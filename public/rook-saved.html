@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Saved Jobs — ROOK</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#0B1D3A; --royal:#1E66F5; --teal:#00C2A8; --gray:#F5F7FA;
+    --muted:#5B6B85; --border:#E3E8F0; --radius:14px;
+    --font-display:'Space Grotesk', sans-serif; --font-body:'Inter', sans-serif;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{font-family:var(--font-body); color:var(--navy); background:var(--gray); -webkit-font-smoothing:antialiased;}
+  h1,h2,h3{font-family:var(--font-display); letter-spacing:-0.01em;}
+  a{color:inherit; text-decoration:none;}
+  .btn{display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:10px 18px; border-radius:999px; font-size:13.5px; font-weight:600; cursor:pointer; border:none;}
+  .btn-primary{background:var(--royal); color:#fff;}
+  .btn-outline{background:#fff; color:var(--navy); border:1px solid var(--border);}
+  .btn-sm{padding:8px 14px; font-size:12.5px;}
+
+  .topbar{background:var(--navy); padding:16px 0;}
+  .topbar-inner{max-width:1200px; margin:0 auto; padding:0 24px; display:flex; align-items:center; justify-content:space-between;}
+  .logo{display:flex; align-items:center; gap:10px; font-family:var(--font-display); font-weight:700; font-size:19px; color:#fff;}
+  .logo svg{width:22px; height:22px;}
+  .top-nav{display:flex; gap:26px; font-size:13.5px; font-weight:500; color:#fff;}
+  .top-nav a{opacity:.75;}
+  .top-nav a.active{opacity:1; font-weight:700;}
+  .avatar{width:32px; height:32px; border-radius:50%; background:linear-gradient(135deg,var(--royal),var(--teal)); display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:#fff;}
+
+  .container{max-width:1200px; margin:0 auto; padding:32px 24px 80px;}
+  .page-head{display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:24px; flex-wrap:wrap; gap:14px;}
+  .page-head h1{font-size:24px; font-weight:700;}
+  .page-head p{font-size:14px; color:var(--muted); margin-top:4px;}
+
+  .compare-bar{
+    display:none; background:var(--navy); border-radius:12px; padding:14px 20px; margin-bottom:20px;
+    align-items:center; justify-content:space-between; color:#fff; font-size:13.5px;
+  }
+  .compare-bar.show{display:flex;}
+  .compare-bar b{color:var(--teal);}
+
+  .job-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:20px;}
+  .job-card{
+    background:#fff; border-radius:var(--radius); padding:22px; box-shadow:0 2px 10px -4px rgba(11,29,58,0.08); position:relative;
+  }
+  .job-card .compare-check{position:absolute; top:18px; right:18px;}
+  .match-pill{font-size:12px; font-weight:700; padding:4px 10px; border-radius:99px; background:rgba(0,194,168,0.12); color:#00806E; display:inline-block; margin-bottom:12px;}
+  .job-card h4{font-size:16px; font-weight:700; margin-bottom:4px; padding-right:24px;}
+  .job-card .company{font-size:13px; color:var(--muted); margin-bottom:12px;}
+  .job-meta{display:flex; flex-direction:column; gap:6px; font-size:12.5px; color:var(--muted); margin-bottom:16px;}
+  .job-actions{display:flex; gap:8px;}
+  .saved-date{font-size:11.5px; color:#8B96AB; margin-top:12px;}
+
+  .empty-hint{text-align:center; padding:60px 20px; color:var(--muted); font-size:14px;}
+
+  @media(max-width:900px){
+    .job-grid{grid-template-columns:1fr;}
+    .top-nav{display:none;}
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M6 21h12M7 21v-3.2c0-.6.3-1.1.8-1.4l1.7-1.1c.4-.3.6-.7.6-1.2v-1c0-.5-.2-.9-.6-1.2L7.9 11c-.5-.3-.8-.9-.8-1.5V7h1.5V5.2H10V7h1V5.2h1.5V7H14v1.5h1.5V7H17v2.5c0 .6-.3 1.2-.8 1.5l-1.6 1.1c-.4.3-.6.7-.6 1.2v1c0 .5.2.9.6 1.2l1.7 1.1c.5.3.8.8.8 1.4V21" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      ROOK
+    </div>
+    <nav class="top-nav">
+      <a href="rook-search.html">Job Search</a>
+      <a href="rook-dashboard.html">Dashboard</a>
+      <a href="rook-tracker.html">Applications</a>
+      <a href="rook-saved.html" class="active">Saved Jobs</a>
+    </nav>
+    <div class="avatar">GZ</div>
+  </div>
+</div>
+
+<div class="container">
+  <div class="page-head">
+    <div>
+      <h1>Saved Jobs</h1>
+      <p>Roles you've bookmarked to review or compare later.</p>
+    </div>
+    <a href="rook-search.html" class="btn btn-outline">Find More Jobs</a>
+  </div>
+
+  <div class="compare-bar" id="compareBar">
+    <span><b id="compareCount">0</b> selected for comparison</span>
+    <a href="#" class="btn btn-primary btn-sm">Compare Jobs</a>
+  </div>
+
+  <div class="job-grid">
+    <div class="job-card">
+      <input type="checkbox" class="compare-check" onchange="updateCompare()">
+      <span class="match-pill">94% Match</span>
+      <h4>Diagnostic Account Executive</h4>
+      <div class="company">Example Diagnostics — Orlando, FL</div>
+      <div class="job-meta">
+        <span>$95K–$120K + Commission</span>
+        <span>25% Travel</span>
+      </div>
+      <div class="job-actions">
+        <a href="rook-job-analysis.html" class="btn btn-primary btn-sm">View</a>
+        <a href="#" class="btn btn-outline btn-sm">Remove</a>
+      </div>
+      <div class="saved-date">Saved Aug 14</div>
+    </div>
+
+    <div class="job-card">
+      <input type="checkbox" class="compare-check" onchange="updateCompare()">
+      <span class="match-pill">91% Match</span>
+      <h4>Veterinary Territory Manager</h4>
+      <div class="company">Covetrus — Jacksonville, FL</div>
+      <div class="job-meta">
+        <span>$100K–$130K OTE</span>
+        <span>40% Travel</span>
+      </div>
+      <div class="job-actions">
+        <a href="rook-job-analysis.html" class="btn btn-primary btn-sm">View</a>
+        <a href="#" class="btn btn-outline btn-sm">Remove</a>
+      </div>
+      <div class="saved-date">Saved Aug 13</div>
+    </div>
+
+    <div class="job-card">
+      <input type="checkbox" class="compare-check" onchange="updateCompare()">
+      <span class="match-pill">86% Match</span>
+      <h4>Regional Sales Manager</h4>
+      <div class="company">Antech Diagnostics — Ocala, FL</div>
+      <div class="job-meta">
+        <span>$95K–$125K OTE</span>
+        <span>Remote / Field</span>
+      </div>
+      <div class="job-actions">
+        <a href="rook-job-analysis.html" class="btn btn-primary btn-sm">View</a>
+        <a href="#" class="btn btn-outline btn-sm">Remove</a>
+      </div>
+      <div class="saved-date">Saved Aug 10</div>
+    </div>
+
+    <div class="job-card">
+      <input type="checkbox" class="compare-check" onchange="updateCompare()">
+      <span class="match-pill">82% Match</span>
+      <h4>Capital Equipment Specialist</h4>
+      <div class="company">Midmark — Tampa, FL</div>
+      <div class="job-meta">
+        <span>$90K–$115K + Commission</span>
+        <span>50% Travel</span>
+      </div>
+      <div class="job-actions">
+        <a href="rook-job-analysis.html" class="btn btn-primary btn-sm">View</a>
+        <a href="#" class="btn btn-outline btn-sm">Remove</a>
+      </div>
+      <div class="saved-date">Saved Aug 8</div>
+    </div>
+  </div>
+</div>
+
+<script>
+function updateCompare(){
+  const checked = document.querySelectorAll('.compare-check:checked').length;
+  const bar = document.getElementById('compareBar');
+  document.getElementById('compareCount').textContent = checked;
+  bar.classList.toggle('show', checked >= 2);
+}
+</script>
+
+</body>
+</html>

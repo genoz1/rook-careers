@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard — ROOK</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#0B1D3A; --royal:#1E66F5; --teal:#00C2A8; --gray:#F5F7FA; --white:#FFFFFF;
+    --muted:#5B6B85; --border:#E3E8F0; --radius:14px;
+    --excellent:#00806E; --excellent-bg:rgba(0,194,168,0.12);
+    --strong:#1E66F5; --strong-bg:rgba(30,102,245,0.1);
+    --possible:#B98900; --possible-bg:rgba(185,137,0,0.1);
+    --font-display:'Space Grotesk', sans-serif; --font-body:'Inter', sans-serif;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{font-family:var(--font-body); color:var(--navy); background:var(--gray); -webkit-font-smoothing:antialiased;}
+  h1,h2,h3{font-family:var(--font-display); letter-spacing:-0.01em;}
+  a{color:inherit; text-decoration:none;}
+  .btn{display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:10px 18px; border-radius:999px; font-size:13.5px; font-weight:600; cursor:pointer; border:none;}
+  .btn-primary{background:var(--royal); color:#fff;}
+  .btn-outline{background:#fff; color:var(--navy); border:1px solid var(--border);}
+  .btn-outline:hover{border-color:var(--royal); color:var(--royal);}
+  .btn-sm{padding:8px 14px; font-size:12.5px;}
+
+  /* shell layout */
+  .shell{display:grid; grid-template-columns:236px 1fr; min-height:100vh;}
+  .sidebar{background:var(--navy); color:#fff; padding:26px 20px; display:flex; flex-direction:column;}
+  .logo{display:flex; align-items:center; gap:10px; font-family:var(--font-display); font-weight:700; font-size:19px; margin-bottom:36px; padding:0 6px;}
+  .logo svg{width:24px; height:24px;}
+  .side-nav{display:flex; flex-direction:column; gap:2px; flex:1;}
+  .side-nav a{display:flex; align-items:center; gap:12px; padding:11px 12px; border-radius:9px; font-size:14px; font-weight:500; color:#AEB9CF;}
+  .side-nav a svg{width:17px; height:17px;}
+  .side-nav a.active{background:rgba(255,255,255,0.08); color:#fff;}
+  .side-nav a:hover{color:#fff;}
+  .side-nav .count{margin-left:auto; background:var(--teal); color:#03261F; font-size:11px; font-weight:700; padding:2px 7px; border-radius:99px;}
+  .side-foot{border-top:1px solid rgba(255,255,255,0.1); padding-top:16px; display:flex; align-items:center; gap:10px;}
+  .avatar{width:34px; height:34px; border-radius:50%; background:linear-gradient(135deg,var(--royal),var(--teal)); display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700;}
+  .side-foot .n{font-size:13.5px; font-weight:600;}
+  .side-foot .r{font-size:11.5px; color:#8B96AB;}
+
+  .main{padding:36px 44px 80px;}
+  .topline{display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:28px; flex-wrap:wrap; gap:16px;}
+  .greeting h1{font-size:26px; font-weight:700;}
+  .greeting p{font-size:14.5px; color:var(--muted); margin-top:4px;}
+  .top-actions{display:flex; gap:10px;}
+
+  .stat-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:18px; margin-bottom:36px;}
+  .stat-card{background:#fff; border:1px solid var(--border); border-radius:var(--radius); padding:20px 22px;}
+  .stat-card .num{font-family:var(--font-display); font-size:28px; font-weight:700;}
+  .stat-card .lbl{font-size:13px; color:var(--muted); margin-top:4px;}
+  .stat-card.accent .num{color:var(--teal);}
+
+  .panel-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;}
+  .panel-head h2{font-size:18px; font-weight:700;}
+  .filter-row{display:flex; gap:8px;}
+  .chip{font-size:12.5px; font-weight:600; padding:7px 13px; border-radius:99px; border:1px solid var(--border); background:#fff; color:var(--muted); cursor:pointer;}
+  .chip.active{background:var(--navy); color:#fff; border-color:var(--navy);}
+
+  .job-list{display:flex; flex-direction:column; gap:14px; margin-bottom:40px;}
+  .job-row{
+    background:#fff; border:1px solid var(--border); border-radius:var(--radius); padding:22px 24px;
+    display:grid; grid-template-columns:auto 1fr auto; gap:22px; align-items:center;
+  }
+  .score-ring{
+    width:58px; height:58px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-family:var(--font-display); font-weight:700; font-size:15px; flex-shrink:0;
+    background:conic-gradient(var(--teal) calc(var(--pct) * 1%), #EDF1F7 0);
+    position:relative;
+  }
+  .score-ring::before{content:""; position:absolute; inset:5px; background:#fff; border-radius:50%;}
+  .score-ring span{position:relative; z-index:1; color:var(--navy);}
+  .job-info h4{font-size:16px; font-weight:700; margin-bottom:3px;}
+  .job-info .company{font-size:13.5px; color:var(--muted); margin-bottom:10px;}
+  .why-row{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px;}
+  .why-tag{font-size:11.5px; font-weight:600; padding:4px 9px; border-radius:6px; background:var(--excellent-bg); color:var(--excellent); display:flex; align-items:center; gap:4px;}
+  .why-tag svg{width:10px; height:10px;}
+  .concern-tag{font-size:11.5px; font-weight:600; padding:4px 9px; border-radius:6px; background:var(--possible-bg); color:var(--possible);}
+  .job-meta-line{font-size:12.5px; color:#8B96AB;}
+  .job-actions{display:flex; flex-direction:column; gap:8px; align-items:flex-end;}
+  .match-level{font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.03em; padding:3px 9px; border-radius:99px;}
+  .ml-excellent{background:var(--excellent-bg); color:var(--excellent);}
+  .ml-strong{background:var(--strong-bg); color:var(--strong);}
+  .ml-possible{background:var(--possible-bg); color:var(--possible);}
+
+  @media(max-width:900px){
+    .shell{grid-template-columns:1fr;}
+    .sidebar{display:none;}
+    .stat-grid{grid-template-columns:1fr 1fr;}
+    .job-row{grid-template-columns:1fr; text-align:left;}
+    .job-actions{align-items:flex-start; flex-direction:row;}
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M6 21h12M7 21v-3.2c0-.6.3-1.1.8-1.4l1.7-1.1c.4-.3.6-.7.6-1.2v-1c0-.5-.2-.9-.6-1.2L7.9 11c-.5-.3-.8-.9-.8-1.5V7h1.5V5.2H10V7h1V5.2h1.5V7H14v1.5h1.5V7H17v2.5c0 .6-.3 1.2-.8 1.5l-1.6 1.1c-.4.3-.6.7-.6 1.2v1c0 .5.2.9.6 1.2l1.7 1.1c.5.3.8.8.8 1.4V21" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      ROOK
+    </div>
+    <nav class="side-nav">
+      <a href="rook-dashboard.html" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l9-9 9 9M5 10v10h14V10"/></svg>Dashboard<span class="count">17</span></a>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>Job Search</a>
+      <a href="rook-tracker.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>Applications</a>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-4-7 4V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>Saved Jobs</a>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>Career Intelligence</a>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>My Résumés</a>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09A1.65 1.65 0 0015 4.6a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>Settings</a>
+    </nav>
+    <div class="side-foot">
+      <div class="avatar">GZ</div>
+      <div><div class="n">Gene Zentko</div><div class="r">Professional Plan</div></div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topline">
+      <div class="greeting">
+        <h1>Good afternoon, Gene</h1>
+        <p>We found 17 new opportunities matching your career profile today.</p>
+      </div>
+      <div class="top-actions">
+        <a href="#" class="btn btn-outline">Edit Preferences</a>
+        <a href="#" class="btn btn-primary">+ New Search</a>
+      </div>
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat-card"><div class="num">17</div><div class="lbl">New Matches Today</div></div>
+      <div class="stat-card accent"><div class="num">4</div><div class="lbl">Excellent Matches (90%+)</div></div>
+      <div class="stat-card"><div class="num">9</div><div class="lbl">Strong Matches (75–89%)</div></div>
+      <div class="stat-card"><div class="num">6</div><div class="lbl">Applications In Progress</div></div>
+    </div>
+
+    <div class="panel-head">
+      <h2>Today's Matches</h2>
+      <div class="filter-row">
+        <span class="chip active">All</span>
+        <span class="chip">Excellent</span>
+        <span class="chip">Strong</span>
+        <span class="chip">Saved</span>
+      </div>
+    </div>
+
+    <div class="job-list" id="jobList" data-demo="true">
+
+      <div class="job-row">
+        <div class="score-ring" style="--pct:94;"><span>94%</span></div>
+        <div class="job-info">
+          <h4>Diagnostic Account Executive</h4>
+          <div class="company">Example Diagnostics — Orlando, FL &nbsp;·&nbsp; $95K–$120K + Commission</div>
+          <div class="why-row">
+            <span class="why-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Diagnostics experience</span>
+            <span class="why-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Territory match</span>
+            <span class="why-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Compensation fit</span>
+            <span class="concern-tag">△ Bachelor's preferred</span>
+          </div>
+          <div class="job-meta-line">Posted 2 days ago · Sourced via employer career page · <span style="color:#00806E; font-weight:600;"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="3" style="vertical-align:-1px;"><path d="M5 13l4 4L19 7"/></svg> Verified 2 hours ago</span></div>
+        </div>
+        <div class="job-actions">
+          <span class="match-level ml-excellent">Excellent Match</span>
+          <a href="rook-job-analysis.html" class="btn btn-primary btn-sm">View Analysis</a>
+        </div>
+      </div>
+
+      <div class="job-row">
+        <div class="score-ring" style="--pct:91;"><span>91%</span></div>
+        <div class="job-info">
+          <h4>Veterinary Territory Manager</h4>
+          <div class="company">Covetrus — Jacksonville, FL &nbsp;·&nbsp; $100K–$130K OTE</div>
+          <div class="why-row">
+            <span class="why-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Veterinary experience</span>
+            <span class="why-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Pharmaceutical background</span>
+            <span class="why-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Travel acceptable</span>
+          </div>
+          <div class="job-meta-line">Posted 4 days ago · Sourced via job feed · <span style="color:#00806E; font-weight:600;"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="3" style="vertical-align:-1px;"><path d="M5 13l4 4L19 7"/></svg> Verified 6 hours ago</span></div>
+        </div>
+        <div class="job-actions">
+          <span class="match-level ml-excellent">Excellent Match</span>
+          <a href="rook-job-analysis.html" class="btn btn-primary btn-sm">View Analysis</a>
+        </div>
+      </div>
+
+      <div class="job-row">
+        <div class="score-ring" style="--pct:82;"><span>82%</span></div>
+        <div class="job-info">
+          <h4>Capital Equipment Specialist</h4>
+          <div class="company">Midmark — Tampa, FL &nbsp;·&nbsp; $90K–$115K + Commission</div>
+          <div class="why-row">
+            <span class="why-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Capital equipment exp.</span>
+            <span class="why-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Location match</span>
+            <span class="concern-tag">△ Limited OR experience</span>
+          </div>
+          <div class="job-meta-line">Posted 6 days ago · Sourced via employer career page · <span style="color:#00806E; font-weight:600;"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="3" style="vertical-align:-1px;"><path d="M5 13l4 4L19 7"/></svg> Verified 5 hours ago</span></div>
+        </div>
+        <div class="job-actions">
+          <span class="match-level ml-strong">Strong Match</span>
+          <a href="rook-job-analysis.html" class="btn btn-primary btn-sm">View Analysis</a>
+        </div>
+      </div>
+
+      <div class="job-row">
+        <div class="score-ring" style="--pct:64;"><span>64%</span></div>
+        <div class="job-info">
+          <h4>Surgical Device Representative</h4>
+          <div class="company">Stryker — Tampa, FL &nbsp;·&nbsp; $105K+ Base</div>
+          <div class="why-row">
+            <span class="why-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Location match</span>
+            <span class="concern-tag">△ Requires 3 yrs OR experience</span>
+            <span class="concern-tag">△ Spine experience preferred</span>
+          </div>
+          <div class="job-meta-line">Posted 1 week ago · Sourced via job feed · <span style="color:#00806E; font-weight:600;"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="3" style="vertical-align:-1px;"><path d="M5 13l4 4L19 7"/></svg> Verified 1 day ago</span></div>
+        </div>
+        <div class="job-actions">
+          <span class="match-level ml-possible">Possible Match</span>
+          <a href="rook-job-analysis.html" class="btn btn-outline btn-sm">View Analysis</a>
+        </div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="rook-config.js"></script>
+<script src="rook-auth.js"></script>
+<script>
+  // Every job row currently in the HTML is sample/demo data — clearly
+  // marked as such per the "no fake functionality" principle in the
+  // architecture spec. This script tries to replace it with real jobs
+  // from the backend; if that fails (no auth, no data yet, backend not
+  // running), the demo rows stay, with a banner explaining why.
+  (async () => {
+    const token = await rookRequireAuth();
+    if (!token) return; // rookRequireAuth already redirected to login
+
+    const jobList = document.getElementById('jobList');
+
+    try {
+      const res = await rookApiFetch('/jobs?limit=20');
+      if (!res.ok) throw new Error('API returned ' + res.status);
+      const jobs = await res.json();
+
+      if (!Array.isArray(jobs) || jobs.length === 0) {
+        showBanner('No live jobs yet. Add employers and run <code>npm run ingest</code> — see ROOK-Setup-Guide.pdf. Showing example matches below in the meantime.');
+        return;
+      }
+
+      // Real jobs exist — replace the demo rows. Note: match scoring
+      // (score, why-reasons, concerns) isn't implemented yet (that's the
+      // matching engine, architecture spec section 9), so real jobs
+      // render without a score ring until that exists.
+      jobList.dataset.demo = 'false';
+      jobList.innerHTML = jobs.map(renderRealJobRow).join('');
+      showBanner('Showing ' + jobs.length + ' live job(s) from your database. Match scoring isn\'t connected yet, so these aren\'t ranked.', 'info');
+    } catch (err) {
+      showBanner('Could not reach the ROOK API (' + err.message + '). Showing example matches below — see ROOK-Setup-Guide.pdf to get the backend running.');
+    }
+  })();
+
+  function renderRealJobRow(job) {
+    const comp = job.compensation_text || (job.salary_min ? `$${job.salary_min}${job.salary_max ? '–$' + job.salary_max : '+'}` : '');
+    return `
+      <div class="job-row">
+        <div class="score-ring" style="--pct:0;"><span>—</span></div>
+        <div class="job-info">
+          <h4>${escapeHtml(job.title_original || job.title_normalized || 'Untitled role')}</h4>
+          <div class="company">${escapeHtml(job.company_name || '')} — ${escapeHtml(job.location_raw || '')} ${comp ? '&nbsp;·&nbsp; ' + escapeHtml(comp) : ''}</div>
+          <div class="job-meta-line">${job.date_posted ? 'Posted ' + escapeHtml(job.date_posted) : ''} · Sourced via ${escapeHtml(job.source_type || 'unknown')}</div>
+        </div>
+        <div class="job-actions">
+          <a href="${job.source_url || '#'}" target="_blank" class="btn btn-outline btn-sm">View Original</a>
+        </div>
+      </div>`;
+  }
+
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function showBanner(html, level) {
+    const banner = document.createElement('div');
+    banner.style.cssText = `background:${level === 'info' ? '#EAF7F4' : '#FFF7E6'}; border-left:3px solid ${level === 'info' ? '#00806E' : '#B98900'}; border-radius:8px; padding:12px 16px; margin-bottom:20px; font-size:13px; color:#3D4A63; line-height:1.5;`;
+    banner.innerHTML = html;
+    document.querySelector('.panel-head').insertAdjacentElement('afterend', banner);
+  }
+</script>
+
+</body>
+</html>

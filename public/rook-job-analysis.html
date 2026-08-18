@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Diagnostic Account Executive — Match Analysis — ROOK</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#0B1D3A; --royal:#1E66F5; --teal:#00C2A8; --gray:#F5F7FA; --white:#FFFFFF;
+    --muted:#5B6B85; --border:#E3E8F0; --radius:14px;
+    --excellent:#00806E; --excellent-bg:rgba(0,194,168,0.12);
+    --warn:#B98900; --warn-bg:rgba(185,137,0,0.1);
+    --font-display:'Space Grotesk', sans-serif; --font-body:'Inter', sans-serif;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{font-family:var(--font-body); color:var(--navy); background:var(--gray); -webkit-font-smoothing:antialiased;}
+  h1,h2,h3{font-family:var(--font-display); letter-spacing:-0.01em;}
+  a{color:inherit; text-decoration:none;}
+  .btn{display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:12px 20px; border-radius:999px; font-size:14px; font-weight:600; cursor:pointer; border:none;}
+  .btn-primary{background:var(--royal); color:#fff;}
+  .btn-outline{background:#fff; color:var(--navy); border:1px solid var(--border);}
+  .btn-outline:hover{border-color:var(--royal); color:var(--royal);}
+  .btn-teal{background:var(--teal); color:#03261F;}
+  .btn-block{width:100%;}
+
+  .topbar{background:#fff; border-bottom:1px solid var(--border); padding:16px 0;}
+  .topbar-inner{max-width:1120px; margin:0 auto; padding:0 24px; display:flex; align-items:center; justify-content:space-between;}
+  .logo{display:flex; align-items:center; gap:10px; font-family:var(--font-display); font-weight:700; font-size:19px;}
+  .logo svg{width:22px; height:22px;}
+  .back-link{font-size:13.5px; color:var(--muted); font-weight:600; display:flex; align-items:center; gap:6px;}
+
+  .container{max-width:1120px; margin:0 auto; padding:36px 24px 100px; display:grid; grid-template-columns:1fr 340px; gap:32px; align-items:start;}
+
+  .job-header{background:#fff; border:1px solid var(--border); border-radius:var(--radius); padding:28px 30px; margin-bottom:24px;}
+  .job-header-top{display:flex; justify-content:space-between; align-items:flex-start; gap:20px;}
+  .job-header h1{font-size:24px; font-weight:700; margin-bottom:6px;}
+  .job-header .company-line{font-size:14.5px; color:var(--muted);}
+  .score-badge{
+    text-align:center; background:var(--excellent-bg); border-radius:14px; padding:14px 22px; flex-shrink:0;
+  }
+  .score-badge .n{font-family:var(--font-display); font-size:28px; font-weight:700; color:var(--excellent);}
+  .score-badge .l{font-size:11px; font-weight:700; color:var(--excellent); text-transform:uppercase; letter-spacing:0.04em;}
+  .meta-chips{display:flex; gap:10px; margin-top:18px; flex-wrap:wrap;}
+  .meta-chip{font-size:12.5px; font-weight:600; padding:6px 12px; border-radius:8px; background:var(--gray); border:1px solid var(--border);}
+
+  .card{background:#fff; border:1px solid var(--border); border-radius:var(--radius); padding:26px 28px; margin-bottom:20px;}
+  .card h3{font-size:16px; font-weight:700; margin-bottom:16px; display:flex; align-items:center; gap:8px;}
+  .card h3 svg{width:17px; height:17px; color:var(--teal);}
+
+  .match-row{display:flex; justify-content:space-between; align-items:center; padding:11px 0; border-bottom:1px solid var(--border); font-size:14px;}
+  .match-row:last-child{border-bottom:none;}
+  .match-row .factor{color:var(--navy); font-weight:500;}
+  .bar-track{width:140px; height:6px; background:var(--gray); border-radius:99px; overflow:hidden;}
+  .bar-fill{height:100%; background:var(--teal); border-radius:99px;}
+  .match-row .pct{font-weight:700; font-size:13px; width:36px; text-align:right;}
+
+  .why-list, .concern-list{list-style:none;}
+  .why-list li{display:flex; align-items:flex-start; gap:10px; font-size:14px; margin-bottom:12px; line-height:1.5;}
+  .why-list svg{width:16px; height:16px; color:var(--excellent); flex-shrink:0; margin-top:2px;}
+  .concern-list li{display:flex; align-items:flex-start; gap:10px; font-size:14px; margin-bottom:12px; line-height:1.5;}
+  .concern-list .dot{width:16px; height:16px; flex-shrink:0; margin-top:2px; color:var(--warn); font-weight:700; text-align:center;}
+
+  .disclaimer{font-size:12px; color:#8B96AB; background:var(--gray); border-radius:8px; padding:12px 14px; margin-top:14px; line-height:1.5;}
+
+  /* sidebar */
+  .side-card{background:#fff; border:1px solid var(--border); border-radius:var(--radius); padding:24px; margin-bottom:18px;}
+  .side-card h4{font-size:14.5px; font-weight:700; margin-bottom:14px;}
+  .action-stack{display:flex; flex-direction:column; gap:10px;}
+
+  .package-card{background:var(--navy); border-radius:var(--radius); padding:24px; color:#fff; margin-bottom:18px;}
+  .package-card .tag{font-size:11px; font-weight:700; color:var(--teal); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:8px;}
+  .package-card h4{font-size:16px; font-weight:700; margin-bottom:14px;}
+  .pkg-list{list-style:none; margin-bottom:18px;}
+  .pkg-list li{display:flex; align-items:center; gap:9px; font-size:13.5px; margin-bottom:10px; color:#DCE3F0;}
+  .pkg-list svg{width:15px; height:15px; color:var(--teal); flex-shrink:0;}
+
+  .company-facts{list-style:none; font-size:13.5px;}
+  .company-facts li{display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--border); color:var(--muted);}
+  .company-facts li:last-child{border-bottom:none;}
+  .company-facts b{color:var(--navy); font-weight:600;}
+
+  @media(max-width:880px){
+    .container{grid-template-columns:1fr;}
+    .job-header-top{flex-direction:column;}
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M6 21h12M7 21v-3.2c0-.6.3-1.1.8-1.4l1.7-1.1c.4-.3.6-.7.6-1.2v-1c0-.5-.2-.9-.6-1.2L7.9 11c-.5-.3-.8-.9-.8-1.5V7h1.5V5.2H10V7h1V5.2h1.5V7H14v1.5h1.5V7H17v2.5c0 .6-.3 1.2-.8 1.5l-1.6 1.1c-.4.3-.6.7-.6 1.2v1c0 .5.2.9.6 1.2l1.7 1.1c.5.3.8.8.8 1.4V21" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      ROOK
+    </div>
+    <a href="rook-dashboard.html" class="back-link">← Back to Dashboard</a>
+  </div>
+</div>
+
+<div class="container">
+  <div>
+    <div class="job-header">
+      <div class="job-header-top">
+        <div>
+          <h1>Diagnostic Account Executive</h1>
+          <div class="company-line">Example Diagnostics · Orlando, FL · $95K–$120K + Commission</div>
+        </div>
+        <div class="score-badge">
+          <div class="n">94%</div>
+          <div class="l">Career Match</div>
+        </div>
+      </div>
+      <div class="meta-chips">
+        <span class="meta-chip">Posted 2 days ago</span>
+        <span class="meta-chip" style="color:#00806E;"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="3" style="vertical-align:-1px;"><path d="M5 13l4 4L19 7"/></svg> Verified 2 hours ago</span>
+        <span class="meta-chip">Diagnostics</span>
+        <span class="meta-chip">Territory Sales</span>
+        <span class="meta-chip">Full-time</span>
+        <span class="meta-chip">Sourced via employer career page</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>Match Breakdown</h3>
+      <div class="match-row"><span class="factor">Industry &amp; Product Experience</span><div style="display:flex; align-items:center; gap:12px;"><div class="bar-track"><div class="bar-fill" style="width:95%;"></div></div><span class="pct">95%</span></div></div>
+      <div class="match-row"><span class="factor">Territory &amp; Geography</span><div style="display:flex; align-items:center; gap:12px;"><div class="bar-track"><div class="bar-fill" style="width:100%;"></div></div><span class="pct">100%</span></div></div>
+      <div class="match-row"><span class="factor">Compensation Alignment</span><div style="display:flex; align-items:center; gap:12px;"><div class="bar-track"><div class="bar-fill" style="width:100%;"></div></div><span class="pct">100%</span></div></div>
+      <div class="match-row"><span class="factor">Capital Equipment Background</span><div style="display:flex; align-items:center; gap:12px;"><div class="bar-track"><div class="bar-fill" style="width:85%;"></div></div><span class="pct">85%</span></div></div>
+      <div class="match-row"><span class="factor">Travel Fit</span><div style="display:flex; align-items:center; gap:12px;"><div class="bar-track"><div class="bar-fill" style="width:90%;"></div></div><span class="pct">90%</span></div></div>
+      <div class="match-row"><span class="factor">Education Requirements</span><div style="display:flex; align-items:center; gap:12px;"><div class="bar-track"><div class="bar-fill" style="width:70%;"></div></div><span class="pct">70%</span></div></div>
+    </div>
+
+    <div class="card">
+      <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>Why You're a Strong Match</h3>
+      <ul class="why-list">
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>8 years of diagnostics sales experience across reference laboratory and point-of-care settings, directly matching this role's core requirement.</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Existing territory management experience in Central Florida, the exact region this role covers.</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Prior capital equipment sales experience aligns with this employer's hybrid consumables-plus-equipment model.</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Compensation range fits your stated minimum base and OTE expectations.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>Potential Concerns</h3>
+      <ul class="concern-list">
+        <li><span class="dot">△</span>Job posting lists a bachelor's degree as "preferred" — not required. Your work history may offset this depending on the hiring manager.</li>
+      </ul>
+      <div class="disclaimer">This is an AI-generated competitiveness estimate based on your profile and this job posting. It is not a guarantee of an interview or employment outcome.</div>
+    </div>
+  </div>
+
+  <aside>
+    <div class="package-card">
+      <div class="tag">Application Package</div>
+      <h4>Your 94% Match Package</h4>
+      <ul class="pkg-list">
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Tailored résumé for this role</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>ATS keyword alignment</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Custom cover letter</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Recruiter outreach message</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Interview prep notes</li>
+      </ul>
+      <a href="rook-application-package.html" class="btn btn-teal btn-block">Create Application Package</a>
+    </div>
+
+    <div class="side-card">
+      <h4>Take Action</h4>
+      <div class="action-stack">
+        <a href="#" class="btn btn-outline btn-block">Open Original Posting</a>
+        <a href="#" class="btn btn-outline btn-block">Save Job</a>
+        <a href="#" class="btn btn-outline btn-block" style="color:var(--muted);">Not Interested</a>
+      </div>
+    </div>
+
+    <div class="side-card">
+      <h4>Company Overview</h4>
+      <ul class="company-facts">
+        <li><span>Industry</span><b>Diagnostics</b></li>
+        <li><span>Company size</span><b>500–1,000 employees</b></li>
+        <li><span>Territory</span><b>Central Florida</b></li>
+        <li><span>Est. hiring manager</span><b>Regional Sales Director</b></li>
+      </ul>
+    </div>
+  </aside>
+</div>
+
+</body>
+</html>

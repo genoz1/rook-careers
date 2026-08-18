@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Build Your Profile — ROOK</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#0B1D3A; --royal:#1E66F5; --teal:#00C2A8; --gray:#F5F7FA; --white:#FFFFFF;
+    --muted:#5B6B85; --border:#E3E8F0; --radius:14px;
+    --font-display:'Space Grotesk', sans-serif; --font-body:'Inter', sans-serif;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{font-family:var(--font-body); color:var(--navy); background:var(--gray); -webkit-font-smoothing:antialiased;}
+  h1,h2,h3{font-family:var(--font-display); letter-spacing:-0.01em;}
+  a{color:inherit; text-decoration:none; cursor:pointer;}
+  .btn{display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:13px 24px; border-radius:999px; font-size:14.5px; font-weight:600; cursor:pointer; border:none; transition:transform .15s, box-shadow .15s;}
+  .btn-primary{background:var(--royal); color:#fff;}
+  .btn-primary:hover{transform:translateY(-1px); box-shadow:0 8px 20px rgba(30,102,245,0.28);}
+  .btn-outline{background:#fff; color:var(--navy); border:1px solid var(--border);}
+  .btn-outline:hover{border-color:var(--royal); color:var(--royal);}
+
+  .topbar{background:#fff; border-bottom:1px solid var(--border); padding:18px 0;}
+  .topbar-inner{max-width:760px; margin:0 auto; padding:0 24px; display:flex; align-items:center; justify-content:space-between;}
+  .logo{display:flex; align-items:center; gap:10px; font-family:var(--font-display); font-weight:700; font-size:19px;}
+  .logo svg{width:24px; height:24px;}
+  .save-exit{font-size:13.5px; color:var(--muted); font-weight:500;}
+
+  .progress-wrap{max-width:760px; margin:32px auto 0; padding:0 24px;}
+  .progress-steps{display:flex; align-items:center; gap:6px; margin-bottom:8px;}
+  .progress-steps .seg{flex:1; height:4px; border-radius:99px; background:var(--border);}
+  .progress-steps .seg.done{background:var(--teal);}
+  .progress-steps .seg.active{background:var(--royal);}
+  .progress-label{font-size:12.5px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:0.04em;}
+
+  .container{max-width:760px; margin:0 auto; padding:48px 24px 100px;}
+  .step-eyebrow{font-size:12.5px; font-weight:700; color:var(--royal); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:10px;}
+  h1.step-h{font-size:28px; font-weight:700; margin-bottom:10px;}
+  .step-sub{font-size:14.5px; color:var(--muted); margin-bottom:32px; line-height:1.6; max-width:540px;}
+
+  .step-panel{display:none;}
+  .step-panel.active{display:block;}
+
+  .card{background:#fff; border-radius:var(--radius); padding:26px; box-shadow:0 2px 10px -4px rgba(11,29,58,0.08); margin-bottom:16px;}
+  .field-row{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;}
+  .field-row:last-child{margin-bottom:0;}
+  .field{display:flex; flex-direction:column; gap:6px;}
+  .field.full{grid-column:1 / -1;}
+  .field label{font-size:12.5px; font-weight:600; color:var(--muted);}
+  .field input, .field select, .field textarea{padding:10px 12px; border-radius:8px; border:1px solid var(--border); font-size:13.5px; font-family:var(--font-body); color:var(--navy);}
+  .field textarea{resize:vertical; min-height:70px;}
+
+  .chip-grid{display:flex; flex-wrap:wrap; gap:10px;}
+  .chip{padding:9px 16px; border-radius:99px; border:1px solid var(--border); background:#fff; font-size:13px; font-weight:600; color:var(--muted); cursor:pointer; transition:.15s;}
+  .chip.selected{background:var(--royal); color:#fff; border-color:var(--royal);}
+
+  .exp-entry{border:1px solid var(--border); border-radius:12px; padding:18px; margin-bottom:14px; position:relative;}
+  .exp-entry .remove{position:absolute; top:14px; right:16px; font-size:12px; color:var(--muted); font-weight:600;}
+  .add-entry{font-size:13.5px; font-weight:600; color:var(--royal); display:inline-flex; align-items:center; gap:6px;}
+
+  .review-section{margin-bottom:20px;}
+  .review-section h4{font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:var(--muted); margin-bottom:10px;}
+  .review-row{display:flex; justify-content:space-between; padding:9px 0; border-bottom:1px solid var(--border); font-size:13.5px;}
+  .review-row:last-child{border-bottom:none;}
+  .review-row .k{color:var(--muted);}
+  .review-row .v{font-weight:600; text-align:right;}
+
+  .actions-row{display:flex; justify-content:space-between; align-items:center; margin-top:32px;}
+  .privacy-note{font-size:12px; color:#8B96AB; margin-top:14px; text-align:center; line-height:1.6;}
+
+  .dropzone{background:#fff; border:2px dashed var(--border); border-radius:18px; padding:44px 32px; text-align:center; cursor:pointer;}
+  .dropzone-icon{width:52px; height:52px; margin:0 auto 18px; border-radius:14px; background:rgba(30,102,245,0.08); display:flex; align-items:center; justify-content:center;}
+  .dropzone-icon svg{width:24px; height:24px; color:var(--royal);}
+  .dropzone h3{font-size:16px; font-weight:700; margin-bottom:6px;}
+  .dropzone p{font-size:13px; color:var(--muted); margin-bottom:16px;}
+  .filetypes{font-size:12px; color:#8B96AB; margin-top:14px;}
+  .uploaded-file{background:#fff; border:1px solid var(--border); border-radius:14px; padding:16px 18px; display:flex; align-items:center; gap:14px; margin-top:20px;}
+  .uploaded-file .icon{width:38px; height:38px; border-radius:10px; background:rgba(30,102,245,0.08); display:flex; align-items:center; justify-content:center; flex-shrink:0;}
+  .uploaded-file .icon svg{width:18px; height:18px; color:var(--royal);}
+  .uploaded-file .name{font-size:13.5px; font-weight:700;}
+  .uploaded-file .status{font-size:12px; color:var(--teal); font-weight:600; margin-top:2px;}
+
+  @media(max-width:600px){
+    .field-row{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M6 21h12M7 21v-3.2c0-.6.3-1.1.8-1.4l1.7-1.1c.4-.3.6-.7.6-1.2v-1c0-.5-.2-.9-.6-1.2L7.9 11c-.5-.3-.8-.9-.8-1.5V7h1.5V5.2H10V7h1V5.2h1.5V7H14v1.5h1.5V7H17v2.5c0 .6-.3 1.2-.8 1.5l-1.6 1.1c-.4.3-.6.7-.6 1.2v1c0 .5.2.9.6 1.2l1.7 1.1c.5.3.8.8.8 1.4V21" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      ROOK
+    </div>
+    <a href="rook-dashboard.html" class="save-exit">Save &amp; exit</a>
+  </div>
+</div>
+
+<div class="progress-wrap">
+  <div class="progress-steps" id="progressSteps"></div>
+  <div class="progress-label" id="progressLabel">Step 1 of 7 — Resume</div>
+</div>
+
+<div class="container">
+
+  <div class="step-panel active" data-step="1">
+    <div class="step-eyebrow">Build Your Career Profile</div>
+    <h1 class="step-h">Upload your résumé</h1>
+    <p class="step-sub">We'll read your work history, employers, and skills automatically. You'll confirm everything before it's saved.</p>
+    <div class="dropzone" id="dropzone" onclick="document.getElementById('resumeFileInput').click()">
+      <div class="dropzone-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 16V4M12 4l-4 4M12 4l4 4M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg></div>
+      <h3>Drag &amp; drop your résumé here</h3>
+      <p>or click to browse your files</p>
+      <a class="btn btn-outline">Choose File</a>
+      <div class="filetypes">Supports PDF, DOC, DOCX — up to 10MB</div>
+    </div>
+    <input type="file" id="resumeFileInput" accept=".pdf,.doc,.docx" style="display:none;" onchange="handleResumeFile(this.files[0])">
+    <div class="uploaded-file" id="uploadedFileCard" style="display:none;">
+      <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg></div>
+      <div><div class="name" id="uploadedFileName"></div><div class="status" id="uploadedFileStatus">Uploading...</div></div>
+    </div>
+  </div>
+
+  <div class="step-panel" data-step="2">
+    <div class="step-eyebrow">Build Your Career Profile</div>
+    <h1 class="step-h">Basic information</h1>
+    <p class="step-sub">Confirm your contact details.</p>
+    <div class="card">
+      <div class="field-row">
+        <div class="field"><label>Full Name</label><input type="text" id="fieldName" value="Gene Zentko"></div>
+        <div class="field"><label>Email</label><input type="text" id="fieldEmail" value="gene@example.com"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Phone</label><input type="text" id="fieldPhone" placeholder="(555) 555-5555"></div>
+        <div class="field"><label>LinkedIn URL</label><input type="text" id="fieldLinkedin" placeholder="linkedin.com/in/..."></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>City</label><input type="text" id="fieldCity" value="Oxford"></div>
+        <div class="field"><label>State</label><input type="text" id="fieldState" value="Florida"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="step-panel" data-step="3">
+    <div class="step-eyebrow">Build Your Career Profile</div>
+    <h1 class="step-h">Career experience</h1>
+    <p class="step-sub">Confirm the roles we found — add or edit anything that's missing.</p>
+    <div class="exp-entry">
+      <span class="remove">Remove</span>
+      <div class="field-row">
+        <div class="field"><label>Company</label><input type="text" value="HealthTrackRx"></div>
+        <div class="field"><label>Job Title</label><input type="text" value="Territory Manager"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Industry</label><select><option selected>Diagnostics</option><option>Veterinary</option><option>Pharmaceutical</option></select></div>
+        <div class="field"><label>Dates</label><input type="text" value="2021 – Present"></div>
+      </div>
+      <div class="field full"><label>Achievements</label><textarea>Grew territory revenue through new diagnostic account development across reference lab and point-of-care segments.</textarea></div>
+    </div>
+    <div class="exp-entry">
+      <span class="remove">Remove</span>
+      <div class="field-row">
+        <div class="field"><label>Company</label><input type="text" value="MWI Animal Health"></div>
+        <div class="field"><label>Job Title</label><input type="text" value="Sales Representative"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Industry</label><select><option>Diagnostics</option><option selected>Veterinary</option><option>Pharmaceutical</option></select></div>
+        <div class="field"><label>Dates</label><input type="text" value="2017 – 2021"></div>
+      </div>
+      <div class="field full"><label>Achievements</label><textarea>Managed veterinary clinic accounts across Central Florida territory.</textarea></div>
+    </div>
+    <a class="add-entry">+ Add another position</a>
+  </div>
+
+  <div class="step-panel" data-step="4">
+    <div class="step-eyebrow">Build Your Career Profile</div>
+    <h1 class="step-h">Skills &amp; selling experience</h1>
+    <p class="step-sub">Select everything that applies — this powers your match scoring.</p>
+    <div class="card">
+      <div class="field full" style="margin-bottom:20px;">
+        <label style="margin-bottom:10px;">Customer types</label>
+        <div class="chip-grid">
+          <div class="chip selected">Veterinary Clinics</div>
+          <div class="chip">Hospitals</div>
+          <div class="chip">Physicians</div>
+          <div class="chip selected">Specialty Hospitals</div>
+          <div class="chip">Corporate Veterinary Groups</div>
+          <div class="chip">Distributors</div>
+          <div class="chip">IDNs</div>
+          <div class="chip selected">Reference Laboratories</div>
+        </div>
+      </div>
+      <div class="field full">
+        <label style="margin-bottom:10px;">Sales type</label>
+        <div class="chip-grid">
+          <div class="chip selected">Hunter</div>
+          <div class="chip">Account Management</div>
+          <div class="chip selected">Territory Management</div>
+          <div class="chip">Capital Equipment</div>
+          <div class="chip selected">Consumables</div>
+          <div class="chip">Recurring Revenue</div>
+          <div class="chip">Contract Negotiation</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="step-panel" data-step="5">
+    <div class="step-eyebrow">Build Your Career Profile</div>
+    <h1 class="step-h">Career preferences</h1>
+    <p class="step-sub">What you're looking for next.</p>
+    <div class="card">
+      <div class="field-row">
+        <div class="field"><label>Minimum Base Salary</label><input type="text" id="fieldMinSalary" value="$95,000"></div>
+        <div class="field"><label>Desired Total Compensation</label><input type="text" id="fieldTargetOte" value="$130,000"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Maximum Travel</label><input type="text" id="fieldMaxTravel" value="50%"></div>
+        <div class="field"><label>Overnight Travel</label><select id="fieldOvernightTravel"><option selected>Occasionally</option><option>Frequently</option><option>Rarely / Never</option></select></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Remote / Hybrid / On-site</label><select id="fieldWorkStyle"><option selected>Field / Territory-based</option><option>Hybrid</option><option>Remote</option></select></div>
+        <div class="field"><label>Relocation</label><select id="fieldRelocation"><option selected>Not willing to relocate</option><option>Open to relocation</option></select></div>
+      </div>
+      <div class="field full">
+        <label style="margin-bottom:10px;">Desired industries</label>
+        <div class="chip-grid">
+          <div class="chip selected">Diagnostics</div>
+          <div class="chip selected">Veterinary / Animal Health</div>
+          <div class="chip">Medical Device</div>
+          <div class="chip">Capital Equipment</div>
+          <div class="chip">Pharmaceutical</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="step-panel" data-step="6">
+    <div class="step-eyebrow">Build Your Career Profile</div>
+    <h1 class="step-h">Exclusions</h1>
+    <p class="step-sub">Anything ROOK should never show you.</p>
+    <div class="card">
+      <div class="field full" style="margin-bottom:16px;">
+        <label>Companies you do not want to work for</label>
+        <input type="text" placeholder="Type a company name and press Enter">
+      </div>
+      <div class="field full" style="margin-bottom:16px;">
+        <label>Companies you've already applied to</label>
+        <input type="text" placeholder="Type a company name and press Enter">
+      </div>
+      <div class="field full">
+        <label style="margin-bottom:10px;">Industries to exclude</label>
+        <div class="chip-grid">
+          <div class="chip">Pharmaceutical</div>
+          <div class="chip">Healthcare SaaS</div>
+          <div class="chip">Dental</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="step-panel" data-step="7">
+    <div class="step-eyebrow">Build Your Career Profile</div>
+    <h1 class="step-h">Review your profile</h1>
+    <p class="step-sub">This is what ROOK will use to find and rank opportunities for you.</p>
+    <div class="card">
+      <div class="review-section">
+        <h4>Basic Info</h4>
+        <div class="review-row"><span class="k">Name</span><span class="v">Gene Zentko</span></div>
+        <div class="review-row"><span class="k">Location</span><span class="v">Oxford, Florida</span></div>
+      </div>
+      <div class="review-section">
+        <h4>Experience</h4>
+        <div class="review-row"><span class="k">Current Role</span><span class="v">Territory Manager, HealthTrackRx</span></div>
+        <div class="review-row"><span class="k">Industries</span><span class="v">Diagnostics, Veterinary</span></div>
+      </div>
+      <div class="review-section">
+        <h4>Preferences</h4>
+        <div class="review-row"><span class="k">Minimum Base</span><span class="v">$95,000</span></div>
+        <div class="review-row"><span class="k">Max Travel</span><span class="v">50%</span></div>
+        <div class="review-row"><span class="k">Relocation</span><span class="v">Not willing</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="actions-row">
+    <a class="btn btn-outline" id="backBtn" onclick="goStep(-1)">Back</a>
+    <a class="btn btn-primary" id="nextBtn" onclick="goStep(1)">Continue →</a>
+  </div>
+
+  <p class="privacy-note">Your résumé is only used to build your career profile and tailor job applications you choose to prepare. We never share it with employers without your permission.</p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="rook-config.js"></script>
+<script src="rook-auth.js"></script>
+<script>
+  const total = 7;
+  let current = 1;
+  const stepLabels = ["Resume","Basic Info","Career Experience","Skills & Selling","Preferences","Exclusions","Review"];
+
+  const segWrap = document.getElementById('progressSteps');
+  for(let i=1;i<=total;i++){
+    const seg = document.createElement('div');
+    seg.className = 'seg';
+    seg.id = 'seg-'+i;
+    segWrap.appendChild(seg);
+  }
+
+  function render(){
+    document.querySelectorAll('.step-panel').forEach(p => p.classList.remove('active'));
+    document.querySelector('.step-panel[data-step="'+current+'"]').classList.add('active');
+    for(let i=1;i<=total;i++){
+      const seg = document.getElementById('seg-'+i);
+      seg.classList.remove('done','active');
+      if(i < current) seg.classList.add('done');
+      if(i === current) seg.classList.add('active');
+    }
+    document.getElementById('progressLabel').textContent = 'Step ' + current + ' of ' + total + ' — ' + stepLabels[current-1];
+    document.getElementById('backBtn').style.visibility = current === 1 ? 'hidden' : 'visible';
+    document.getElementById('nextBtn').textContent = current === total ? 'Start Finding My Jobs →' : 'Continue →';
+    window.scrollTo({top:0, behavior:'smooth'});
+  }
+
+  async function handleResumeFile(file) {
+    if (!file) return;
+    document.getElementById('dropzone').style.display = 'none';
+    const card = document.getElementById('uploadedFileCard');
+    card.style.display = 'flex';
+    document.getElementById('uploadedFileName').textContent = file.name;
+    document.getElementById('uploadedFileStatus').textContent = 'Uploading...';
+    document.getElementById('uploadedFileStatus').style.color = '';
+
+    const formData = new FormData();
+    formData.append('resume', file);
+
+    try {
+      const res = await rookApiFetch('/resume', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Upload failed');
+      document.getElementById('uploadedFileStatus').textContent = 'Uploaded successfully';
+    } catch (err) {
+      document.getElementById('uploadedFileStatus').textContent = 'Upload failed: ' + err.message;
+      document.getElementById('uploadedFileStatus').style.color = '#C23B3B';
+    }
+  }
+
+  // Collects whatever's filled in on the form fields into a plain object
+  // matching the candidate_profiles columns. This is a straightforward,
+  // best-effort mapping — it does not yet cover every field in the schema
+  // (multi-entry career history, chip selections, exclusions), just the
+  // core identity/preference fields that have simple inputs.
+  function collectProfileData() {
+    const val = (id) => document.getElementById(id)?.value?.trim() || null;
+    const numFromMoney = (id) => {
+      const raw = val(id);
+      if (!raw) return null;
+      const n = Number(raw.replace(/[^0-9.]/g, ''));
+      return Number.isFinite(n) ? n : null;
+    };
+    const numFromPercent = (id) => {
+      const raw = val(id);
+      if (!raw) return null;
+      const n = Number(raw.replace(/[^0-9.]/g, ''));
+      return Number.isFinite(n) ? n : null;
+    };
+    return {
+      name: val('fieldName'),
+      email: val('fieldEmail'),
+      phone: val('fieldPhone'),
+      home_city: val('fieldCity'),
+      home_state: val('fieldState'),
+      minimum_base_salary: numFromMoney('fieldMinSalary'),
+      target_ote: numFromMoney('fieldTargetOte'),
+      maximum_travel_percentage: numFromPercent('fieldMaxTravel'),
+      overnight_travel_preference: val('fieldOvernightTravel'),
+      work_style: val('fieldWorkStyle'),
+      willing_to_relocate: val('fieldRelocation') === 'Open to relocation',
+    };
+  }
+
+  async function saveProfileAndFinish() {
+    const nextBtn = document.getElementById('nextBtn');
+    nextBtn.textContent = 'Saving...';
+    try {
+      const res = await rookApiFetch('/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(collectProfileData()),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Could not save profile');
+      }
+    } catch (err) {
+      alert('Could not save your profile: ' + err.message + '\n\nCheck that your backend is running and Supabase is configured (see ROOK-Setup-Guide.pdf).');
+      nextBtn.textContent = 'Start Finding My Jobs →';
+      return;
+    }
+    window.location.href = 'rook-dashboard.html';
+  }
+
+  function goStep(dir){
+    if(current === total && dir === 1){
+      saveProfileAndFinish();
+      return;
+    }
+    current = Math.min(total, Math.max(1, current + dir));
+    render();
+  }
+
+  document.querySelectorAll('.chip').forEach(chip => {
+    chip.addEventListener('click', () => chip.classList.toggle('selected'));
+  });
+
+  (async () => {
+    await rookRequireAuth();
+    render();
+  })();
+</script>
+
+</body>
+</html>

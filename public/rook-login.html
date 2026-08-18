@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Log In — ROOK</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --navy:#0B1D3A; --royal:#1E66F5; --teal:#00C2A8; --gray:#F5F7FA;
+    --muted:#5B6B85; --border:#E3E8F0;
+    --font-display:'Space Grotesk', sans-serif; --font-body:'Inter', sans-serif;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    font-family:var(--font-body); color:var(--navy); background:var(--gray);
+    min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:24px;
+  }
+  h1,h2{font-family:var(--font-display); letter-spacing:-0.01em;}
+  a{color:var(--royal); text-decoration:none;}
+  .logo{display:flex; align-items:center; gap:10px; font-family:var(--font-display); font-weight:700; font-size:22px; margin-bottom:32px;}
+  .logo svg{width:26px; height:26px;}
+  .card{background:#fff; border-radius:16px; padding:36px; width:100%; max-width:400px; box-shadow:0 20px 45px -18px rgba(11,29,58,0.2);}
+  .tabs{display:flex; gap:4px; background:var(--gray); border-radius:10px; padding:4px; margin-bottom:24px;}
+  .tab{flex:1; text-align:center; padding:9px; border-radius:8px; font-size:13.5px; font-weight:600; color:var(--muted); cursor:pointer;}
+  .tab.active{background:#fff; color:var(--navy); box-shadow:0 1px 3px rgba(11,29,58,0.1);}
+  h2{font-size:20px; margin-bottom:6px;}
+  .sub{font-size:13.5px; color:var(--muted); margin-bottom:22px;}
+  .field{display:flex; flex-direction:column; gap:6px; margin-bottom:16px;}
+  .field label{font-size:12.5px; font-weight:600; color:var(--muted);}
+  .field input{padding:11px 13px; border-radius:9px; border:1px solid var(--border); font-size:14px; font-family:var(--font-body);}
+  .btn{width:100%; padding:12px; border-radius:999px; border:none; background:var(--royal); color:#fff; font-size:14.5px; font-weight:600; cursor:pointer; margin-top:6px;}
+  .btn:disabled{background:#B9C6DE; cursor:not-allowed;}
+  .msg{font-size:13px; margin-top:14px; text-align:center; line-height:1.5;}
+  .msg.error{color:#C23B3B;}
+  .msg.success{color:#00806E;}
+  .config-warning{
+    max-width:400px; width:100%; margin-top:16px; font-size:12px; color:var(--muted);
+    background:#fff; border-left:3px solid #B98900; border-radius:8px; padding:12px 14px; line-height:1.5;
+  }
+</style>
+</head>
+<body>
+
+<div class="logo">
+  <svg viewBox="0 0 24 24" fill="none"><path d="M6 21h12M7 21v-3.2c0-.6.3-1.1.8-1.4l1.7-1.1c.4-.3.6-.7.6-1.2v-1c0-.5-.2-.9-.6-1.2L7.9 11c-.5-.3-.8-.9-.8-1.5V7h1.5V5.2H10V7h1V5.2h1.5V7H14v1.5h1.5V7H17v2.5c0 .6-.3 1.2-.8 1.5l-1.6 1.1c-.4.3-.6.7-.6 1.2v1c0 .5.2.9.6 1.2l1.7 1.1c.5.3.8.8.8 1.4V21" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  ROOK
+</div>
+
+<div class="card">
+  <div class="tabs">
+    <div class="tab active" id="tabSignin" onclick="switchTab('signin')">Log In</div>
+    <div class="tab" id="tabSignup" onclick="switchTab('signup')">Create Account</div>
+  </div>
+
+  <div id="panelSignin">
+    <h2>Welcome back</h2>
+    <div class="sub">Log in to see your matches.</div>
+    <div class="field"><label>Email</label><input type="email" id="signinEmail" autocomplete="email"></div>
+    <div class="field"><label>Password</label><input type="password" id="signinPassword" autocomplete="current-password"></div>
+    <button class="btn" id="signinBtn" onclick="handleSignIn()">Log In</button>
+  </div>
+
+  <div id="panelSignup" style="display:none;">
+    <h2>Create your account</h2>
+    <div class="sub">Takes about a minute — you'll build your profile next.</div>
+    <div class="field"><label>Email</label><input type="email" id="signupEmail" autocomplete="email"></div>
+    <div class="field"><label>Password</label><input type="password" id="signupPassword" autocomplete="new-password"></div>
+    <button class="btn" id="signupBtn" onclick="handleSignUp()">Create Account</button>
+  </div>
+
+  <div class="msg" id="authMsg"></div>
+</div>
+
+<div class="config-warning" id="configWarning" style="display:none;">
+  ⚠ ROOK_CONFIG in rook-config.js still has placeholder Supabase values. Auth won't work until you fill in your real Supabase URL and anon key — see ROOK-Setup-Guide.pdf, Section 1.4.
+</div>
+
+<script src="rook-config.js"></script>
+<script>
+  const configured = window.ROOK_CONFIG.SUPABASE_URL !== "YOUR_SUPABASE_PROJECT_URL";
+  if (!configured) document.getElementById('configWarning').style.display = 'block';
+
+  const client = configured
+    ? window.supabase.createClient(window.ROOK_CONFIG.SUPABASE_URL, window.ROOK_CONFIG.SUPABASE_ANON_KEY)
+    : null;
+
+  function switchTab(tab) {
+    document.getElementById('tabSignin').classList.toggle('active', tab === 'signin');
+    document.getElementById('tabSignup').classList.toggle('active', tab === 'signup');
+    document.getElementById('panelSignin').style.display = tab === 'signin' ? 'block' : 'none';
+    document.getElementById('panelSignup').style.display = tab === 'signup' ? 'block' : 'none';
+    setMsg('');
+  }
+
+  function setMsg(text, type) {
+    const el = document.getElementById('authMsg');
+    el.textContent = text;
+    el.className = 'msg' + (type ? ' ' + type : '');
+  }
+
+  async function handleSignIn() {
+    if (!configured) return setMsg('Supabase isn\'t configured yet — see the warning below.', 'error');
+    const email = document.getElementById('signinEmail').value.trim();
+    const password = document.getElementById('signinPassword').value;
+    if (!email || !password) return setMsg('Enter your email and password.', 'error');
+
+    document.getElementById('signinBtn').disabled = true;
+    setMsg('Logging in...');
+    const { error } = await client.auth.signInWithPassword({ email, password });
+    document.getElementById('signinBtn').disabled = false;
+
+    if (error) return setMsg(error.message, 'error');
+    window.location.href = 'rook-dashboard.html';
+  }
+
+  async function handleSignUp() {
+    if (!configured) return setMsg('Supabase isn\'t configured yet — see the warning below.', 'error');
+    const email = document.getElementById('signupEmail').value.trim();
+    const password = document.getElementById('signupPassword').value;
+    if (!email || password.length < 8) return setMsg('Enter a valid email and an 8+ character password.', 'error');
+
+    document.getElementById('signupBtn').disabled = true;
+    setMsg('Creating your account...');
+    const { error } = await client.auth.signUp({ email, password });
+    document.getElementById('signupBtn').disabled = false;
+
+    if (error) return setMsg(error.message, 'error');
+    setMsg('Account created — check your email to confirm, then log in.', 'success');
+    switchTab('signin');
+  }
+</script>
+
+</body>
+</html>

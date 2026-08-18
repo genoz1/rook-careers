@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Job Search — ROOK</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#0B1D3A; --royal:#1E66F5; --teal:#00C2A8; --gray:#F5F7FA; --white:#FFFFFF;
+    --muted:#5B6B85; --border:#E3E8F0; --radius:14px;
+    --excellent:#00806E; --excellent-bg:rgba(0,194,168,0.12);
+    --strong:#1E66F5; --strong-bg:rgba(30,102,245,0.1);
+    --possible:#B98900; --possible-bg:rgba(185,137,0,0.1);
+    --font-display:'Space Grotesk', sans-serif; --font-body:'Inter', sans-serif;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{font-family:var(--font-body); color:var(--navy); background:var(--gray); -webkit-font-smoothing:antialiased;}
+  h1,h2,h3{font-family:var(--font-display); letter-spacing:-0.01em;}
+  a{color:inherit; text-decoration:none;}
+  .btn{display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:10px 18px; border-radius:999px; font-size:13.5px; font-weight:600; cursor:pointer; border:none;}
+  .btn-primary{background:var(--royal); color:#fff;}
+  .btn-outline{background:#fff; color:var(--navy); border:1px solid var(--border);}
+  .btn-outline:hover{border-color:var(--royal); color:var(--royal);}
+  .btn-sm{padding:8px 14px; font-size:12.5px;}
+
+  .topbar{background:var(--navy); padding:16px 0;}
+  .topbar-inner{max-width:1320px; margin:0 auto; padding:0 24px; display:flex; align-items:center; justify-content:space-between;}
+  .logo{display:flex; align-items:center; gap:10px; font-family:var(--font-display); font-weight:700; font-size:19px; color:#fff;}
+  .logo svg{width:22px; height:22px;}
+  .top-nav{display:flex; gap:26px; font-size:13.5px; font-weight:500; color:#fff;}
+  .top-nav a{opacity:.75;}
+  .top-nav a.active{opacity:1; font-weight:700;}
+  .avatar{width:32px; height:32px; border-radius:50%; background:linear-gradient(135deg,var(--royal),var(--teal)); display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:#fff;}
+
+  .layout{max-width:1320px; margin:0 auto; padding:32px 24px 80px; display:grid; grid-template-columns:260px 1fr; gap:28px; align-items:start;}
+
+  .filters{background:#fff; border-radius:var(--radius); padding:22px; box-shadow:0 2px 10px -4px rgba(11,29,58,0.08);}
+  .filters h3{font-size:14px; font-weight:700; margin-bottom:16px;}
+  .filter-group{margin-bottom:22px;}
+  .filter-group:last-child{margin-bottom:0;}
+  .filter-group label{display:block; font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:10px;}
+  .filter-group input[type="text"]{
+    width:100%; padding:9px 12px; border-radius:8px; border:1px solid var(--border); font-size:13.5px; font-family:var(--font-body);
+  }
+  .check-row{display:flex; align-items:center; gap:8px; font-size:13.5px; margin-bottom:9px; color:var(--navy);}
+  .check-row input{accent-color:var(--royal);}
+  .range-labels{display:flex; justify-content:space-between; font-size:12px; color:var(--muted); margin-top:6px;}
+  input[type="range"]{width:100%; accent-color:var(--royal);}
+  .clear-link{font-size:12.5px; font-weight:600; color:var(--royal); margin-top:18px; display:block; text-align:center;}
+
+  .results-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; flex-wrap:wrap; gap:12px;}
+  .results-count{font-size:14.5px; color:var(--muted);}
+  .results-count b{color:var(--navy);}
+  .sort-row{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted);}
+  .sort-row select{border:1px solid var(--border); border-radius:8px; padding:7px 10px; font-size:13px; font-family:var(--font-body); color:var(--navy);}
+
+  .job-list{display:flex; flex-direction:column; gap:14px;}
+  .job-row{
+    background:#fff; border-radius:var(--radius); padding:22px 24px; box-shadow:0 2px 10px -4px rgba(11,29,58,0.08);
+    display:grid; grid-template-columns:auto 1fr auto; gap:22px; align-items:center;
+  }
+  .score-ring{
+    width:56px; height:56px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-family:var(--font-display); font-weight:700; font-size:14px; flex-shrink:0;
+    background:conic-gradient(var(--teal) calc(var(--pct) * 1%), #EDF1F7 0);
+    position:relative;
+  }
+  .score-ring::before{content:""; position:absolute; inset:5px; background:#fff; border-radius:50%;}
+  .score-ring span{position:relative; z-index:1;}
+  .job-info h4{font-size:16px; font-weight:700; margin-bottom:3px;}
+  .job-info .company{font-size:13.5px; color:var(--muted); margin-bottom:10px;}
+  .tag-row{display:flex; flex-wrap:wrap; gap:8px;}
+  .jtag{font-size:11.5px; font-weight:600; padding:4px 10px; border-radius:6px; background:var(--gray); color:var(--muted);}
+  .job-meta-line{font-size:12.5px; color:#8B96AB; margin-top:8px;}
+  .job-actions{display:flex; flex-direction:column; gap:8px; align-items:flex-end;}
+  .match-level{font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.03em; padding:3px 9px; border-radius:99px;}
+  .ml-excellent{background:var(--excellent-bg); color:var(--excellent);}
+  .ml-strong{background:var(--strong-bg); color:var(--strong);}
+  .ml-possible{background:var(--possible-bg); color:var(--possible);}
+
+  .pagination{display:flex; justify-content:center; gap:8px; margin-top:28px;}
+  .pagination a{width:34px; height:34px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:600; background:#fff; box-shadow:0 2px 8px -4px rgba(11,29,58,0.1);}
+  .pagination a.active{background:var(--navy); color:#fff;}
+
+  @media(max-width:900px){
+    .layout{grid-template-columns:1fr;}
+    .job-row{grid-template-columns:1fr; text-align:left;}
+    .job-actions{flex-direction:row; align-items:center;}
+    .top-nav{display:none;}
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M6 21h12M7 21v-3.2c0-.6.3-1.1.8-1.4l1.7-1.1c.4-.3.6-.7.6-1.2v-1c0-.5-.2-.9-.6-1.2L7.9 11c-.5-.3-.8-.9-.8-1.5V7h1.5V5.2H10V7h1V5.2h1.5V7H14v1.5h1.5V7H17v2.5c0 .6-.3 1.2-.8 1.5l-1.6 1.1c-.4.3-.6.7-.6 1.2v1c0 .5.2.9.6 1.2l1.7 1.1c.5.3.8.8.8 1.4V21" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      ROOK
+    </div>
+    <nav class="top-nav">
+      <a href="rook-search.html" class="active">Job Search</a>
+      <a href="rook-dashboard.html">Dashboard</a>
+      <a href="rook-tracker.html">Applications</a>
+      <a href="#">Saved Jobs</a>
+    </nav>
+    <div class="avatar">GZ</div>
+  </div>
+</div>
+
+<div class="layout">
+  <aside class="filters">
+    <h3>Filters</h3>
+    <div class="filter-group">
+      <label>Keyword</label>
+      <input type="text" placeholder="Title, company, product...">
+    </div>
+    <div class="filter-group">
+      <label>Location</label>
+      <div class="check-row"><input type="checkbox" checked> Central Florida</div>
+      <div class="check-row"><input type="checkbox"> Northeast Florida</div>
+      <div class="check-row"><input type="checkbox"> Tampa Bay</div>
+      <div class="check-row"><input type="checkbox"> Remote</div>
+    </div>
+    <div class="filter-group">
+      <label>Industry</label>
+      <div class="check-row"><input type="checkbox" checked> Diagnostics</div>
+      <div class="check-row"><input type="checkbox" checked> Veterinary / Animal Health</div>
+      <div class="check-row"><input type="checkbox"> Medical Device</div>
+      <div class="check-row"><input type="checkbox"> Capital Equipment</div>
+      <div class="check-row"><input type="checkbox"> Pharmaceutical</div>
+    </div>
+    <div class="filter-group">
+      <label>Match Score</label>
+      <input type="range" min="0" max="100" value="70">
+      <div class="range-labels"><span>0%</span><span>70%+</span><span>100%</span></div>
+    </div>
+    <div class="filter-group">
+      <label>Compensation</label>
+      <input type="range" min="0" max="200" value="90">
+      <div class="range-labels"><span>$0</span><span>$90K+</span><span>$200K</span></div>
+    </div>
+    <div class="filter-group">
+      <label>Travel</label>
+      <div class="check-row"><input type="checkbox"> Under 25%</div>
+      <div class="check-row"><input type="checkbox" checked> 25–50%</div>
+      <div class="check-row"><input type="checkbox" checked> 50%+</div>
+    </div>
+    <a href="#" class="clear-link">Clear all filters</a>
+  </aside>
+
+  <main>
+    <div class="results-head">
+      <div class="results-count"><b>23</b> opportunities match your profile</div>
+      <div class="sort-row">
+        Sort by
+        <select>
+          <option>Best Match</option>
+          <option>Newest</option>
+          <option>Highest Compensation</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="job-list">
+      <div class="job-row">
+        <div class="score-ring" style="--pct:96;"><span>96%</span></div>
+        <div class="job-info">
+          <h4>Territory Sales Manager</h4>
+          <div class="company">IDEXX — Orlando / Tampa, FL · $110K–$150K OTE</div>
+          <div class="tag-row"><span class="jtag">Veterinary Diagnostics</span><span class="jtag">Full-time</span><span class="jtag">50% Travel</span></div>
+          <div class="job-meta-line">Posted 1 day ago · Sourced via employer career page · <span style="color:#00806E; font-weight:600;"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="3" style="vertical-align:-1px;"><path d="M5 13l4 4L19 7"/></svg> Verified 2 hours ago</span></div>
+        </div>
+        <div class="job-actions">
+          <span class="match-level ml-excellent">Excellent Match</span>
+          <a href="rook-job-analysis.html" class="btn btn-primary btn-sm">View Analysis</a>
+        </div>
+      </div>
+
+      <div class="job-row">
+        <div class="score-ring" style="--pct:94;"><span>94%</span></div>
+        <div class="job-info">
+          <h4>Diagnostic Account Executive</h4>
+          <div class="company">Example Diagnostics — Orlando, FL · $95K–$120K + Commission</div>
+          <div class="tag-row"><span class="jtag">Diagnostics</span><span class="jtag">Full-time</span><span class="jtag">Territory Sales</span></div>
+          <div class="job-meta-line">Posted 2 days ago · Sourced via employer career page · <span style="color:#00806E; font-weight:600;"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="3" style="vertical-align:-1px;"><path d="M5 13l4 4L19 7"/></svg> Verified 3 hours ago</span></div>
+        </div>
+        <div class="job-actions">
+          <span class="match-level ml-excellent">Excellent Match</span>
+          <a href="rook-job-analysis.html" class="btn btn-primary btn-sm">View Analysis</a>
+        </div>
+      </div>
+
+      <div class="job-row">
+        <div class="score-ring" style="--pct:91;"><span>91%</span></div>
+        <div class="job-info">
+          <h4>Veterinary Territory Manager</h4>
+          <div class="company">Covetrus — Jacksonville, FL · $100K–$130K OTE</div>
+          <div class="tag-row"><span class="jtag">Veterinary / Animal Health</span><span class="jtag">Full-time</span></div>
+          <div class="job-meta-line">Posted 4 days ago · Sourced via job feed · <span style="color:#00806E; font-weight:600;"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="3" style="vertical-align:-1px;"><path d="M5 13l4 4L19 7"/></svg> Verified 6 hours ago</span></div>
+        </div>
+        <div class="job-actions">
+          <span class="match-level ml-excellent">Excellent Match</span>
+          <a href="rook-job-analysis.html" class="btn btn-primary btn-sm">View Analysis</a>
+        </div>
+      </div>
+
+      <div class="job-row">
+        <div class="score-ring" style="--pct:82;"><span>82%</span></div>
+        <div class="job-info">
+          <h4>Capital Equipment Specialist</h4>
+          <div class="company">Midmark — Tampa, FL · $90K–$115K + Commission</div>
+          <div class="tag-row"><span class="jtag">Capital Equipment</span><span class="jtag">Full-time</span></div>
+          <div class="job-meta-line">Posted 6 days ago · Sourced via employer career page · <span style="color:#00806E; font-weight:600;"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="3" style="vertical-align:-1px;"><path d="M5 13l4 4L19 7"/></svg> Verified 5 hours ago</span></div>
+        </div>
+        <div class="job-actions">
+          <span class="match-level ml-strong">Strong Match</span>
+          <a href="rook-job-analysis.html" class="btn btn-outline btn-sm">View Analysis</a>
+        </div>
+      </div>
+
+      <div class="job-row">
+        <div class="score-ring" style="--pct:76;"><span>76%</span></div>
+        <div class="job-info">
+          <h4>Regional Account Manager</h4>
+          <div class="company">Antech Diagnostics — Ocala, FL · $95K–$125K OTE</div>
+          <div class="tag-row"><span class="jtag">Diagnostics</span><span class="jtag">Full-time</span><span class="jtag">Remote</span></div>
+          <div class="job-meta-line">Posted 1 week ago · Sourced via job feed · <span style="color:#00806E; font-weight:600;"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="3" style="vertical-align:-1px;"><path d="M5 13l4 4L19 7"/></svg> Verified 1 day ago</span></div>
+        </div>
+        <div class="job-actions">
+          <span class="match-level ml-strong">Strong Match</span>
+          <a href="rook-job-analysis.html" class="btn btn-outline btn-sm">View Analysis</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="pagination">
+      <a href="#" class="active">1</a>
+      <a href="#">2</a>
+      <a href="#">3</a>
+      <a href="#">→</a>
+    </div>
+  </main>
+</div>
+
+</body>
+</html>

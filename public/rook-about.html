@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>About — ROOK</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#0B1D3A; --royal:#1E66F5; --teal:#00C2A8; --gray:#F5F7FA; --white:#FFFFFF;
+    --muted:#5B6B85; --border:#E3E8F0;
+    --font-display:'Space Grotesk', sans-serif; --font-body:'Inter', sans-serif;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{font-family:var(--font-body); color:var(--navy); background:#fff; -webkit-font-smoothing:antialiased; line-height:1.6;}
+  h1,h2,h3{font-family:var(--font-display); letter-spacing:-0.01em;}
+  a{color:inherit; text-decoration:none;}
+  .wrap{max-width:1100px; margin:0 auto; padding:0 32px;}
+  .btn{display:inline-flex; align-items:center; justify-content:center; padding:13px 26px; border-radius:999px; font-size:14.5px; font-weight:600; cursor:pointer; border:none;}
+  .btn-primary{background:var(--royal); color:#fff;}
+  .btn-outline{background:transparent; color:#fff; border:1px solid rgba(255,255,255,0.35); padding:10px 19px; font-size:13.5px;}
+
+  header.nav{background:var(--navy); padding:18px 0;}
+  .nav-inner{max-width:1100px; margin:0 auto; padding:0 32px; display:flex; align-items:center; justify-content:space-between;}
+  .logo{display:flex; align-items:center; gap:10px; font-family:var(--font-display); font-weight:700; font-size:19px; color:#fff;}
+  .logo svg{width:22px; height:22px;}
+  .nav-cta{display:flex; gap:14px;}
+
+  .hero{padding:80px 0 64px; text-align:center;}
+  .eyebrow{display:inline-flex; font-size:12.5px; font-weight:700; color:var(--royal); background:rgba(30,102,245,0.08); padding:6px 14px; border-radius:99px; margin-bottom:20px;}
+  .hero h1{font-size:42px; font-weight:700; line-height:1.15; margin-bottom:18px; max-width:680px; margin-left:auto; margin-right:auto;}
+  .hero p{font-size:17px; color:var(--muted); max-width:620px; margin:0 auto; line-height:1.65;}
+
+  section.pad{padding:72px 0;}
+  .origin{background:var(--gray); border-radius:20px; padding:52px; display:grid; grid-template-columns:1fr 1fr; gap:44px; align-items:center;}
+  .origin h2{font-size:26px; font-weight:700; margin-bottom:16px;}
+  .origin p{font-size:15px; color:var(--muted); margin-bottom:14px;}
+  .stat-strip{display:grid; grid-template-columns:repeat(4,1fr); gap:24px;}
+  .stat{text-align:center;}
+  .stat .n{font-family:var(--font-display); font-size:32px; font-weight:700; color:var(--navy);}
+  .stat .l{font-size:12.5px; color:var(--muted); margin-top:4px;}
+
+  .values-head{text-align:center; max-width:600px; margin:0 auto 44px;}
+  .values-head .eyebrow-sm{font-size:12.5px; font-weight:700; color:var(--royal); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:10px; display:block;}
+  .values-head h2{font-size:32px; font-weight:700;}
+  .value-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:24px;}
+  .value-card{padding:8px 4px;}
+  .value-icon{width:44px; height:44px; border-radius:11px; background:rgba(0,194,168,0.1); display:flex; align-items:center; justify-content:center; margin-bottom:16px;}
+  .value-icon svg{width:21px; height:21px; color:#00806E;}
+  .value-card h3{font-size:16px; font-weight:700; margin-bottom:8px;}
+  .value-card p{font-size:14px; color:var(--muted); line-height:1.6;}
+
+  .principle-list{background:var(--navy); border-radius:20px; padding:56px;}
+  .principle-list h2{color:#fff; font-size:28px; font-weight:700; text-align:center; margin-bottom:40px;}
+  .principle{display:flex; gap:18px; padding:20px 0; border-bottom:1px solid rgba(255,255,255,0.1);}
+  .principle:last-child{border-bottom:none;}
+  .principle .num{font-family:var(--font-display); font-size:14px; font-weight:700; color:var(--teal); flex-shrink:0; width:28px;}
+  .principle h4{color:#fff; font-size:15.5px; font-weight:700; margin-bottom:4px;}
+  .principle p{color:#AEB9CF; font-size:14px; line-height:1.6;}
+
+  .cta{text-align:center; padding:80px 0;}
+  .cta h2{font-size:30px; font-weight:700; margin-bottom:14px;}
+  .cta p{font-size:15.5px; color:var(--muted); margin-bottom:28px;}
+
+  footer{background:var(--navy); color:#AEB9CF; padding:36px 0; text-align:center; font-size:13px;}
+
+  @media(max-width:820px){
+    .origin{grid-template-columns:1fr;}
+    .stat-strip{grid-template-columns:1fr 1fr;}
+    .value-grid{grid-template-columns:1fr;}
+    .hero h1{font-size:30px;}
+  }
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="nav-inner">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M6 21h12M7 21v-3.2c0-.6.3-1.1.8-1.4l1.7-1.1c.4-.3.6-.7.6-1.2v-1c0-.5-.2-.9-.6-1.2L7.9 11c-.5-.3-.8-.9-.8-1.5V7h1.5V5.2H10V7h1V5.2h1.5V7H14v1.5h1.5V7H17v2.5c0 .6-.3 1.2-.8 1.5l-1.6 1.1c-.4.3-.6.7-.6 1.2v1c0 .5.2.9.6 1.2l1.7 1.1c.5.3.8.8.8 1.4V21" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      ROOK
+    </div>
+    <div class="nav-cta">
+      <a href="index.html" class="btn btn-outline">Back to Home</a>
+      <a href="#" class="btn btn-primary">Get Started</a>
+    </div>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap">
+    <div class="eyebrow">About ROOK</div>
+    <h1>We built the tool we wished existed during our own job search.</h1>
+    <p>ROOK exists because searching medical and veterinary sales openings one job board at a time is a bad use of a professional salesperson's time — and it doesn't get easier the more experienced you are.</p>
+  </div>
+</section>
+
+<section class="pad">
+  <div class="wrap">
+    <div class="origin">
+      <div>
+        <h2>Why we started here</h2>
+        <p>ROOK began with a very specific, unglamorous problem: a medical and veterinary sales professional going through a job search, manually checking a dozen sites a day, and still missing roles that were a genuine fit.</p>
+        <p>Generic AI job tools already exist. What didn't exist was one that actually understood the difference between reference-lab diagnostics and point-of-care diagnostics, or between veterinary distribution and veterinary capital equipment — distinctions that matter enormously to hiring managers in this industry and are invisible to a keyword search.</p>
+      </div>
+      <div class="stat-strip">
+        <div class="stat"><div class="n">300+</div><div class="l">Target employer sources</div></div>
+        <div class="stat"><div class="n">7</div><div class="l">Industry categories covered</div></div>
+        <div class="stat"><div class="n">2026</div><div class="l">Founded</div></div>
+        <div class="stat"><div class="n">1</div><div class="l">Profile candidates build</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="pad" style="background:var(--gray);">
+  <div class="wrap">
+    <div class="values-head">
+      <span class="eyebrow-sm">What We Believe</span>
+      <h2>The industry deserves better than keyword search.</h2>
+    </div>
+    <div class="value-grid">
+      <div class="value-card">
+        <div class="value-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
+        <h3>Explained, not just scored</h3>
+        <p>A match percentage with no explanation is a number, not information. Every match shows exactly why it fits and what might not.</p>
+      </div>
+      <div class="value-card">
+        <div class="value-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+        <h3>Direct from the source</h3>
+        <p>Roles are sourced from employer career sites and applicant-tracking systems directly — not recycled from other job boards.</p>
+      </div>
+      <div class="value-card">
+        <div class="value-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21c-4-1-7-4-7-8 0-2 1-3 2-3s2 2 3 2 1-2 3-2 2 2 3 2 2-2 3-2 2 1 2 3c0 4-3 7-7 8"/></svg></div>
+        <h3>Never fabricated</h3>
+        <p>Tailored résumés reorganize and emphasize your real experience. ROOK never invents a job, a skill, or an accomplishment.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="pad">
+  <div class="wrap">
+    <div class="principle-list">
+      <h2>How ROOK actually works</h2>
+      <div class="principle">
+        <div class="num">01</div>
+        <div><h4>One profile, once</h4><p>Upload a résumé and set your preferences a single time — territory, compensation floor, travel tolerance, industries you'll consider.</p></div>
+      </div>
+      <div class="principle">
+        <div class="num">02</div>
+        <div><h4>Continuous discovery</h4><p>ROOK checks employer career sources on a schedule, not on request — so opportunities are waiting for you, not the other way around.</p></div>
+      </div>
+      <div class="principle">
+        <div class="num">03</div>
+        <div><h4>Weighted, explained matching</h4><p>Scores combine deterministic factors (territory, comp, required experience) with semantic similarity — never a bare AI guess.</p></div>
+      </div>
+      <div class="principle">
+        <div class="num">04</div>
+        <div><h4>You apply, on your terms</h4><p>ROOK prepares a tailored application package; you decide what to send and where, on the employer's own application page.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="cta">
+  <div class="wrap">
+    <h2>See what ROOK finds for you.</h2>
+    <p>Build your profile once — the search runs from there.</p>
+    <a href="index.html" class="btn" style="background:var(--royal); color:#fff;">Find My Matches</a>
+  </div>
+</section>
+
+<footer>© 2026 ROOK Careers. All rights reserved.</footer>
+
+</body>
+</html>

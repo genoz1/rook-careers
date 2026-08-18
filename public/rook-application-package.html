@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Application Package — Diagnostic Account Executive — ROOK</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#0B1D3A; --royal:#1E66F5; --teal:#00C2A8; --gray:#F5F7FA; --white:#FFFFFF;
+    --muted:#5B6B85; --border:#E3E8F0; --radius:14px;
+    --font-display:'Space Grotesk', sans-serif; --font-body:'Inter', sans-serif;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{font-family:var(--font-body); color:var(--navy); background:var(--gray); -webkit-font-smoothing:antialiased;}
+  h1,h2,h3{font-family:var(--font-display); letter-spacing:-0.01em;}
+  a{color:inherit; text-decoration:none;}
+  .btn{display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:11px 18px; border-radius:999px; font-size:13.5px; font-weight:600; cursor:pointer; border:none;}
+  .btn-primary{background:var(--royal); color:#fff;}
+  .btn-outline{background:#fff; color:var(--navy); border:1px solid var(--border);}
+  .btn-teal{background:var(--teal); color:#03261F;}
+  .btn-block{width:100%;}
+
+  .topbar{background:#fff; border-bottom:1px solid var(--border); padding:16px 0;}
+  .topbar-inner{max-width:1120px; margin:0 auto; padding:0 24px; display:flex; align-items:center; justify-content:space-between;}
+  .logo{display:flex; align-items:center; gap:10px; font-family:var(--font-display); font-weight:700; font-size:19px;}
+  .logo svg{width:22px; height:22px;}
+  .back-link{font-size:13.5px; color:var(--muted); font-weight:600;}
+
+  .container{max-width:1120px; margin:0 auto; padding:36px 24px 100px;}
+  .pkg-header{margin-bottom:28px;}
+  .pkg-eyebrow{font-size:12.5px; font-weight:700; color:var(--royal); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:8px;}
+  .pkg-header h1{font-size:26px; font-weight:700; margin-bottom:6px;}
+  .pkg-header p{font-size:14.5px; color:var(--muted);}
+
+  .rule-banner{
+    display:flex; align-items:center; gap:12px; background:#fff; border:1px solid var(--border);
+    border-left:4px solid var(--teal); border-radius:10px; padding:14px 18px; margin-bottom:28px; font-size:13.5px; color:var(--navy);
+  }
+  .rule-banner svg{width:18px; height:18px; color:var(--teal); flex-shrink:0;}
+
+  .tabs{display:flex; gap:4px; background:#fff; border:1px solid var(--border); border-radius:11px; padding:4px; margin-bottom:24px; width:fit-content;}
+  .tab{padding:9px 18px; border-radius:8px; font-size:13.5px; font-weight:600; color:var(--muted); cursor:pointer;}
+  .tab.active{background:var(--navy); color:#fff;}
+
+  .compare-grid{display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:28px;}
+  .resume-card{background:#fff; border:1px solid var(--border); border-radius:var(--radius); overflow:hidden;}
+  .resume-card .rc-head{padding:16px 20px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;}
+  .resume-card .rc-head h4{font-size:13.5px; font-weight:700;}
+  .rc-tag{font-size:11px; font-weight:700; padding:3px 9px; border-radius:99px;}
+  .rc-tag.original{background:var(--gray); color:var(--muted);}
+  .rc-tag.tailored{background:rgba(0,194,168,0.12); color:#00806E;}
+  .resume-body{padding:20px; font-size:13px; line-height:1.65; color:#3D4A63; max-height:420px; overflow-y:auto;}
+  .resume-body .rname{font-family:var(--font-display); font-size:15px; font-weight:700; color:var(--navy); margin-bottom:2px;}
+  .resume-body .rtitle{font-size:12.5px; color:var(--muted); margin-bottom:14px;}
+  .resume-body h5{font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:var(--navy); margin:16px 0 8px;}
+  .resume-body ul{padding-left:16px; margin-bottom:4px;}
+  .resume-body li{margin-bottom:5px;}
+  mark{background:rgba(0,194,168,0.22); color:inherit; padding:0 2px; border-radius:3px;}
+
+  .match-note{font-size:12px; color:var(--muted); padding:12px 20px; border-top:1px solid var(--border); background:var(--gray);}
+
+  .module-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:32px;}
+  .module-card{background:#fff; border:1px solid var(--border); border-radius:12px; padding:18px; text-align:left;}
+  .module-card .icon{width:36px; height:36px; border-radius:9px; background:rgba(30,102,245,0.08); display:flex; align-items:center; justify-content:center; margin-bottom:12px;}
+  .module-card .icon svg{width:17px; height:17px; color:var(--royal);}
+  .module-card h5{font-size:13.5px; font-weight:700; margin-bottom:4px;}
+  .module-card p{font-size:12px; color:var(--muted); line-height:1.5; margin-bottom:12px;}
+  .module-card .status{font-size:11.5px; font-weight:600; color:#00806E; display:flex; align-items:center; gap:5px;}
+
+  .final-actions{display:flex; justify-content:space-between; align-items:center; background:#fff; border:1px solid var(--border); border-radius:var(--radius); padding:22px 26px;}
+  .final-actions .l h4{font-size:15px; font-weight:700; margin-bottom:2px;}
+  .final-actions .l p{font-size:13px; color:var(--muted);}
+  .final-actions .r{display:flex; gap:10px;}
+
+  @media(max-width:880px){
+    .compare-grid, .module-grid{grid-template-columns:1fr;}
+    .final-actions{flex-direction:column; align-items:flex-start; gap:16px;}
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M6 21h12M7 21v-3.2c0-.6.3-1.1.8-1.4l1.7-1.1c.4-.3.6-.7.6-1.2v-1c0-.5-.2-.9-.6-1.2L7.9 11c-.5-.3-.8-.9-.8-1.5V7h1.5V5.2H10V7h1V5.2h1.5V7H14v1.5h1.5V7H17v2.5c0 .6-.3 1.2-.8 1.5l-1.6 1.1c-.4.3-.6.7-.6 1.2v1c0 .5.2.9.6 1.2l1.7 1.1c.5.3.8.8.8 1.4V21" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      ROOK
+    </div>
+    <a href="rook-job-analysis.html" class="back-link">← Back to Match Analysis</a>
+  </div>
+</div>
+
+<div class="container">
+  <div class="pkg-header">
+    <div class="pkg-eyebrow">Application Package</div>
+    <h1>Diagnostic Account Executive — Example Diagnostics</h1>
+    <p>Everything below is built from your master résumé. Review and edit before you apply.</p>
+  </div>
+
+  <div class="rule-banner">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+    ROOK only reorganizes and emphasizes experience already in your résumé — it never invents jobs, titles, dates, or accomplishments.
+  </div>
+
+  <div class="tabs">
+    <div class="tab active">Résumé</div>
+    <div class="tab">Cover Letter</div>
+    <div class="tab">Recruiter Message</div>
+    <div class="tab">Interview Prep</div>
+  </div>
+
+  <div class="compare-grid">
+    <div class="resume-card">
+      <div class="rc-head"><h4>Master Résumé</h4><span class="rc-tag original">Original</span></div>
+      <div class="resume-body">
+        <div class="rname">Gene Zentko</div>
+        <div class="rtitle">Healthcare & Diagnostics Sales Professional</div>
+        <h5>Summary</h5>
+        <p>15-year sales professional with experience across diagnostics, laboratory services, veterinary, and capital equipment sales.</p>
+        <h5>Experience</h5>
+        <ul>
+          <li>Managed a multi-county territory covering reference laboratory and point-of-care diagnostics accounts.</li>
+          <li>Sold diagnostic instrumentation and consumables to hospital, physician office, and veterinary accounts.</li>
+          <li>Built and maintained relationships with veterinary clinics and animal health distributors.</li>
+          <li>Consistently ranked among top territory performers on new account growth.</li>
+        </ul>
+        <h5>Skills</h5>
+        <p>Territory management, capital equipment sales, veterinary sales, laboratory diagnostics, account growth, contract negotiation.</p>
+      </div>
+      <div class="match-note">Unchanged — this is exactly what you uploaded.</div>
+    </div>
+
+    <div class="resume-card">
+      <div class="rc-head"><h4>Tailored for This Role</h4><span class="rc-tag tailored">94% Aligned</span></div>
+      <div class="resume-body">
+        <div class="rname">Gene Zentko</div>
+        <div class="rtitle">Diagnostics &amp; Territory Sales Professional</div>
+        <h5>Summary</h5>
+        <p><mark>Diagnostics-focused</mark> sales professional with 15 years selling <mark>reference laboratory and point-of-care diagnostic solutions</mark> across a defined Central Florida territory.</p>
+        <h5>Experience</h5>
+        <ul>
+          <li><mark>Managed reference laboratory and point-of-care diagnostics accounts</mark> across a multi-county territory — directly matching this role's core coverage area.</li>
+          <li><mark>Sold diagnostic instrumentation and consumables</mark> to hospital and physician-office accounts, including capital equipment components.</li>
+          <li>Built relationships with veterinary clinics and animal health distributors, broadening account reach.</li>
+          <li>Consistently ranked among top territory performers on new account growth.</li>
+        </ul>
+        <h5>Skills</h5>
+        <p><mark>Laboratory diagnostics</mark>, <mark>territory management</mark>, capital equipment sales, veterinary sales, account growth, contract negotiation.</p>
+      </div>
+      <div class="match-note">Reordered to lead with diagnostics; added the job's own terminology where your experience already supports it.</div>
+    </div>
+  </div>
+
+  <div class="module-grid">
+    <div class="module-card">
+      <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h7"/></svg></div>
+      <h5>ATS Alignment</h5>
+      <p>Terminology matched to this posting's language where your background supports it.</p>
+      <div class="status"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Ready</div>
+    </div>
+    <div class="module-card">
+      <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4zM4 9h16"/></svg></div>
+      <h5>Cover Letter</h5>
+      <p>A short, specific letter referencing this role and your diagnostics background.</p>
+      <div class="status"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Ready</div>
+    </div>
+    <div class="module-card">
+      <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg></div>
+      <h5>Recruiter Message</h5>
+      <p>A short LinkedIn/email note you can send to the hiring team.</p>
+      <div class="status"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Ready</div>
+    </div>
+    <div class="module-card">
+      <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
+      <h5>Interview Prep</h5>
+      <p>Likely questions for this role, and how your background answers them.</p>
+      <div class="status"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Ready</div>
+    </div>
+  </div>
+
+  <div class="final-actions">
+    <div class="l">
+      <h4>Package complete</h4>
+      <p>This version is saved to your résumé history and will attach automatically when you mark this job "Applied."</p>
+    </div>
+    <div class="r">
+      <a href="#" class="btn btn-outline">Download PDF</a>
+      <a href="rook-tracker.html" class="btn btn-primary">Move to Applied →</a>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
