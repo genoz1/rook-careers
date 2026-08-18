@@ -108,6 +108,27 @@
     el.className = 'msg' + (type ? ' ' + type : '');
   }
 
+  // After a successful login, check whether this candidate has actually
+  // completed onboarding yet — GET /api/profile returns null until Step 7
+  // of onboarding has been submitted. Routing straight to the dashboard
+  // regardless of this was the root cause of new users landing on an
+  // empty, unscored dashboard with no path back into profile setup.
+  async function routeAfterLogin() {
+    try {
+      const { data: sessionData } = await client.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      const res = await fetch('/api/profile', {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const profile = res.ok ? await res.json() : null;
+      window.location.href = profile ? 'rook-dashboard.html' : 'rook-onboarding.html';
+    } catch {
+      // If the check itself fails (e.g. backend not configured), fall back
+      // to the dashboard rather than blocking login entirely.
+      window.location.href = 'rook-dashboard.html';
+    }
+  }
+
   async function handleSignIn() {
     if (!configured) return setMsg('Supabase isn\'t configured yet — see the warning below.', 'error');
     const email = document.getElementById('signinEmail').value.trim();
@@ -117,10 +138,13 @@
     document.getElementById('signinBtn').disabled = true;
     setMsg('Logging in...');
     const { error } = await client.auth.signInWithPassword({ email, password });
-    document.getElementById('signinBtn').disabled = false;
 
-    if (error) return setMsg(error.message, 'error');
-    window.location.href = 'rook-dashboard.html';
+    if (error) {
+      document.getElementById('signinBtn').disabled = false;
+      return setMsg(error.message, 'error');
+    }
+    setMsg('Checking your profile...');
+    await routeAfterLogin();
   }
 
   async function handleSignUp() {
