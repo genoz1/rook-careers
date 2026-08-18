@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="assets/favicon.ico" sizes="any">
+<link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="icon" href="assets/favicon-16.png" type="image/png" sizes="16x16">
+<link rel="apple-touch-icon" href="assets/rook-icon-180.png">
+<link rel="icon" href="assets/rook-icon-192.png" type="image/png" sizes="192x192">
+<meta name="theme-color" content="#071E41">
+<title>Add Employers — ROOK</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#071E41; --royal:#1463FF; --teal:#12B8A6; --gray:#F5F7FA;
+    --muted:#5B6B85; --border:#E3E8F0; --radius:14px;
+    --font-display:'Space Grotesk', sans-serif; --font-body:'Inter', sans-serif;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{font-family:var(--font-body); color:var(--navy); background:var(--gray); -webkit-font-smoothing:antialiased;}
+  h1,h2,h3{font-family:var(--font-display); letter-spacing:-0.01em;}
+  a{color:inherit; text-decoration:none; cursor:pointer;}
+  .btn{display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:11px 20px; border-radius:999px; font-size:13.5px; font-weight:600; cursor:pointer; border:none;}
+  .btn-primary{background:var(--royal); color:#fff;}
+  .btn-primary:disabled{background:#B9C6DE; cursor:not-allowed;}
+  .btn-outline{background:#fff; color:var(--navy); border:1px solid var(--border);}
+
+  .topbar{background:var(--navy); padding:16px 0;}
+  .topbar-inner{max-width:900px; margin:0 auto; padding:0 24px; display:flex; align-items:center; justify-content:space-between;}
+  .logo{display:flex; align-items:center; gap:8px;}
+  .back-link{font-size:13.5px; color:#AEB9CF; font-weight:600;}
+
+  .container{max-width:900px; margin:0 auto; padding:32px 24px 80px;}
+  .page-head{margin-bottom:24px;}
+  .page-head h1{font-size:24px; font-weight:700;}
+  .page-head p{font-size:14px; color:var(--muted); margin-top:4px; line-height:1.6;}
+
+  .card{background:#fff; border-radius:var(--radius); padding:26px; box-shadow:0 2px 10px -4px rgba(11,29,58,0.08); margin-bottom:24px;}
+  .card h3{font-size:15px; font-weight:700; margin-bottom:16px;}
+  .field-row{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px;}
+  .field{display:flex; flex-direction:column; gap:6px;}
+  .field.full{grid-column:1 / -1;}
+  .field label{font-size:12.5px; font-weight:600; color:var(--muted);}
+  .field input, .field select{padding:10px 12px; border-radius:8px; border:1px solid var(--border); font-size:13.5px; font-family:var(--font-body);}
+
+  .hint{font-size:12px; color:#8B96AB; margin-top:6px; line-height:1.5;}
+  .msg{font-size:13px; margin-top:14px; padding:10px 14px; border-radius:8px; display:none;}
+  .msg.error{background:#FDECEC; color:#C23B3B; display:block;}
+  .msg.success{background:#EAF7F4; color:#00806E; display:block;}
+
+  .supported-list{display:flex; flex-wrap:wrap; gap:8px; margin-top:12px;}
+  .supported-chip{font-size:11.5px; font-weight:600; padding:5px 11px; border-radius:99px; background:var(--gray); color:var(--muted); border:1px solid var(--border);}
+
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  th{text-align:left; font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:var(--muted); padding:10px 8px; border-bottom:1px solid var(--border);}
+  td{padding:12px 8px; border-bottom:1px solid var(--border); vertical-align:top;}
+  tr:last-child td{border-bottom:none;}
+  .ats-pill{font-size:11px; font-weight:700; padding:3px 9px; border-radius:99px; background:rgba(20,99,255,0.1); color:var(--royal);}
+  .status-ok{color:#00806E; font-weight:600;}
+  .status-pending{color:#B98900; font-weight:600;}
+  .status-error{color:#C23B3B; font-weight:600;}
+  .empty-row td{text-align:center; color:var(--muted); padding:28px 8px;}
+
+  @media(max-width:640px){
+    .field-row{grid-template-columns:1fr;}
+    table{font-size:12px;}
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="logo">
+      <img src="assets/rook-icon-192.png" alt="ROOK" style="height:30px; width:auto;">
+      <span style="font-family:var(--font-display); font-weight:700; font-size:20px; color:#fff;">ROOK</span>
+    </div>
+    <a href="rook-dashboard.html" class="back-link">← Back to Dashboard</a>
+  </div>
+</div>
+
+<div class="container">
+  <div class="page-head">
+    <h1>Add Employers</h1>
+    <p>Paste a company's careers page URL — ROOK detects which ATS it runs on and adds it to the ingestion list automatically. No SQL, no Supabase.</p>
+  </div>
+
+  <div class="card">
+    <h3>Add a new employer</h3>
+    <div class="field-row">
+      <div class="field">
+        <label>Company Name</label>
+        <input type="text" id="fieldCompanyName" placeholder="e.g. IDEXX Laboratories">
+      </div>
+      <div class="field">
+        <label>Priority</label>
+        <select id="fieldPriority">
+          <option value="normal" selected>Normal</option>
+          <option value="high">High</option>
+          <option value="low">Low</option>
+        </select>
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="field full">
+        <label>Careers Page URL</label>
+        <input type="text" id="fieldCareersUrl" placeholder="e.g. https://idexx.wd1.myworkdayjobs.com/IDEXX">
+        <div class="hint">Paste the exact URL of the company's job listings page — the one showing individual open roles.</div>
+      </div>
+    </div>
+    <a class="btn btn-primary" id="addBtn" onclick="handleAdd()">+ Add Employer</a>
+    <div class="msg" id="addMsg"></div>
+
+    <div class="supported-list">
+      <span class="supported-chip">Greenhouse</span>
+      <span class="supported-chip">Lever</span>
+      <span class="supported-chip">Ashby</span>
+      <span class="supported-chip">Workday</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Current Employers</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Company</th>
+          <th>ATS</th>
+          <th>Priority</th>
+          <th>Last Synced</th>
+        </tr>
+      </thead>
+      <tbody id="employerRows">
+        <tr class="empty-row"><td colspan="4">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="rook-config.js"></script>
+<script src="rook-auth.js"></script>
+<script>
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  async function handleAdd() {
+    const btn = document.getElementById('addBtn');
+    const msg = document.getElementById('addMsg');
+    msg.className = 'msg';
+    msg.textContent = '';
+
+    const company_name = document.getElementById('fieldCompanyName').value.trim();
+    const careers_url = document.getElementById('fieldCareersUrl').value.trim();
+    const priority = document.getElementById('fieldPriority').value;
+
+    if (!company_name || !careers_url) {
+      msg.className = 'msg error';
+      msg.textContent = 'Enter both a company name and a careers URL.';
+      return;
+    }
+
+    btn.textContent = 'Adding...';
+    try {
+      const res = await rookApiFetch('/admin/employers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company_name, careers_url, priority }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not add employer');
+
+      msg.className = 'msg success';
+      msg.textContent = `Added ${data.company_name} (${data.ats_type}). Run npm run ingest to pull its jobs.`;
+      document.getElementById('fieldCompanyName').value = '';
+      document.getElementById('fieldCareersUrl').value = '';
+      loadEmployers();
+    } catch (err) {
+      msg.className = 'msg error';
+      msg.textContent = err.message;
+    }
+    btn.textContent = '+ Add Employer';
+  }
+
+  async function loadEmployers() {
+    const tbody = document.getElementById('employerRows');
+    try {
+      const res = await rookApiFetch('/admin/employers');
+      const employers = await res.json();
+      if (!res.ok) throw new Error(employers.error || 'Could not load employers');
+
+      if (!Array.isArray(employers) || employers.length === 0) {
+        tbody.innerHTML = '<tr class="empty-row"><td colspan="4">No employers yet — add your first one above.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = employers.map((e) => {
+        const synced = e.last_successful_sync_at
+          ? new Date(e.last_successful_sync_at).toLocaleString()
+          : '<span class="status-pending">Not synced yet</span>';
+        const statusClass = e.sync_status === 'error' ? 'status-error' : (e.sync_status === 'ok' ? 'status-ok' : 'status-pending');
+        return `
+          <tr>
+            <td><b>${escapeHtml(e.company_name)}</b></td>
+            <td><span class="ats-pill">${escapeHtml(e.ats_type)}</span></td>
+            <td>${escapeHtml(e.priority || 'normal')}</td>
+            <td><span class="${statusClass}">${synced}</span></td>
+          </tr>`;
+      }).join('');
+    } catch (err) {
+      tbody.innerHTML = `<tr class="empty-row"><td colspan="4">${escapeHtml(err.message)}</td></tr>`;
+    }
+  }
+
+  (async () => {
+    await rookRequireAuth();
+    loadEmployers();
+  })();
+</script>
+
+</body>
+</html>
