@@ -110,6 +110,16 @@
         <div class="hint">Paste the exact URL of the company's job listings page — the one showing individual open roles.</div>
       </div>
     </div>
+    <div class="field-row">
+      <div class="field full">
+        <label>ATS (leave on Auto unless you already know)</label>
+        <select id="fieldAtsOverride">
+          <option value="" selected>Auto-detect</option>
+          <option value="talentbrew">TalentBrew / Radancy (e.g. careers.questdiagnostics.com)</option>
+        </select>
+        <div class="hint">Auto-detect works for Greenhouse, Lever, Ashby, and Workday URLs. TalentBrew sites don't share a common domain, so pick it manually.</div>
+      </div>
+    </div>
     <a class="btn btn-primary" id="addBtn" onclick="handleAdd()">+ Add Employer</a>
     <div class="msg" id="addMsg"></div>
 
@@ -118,6 +128,7 @@
       <span class="supported-chip">Lever</span>
       <span class="supported-chip">Ashby</span>
       <span class="supported-chip">Workday</span>
+      <span class="supported-chip">TalentBrew</span>
     </div>
   </div>
 
@@ -125,6 +136,7 @@
     <h3>Add Many At Once</h3>
     <p style="font-size:13px; color:var(--muted); margin-bottom:14px; line-height:1.6;">
       One company per line: <code style="background:var(--gray); padding:2px 6px; border-radius:4px;">Company Name | careers URL</code>
+      &nbsp;or, for TalentBrew sites: <code style="background:var(--gray); padding:2px 6px; border-radius:4px;">Company Name | careers URL | talentbrew</code>
     </p>
     <div class="field full" style="margin-bottom:14px;">
       <textarea id="bulkInput" rows="6" style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--border); font-size:13px; font-family:var(--font-body); resize:vertical;" placeholder="IDEXX Laboratories | https://idexx.wd1.myworkdayjobs.com/IDEXX
@@ -181,7 +193,7 @@ Covetrus | https://covetrus.wd5.myworkdayjobs.com/CovetrusCareers"></textarea>
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       const parts = line.split('|').map((p) => p.trim());
-      const [company_name, careers_url] = parts;
+      const [company_name, careers_url, ats_type_override] = parts;
 
       if (!company_name || !careers_url) {
         results.push({ line, ok: false, message: 'Expected "Company Name | URL" — skipped.' });
@@ -193,7 +205,7 @@ Covetrus | https://covetrus.wd5.myworkdayjobs.com/CovetrusCareers"></textarea>
         const res = await rookApiFetch('/admin/employers', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ company_name, careers_url }),
+          body: JSON.stringify({ company_name, careers_url, ats_type_override }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed');
@@ -229,6 +241,7 @@ Covetrus | https://covetrus.wd5.myworkdayjobs.com/CovetrusCareers"></textarea>
     const company_name = document.getElementById('fieldCompanyName').value.trim();
     const careers_url = document.getElementById('fieldCareersUrl').value.trim();
     const priority = document.getElementById('fieldPriority').value;
+    const ats_type_override = document.getElementById('fieldAtsOverride').value || undefined;
 
     if (!company_name || !careers_url) {
       msg.className = 'msg error';
@@ -241,7 +254,7 @@ Covetrus | https://covetrus.wd5.myworkdayjobs.com/CovetrusCareers"></textarea>
       const res = await rookApiFetch('/admin/employers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ company_name, careers_url, priority }),
+        body: JSON.stringify({ company_name, careers_url, priority, ats_type_override }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Could not add employer');
