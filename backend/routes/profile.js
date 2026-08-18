@@ -13,8 +13,25 @@ const { createClient } = require("@supabase/supabase-js");
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
-const supabaseAnon = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
-const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+// Guard against missing config the same way as backend/routes/stripe.js —
+// createClient() throws synchronously on an undefined URL, which would
+// otherwise crash the whole server on startup rather than just this route.
+const isConfigured = Boolean(
+  process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY && process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+const supabaseAnon = (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY)
+  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+  : null;
+const supabaseAdmin = (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY)
+  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+  : null;
+
+function requireConfig(req, res, next) {
+  if (!isConfigured) {
+    return res.status(503).json({ error: "Supabase isn't configured on this server yet. See ROOK-Setup-Guide.pdf." });
+  }
+  next();
+}
 
 // Verifies the caller's Supabase access token and attaches req.user.
 async function requireAuth(req, res, next) {
@@ -29,7 +46,7 @@ async function requireAuth(req, res, next) {
 }
 
 // GET /api/profile — the caller's own candidate profile
-router.get("/profile", requireAuth, async (req, res) => {
+router.get("/profile", requireConfig, requireAuth, async (req, res) => {
   const { data, error } = await supabaseAdmin
     .from("candidate_profiles")
     .select("*")
@@ -41,7 +58,7 @@ router.get("/profile", requireAuth, async (req, res) => {
 });
 
 // PUT /api/profile — create or update the caller's candidate profile
-router.put("/profile", requireAuth, async (req, res) => {
+router.put("/profile", requireConfig, requireAuth, async (req, res) => {
   const payload = { ...req.body, user_id: req.user.id, updated_at: new Date().toISOString() };
 
   const { data, error } = await supabaseAdmin
@@ -58,7 +75,7 @@ router.put("/profile", requireAuth, async (req, res) => {
 // its path on the candidate's profile. Text extraction and AI parsing
 // (architecture spec section 8) are intentionally NOT done here yet —
 // this route only handles the upload + storage side.
-router.post("/resume", requireAuth, upload.single("resume"), async (req, res) => {
+router.post("/resume", requireConfig, requireAuth, upload.single("resume"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
   const filePath = `${req.user.id}/${Date.now()}-${req.file.originalname}`;

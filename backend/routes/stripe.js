@@ -13,9 +13,31 @@ const Stripe = require("stripe");
 const { createClient } = require("@supabase/supabase-js");
 
 const router = express.Router();
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-const supabaseAnon = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
-const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+
+// Build these clients defensively: missing credentials should mean "the
+// Stripe/billing routes return a clear error when called," NOT "the whole
+// server crashes on startup." Both the Stripe SDK and supabase-js throw
+// synchronously if given undefined/empty config, so we guard against that.
+const isConfigured = Boolean(
+  process.env.STRIPE_SECRET_KEY && process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY
+);
+
+const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
+const supabaseAnon = (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY)
+  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+  : null;
+const supabaseAdmin = (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY)
+  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+  : null;
+
+function requireConfig(req, res, next) {
+  if (!isConfigured || !stripe || !supabaseAnon || !supabaseAdmin) {
+    return res.status(503).json({
+      error: "Stripe/Supabase aren't configured on this server yet. See ROOK-Setup-Guide.pdf.",
+    });
+  }
+  next();
+}
 
 async function requireAuth(req, res, next) {
   const token = (req.headers.authorization || "").replace("Bearer ", "");
@@ -29,7 +51,7 @@ async function requireAuth(req, res, next) {
 // POST /api/stripe/create-checkout-session
 // Called from the Pricing page's "Get My Matches" button once the
 // candidate is signed in. Redirects them to Stripe-hosted checkout.
-router.post("/stripe/create-checkout-session", requireAuth, async (req, res) => {
+router.post("/stripe/create-checkout-session", requireConfig, requireAuth, async (req, res) => {
   try {
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
@@ -50,7 +72,7 @@ router.post("/stripe/create-checkout-session", requireAuth, async (req, res) => 
 // Stripe calls this directly (not the browser) to notify you of
 // subscription events. Must receive the RAW request body — see the
 // express.raw() wiring for this route in server.js.
-router.post("/stripe/webhook", async (req, res) => {
+router.post("/stripe/webhook", requireConfig, async (req, res) => {
   const sig = req.headers["stripe-signature"];
   let event;
 

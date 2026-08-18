@@ -6,10 +6,23 @@ const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
 
 const router = express.Router();
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+
+// Guard against missing config — see backend/routes/stripe.js for why this
+// pattern matters (createClient throws synchronously on an undefined URL).
+const isConfigured = Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY);
+const supabase = isConfigured
+  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+  : null;
+
+function requireConfig(req, res, next) {
+  if (!isConfigured) {
+    return res.status(503).json({ error: "Supabase isn't configured on this server yet. See ROOK-Setup-Guide.pdf." });
+  }
+  next();
+}
 
 // GET /api/jobs?industry=Veterinary&state=FL&limit=20
-router.get("/jobs", async (req, res) => {
+router.get("/jobs", requireConfig, async (req, res) => {
   const { industry, state, limit = 20 } = req.query;
 
   let query = supabase
@@ -28,7 +41,7 @@ router.get("/jobs", async (req, res) => {
 });
 
 // GET /api/jobs/:id
-router.get("/jobs/:id", async (req, res) => {
+router.get("/jobs/:id", requireConfig, async (req, res) => {
   const { data, error } = await supabase
     .from("jobs")
     .select("*")
