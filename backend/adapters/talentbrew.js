@@ -19,14 +19,22 @@
 // are only fetched for postings that already look relevant, not for every
 // single listing.
 
-const RELEVANT_TITLE_KEYWORDS = [
-  "sales", "account executive", "territory", "representative", "specialist",
-  "business development", "key account", "regional manager", "clinical",
+// Same relevance filter used in ingest.js — kept in sync with it. See the
+// comment there for why this is a two-tier check rather than a flat
+// keyword list.
+const STRONG_TITLE_SIGNALS = [
+  "sales", "account executive", "territory manager", "business development", "key account",
 ];
-
+const ROLE_WORDS = ["representative", "specialist", "manager", "executive", "consultant"];
+const DOMAIN_WORDS = [
+  "sales", "territory", "account", "veterinary", "medical", "pharmaceutical", "diagnostic", "clinical",
+];
 function titleLooksRelevant(title = "") {
   const t = title.toLowerCase();
-  return RELEVANT_TITLE_KEYWORDS.some((k) => t.includes(k));
+  if (STRONG_TITLE_SIGNALS.some((k) => t.includes(k))) return true;
+  const hasRoleWord = ROLE_WORDS.some((k) => t.includes(k));
+  const hasDomainWord = DOMAIN_WORDS.some((k) => t.includes(k));
+  return hasRoleWord && hasDomainWord;
 }
 
 function stripHtml(html) {
@@ -39,6 +47,19 @@ function stripHtml(html) {
  *
  * @param {string} hostname - e.g. "careers.questdiagnostics.com"
  */
+
+// Wraps fetch() with a timeout so one stalled request can't hang the
+// entire ingestion run forever.
+async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function fetchTalentBrewJobs(hostname) {
   const base = `https://${hostname}`;
   const rawJobs = [];
@@ -48,7 +69,7 @@ async function fetchTalentBrewJobs(hostname) {
     const url = page === 1 ? `${base}/search-jobs` : `${base}/search-jobs&p=${page}`;
     let res;
     try {
-      res = await fetch(url);
+      res = await fetchWithTimeout(url);
     } catch {
       break;
     }
@@ -64,6 +85,7 @@ async function fetchTalentBrewJobs(hostname) {
       foundOnPage++;
       rawJobs.push({ path, jobId, title: titleRaw.trim() });
     }
+    console.log(`    ...page ${page}: ${foundOnPage} listing(s) found (${rawJobs.length} total so far)`);
 
     if (foundOnPage === 0) break; // no more results — stop paginating
   }
@@ -78,16 +100,22 @@ async function fetchTalentBrewJobs(hostname) {
   });
 
   // Fetch full detail only for postings that already look relevant by title.
+  const relevant = deduped.filter((j) => titleLooksRelevant(j.title));
+  console.log(`    ${relevant.length} / ${deduped.length} titles look relevant — fetching their descriptions...`);
+
   const detailed = [];
-  for (const job of deduped) {
-    if (!titleLooksRelevant(job.title)) continue;
+  for (let i = 0; i < relevant.length; i++) {
+    const job = relevant[i];
     try {
-      const detailRes = await fetch(`${base}${job.path}`);
+      const detailRes = await fetchWithTimeout(`${base}${job.path}`);
       if (!detailRes.ok) continue;
       const detailHtml = await detailRes.text();
       detailed.push({ ...job, detailHtml });
     } catch {
       continue;
+    }
+    if ((i + 1) % 10 === 0 || i === relevant.length - 1) {
+      console.log(`    ...fetched details for ${i + 1} / ${relevant.length}`);
     }
   }
 
