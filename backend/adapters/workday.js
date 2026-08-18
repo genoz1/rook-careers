@@ -91,10 +91,21 @@ async function fetchWorkdayJobs(identifier) {
       body: JSON.stringify({ appliedFacets: {}, limit: pageSize, offset, searchText: "" }),
     });
     if (!res.ok) {
-      throw new Error(`Workday fetch failed for "${identifier}": ${res.status} ${res.statusText}`);
+      const bodyText = await res.text().catch(() => "");
+      throw new Error(
+        `Workday fetch failed for "${identifier}": ${res.status} ${res.statusText}` +
+          (bodyText ? ` — ${bodyText.slice(0, 300)}` : "")
+      );
     }
     const data = await res.json();
-    total = data.total ?? 0;
+    // Only trust a new total if it's a real positive number — some
+    // Workday tenants omit or zero out `total` on paginated (non-first)
+    // requests, which was silently truncating results to just the first
+    // couple pages for several employers (Covetrus, Elanco, Cardinal
+    // Health, MWI all stopped at 40 jobs regardless of their real count).
+    if (typeof data.total === "number" && data.total > 0) {
+      total = data.total;
+    }
     allPostings.push(...(data.jobPostings || []));
     offset += pageSize;
     console.log(`    ...listed ${allPostings.length} / ${total} postings`);
