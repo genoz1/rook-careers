@@ -30,10 +30,16 @@ rook-project/
 │   ├── adapters/                  # one file per job source (greenhouse.js, lever.js, ashby.js)
 │   └── routes/                    # Express API routes (profile.js, jobs.js, stripe.js)
 └── public/
+    ├── assets/                       # NEW — official ROOK brand assets
+    │   ├── favicon.ico, favicon-16/32.png       # browser tab icon
+    │   ├── rook-icon-96/180/192/512.png         # standalone R/rook mark, various sizes
+    │   ├── rook-full-logo-480/900.png           # full lockup w/ tagline, for footers
+    │   ├── rook-social-share.png                # 1200px wide, for social cards
+    │   └── *-source.png                          # original supplied files, full-res
     ├── index.html                    # homepage
-    ├── rook-login.html               # NEW — log in / create account (Supabase Auth)
-    ├── rook-config.js                # NEW — put your Supabase URL + anon key here
-    ├── rook-auth.js                  # NEW — shared auth helpers used by wired pages
+    ├── rook-login.html               # log in / create account (Supabase Auth)
+    ├── rook-config.js                # put your Supabase URL + anon key here
+    ├── rook-auth.js                  # shared auth helpers used by wired pages
     ├── rook-onboarding.html          # 7-step signup flow — résumé upload + profile save are LIVE
     ├── rook-dashboard.html           # dashboard — fetches real jobs from /api/jobs when signed in
     ├── rook-search.html              # job search / filterable results (still sample data)
@@ -108,12 +114,16 @@ editor workflow):
    - **Run command:** `npm start`
    - **HTTP port:** `8080` (or whatever `$PORT` App Platform assigns —
      `server.js` already reads `process.env.PORT`)
-4. Add every variable from `.env.example` as an Environment Variable in
-   the app's settings (mark the Supabase service role key and Stripe
-   secret key as encrypted).
+4. **You can deploy with zero environment variables set.** The server
+   detects missing Supabase/Stripe config and returns a clean error from
+   the affected API routes instead of crashing — every page will load,
+   login just won't work yet. Add the real variables from
+   `.env.example` whenever you're ready (Section 7 of
+   `ROOK-Setup-Guide.pdf`); mark the Supabase service role key and
+   Stripe secret key as Encrypted.
 5. Fill in `public/rook-config.js` with your real Supabase URL/anon key
-   before deploying (or template it at build time if you prefer not to
-   commit real values — that's a reasonable next hardening step).
+   before login will work in the browser (separate from the backend
+   `.env` — see the note above in "What's actually wired now").
 6. Deploy.
 
 ## What's deliberately NOT here yet
