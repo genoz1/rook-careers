@@ -34,7 +34,7 @@
   /* shell layout */
   .shell{display:grid; grid-template-columns:236px 1fr; min-height:100vh;}
   .sidebar{background:var(--navy); color:#fff; padding:26px 20px; display:flex; flex-direction:column;}
-  .logo{display:flex; align-items:center; gap:10px; font-family:var(--font-display); font-weight:700; font-size:19px; margin-bottom:36px; padding:0 6px;}
+  .logo{display:flex; align-items:center; gap:12px; font-family:var(--font-display); font-weight:700; font-size:19px; margin-bottom:36px; padding:0 6px;}
   .logo svg{width:24px; height:24px;}
   .side-nav{display:flex; flex-direction:column; gap:2px; flex:1;}
   .side-nav a{display:flex; align-items:center; gap:12px; padding:11px 12px; border-radius:9px; font-size:14px; font-weight:500; color:#AEB9CF;}
@@ -104,8 +104,7 @@
 <div class="shell">
   <aside class="sidebar">
     <div class="logo">
-      <img src="assets/rook-icon-96.png" alt="ROOK" style="height:34px; width:auto; display:block;">
-      ROOK
+      <img src="assets/rook-icon-192.png" alt="ROOK" style="height:46px; width:auto; display:block; filter:brightness(1.4) saturate(1.2) drop-shadow(0 0 1px rgba(255,255,255,0.15));"><span style="font-family:var(--font-display); font-weight:700; font-size:36px; letter-spacing:-0.02em; color:#EDF3FF; line-height:1;">ROOK</span>
     </div>
     <nav class="side-nav">
       <a href="rook-dashboard.html" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l9-9 9 9M5 10v10h14V10"/></svg>Dashboard<span class="count">17</span></a>
