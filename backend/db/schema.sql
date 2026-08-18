@@ -16,7 +16,7 @@ create table if not exists employers (
   careers_url text,
   industry text,
   subindustry text,
-  ats_type text not null check (ats_type in ('greenhouse','lever','ashby','custom','manual')),
+  ats_type text not null check (ats_type in ('greenhouse','lever','ashby','workday','talentbrew','custom','manual')),
   ats_identifier text,               -- greenhouse board token / lever site / ashby job board name
   source_url text,
   active boolean default true,
@@ -92,6 +92,11 @@ create table if not exists jobs (
 create index if not exists idx_jobs_employer on jobs(employer_id);
 create index if not exists idx_jobs_status on jobs(status);
 create index if not exists idx_jobs_category on jobs(category);
+
+-- Required for backend/ingest.js's upsert (ON CONFLICT employer_id, source_job_id)
+-- to work — without this, every ingestion run fails with a Postgres error
+-- ("no unique or exclusion constraint matching the ON CONFLICT specification").
+alter table jobs add constraint jobs_employer_source_unique unique (employer_id, source_job_id);
 
 -- ============================================================
 -- JOB DUPLICATES
@@ -245,5 +250,12 @@ create policy "candidates write own applications" on applications
     candidate_id in (select id from candidate_profiles where user_id = auth.uid())
   );
 
--- jobs and employers are public read (no RLS needed for anonymous browsing)
--- but writes should only happen from the backend service role, never the client.
+-- jobs and employers are meant to be publicly browsable data — but Supabase
+-- now enables Row Level Security by default on every new table, which
+-- silently returns zero rows to any query until a policy explicitly allows
+-- it. This policy makes active jobs readable by anyone (candidates browsing
+-- without an account, and the anon-key-based /api/jobs route). Writes are
+-- unaffected — ingestion uses the service_role key, which bypasses RLS.
+alter table jobs enable row level security;
+create policy "public can read active jobs" on jobs
+  for select using (status = 'active');
