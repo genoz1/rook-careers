@@ -260,7 +260,7 @@
       // render without a score ring until that exists.
       jobList.dataset.demo = 'false';
       jobList.innerHTML = jobs.map(renderRealJobRow).join('');
-      showBanner('Showing ' + jobs.length + ' live job(s) from your database. Match scoring isn\'t connected yet, so these aren\'t ranked.', 'info');
+      showBanner('Showing ' + jobs.length + ' live job(s) from your database, scored against your profile. This is an early scoring pass (location and compensation only) — see ROOK-Technical-Architecture-Spec.docx for the full model.', 'info');
     } catch (err) {
       showBanner('Could not reach the ROOK API (' + err.message + '). Showing example matches below — see ROOK-Setup-Guide.pdf to get the backend running.');
     }
@@ -268,12 +268,23 @@
 
   function renderRealJobRow(job) {
     const comp = job.compensation_text || (job.salary_min ? `$${job.salary_min}${job.salary_max ? '–$' + job.salary_max : '+'}` : '');
+    const match = job.match; // present when the request was authenticated — see rook-auth.js / jobs.js
+    const scoreDisplay = match && match.overall_score != null ? `${match.overall_score}%` : '—';
+    const scorePct = match && match.overall_score != null ? match.overall_score : 0;
+    const reasonTags = (match?.reasons || []).map((r) =>
+      `<span class="why-tag"><svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>${escapeHtml(r)}</span>`
+    ).join('');
+    const concernTags = (match?.concerns || []).map((c) =>
+      `<span class="concern-tag">△ ${escapeHtml(c)}</span>`
+    ).join('');
+
     return `
       <div class="job-row">
-        <div class="score-ring" style="--pct:0;"><span>—</span></div>
+        <div class="score-ring" style="--pct:${scorePct};"><span>${scoreDisplay}</span></div>
         <div class="job-info">
           <h4>${escapeHtml(job.title_original || job.title_normalized || 'Untitled role')}</h4>
           <div class="company">${escapeHtml(job.company_name || '')} — ${escapeHtml(job.location_raw || '')} ${comp ? '&nbsp;·&nbsp; ' + escapeHtml(comp) : ''}</div>
+          ${(reasonTags || concernTags) ? `<div class="why-row">${reasonTags}${concernTags}</div>` : ''}
           <div class="job-meta-line">${job.date_posted ? 'Posted ' + escapeHtml(job.date_posted) : ''} · Sourced via ${escapeHtml(job.source_type || 'unknown')}</div>
         </div>
         <div class="job-actions">
