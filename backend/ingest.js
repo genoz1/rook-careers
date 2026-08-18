@@ -12,6 +12,7 @@ const { createClient } = require("@supabase/supabase-js");
 const { fetchGreenhouseJobs, normalizeGreenhouseJob } = require("./adapters/greenhouse");
 const { fetchLeverJobs, normalizeLeverJob } = require("./adapters/lever");
 const { fetchAshbyJobs, normalizeAshbyJob } = require("./adapters/ashby");
+const { fetchWorkdayJobs, normalizeWorkdayJob } = require("./adapters/workday");
 
 // Use the SERVICE ROLE key here, never the anon key — ingestion writes
 // to the jobs table and must bypass row-level security intentionally.
@@ -36,6 +37,9 @@ async function ingestEmployer(employer) {
     } else if (employer.ats_type === "ashby") {
       rawJobs = await fetchAshbyJobs(employer.ats_identifier);
       normalize = normalizeAshbyJob;
+    } else if (employer.ats_type === "workday") {
+      rawJobs = await fetchWorkdayJobs(employer.ats_identifier);
+      normalize = normalizeWorkdayJob;
     } else {
       console.log(`  Skipping — no adapter for ats_type "${employer.ats_type}"`);
       return;
