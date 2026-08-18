@@ -39,6 +39,42 @@ function parseWorkdayIdentifier(identifier) {
  *
  * @param {string} identifier - "tenant|wdNumber|site", e.g. "idexx|wd1|IDEXX"
  */
+
+// Same relevance filter used in ingest.js — applied here as a pre-filter
+// before fetching each job's full detail page, since detail fetches are
+// the slow part (one request per job, done sequentially). For a large
+// employer (Labcorp, IDEXX, etc. can have hundreds of postings), fetching
+// full descriptions for obviously-irrelevant jobs (warehouse, lab tech,
+// packaging) wastes most of the run's time on titles that will just get
+// filtered out afterward anyway.
+const STRONG_TITLE_SIGNALS = [
+  "sales", "account executive", "territory manager", "business development", "key account",
+];
+const ROLE_WORDS = ["representative", "specialist", "manager", "executive", "consultant"];
+const DOMAIN_WORDS = [
+  "sales", "territory", "account", "veterinary", "medical", "pharmaceutical", "diagnostic", "clinical",
+];
+function titleLooksRelevant(title = "") {
+  const t = title.toLowerCase();
+  if (STRONG_TITLE_SIGNALS.some((k) => t.includes(k))) return true;
+  const hasRoleWord = ROLE_WORDS.some((k) => t.includes(k));
+  const hasDomainWord = DOMAIN_WORDS.some((k) => t.includes(k));
+  return hasRoleWord && hasDomainWord;
+}
+
+// Wraps fetch() with a timeout so one stalled request can't hang the
+// entire ingestion run forever — without this, a single unresponsive
+// endpoint blocks every job after it indefinitely.
+async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function fetchWorkdayJobs(identifier) {
   const { tenant, wdNumber, site } = parseWorkdayIdentifier(identifier);
   const baseUrl = `https://${tenant}.${wdNumber}.myworkdayjobs.com/wday/cxs/${tenant}/${site}`;
@@ -49,7 +85,7 @@ async function fetchWorkdayJobs(identifier) {
   let total = Infinity;
 
   while (offset < total) {
-    const res = await fetch(`${baseUrl}/jobs`, {
+    const res = await fetchWithTimeout(`${baseUrl}/jobs`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ appliedFacets: {}, limit: pageSize, offset, searchText: "" }),
@@ -61,26 +97,34 @@ async function fetchWorkdayJobs(identifier) {
     total = data.total ?? 0;
     allPostings.push(...(data.jobPostings || []));
     offset += pageSize;
+    console.log(`    ...listed ${allPostings.length} / ${total} postings`);
 
     // Safety cap so a very large employer (or an unexpected API response)
     // can't loop forever.
     if (offset > 2000) break;
   }
 
-  // Fetch full description for each job. One extra request per job — for
-  // a large employer this can be a lot of requests; that's an acceptable
-  // MVP tradeoff, but worth revisiting (e.g. only fetch detail for jobs
-  // whose title already looks relevant) if it becomes slow in practice.
+  // Only fetch full detail for postings that already look relevant by
+  // title — see titleLooksRelevant() above for why. This is the slow part
+  // (one request per job, sequential), so it logs progress every 10 jobs.
+  const relevantPostings = allPostings.filter((p) => titleLooksRelevant(p.title));
+  console.log(`    ${relevantPostings.length} / ${allPostings.length} titles look relevant — fetching their descriptions...`);
+
   const detailed = [];
-  for (const posting of allPostings) {
+  for (let i = 0; i < relevantPostings.length; i++) {
+    const posting = relevantPostings[i];
     try {
-      const detailRes = await fetch(`${baseUrl}${posting.externalPath}`);
+      const detailRes = await fetchWithTimeout(`${baseUrl}${posting.externalPath}`);
       if (!detailRes.ok) continue;
       const detail = await detailRes.json();
       detailed.push({ ...posting, detail });
     } catch {
-      // Skip jobs whose detail fetch fails rather than aborting the whole run.
+      // Skip jobs whose detail fetch fails (including timeouts) rather
+      // than aborting the whole run.
       continue;
+    }
+    if ((i + 1) % 10 === 0 || i === relevantPostings.length - 1) {
+      console.log(`    ...fetched details for ${i + 1} / ${relevantPostings.length}`);
     }
   }
 
