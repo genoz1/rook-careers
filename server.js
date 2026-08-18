@@ -19,6 +19,7 @@ app.use(express.json());
 
 app.use("/api", require("./backend/routes/profile"));
 app.use("/api", require("./backend/routes/jobs"));
+app.use("/api", require("./backend/routes/admin"));
 
 // Static frontend (the UI prototype pages).
 app.use(express.static(path.join(__dirname, "public")));
