@@ -13,6 +13,7 @@ const { fetchGreenhouseJobs, normalizeGreenhouseJob } = require("./adapters/gree
 const { fetchLeverJobs, normalizeLeverJob } = require("./adapters/lever");
 const { fetchAshbyJobs, normalizeAshbyJob } = require("./adapters/ashby");
 const { fetchWorkdayJobs, normalizeWorkdayJob } = require("./adapters/workday");
+const { fetchTalentBrewJobs, normalizeTalentBrewJob } = require("./adapters/talentbrew");
 
 // Use the SERVICE ROLE key here, never the anon key — ingestion writes
 // to the jobs table and must bypass row-level security intentionally.
@@ -40,6 +41,9 @@ async function ingestEmployer(employer) {
     } else if (employer.ats_type === "workday") {
       rawJobs = await fetchWorkdayJobs(employer.ats_identifier);
       normalize = normalizeWorkdayJob;
+    } else if (employer.ats_type === "talentbrew") {
+      rawJobs = await fetchTalentBrewJobs(employer.ats_identifier);
+      normalize = normalizeTalentBrewJob;
     } else {
       console.log(`  Skipping — no adapter for ats_type "${employer.ats_type}"`);
       return;
