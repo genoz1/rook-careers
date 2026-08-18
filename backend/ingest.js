@@ -105,16 +105,32 @@ async function ingestEmployer(employer) {
   console.log(`  Done — ${rawJobs.length} jobs seen, ${closedIds.length} closed.`);
 }
 
-// Extremely rough placeholder relevance filter — a real version should
-// use the ROOK role-family classification from the architecture spec
-// (section 18), likely with AI assistance for ambiguous titles.
-const RELEVANT_KEYWORDS = [
-  "sales", "account executive", "territory", "representative", "specialist",
-  "business development", "key account", "regional manager", "clinical",
+// Relevance filter — still a placeholder pending real AI classification
+// (architecture spec section 18), but this is a meaningful improvement
+// over a flat keyword list: single generic words like "specialist" or
+// "representative" match almost anything (Packaging Specialist, Customer
+// Service Representative), so those only count when paired with a word
+// that actually signals a sales/commercial role. A few standalone phrases
+// are strong enough signals on their own.
+//
+// Known remaining limitation: a bare domain word like "veterinary" paired
+// with "representative" can still let through non-sales roles inside a
+// veterinary organization (e.g. a front-desk client service rep at a vet
+// clinic) — genuinely distinguishing those from a sales-facing "Veterinary
+// Territory Manager" needs real classification, not keyword matching.
+const STRONG_TITLE_SIGNALS = [
+  "sales", "account executive", "territory manager", "business development", "key account",
+];
+const ROLE_WORDS = ["representative", "specialist", "manager", "executive", "consultant"];
+const DOMAIN_WORDS = [
+  "sales", "territory", "account", "veterinary", "medical", "pharmaceutical", "diagnostic", "clinical",
 ];
 function looksRelevant(title = "") {
   const t = title.toLowerCase();
-  return RELEVANT_KEYWORDS.some((k) => t.includes(k));
+  if (STRONG_TITLE_SIGNALS.some((k) => t.includes(k))) return true;
+  const hasRoleWord = ROLE_WORDS.some((k) => t.includes(k));
+  const hasDomainWord = DOMAIN_WORDS.some((k) => t.includes(k));
+  return hasRoleWord && hasDomainWord;
 }
 
 async function run() {
