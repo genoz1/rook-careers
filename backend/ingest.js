@@ -58,6 +58,7 @@ async function ingestEmployer(employer) {
   }
 
   const seenSourceIds = new Set();
+  let savedCount = 0;
 
   for (const raw of rawJobs) {
     const job = normalize(raw, employer);
@@ -65,7 +66,12 @@ async function ingestEmployer(employer) {
 
     // Relevance filter: a very rough first pass. Replace with real
     // classification once the normalization step (Phase 1.5) is built —
-    // for now this just keeps obviously-unrelated roles out.
+    // for now this just keeps obviously-unrelated roles out. Note: the
+    // Workday and TalentBrew adapters already pre-filter by title before
+    // returning rawJobs at all (see their file comments), so for those
+    // sources this check rarely rejects anything further — it's still
+    // the primary filter for Greenhouse/Lever/Ashby, which return every
+    // raw posting unfiltered.
     if (!looksRelevant(job.title_original)) continue;
 
     const { error } = await supabase
@@ -74,7 +80,11 @@ async function ingestEmployer(employer) {
         { ...job, last_seen_at: new Date().toISOString() },
         { onConflict: "employer_id,source_job_id" }
       );
-    if (error) console.error(`  Upsert error for "${job.title_original}": ${error.message}`);
+    if (error) {
+      console.error(`  Upsert error for "${job.title_original}": ${error.message}`);
+    } else {
+      savedCount++;
+    }
   }
 
   // Mark jobs that disappeared from the source as closed, rather than
@@ -102,7 +112,9 @@ async function ingestEmployer(employer) {
     })
     .eq("id", employer.id);
 
-  console.log(`  Done — ${rawJobs.length} jobs seen, ${closedIds.length} closed.`);
+  console.log(
+    `  Done — ${savedCount} relevant job(s) saved (${rawJobs.length} total posting(s) examined), ${closedIds.length} closed.`
+  );
 }
 
 // Relevance filter — still a placeholder pending real AI classification
