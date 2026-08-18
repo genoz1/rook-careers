@@ -1,9 +1,10 @@
-// Public job-listing routes. No auth required — anyone can browse jobs,
-// same as the public site. Matching against a specific candidate happens
-// in a separate route once the matching engine (Phase 1.5) exists.
+// Public job-listing routes. Auth is optional here: signed-out visitors
+// can browse jobs same as before, but a signed-in candidate gets each
+// job scored against their profile — see backend/matching.js.
 
 const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
+const { scoreJob } = require("../matching");
 
 const router = express.Router();
 
@@ -21,8 +22,19 @@ function requireConfig(req, res, next) {
   next();
 }
 
+// Optional auth: attaches req.user if a valid token is present, but never
+// blocks the request if it's missing or invalid — job browsing stays
+// public either way, matching gets added on top when possible.
+async function optionalAuth(req, res, next) {
+  const token = (req.headers.authorization || "").replace("Bearer ", "");
+  if (!token) return next();
+  const { data } = await supabase.auth.getUser(token);
+  if (data?.user) req.user = data.user;
+  next();
+}
+
 // GET /api/jobs?industry=Veterinary&state=FL&limit=20
-router.get("/jobs", requireConfig, async (req, res) => {
+router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
   const { industry, state, limit = 20 } = req.query;
 
   let query = supabase
@@ -37,11 +49,27 @@ router.get("/jobs", requireConfig, async (req, res) => {
 
   const { data, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+
+  if (!req.user) return res.json(data);
+
+  // Signed in — attach a real match score per job using their profile.
+  const { data: profile } = await supabase
+    .from("candidate_profiles")
+    .select("*")
+    .eq("user_id", req.user.id)
+    .maybeSingle();
+
+  if (!profile) return res.json(data);
+
+  const scored = data
+    .map((job) => ({ ...job, match: scoreJob(job, profile) }))
+    .sort((a, b) => (b.match.overall_score ?? -1) - (a.match.overall_score ?? -1));
+
+  res.json(scored);
 });
 
 // GET /api/jobs/:id
-router.get("/jobs/:id", requireConfig, async (req, res) => {
+router.get("/jobs/:id", requireConfig, optionalAuth, async (req, res) => {
   const { data, error } = await supabase
     .from("jobs")
     .select("*")
@@ -50,7 +78,16 @@ router.get("/jobs/:id", requireConfig, async (req, res) => {
 
   if (error) return res.status(500).json({ error: error.message });
   if (!data) return res.status(404).json({ error: "Job not found" });
-  res.json(data);
+
+  if (!req.user) return res.json(data);
+
+  const { data: profile } = await supabase
+    .from("candidate_profiles")
+    .select("*")
+    .eq("user_id", req.user.id)
+    .maybeSingle();
+
+  res.json(profile ? { ...data, match: scoreJob(data, profile) } : data);
 });
 
 module.exports = router;
