@@ -124,9 +124,39 @@
       <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Cover letters &amp; recruiter outreach messages</li>
       <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Interview prep &amp; application tracking</li>
     </ul>
-    <a href="#" class="btn btn-primary">Get My Matches</a>
+    <a href="#" class="btn btn-primary" id="subscribeBtn" onclick="handleSubscribe(event)">Get My Matches</a>
+    <div id="subscribeMsg" style="font-size:12.5px; color:#C23B3B; text-align:center; margin-top:10px;"></div>
   </div>
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="rook-config.js"></script>
+<script src="rook-auth.js"></script>
+<script>
+  async function handleSubscribe(e) {
+    e.preventDefault();
+    const btn = document.getElementById('subscribeBtn');
+    const msg = document.getElementById('subscribeMsg');
+    msg.textContent = '';
+
+    const token = await rookGetAccessToken();
+    if (!token) {
+      window.location.href = 'rook-login.html';
+      return;
+    }
+
+    btn.textContent = 'Redirecting to checkout...';
+    try {
+      const res = await rookApiFetch('/stripe/create-checkout-session', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not start checkout');
+      window.location.href = data.url;
+    } catch (err) {
+      msg.textContent = err.message;
+      btn.textContent = 'Get My Matches';
+    }
+  }
+</script>
 
 <div class="wrap">
   <div class="guarantee">
