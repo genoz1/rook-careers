@@ -165,6 +165,9 @@ create table if not exists candidate_profiles (
   resume_file_path text,              -- Supabase Storage path
   resume_text text,                   -- extracted raw text
   resume_structured jsonb,            -- parsed employers/titles/dates/skills, user-confirmed
+  suggested_roles jsonb,              -- AI-suggested job titles, computed once at résumé
+                                       -- upload time alongside resume_structured — see
+                                       -- backend/ai/roleSuggestions.js and backend/routes/profile.js
 
   created_at timestamptz default now(),
   updated_at timestamptz default now()
@@ -194,6 +197,10 @@ create table if not exists candidate_job_matches (
 
   calculated_at timestamptz default now(),
   dismissed boolean default false,
+  generated_package jsonb,           -- cached output of backend/ai/applicationPackage.js
+                                      -- so it's a real AI call once per candidate+job, not
+                                      -- once per page visit — see backend/routes/applicationPackage.js
+  generated_package_at timestamptz,
   saved boolean default false,
   interested boolean default false,
 
