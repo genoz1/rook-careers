@@ -117,6 +117,26 @@ function scoreJob(job, profile) {
     score += 25;
   }
 
+  // --- Industry interest (up to 30 points — only counted toward the
+  // total if the candidate actually selected any desired industries
+  // during onboarding, so profiles without this data aren't penalized) ---
+  if (Array.isArray(profile.desired_industries) && profile.desired_industries.length > 0) {
+    maxScore += 30;
+    const jobText = `${job.title_original || ""} ${job.description_text || ""}`.toLowerCase();
+    const matchedIndustry = profile.desired_industries.find((ind) => jobText.includes(String(ind).toLowerCase()));
+    if (matchedIndustry) {
+      score += 30;
+      reasons.push(`Matches your interest in ${matchedIndustry}`);
+    }
+
+    if (Array.isArray(profile.industries_to_avoid) && profile.industries_to_avoid.length > 0) {
+      const avoided = profile.industries_to_avoid.find((ind) => jobText.includes(String(ind).toLowerCase()));
+      if (avoided) {
+        concerns.push(`Mentions ${avoided}, which you asked to avoid`);
+      }
+    }
+  }
+
   const overall_score = maxScore > 0 ? Math.round((score / maxScore) * 100) : null;
 
   return { overall_score, reasons, concerns };
