@@ -125,7 +125,7 @@
     <div class="topline">
       <div class="greeting">
         <h1>Good afternoon, Gene</h1>
-        <p>We found 17 new opportunities matching your career profile today.</p>
+        <p id="greetingSubtitle">We found 17 new opportunities matching your career profile today.</p>
       </div>
       <div class="top-actions">
         <a href="rook-onboarding.html" class="btn btn-outline">Edit Preferences</a>
@@ -134,10 +134,10 @@
     </div>
 
     <div class="stat-grid">
-      <div class="stat-card"><div class="num">17</div><div class="lbl">New Matches Today</div></div>
-      <div class="stat-card accent"><div class="num">4</div><div class="lbl">Excellent Matches (90%+)</div></div>
-      <div class="stat-card"><div class="num">9</div><div class="lbl">Strong Matches (75–89%)</div></div>
-      <div class="stat-card"><div class="num">6</div><div class="lbl">Applications In Progress</div></div>
+      <div class="stat-card"><div class="num" id="statNewMatches">17</div><div class="lbl">New Matches Today</div></div>
+      <div class="stat-card accent"><div class="num" id="statExcellent">4</div><div class="lbl">Excellent Matches (90%+)</div></div>
+      <div class="stat-card"><div class="num" id="statStrong">9</div><div class="lbl">Strong Matches (75–89%)</div></div>
+      <div class="stat-card"><div class="num" id="statApplications">6</div><div class="lbl">Applications In Progress</div></div>
     </div>
 
     <div class="panel-head">
@@ -254,17 +254,33 @@
         return;
       }
 
-      // Real jobs exist — replace the demo rows. Note: match scoring
-      // (score, why-reasons, concerns) isn't implemented yet (that's the
-      // matching engine, architecture spec section 9), so real jobs
-      // render without a score ring until that exists.
+      // Real jobs exist — replace the demo rows and update the stat
+      // cards / greeting to reflect real counts instead of the original
+      // hardcoded mockup numbers.
       jobList.dataset.demo = 'false';
       jobList.innerHTML = jobs.map(renderRealJobRow).join('');
+      updateStats(jobs);
       showBanner('Showing ' + jobs.length + ' live job(s) from your database, scored against your profile. This is an early scoring pass (location and compensation only) — see ROOK-Technical-Architecture-Spec.docx for the full model.', 'info');
     } catch (err) {
       showBanner('Could not reach the ROOK API (' + err.message + '). Showing example matches below — see ROOK-Setup-Guide.pdf to get the backend running.');
     }
   })();
+
+  function updateStats(jobs) {
+    const excellent = jobs.filter((j) => (j.match?.overall_score ?? -1) >= 90).length;
+    const strong = jobs.filter((j) => (j.match?.overall_score ?? -1) >= 75 && j.match.overall_score < 90).length;
+
+    document.getElementById('statNewMatches').textContent = jobs.length;
+    document.getElementById('statExcellent').textContent = excellent;
+    document.getElementById('statStrong').textContent = strong;
+    // Applications In Progress has no real data source yet — the
+    // applications/tracker table has no backend route at all (that page
+    // is still fully sample data). Showing "—" rather than a fake number.
+    document.getElementById('statApplications').textContent = '—';
+
+    document.getElementById('greetingSubtitle').textContent =
+      `We found ${jobs.length} opportunit${jobs.length === 1 ? 'y' : 'ies'} matching your career profile.`;
+  }
 
   function renderRealJobRow(job) {
     const comp = job.compensation_text || (job.salary_min ? `$${job.salary_min}${job.salary_max ? '–$' + job.salary_max : '+'}` : '');
