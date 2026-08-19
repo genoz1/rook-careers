@@ -91,66 +91,92 @@
     <p>What ROOK has learned about your background from your profile and résumé.</p>
   </div>
 
-  <div class="card">
-    <h3>Your Industry Strengths</h3>
-    <div class="strength-row">
-      <div class="strength-label">Veterinary Sales</div>
-      <div class="strength-track"><div class="strength-fill" style="width:95%;"></div></div>
-      <div class="strength-tag tag-expert">Expert</div>
-    </div>
-    <div class="strength-row">
-      <div class="strength-label">Diagnostics</div>
-      <div class="strength-track"><div class="strength-fill" style="width:92%;"></div></div>
-      <div class="strength-tag tag-expert">Expert</div>
-    </div>
-    <div class="strength-row">
-      <div class="strength-label">Laboratory Sales</div>
-      <div class="strength-track"><div class="strength-fill" style="width:88%;"></div></div>
-      <div class="strength-tag tag-expert">Expert</div>
-    </div>
-    <div class="strength-row">
-      <div class="strength-label">Capital Equipment</div>
-      <div class="strength-track"><div class="strength-fill" style="width:64%;"></div></div>
-      <div class="strength-tag tag-strong">Strong</div>
-    </div>
-    <div class="strength-row">
-      <div class="strength-label">Medical Device</div>
-      <div class="strength-track"><div class="strength-fill" style="width:58%;"></div></div>
-      <div class="strength-tag tag-strong">Strong</div>
-    </div>
-    <div class="strength-row">
-      <div class="strength-label">Surgical</div>
-      <div class="strength-track"><div class="strength-fill" style="width:30%;"></div></div>
-      <div class="strength-tag tag-developing">Developing</div>
-    </div>
+  <div id="intelLoading" style="text-align:center; padding:60px 20px; color:#5B6B85; font-size:14px;">Loading…</div>
+  <div id="intelEmpty" style="display:none; text-align:center; padding:60px 20px; color:#5B6B85; font-size:14px;">
+    Upload a résumé through onboarding to see your Career Intelligence.
   </div>
 
-  <div class="card">
-    <h3>Roles ROOK Recommends For You</h3>
-    <div class="role-grid">
-      <div class="role-chip">Territory Sales Manager</div>
-      <div class="role-chip">Key Account Manager</div>
-      <div class="role-chip">Regional Account Manager</div>
-      <div class="role-chip">Diagnostic Sales Specialist</div>
-      <div class="role-chip">Veterinary Equipment Specialist</div>
-      <div class="role-chip">Regional Sales Manager</div>
+  <div id="intelContent" style="display:none;">
+    <div class="card">
+      <h3>Your Industry Strengths</h3>
+      <div id="industryStrengths"></div>
     </div>
-  </div>
 
-  <div class="two-col">
     <div class="card">
-      <h3>Career Strengths</h3>
-      <div class="list-item strength"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>15 years of continuous healthcare/diagnostics sales experience</div>
-      <div class="list-item strength"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Cross-trained across reference lab, point-of-care, and veterinary channels</div>
-      <div class="list-item strength"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Established Central Florida territory relationships</div>
+      <h3>Roles ROOK Recommends For You</h3>
+      <div class="role-grid" id="roleGrid"></div>
     </div>
-    <div class="card">
-      <h3>Potential Gaps</h3>
-      <div class="list-item gap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>Limited direct operating-room / surgical device experience</div>
-      <div class="list-item gap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>No formal people-management experience on résumé</div>
+
+    <div class="two-col">
+      <div class="card">
+        <h3>Career Strengths</h3>
+        <div id="strengthsList"></div>
+      </div>
+      <div class="card">
+        <h3>Potential Gaps</h3>
+        <div id="gapsList"></div>
+        <div style="font-size:12px; color:#8B96AB; margin-top:10px; line-height:1.5;">Gaps are computed by comparing your résumé against what's actually required across currently-listed jobs — not a general market survey.</div>
+      </div>
     </div>
   </div>
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="rook-config.js"></script>
+<script src="rook-auth.js"></script>
+<script>
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+(async () => {
+  const token = await rookRequireAuth();
+  if (!token) return;
+
+  try {
+    const res = await rookApiFetch('/career-intelligence');
+    if (!res.ok) throw new Error('API returned ' + res.status);
+    const data = await res.json();
+
+    document.getElementById('intelLoading').style.display = 'none';
+
+    if (!data.has_resume) {
+      document.getElementById('intelEmpty').style.display = 'block';
+      return;
+    }
+
+    renderIntelligence(data);
+    document.getElementById('intelContent').style.display = 'block';
+  } catch (err) {
+    document.getElementById('intelLoading').textContent = 'Could not load Career Intelligence: ' + err.message;
+  }
+})();
+
+const TAG_CLASS = { Expert: 'tag-expert', Strong: 'tag-strong', Developing: 'tag-developing' };
+
+function renderIntelligence(data) {
+  document.getElementById('industryStrengths').innerHTML = (data.industries || []).length > 0
+    ? data.industries.map((i) => `
+        <div class="strength-row">
+          <div class="strength-label">${escapeHtml(i.industry)}</div>
+          <div class="strength-track"><div class="strength-fill" style="width:${i.pct}%;"></div></div>
+          <div class="strength-tag ${TAG_CLASS[i.tag] || ''}">${escapeHtml(i.tag)}</div>
+        </div>`).join('')
+    : '<p style="font-size:13.5px; color:#5B6B85;">No industry experience extracted from your résumé yet.</p>';
+
+  document.getElementById('roleGrid').innerHTML = (data.suggested_roles || []).length > 0
+    ? data.suggested_roles.map((r) => `<div class="role-chip">${escapeHtml(r)}</div>`).join('')
+    : '<p style="font-size:13.5px; color:#5B6B85;">Not enough résumé data yet to suggest roles.</p>';
+
+  document.getElementById('strengthsList').innerHTML = (data.strengths || []).length > 0
+    ? data.strengths.map((s) => `<div class="list-item strength"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>${escapeHtml(s)}</div>`).join('')
+    : '<p style="font-size:13.5px; color:#5B6B85;">No documented achievements extracted from your résumé yet.</p>';
+
+  document.getElementById('gapsList').innerHTML = (data.gaps || []).length > 0
+    ? data.gaps.map((g) => `<div class="list-item gap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>${escapeHtml(g)}</div>`).join('')
+    : '<p style="font-size:13.5px; color:#5B6B85;">No notable gaps found against currently-listed jobs.</p>';
+}
+</script>
 
 </body>
 </html>
