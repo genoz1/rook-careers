@@ -39,7 +39,7 @@ async function requireAuth(req, res, next) {
 router.get("/career-intelligence", requireConfig, requireAuth, async (req, res) => {
   const { data: profile } = await supabaseAdmin
     .from("candidate_profiles")
-    .select("resume_structured")
+    .select("resume_structured, suggested_roles")
     .eq("user_id", req.user.id)
     .maybeSingle();
 
@@ -98,17 +98,25 @@ router.get("/career-intelligence", requireConfig, requireAuth, async (req, res) 
     return { industry: i.industry, years_estimate: i.years_estimate, tag, pct };
   });
 
-  const suggestedRoles = new Set();
-  if (resume.seniority_level) {
-    for (const ind of resume.industries_experience || []) {
-      suggestedRoles.add(`${resume.seniority_level} — ${ind.industry}`);
-    }
-  }
+  const suggestedRoles = Array.isArray(profile.suggested_roles) && profile.suggested_roles.length > 0
+    ? profile.suggested_roles
+    : (() => {
+        // Fallback for profiles analyzed before role suggestions existed
+        // (or where the AI call failed at upload time) — the old naive
+        // combination, clearly a lesser fallback, not the primary path.
+        const roles = new Set();
+        if (resume.seniority_level) {
+          for (const ind of resume.industries_experience || []) {
+            roles.add(`${resume.seniority_level} — ${ind.industry}`);
+          }
+        }
+        return Array.from(roles).slice(0, 6);
+      })();
 
   res.json({
     has_resume: true,
     industries,
-    suggested_roles: Array.from(suggestedRoles).slice(0, 6),
+    suggested_roles: suggestedRoles,
     strengths: resume.performance_highlights || [],
     gaps,
   });
