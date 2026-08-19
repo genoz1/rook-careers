@@ -187,7 +187,7 @@
     <div class="card">
       <div class="field full" style="margin-bottom:20px;">
         <label style="margin-bottom:10px;">Customer types</label>
-        <div class="chip-grid">
+        <div class="chip-grid" data-group="customerTypes">
           <div class="chip selected">Veterinary Clinics</div>
           <div class="chip">Hospitals</div>
           <div class="chip">Physicians</div>
@@ -200,7 +200,7 @@
       </div>
       <div class="field full">
         <label style="margin-bottom:10px;">Sales type</label>
-        <div class="chip-grid">
+        <div class="chip-grid" data-group="salesType">
           <div class="chip selected">Hunter</div>
           <div class="chip">Account Management</div>
           <div class="chip selected">Territory Management</div>
@@ -232,7 +232,7 @@
       </div>
       <div class="field full">
         <label style="margin-bottom:10px;">Desired industries</label>
-        <div class="chip-grid">
+        <div class="chip-grid" data-group="desiredIndustries">
           <div class="chip selected">Diagnostics</div>
           <div class="chip selected">Veterinary / Animal Health</div>
           <div class="chip">Medical Device</div>
@@ -258,7 +258,7 @@
       </div>
       <div class="field full">
         <label style="margin-bottom:10px;">Industries to exclude</label>
-        <div class="chip-grid">
+        <div class="chip-grid" data-group="industriesToAvoid">
           <div class="chip">Pharmaceutical</div>
           <div class="chip">Healthcare SaaS</div>
           <div class="chip">Dental</div>
@@ -372,6 +372,11 @@
       const n = Number(raw.replace(/[^0-9.]/g, ''));
       return Number.isFinite(n) ? n : null;
     };
+    const selectedChips = (group) => {
+      const grid = document.querySelector(`.chip-grid[data-group="${group}"]`);
+      if (!grid) return [];
+      return Array.from(grid.querySelectorAll('.chip.selected')).map((c) => c.textContent.trim());
+    };
     return {
       name: val('fieldName'),
       email: val('fieldEmail'),
@@ -384,6 +389,16 @@
       overnight_travel_preference: val('fieldOvernightTravel'),
       work_style: val('fieldWorkStyle'),
       willing_to_relocate: val('fieldRelocation') === 'Open to relocation',
+      desired_industries: selectedChips('desiredIndustries'),
+      industries_to_avoid: selectedChips('industriesToAvoid'),
+      // Customer types and sales type don't map to their own schema columns
+      // yet — stored together in sales_experience as a simple record of
+      // which chips were selected, so the data isn't silently discarded
+      // even though matching doesn't use it yet.
+      sales_experience: {
+        customer_types: selectedChips('customerTypes'),
+        sales_types: selectedChips('salesType'),
+      },
     };
   }
 
