@@ -116,8 +116,9 @@
         <select id="fieldAtsOverride">
           <option value="" selected>Auto-detect</option>
           <option value="talentbrew">TalentBrew / Radancy (e.g. careers.questdiagnostics.com)</option>
+          <option value="clinchtalent">ClinchTalent (e.g. careers.foundationmedicine.com)</option>
         </select>
-        <div class="hint">Auto-detect works for Greenhouse, Lever, Ashby, and Workday URLs. TalentBrew sites don't share a common domain, so pick it manually.</div>
+        <div class="hint">Auto-detect works for Greenhouse, Lever, Ashby, Workday, Workable, and SmartRecruiters URLs. TalentBrew and ClinchTalent sites don't share a common domain, so pick those manually.</div>
       </div>
     </div>
     <a class="btn btn-primary" id="addBtn" onclick="handleAdd()">+ Add Employer</a>
@@ -129,6 +130,9 @@
       <span class="supported-chip">Ashby</span>
       <span class="supported-chip">Workday</span>
       <span class="supported-chip">TalentBrew</span>
+      <span class="supported-chip">Workable</span>
+      <span class="supported-chip">SmartRecruiters</span>
+      <span class="supported-chip">ClinchTalent</span>
     </div>
   </div>
 
@@ -136,7 +140,7 @@
     <h3>Add Many At Once</h3>
     <p style="font-size:13px; color:var(--muted); margin-bottom:14px; line-height:1.6;">
       One company per line: <code style="background:var(--gray); padding:2px 6px; border-radius:4px;">Company Name | careers URL</code>
-      &nbsp;or, for TalentBrew sites: <code style="background:var(--gray); padding:2px 6px; border-radius:4px;">Company Name | careers URL | talentbrew</code>
+      &nbsp;or, for TalentBrew/ClinchTalent sites: <code style="background:var(--gray); padding:2px 6px; border-radius:4px;">Company Name | careers URL | talentbrew</code> <code style="background:var(--gray); padding:2px 6px; border-radius:4px;">Company Name | careers URL | clinchtalent</code>
     </p>
     <div class="field full" style="margin-bottom:14px;">
       <textarea id="bulkInput" rows="6" style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--border); font-size:13px; font-family:var(--font-body); resize:vertical;" placeholder="IDEXX Laboratories | https://idexx.wd1.myworkdayjobs.com/IDEXX
