@@ -6,14 +6,10 @@
 // embeddings endpoint.
 //
 // Requires OPENAI_API_KEY in the environment.
-//
-// NOTE: like the Claude client, this has not been tested against the
-// live OpenAI API from the environment this was written in — no API key
-// available there. The request/response shape follows OpenAI's
-// documented embeddings API format; treat the first real call as the
-// real test.
 
 const EMBEDDING_MODEL = "text-embedding-3-small"; // 1536 dimensions — matches the schema's vector(1536) columns
+const REQUEST_TIMEOUT_MS = 30_000; // see backend/ai/client.js for why this matters —
+  // an unbounded fetch() here would freeze the whole sequential ingest loop.
 
 /**
  * Generate a vector embedding for a piece of text.
@@ -28,17 +24,31 @@ async function generateEmbedding(text) {
     throw new Error("Cannot generate an embedding for empty text");
   }
 
-  const res = await fetch("https://api.openai.com/v1/embeddings", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: EMBEDDING_MODEL,
-      input: text.slice(0, 30000), // stay comfortably within the model's token limit
-    }),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  let res;
+  try {
+    res = await fetch("https://api.openai.com/v1/embeddings", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: EMBEDDING_MODEL,
+        input: text.slice(0, 30000),
+      }),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (err.name === "AbortError") {
+      throw new Error(`OpenAI embeddings request timed out after ${REQUEST_TIMEOUT_MS / 1000}s`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!res.ok) {
     const bodyText = await res.text().catch(() => "");
