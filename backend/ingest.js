@@ -15,6 +15,7 @@ const { fetchAshbyJobs, normalizeAshbyJob } = require("./adapters/ashby");
 const { fetchWorkdayJobs, normalizeWorkdayJob } = require("./adapters/workday");
 const { fetchTalentBrewJobs, normalizeTalentBrewJob } = require("./adapters/talentbrew");
 const { analyzeJob } = require("./ai/jobAnalysis");
+const { generateEmbedding } = require("./ai/embeddings");
 
 // Use the SERVICE ROLE key here, never the anon key — ingestion writes
 // to the jobs table and must bypass row-level security intentionally.
@@ -90,17 +91,28 @@ async function ingestEmployer(employer) {
     }
     savedCount++;
 
-    // AI job analysis runs once per job, ever — not on every re-ingestion
-    // run. This keeps API cost bounded: a job already analyzed on a
-    // previous run is skipped even if it's seen again today. A failure
-    // here doesn't affect the job being saved — it just means that job
-    // scores without the AI-derived factors until a later run retries it.
+    // AI job analysis + embedding both run once per job, ever — not on
+    // every re-ingestion run. This keeps API cost bounded: a job already
+    // analyzed on a previous run is skipped even if it's seen again
+    // today. A failure here doesn't affect the job being saved — it
+    // just means that job scores without the AI-derived factors until a
+    // later run retries it.
     if (!upsertedRow.ai_analysis) {
       try {
         const analysis = await analyzeJob(upsertedRow.title_original, upsertedRow.description_text);
         await supabase.from("jobs").update({ ai_analysis: analysis }).eq("id", upsertedRow.id);
       } catch (err) {
         console.error(`  AI analysis failed for "${job.title_original}": ${err.message}`);
+      }
+    }
+
+    if (!upsertedRow.job_embedding) {
+      try {
+        const embeddingText = `${upsertedRow.title_original || ""}\n\n${upsertedRow.description_text || ""}`.trim();
+        const embedding = await generateEmbedding(embeddingText);
+        await supabase.from("jobs").update({ job_embedding: embedding }).eq("id", upsertedRow.id);
+      } catch (err) {
+        console.error(`  Embedding generation failed for "${job.title_original}": ${err.message}`);
       }
     }
   }
