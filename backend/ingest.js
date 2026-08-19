@@ -61,6 +61,18 @@ async function ingestEmployer(employer) {
 
   const seenSourceIds = new Set();
   let savedCount = 0;
+  let aiAnalyzedThisRun = 0;
+
+  // Cap how many NEW AI analyses (job analysis + embedding) happen per
+  // employer per run. Some employers post hundreds of relevant jobs
+  // (Abbott alone had 559 in one run) — without a cap, a single massive
+  // employer can make one `npm run ingest` invocation take hours. Jobs
+  // beyond the cap are still saved normally, just without AI analysis
+  // yet; because that analysis is only ever attempted for jobs missing
+  // it (see the `if (!upsertedRow.ai_analysis)` check below), the next
+  // run picks up exactly where this one left off — no progress is lost,
+  // it just spreads a big employer's backfill across a few runs.
+  const AI_ANALYSIS_CAP_PER_EMPLOYER = 40;
 
   for (const raw of rawJobs) {
     const job = normalize(raw, employer);
@@ -91,6 +103,10 @@ async function ingestEmployer(employer) {
     }
     savedCount++;
 
+    if (aiAnalyzedThisRun >= AI_ANALYSIS_CAP_PER_EMPLOYER) {
+      continue; // saved, but AI analysis deferred to a later run
+    }
+
     // AI job analysis + embedding both run once per job, ever — not on
     // every re-ingestion run. This keeps API cost bounded: a job already
     // analyzed on a previous run is skipped even if it's seen again
@@ -98,6 +114,10 @@ async function ingestEmployer(employer) {
     // just means that job scores without the AI-derived factors until a
     // later run retries it.
     if (!upsertedRow.ai_analysis) {
+      aiAnalyzedThisRun++;
+      if (aiAnalyzedThisRun % 5 === 0 || aiAnalyzedThisRun === 1) {
+        console.log(`    ...AI-analyzing job ${aiAnalyzedThisRun}/${AI_ANALYSIS_CAP_PER_EMPLOYER} this run: "${job.title_original}"`);
+      }
       try {
         const analysis = await analyzeJob(upsertedRow.title_original, upsertedRow.description_text);
         await supabase.from("jobs").update({ ai_analysis: analysis }).eq("id", upsertedRow.id);
