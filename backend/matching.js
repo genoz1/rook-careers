@@ -9,16 +9,40 @@
 // deterministic factors alone, same "don't penalize missing data"
 // philosophy as before.
 //
-// Still NOT implemented from the full 50-factor spec Gene provided:
-//   - Semantic embeddings (spec factor 46) — pgvector column exists in
-//     the schema, nothing populates or queries it yet
-//   - Sales-motion fit as its own scored factor (spec factor 5) —
-//     captured in résumé/job analysis output but not yet compared
-//   - Separate Candidate Fit / Preference Fit / Overall Recommendation
-//     triple-score (still one combined overall_score)
-//   - Feedback loop / outcome learning (spec factors 48-49) — needs real
-//     usage data accumulated over time
-//   - Duplicate/reposted-job detection (spec factors 40-41)
+// Factors implemented from Gene's 50-factor spec: geography (#1),
+// industry experience (#2), product category (#3), customer/call-point
+// (#4), sales motion (#5), seniority (#6), years of experience (#7),
+// clinical hard requirement (#8, partial), specialty experience (#9),
+// performance history (#10, partial), compensation (#12), certifications
+// (#15, partial), travel (#18, partial), job freshness (#38), missing-
+// data confidence (#47).
+//
+// Still NOT implemented from the full spec:
+//   - True semantic matching (#46) — this module does categorized
+//     KEYWORD overlap ("Diagnostics" = "Diagnostics"), not genuine
+//     semantic understanding ("reference lab experience" ≈ "diagnostic
+//     services"). Real semantic matching needs embeddings — the schema's
+//     pgvector column exists, nothing populates or queries it yet.
+//   - Existing relationships/network (#11), employment type (#13),
+//     education (#14), company type/size (#16-17), role responsibilities
+//     (#20), required tools (#21), competitive-company experience (#22),
+//     transferability (#23), recency weighting (#24), duration/stability
+//     (#25), career trajectory (#26), résumé evidence strength (#27) —
+//     none captured or scored yet
+//   - Overqualification/stretch-apply labeling (#33-34)
+//   - Separate employer-interest vs candidate-interest scores (#35-36)
+//   - Opportunity quality, application friction (#37, #39)
+//   - Duplicate/reposted-job detection (#40-41)
+//   - Application/employer history awareness (#42-43) — no applications
+//     backend exists at all yet
+//   - Network opportunity (#44)
+//   - Feedback loop, outcome learning (#48-49) — needs real usage data
+//     accumulated over time, which can't exist before real candidates
+//     are using the product
+//   - The three-way Candidate Fit / Preference Fit / Overall
+//     Recommendation split and four-bucket recommendation labels (Strong
+//     Apply / Apply / Stretch Apply / Skip) — still one combined
+//     overall_score
 //
 // Also worth knowing: no job adapter populates jobs.city/jobs.state —
 // only location_raw free text — so this module does its own lightweight
@@ -272,6 +296,80 @@ function scoreJob(job, profile) {
       } else {
         score += 5;
       }
+    }
+
+    // --- Sales-motion fit (up to 10 points, spec factor #5) ---
+    const resumeMotion = resume.sales_motion || [];
+    const jobMotion = jobAI.sales_motion || [];
+    if (resumeMotion.length > 0 && jobMotion.length > 0) {
+      maxScore += 10;
+      dataPointsPossible++;
+      dataPointsAvailable++;
+      const matchedMotion = findOverlap(jobMotion, resumeMotion);
+      if (matchedMotion) {
+        score += 10;
+        reasons.push(`Your ${matchedMotion} sales experience matches this role's style`);
+      } else {
+        score += 4;
+      }
+    }
+
+    // --- Required years of experience (up to 10 points, spec factor #7) ---
+    // "Don't automatically reject someone with 4 years when the posting
+    // says 5 if the rest of the fit is excellent" — so this is scored
+    // gradually, never a hard disqualifier on its own.
+    if (resume.total_sales_years != null && jobAI.required_years_experience != null) {
+      maxScore += 10;
+      dataPointsPossible++;
+      dataPointsAvailable++;
+      const gap = resume.total_sales_years - jobAI.required_years_experience;
+      if (gap >= 0) {
+        score += 10;
+        reasons.push(`Your ${resume.total_sales_years} years of experience meets the ${jobAI.required_years_experience}-year requirement`);
+      } else if (gap >= -2) {
+        score += 6;
+        concerns.push(`Slightly under the stated ${jobAI.required_years_experience}-year requirement`);
+      } else {
+        score += 2;
+        concerns.push(`Well under the stated ${jobAI.required_years_experience}-year requirement`);
+      }
+    }
+
+    // --- Specialty experience (up to 8 points, spec factor #9) ---
+    const resumeSpecialties = resume.specialties || [];
+    const jobSpecialties = jobAI.specialty_requirements || [];
+    if (jobSpecialties.length > 0) {
+      maxScore += 8;
+      dataPointsPossible++;
+      if (resumeSpecialties.length > 0) dataPointsAvailable++;
+      const matchedSpecialty = findOverlap(jobSpecialties, resumeSpecialties);
+      if (matchedSpecialty) {
+        score += 8;
+        reasons.push(`Your ${matchedSpecialty} specialty experience is a direct match`);
+      } else {
+        concerns.push(`Job calls for specialty experience (${jobSpecialties.join(", ")}) not shown on your résumé`);
+      }
+    }
+
+    // --- Performance history bonus (up to 6 points, spec factor #10) ---
+    // A positive differentiator, not something that can hurt the score —
+    // per the spec, achievements are bonus points beyond the baseline.
+    if (Array.isArray(resume.performance_highlights) && resume.performance_highlights.length > 0) {
+      maxScore += 6;
+      dataPointsPossible++;
+      dataPointsAvailable++;
+      score += 6;
+      reasons.push("Résumé shows documented sales performance achievements");
+    }
+
+    // --- Certifications/licensing (up to 5 points, spec factor #15) ---
+    const resumeCerts = resume.certifications || [];
+    if (resumeCerts.length > 0) {
+      maxScore += 5;
+      dataPointsPossible++;
+      dataPointsAvailable++;
+      score += 5;
+      reasons.push(`Holds relevant certifications: ${resumeCerts.slice(0, 2).join(", ")}`);
     }
 
     // --- Clinical requirement hard disqualifier (spec factor #8, #31) ---
