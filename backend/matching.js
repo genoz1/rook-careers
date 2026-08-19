@@ -1,37 +1,29 @@
-// Matching engine — Phase 1 slice, expanded.
+// Matching engine — now using AI-derived résumé and job analysis.
 //
-// Gene provided a genuinely comprehensive 50-factor matching spec (three
-// layers: hard disqualifiers, weighted fit score, confidence score; plus
-// separate Candidate Fit / Preference Fit / Overall Recommendation
-// scores). This file implements the realistic subset of that spec
-// buildable with data ROOK already has — it is NOT the full spec.
+// This extends the earlier deterministic-only version (location,
+// compensation, travel, onboarding-stated industry interest, freshness)
+// with real comparison against AI-extracted structured data: a
+// candidate's résumé analysis (backend/ai/resumeAnalysis.js) and a job's
+// requirement analysis (backend/ai/jobAnalysis.js). Both are optional —
+// a job or profile without AI analysis yet still scores correctly on the
+// deterministic factors alone, same "don't penalize missing data"
+// philosophy as before.
 //
-// Implemented here: location, compensation, industry interest, travel
-// fit, job freshness, hard-disqualifier score capping, and an explicit
-// confidence rating.
-//
-// Explicitly NOT implemented, and why — these need infrastructure that
-// doesn't exist yet:
-//   - Industry/product/clinical/specialty experience matching (factors
-//     2-9, 23) — needs résumé parsing. Nothing currently reads what's
-//     inside an uploaded résumé; only self-reported onboarding chips.
-//   - Requirement-strength classification — Mandatory vs. Preferred vs.
-//     Boilerplate (factor 28) — needs a real AI/LLM call per job
-//     posting, which costs money and adds latency to ingestion.
-//   - Semantic matching (factor 46) — needs embeddings (pgvector column
-//     already exists in the schema, nothing populates or queries it yet).
-//   - Feedback loop / outcome learning (factors 48-49) — needs real
-//     usage data accumulated over time, which can't exist before real
-//     candidates are using the product.
+// Still NOT implemented from the full 50-factor spec Gene provided:
+//   - Semantic embeddings (spec factor 46) — pgvector column exists in
+//     the schema, nothing populates or queries it yet
+//   - Sales-motion fit as its own scored factor (spec factor 5) —
+//     captured in résumé/job analysis output but not yet compared
 //   - Separate Candidate Fit / Preference Fit / Overall Recommendation
-//     triple-score — collapsed into one overall_score for now; splitting
-//     it out is a reasonable next step once there's demand for it.
+//     triple-score (still one combined overall_score)
+//   - Feedback loop / outcome learning (spec factors 48-49) — needs real
+//     usage data accumulated over time
+//   - Duplicate/reposted-job detection (spec factors 40-41)
 //
-// Also worth knowing: no job adapter currently populates the jobs.city /
-// jobs.state columns — they only set location_raw as free text (e.g.
-// "Orlando, FL" or "Columbus, OH (US)"). So this module does its own
-// lightweight state-abbreviation matching against location_raw rather
-// than relying on a structured state column that's actually empty.
+// Also worth knowing: no job adapter populates jobs.city/jobs.state —
+// only location_raw free text — so this module does its own lightweight
+// state-abbreviation matching rather than relying on structured columns
+// that are actually empty.
 
 const STATE_ABBR = {
   alabama: "AL", alaska: "AK", arizona: "AZ", arkansas: "AR", california: "CA",
@@ -83,11 +75,18 @@ function extractJobTravelPercentage(job) {
   return match ? Number(match[1]) : null;
 }
 
+// Case-insensitive overlap check between two string lists.
+function findOverlap(listA, listB) {
+  if (!Array.isArray(listA) || !Array.isArray(listB)) return null;
+  const setB = listB.map((s) => String(s).toLowerCase());
+  return listA.find((a) => setB.includes(String(a).toLowerCase())) || null;
+}
+
 /**
  * Score one job against one candidate profile.
  *
- * @param {object} job - a row from the jobs table
- * @param {object} profile - a row from the candidate_profiles table
+ * @param {object} job - a row from the jobs table (may include ai_analysis)
+ * @param {object} profile - a row from candidate_profiles (may include resume_structured)
  * @returns {{
  *   overall_score: number|null,
  *   reasons: string[],
@@ -106,21 +105,21 @@ function scoreJob(job, profile) {
   let hardDisqualifier = false;
   let disqualifierCap = 100;
 
-  // --- Location (up to 40 points) ---
-  maxScore += 40;
+  // --- Location (up to 35 points) ---
+  maxScore += 35;
   dataPointsPossible++;
   const remoteFriendly = /remote/i.test(job.location_raw || "") || job.remote_status === "remote";
   const candidateStateAbbr = stateAbbrFromName(profile.home_state);
   if (candidateStateAbbr) dataPointsAvailable++;
 
   if (candidateStateAbbr && locationMentionsState(job.location_raw, candidateStateAbbr)) {
-    score += 40;
+    score += 35;
     reasons.push("Location matches your home state");
   } else if (remoteFriendly) {
-    score += 32;
+    score += 28;
     reasons.push("Remote-friendly role");
   } else if (profile.willing_to_relocate) {
-    score += 16;
+    score += 14;
     reasons.push("You've indicated openness to relocation");
   } else if (candidateStateAbbr && job.location_raw) {
     concerns.push(`Location (${job.location_raw}) may be outside your home state`);
@@ -130,80 +129,166 @@ function scoreJob(job, profile) {
     }
   }
 
-  // --- Compensation (up to 35 points) ---
-  maxScore += 35;
+  // --- Compensation (up to 30 points) ---
+  maxScore += 30;
   dataPointsPossible++;
   const jobSalary = extractSalaryFigure(job);
   if (jobSalary) dataPointsAvailable++;
 
   if (profile.minimum_base_salary && jobSalary) {
     if (jobSalary >= profile.minimum_base_salary) {
-      score += 35;
+      score += 30;
       reasons.push("Compensation meets your stated minimum");
     } else if (jobSalary >= profile.minimum_base_salary * 0.85) {
-      score += 15;
+      score += 13;
       concerns.push("Compensation may be slightly below your stated minimum");
     } else {
-      score += 5;
+      score += 4;
       concerns.push("Compensation appears well below your stated minimum");
       hardDisqualifier = true;
       disqualifierCap = Math.min(disqualifierCap, 55);
     }
   } else if (jobSalary) {
-    score += 22;
-  } else {
     score += 18;
+  } else {
+    score += 15;
   }
 
-  // --- Travel fit (up to 15 points) ---
+  // --- Travel fit (up to 12 points) ---
   const jobTravel = extractJobTravelPercentage(job);
   if (profile.maximum_travel_percentage != null && jobTravel != null) {
-    maxScore += 15;
+    maxScore += 12;
     dataPointsPossible++;
     dataPointsAvailable++;
     if (jobTravel <= profile.maximum_travel_percentage) {
-      score += 15;
+      score += 12;
       reasons.push(`Travel (${jobTravel}%) is within your stated limit`);
     } else if (jobTravel <= profile.maximum_travel_percentage + 15) {
-      score += 6;
+      score += 5;
       concerns.push(`Travel (${jobTravel}%) is somewhat above your stated limit`);
     } else {
       concerns.push(`Travel (${jobTravel}%) is well above your stated limit`);
     }
   }
 
-  // --- Industry interest (up to 20 points) ---
+  // --- Onboarding-stated industry interest (up to 15 points) ---
   if (Array.isArray(profile.desired_industries) && profile.desired_industries.length > 0) {
-    maxScore += 20;
+    maxScore += 15;
     dataPointsPossible++;
     dataPointsAvailable++;
     const jobText = `${job.title_original || ""} ${job.description_text || ""}`.toLowerCase();
     const matchedIndustry = profile.desired_industries.find((ind) => jobText.includes(String(ind).toLowerCase()));
     if (matchedIndustry) {
-      score += 20;
-      reasons.push(`Matches your interest in ${matchedIndustry}`);
+      score += 15;
+      reasons.push(`Matches your stated interest in ${matchedIndustry}`);
     }
-
     if (Array.isArray(profile.industries_to_avoid) && profile.industries_to_avoid.length > 0) {
       const avoided = profile.industries_to_avoid.find((ind) => jobText.includes(String(ind).toLowerCase()));
-      if (avoided) {
-        concerns.push(`Mentions ${avoided}, which you asked to avoid`);
-      }
+      if (avoided) concerns.push(`Mentions ${avoided}, which you asked to avoid`);
     }
   }
 
-  // --- Job freshness (up to 10 points) ---
-  maxScore += 10;
+  // --- Job freshness (up to 8 points) ---
+  maxScore += 8;
   const referenceDate = job.last_seen_at || job.date_posted;
   if (referenceDate) {
     const ageDays = (Date.now() - new Date(referenceDate).getTime()) / (1000 * 60 * 60 * 24);
     if (ageDays <= 3) {
-      score += 10;
+      score += 8;
       reasons.push("Posted or verified in the last few days");
     } else if (ageDays <= 14) {
-      score += 6;
+      score += 5;
     } else if (ageDays <= 30) {
-      score += 3;
+      score += 2;
+    }
+  }
+
+  // ============================================================
+  // AI-derived factors — only scored when BOTH the candidate's résumé
+  // analysis AND the job's requirement analysis exist. This is the real
+  // upgrade from résumé parsing: actual industry/product/customer-type/
+  // seniority comparison instead of onboarding self-report alone.
+  // ============================================================
+  const resume = profile.resume_structured;
+  const jobAI = job.ai_analysis;
+
+  if (resume && jobAI) {
+    // --- AI industry experience match (up to 25 points, spec factor #2) ---
+    maxScore += 25;
+    dataPointsPossible++;
+    const resumeIndustries = (resume.industries_experience || []).map((i) => i.industry);
+    if (resumeIndustries.length > 0) dataPointsAvailable++;
+
+    const matchedRequired = findOverlap(jobAI.required_industries, resumeIndustries);
+    const matchedPreferred = findOverlap(jobAI.preferred_industries, resumeIndustries);
+    if (matchedRequired) {
+      score += 25;
+      reasons.push(`Your ${matchedRequired} experience matches a required industry`);
+    } else if (matchedPreferred) {
+      score += 16;
+      reasons.push(`Your ${matchedPreferred} experience matches a preferred industry`);
+    } else if (Array.isArray(jobAI.required_industries) && jobAI.required_industries.length > 0) {
+      concerns.push(`Job requires industry experience (${jobAI.required_industries.join(", ")}) not found on your résumé`);
+      hardDisqualifier = true;
+      disqualifierCap = Math.min(disqualifierCap, 70);
+    } else {
+      score += 10; // no specific industry required — neutral credit
+    }
+
+    // --- AI product-category match (up to 18 points, spec factor #3) ---
+    maxScore += 18;
+    dataPointsPossible++;
+    const resumeProducts = resume.product_categories || [];
+    if (resumeProducts.length > 0) dataPointsAvailable++;
+    const matchedProduct = findOverlap(jobAI.product_categories, resumeProducts);
+    if (matchedProduct) {
+      score += 18;
+      reasons.push(`You have direct ${matchedProduct} product experience`);
+    } else {
+      score += 8; // no match, but not a disqualifier — product experience often transfers
+    }
+
+    // --- AI customer/call-point match (up to 18 points, spec factor #4) ---
+    maxScore += 18;
+    dataPointsPossible++;
+    const resumeCustomers = resume.customer_types || [];
+    if (resumeCustomers.length > 0) dataPointsAvailable++;
+    const matchedCustomer = findOverlap(jobAI.required_customer_types, resumeCustomers);
+    if (matchedCustomer) {
+      score += 18;
+      reasons.push(`You've sold to ${matchedCustomer} before`);
+    } else {
+      score += 8;
+    }
+
+    // --- AI seniority fit (up to 12 points, spec factor #6) ---
+    if (resume.seniority_level && jobAI.seniority_level) {
+      maxScore += 12;
+      dataPointsPossible++;
+      dataPointsAvailable++;
+      if (resume.seniority_level.toLowerCase() === jobAI.seniority_level.toLowerCase()) {
+        score += 12;
+        reasons.push(`Seniority level (${jobAI.seniority_level}) matches your background`);
+      } else {
+        score += 5;
+      }
+    }
+
+    // --- Clinical requirement hard disqualifier (spec factor #8, #31) ---
+    // Only mandatory clinical requirements can trigger this — preferred
+    // or boilerplate ones are informational only, per the spec's
+    // requirement-strength classification.
+    const mandatoryClinical = (jobAI.clinical_requirements || []).filter((r) => r.strength === "mandatory");
+    if (mandatoryClinical.length > 0) {
+      const resumeClinicalText = (resume.clinical_technical_experience || []).join(" ").toLowerCase();
+      const unmet = mandatoryClinical.find(
+        (req) => !resumeClinicalText.includes(String(req.requirement).toLowerCase().split(" ")[0])
+      );
+      if (unmet) {
+        concerns.push(`Job requires "${unmet.requirement}" — not clearly shown on your résumé`);
+        hardDisqualifier = true;
+        disqualifierCap = Math.min(disqualifierCap, 60);
+      }
     }
   }
 
