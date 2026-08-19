@@ -99,7 +99,7 @@
     <a href="#" class="btn btn-primary btn-sm">Compare Jobs</a>
   </div>
 
-  <div class="job-grid">
+  <div class="job-grid" id="jobGrid">
     <div class="job-card">
       <input type="checkbox" class="compare-check" onchange="updateCompare()">
       <span class="match-pill">94% Match</span>
@@ -166,12 +166,75 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="rook-config.js"></script>
+<script src="rook-auth.js"></script>
 <script>
 function updateCompare(){
   const checked = document.querySelectorAll('.compare-check:checked').length;
   const bar = document.getElementById('compareBar');
   document.getElementById('compareCount').textContent = checked;
   bar.classList.toggle('show', checked >= 2);
+}
+
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+(async () => {
+  const token = await rookRequireAuth();
+  if (!token) return;
+
+  const grid = document.getElementById('jobGrid');
+
+  try {
+    const res = await rookApiFetch('/saved-jobs');
+    if (!res.ok) throw new Error('API returned ' + res.status);
+    const jobs = await res.json();
+
+    if (!Array.isArray(jobs) || jobs.length === 0) {
+      grid.innerHTML = '<div class="empty-hint">Nothing saved yet — jobs you save from the Dashboard or Job Search will show up here.</div>';
+      return;
+    }
+
+    grid.innerHTML = jobs.map(renderSavedCard).join('');
+  } catch (err) {
+    grid.innerHTML = `<div class="empty-hint">Could not load saved jobs (${escapeHtml(err.message)}). Showing example cards below — see ROOK-Setup-Guide.pdf.</div>`;
+  }
+})();
+
+function renderSavedCard(job) {
+  const score = job.match?.overall_score;
+  const comp = job.compensation_text || (job.salary_min ? `$${job.salary_min}${job.salary_max ? '–$' + job.salary_max : '+'}` : '');
+  return `
+    <div class="job-card" data-job-id="${escapeHtml(job.id)}">
+      ${score != null ? `<span class="match-pill">${score}% Match</span>` : ''}
+      <h4>${escapeHtml(job.title_original || job.title_normalized || 'Untitled role')}</h4>
+      <div class="company">${escapeHtml(job.company_name || '')} — ${escapeHtml(job.location_raw || '')}</div>
+      <div class="job-meta">
+        ${comp ? `<span>${escapeHtml(comp)}</span>` : ''}
+      </div>
+      <div class="job-actions">
+        <a href="${job.source_url || '#'}" target="_blank" class="btn btn-primary btn-sm">View Original</a>
+        <button type="button" class="btn btn-outline btn-sm" onclick="removeSaved('${escapeHtml(job.id)}', this)">Remove</button>
+      </div>
+    </div>`;
+}
+
+async function removeSaved(jobId, btn) {
+  const card = btn.closest('.job-card');
+  btn.disabled = true;
+  try {
+    const res = await rookApiFetch(`/jobs/${jobId}/save`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ saved: false }),
+    });
+    if (res.ok && card) card.remove();
+  } catch (err) {
+    console.error('Remove failed:', err);
+    btn.disabled = false;
+  }
 }
 </script>
 
