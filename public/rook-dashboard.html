@@ -293,6 +293,12 @@
     const concernTags = (match?.concerns || []).map((c) =>
       `<span class="concern-tag">△ ${escapeHtml(c)}</span>`
     ).join('');
+    const confidenceLabel = match?.confidence
+      ? `<span style="font-size:11px; font-weight:600; color:#8B96AB; text-transform:uppercase; letter-spacing:0.03em;">Confidence: ${match.confidence}</span>`
+      : '';
+    const disqualifierNote = match?.hard_disqualifier
+      ? `<div style="font-size:11.5px; color:#B98900; font-weight:600; margin-top:4px;">△ Score capped — this job misses at least one of your stated requirements</div>`
+      : '';
 
     return `
       <div class="job-row">
@@ -301,7 +307,8 @@
           <h4>${escapeHtml(job.title_original || job.title_normalized || 'Untitled role')}</h4>
           <div class="company">${escapeHtml(job.company_name || '')} — ${escapeHtml(job.location_raw || '')} ${comp ? '&nbsp;·&nbsp; ' + escapeHtml(comp) : ''}</div>
           ${(reasonTags || concernTags) ? `<div class="why-row">${reasonTags}${concernTags}</div>` : ''}
-          <div class="job-meta-line">${job.date_posted ? 'Posted ' + escapeHtml(job.date_posted) : ''} · Sourced via ${escapeHtml(job.source_type || 'unknown')}</div>
+          ${disqualifierNote}
+          <div class="job-meta-line">${job.date_posted ? 'Posted ' + escapeHtml(job.date_posted) : ''} · Sourced via ${escapeHtml(job.source_type || 'unknown')} ${confidenceLabel ? '· ' + confidenceLabel : ''}</div>
         </div>
         <div class="job-actions">
           <a href="${job.source_url || '#'}" target="_blank" class="btn btn-outline btn-sm">View Original</a>
