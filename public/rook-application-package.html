@@ -84,6 +84,19 @@
     .compare-grid, .module-grid{grid-template-columns:1fr;}
     .final-actions{flex-direction:column; align-items:flex-start; gap:16px;}
   }
+
+  /* Print mode: shows every section stacked (not just the active tab),
+     hides nav/tabs/buttons, so "Download PDF" (window.print with "Save
+     as PDF" as the destination) produces one complete document rather
+     than whichever single tab happened to be open. */
+  .cache-banner{font-size:12.5px; color:#5B6B85; margin-bottom:16px; display:flex; align-items:center; gap:10px;}
+  @media print {
+    .topbar, .tabs, .rule-banner, .cache-banner, .final-actions, .match-note{display:none !important;}
+    .tab-panel{display:block !important; page-break-after:always;}
+    .tab-panel:last-child{page-break-after:auto;}
+    .resume-body{max-height:none !important; overflow:visible !important;}
+    body{background:#fff;}
+  }
 </style>
 </head>
 <body>
@@ -114,6 +127,8 @@
   </div>
 
   <div id="pkgContent" style="display:none;">
+    <div class="cache-banner" id="cacheBanner"></div>
+
     <div class="tabs">
       <div class="tab active" data-tab="resume" onclick="showTab('resume', this)">Résumé</div>
       <div class="tab" data-tab="cover" onclick="showTab('cover', this)">Cover Letter</div>
@@ -163,6 +178,17 @@
         <div class="resume-body" id="interviewPrepBody"></div>
       </div>
     </div>
+
+    <div class="final-actions">
+      <div class="l">
+        <h4>Package ready</h4>
+        <p id="finalActionsNote">Review each tab, then download or mark this job applied.</p>
+      </div>
+      <div class="r">
+        <a href="#" class="btn btn-outline" onclick="window.print(); return false;">Download PDF</a>
+        <a href="#" class="btn btn-primary" id="moveToAppliedBtn" onclick="moveToApplied(this); return false;">Move to Applied →</a>
+      </div>
+    </div>
   </div>
 
   <div id="pkgError" style="display:none; text-align:center; padding:60px 20px; color:#B98900; font-size:14px;"></div>
@@ -193,8 +219,23 @@ function showTab(name, el) {
     return;
   }
 
+  await loadPackage(jobId);
+})();
+
+let currentJobId = null;
+
+async function loadPackage(jobId, regenerate) {
+  currentJobId = jobId;
+  document.getElementById('pkgLoading').style.display = 'block';
+  document.getElementById('pkgContent').style.display = 'none';
+  document.getElementById('pkgError').style.display = 'none';
+  document.getElementById('pkgLoading').textContent = regenerate
+    ? 'Regenerating your tailored package — this calls the AI fresh, so it can take a few seconds…'
+    : 'Loading your tailored package…';
+
   try {
-    const res = await rookApiFetch(`/application-package/${jobId}`);
+    const url = `/application-package/${jobId}${regenerate ? '?regenerate=true' : ''}`;
+    const res = await rookApiFetch(url);
     const pkg = await res.json();
     if (!res.ok) {
       showError(pkg.error || 'Could not generate an application package for this job.');
@@ -204,7 +245,7 @@ function showTab(name, el) {
   } catch (err) {
     showError('Could not reach the ROOK API: ' + err.message);
   }
-})();
+}
 
 function showError(message) {
   document.getElementById('pkgLoading').style.display = 'none';
@@ -231,8 +272,39 @@ function renderPackage(pkg) {
     .map((n) => `<div style="margin-bottom:16px;"><b style="color:var(--navy);">${escapeHtml(n.question || '')}</b><p style="margin-top:4px; color:#5B6B85;">${escapeHtml(n.how_to_answer || '')}</p></div>`)
     .join('');
 
+  // This package is cached in the database (candidate_job_matches.
+  // generated_package) — it's only regenerated via the AI on the first
+  // visit for this job, or when "Regenerate" is explicitly clicked, not
+  // on every page load.
+  const cacheBanner = document.getElementById('cacheBanner');
+  if (pkg.cached) {
+    const when = pkg.generated_at ? new Date(pkg.generated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'earlier';
+    cacheBanner.innerHTML = `Showing the version generated ${escapeHtml(when)}. <a href="#" onclick="loadPackage(currentJobId, true); return false;" style="color:var(--royal); font-weight:600;">Regenerate</a>`;
+  } else {
+    cacheBanner.innerHTML = `Freshly generated just now. <a href="#" onclick="loadPackage(currentJobId, true); return false;" style="color:var(--royal); font-weight:600;">Regenerate</a>`;
+  }
+
   document.getElementById('pkgLoading').style.display = 'none';
   document.getElementById('pkgContent').style.display = 'block';
+}
+
+async function moveToApplied(btn) {
+  btn.textContent = 'Saving...';
+  try {
+    const res = await rookApiFetch('/applications', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ job_id: currentJobId, status: 'applied' }),
+    });
+    if (res.ok) {
+      window.location.href = 'rook-tracker.html';
+    } else {
+      btn.textContent = 'Move to Applied →';
+    }
+  } catch (err) {
+    console.error('Mark applied failed:', err);
+    btn.textContent = 'Move to Applied →';
+  }
 }
 </script>
 
