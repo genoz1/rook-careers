@@ -120,51 +120,51 @@
     <h3>Filters</h3>
     <div class="filter-group">
       <label>Keyword</label>
-      <input type="text" placeholder="Title, company, product...">
+      <input type="text" id="filterKeyword" placeholder="Title, company, product...">
     </div>
     <div class="filter-group">
       <label>Location</label>
-      <div class="check-row"><input type="checkbox" checked> Central Florida</div>
-      <div class="check-row"><input type="checkbox"> Northeast Florida</div>
-      <div class="check-row"><input type="checkbox"> Tampa Bay</div>
-      <div class="check-row"><input type="checkbox"> Remote</div>
+      <div class="check-row"><input type="checkbox" class="filter-location" value="central-fl"> Central Florida</div>
+      <div class="check-row"><input type="checkbox" class="filter-location" value="northeast-fl"> Northeast Florida</div>
+      <div class="check-row"><input type="checkbox" class="filter-location" value="tampa-bay"> Tampa Bay</div>
+      <div class="check-row"><input type="checkbox" class="filter-location" value="remote"> Remote</div>
     </div>
     <div class="filter-group">
       <label>Industry</label>
-      <div class="check-row"><input type="checkbox" checked> Diagnostics</div>
-      <div class="check-row"><input type="checkbox" checked> Veterinary / Animal Health</div>
-      <div class="check-row"><input type="checkbox"> Medical Device</div>
-      <div class="check-row"><input type="checkbox"> Capital Equipment</div>
-      <div class="check-row"><input type="checkbox"> Pharmaceutical</div>
+      <div class="check-row"><input type="checkbox" class="filter-industry" value="Diagnostics"> Diagnostics</div>
+      <div class="check-row"><input type="checkbox" class="filter-industry" value="Veterinary"> Veterinary / Animal Health</div>
+      <div class="check-row"><input type="checkbox" class="filter-industry" value="Medical Device"> Medical Device</div>
+      <div class="check-row"><input type="checkbox" class="filter-industry" value="Capital Equipment"> Capital Equipment</div>
+      <div class="check-row"><input type="checkbox" class="filter-industry" value="Pharmaceutical"> Pharmaceutical</div>
     </div>
     <div class="filter-group">
       <label>Match Score</label>
-      <input type="range" min="0" max="100" value="70">
-      <div class="range-labels"><span>0%</span><span>70%+</span><span>100%</span></div>
+      <input type="range" id="filterMatchScore" min="0" max="100" value="0">
+      <div class="range-labels"><span>0%</span><span id="filterMatchScoreLabel">Any</span><span>100%</span></div>
     </div>
     <div class="filter-group">
-      <label>Compensation</label>
-      <input type="range" min="0" max="200" value="90">
-      <div class="range-labels"><span>$0</span><span>$90K+</span><span>$200K</span></div>
+      <label>Compensation (minimum base)</label>
+      <input type="range" id="filterComp" min="0" max="200" value="0">
+      <div class="range-labels"><span>$0</span><span id="filterCompLabel">Any</span><span>$200K</span></div>
     </div>
     <div class="filter-group">
       <label>Travel</label>
-      <div class="check-row"><input type="checkbox"> Under 25%</div>
-      <div class="check-row"><input type="checkbox" checked> 25–50%</div>
-      <div class="check-row"><input type="checkbox" checked> 50%+</div>
+      <div class="check-row"><input type="checkbox" class="filter-travel" value="under25"> Under 25%</div>
+      <div class="check-row"><input type="checkbox" class="filter-travel" value="25-50"> 25–50%</div>
+      <div class="check-row"><input type="checkbox" class="filter-travel" value="over50"> 50%+</div>
     </div>
-    <a href="#" class="clear-link">Clear all filters</a>
+    <a href="#" class="clear-link" onclick="clearAllFilters(); return false;">Clear all filters</a>
   </aside>
 
   <main>
     <div class="results-head">
-      <div class="results-count"><b>23</b> opportunities match your profile</div>
+      <div class="results-count"><b id="resultsCount">23</b> opportunities match your profile</div>
       <div class="sort-row">
         Sort by
-        <select>
-          <option>Best Match</option>
-          <option>Newest</option>
-          <option>Highest Compensation</option>
+        <select id="sortSelect">
+          <option value="match">Best Match</option>
+          <option value="newest">Newest</option>
+          <option value="comp">Highest Compensation</option>
         </select>
       </div>
     </div>
@@ -257,11 +257,28 @@
   // Same live-data pattern as rook-dashboard.html: try to replace the demo
   // rows with real, scored jobs; leave demo data in place (with a banner
   // explaining why) if there's no session, no data yet, or a fetch error.
+  //
+  // Filtering happens entirely client-side against the full fetched list.
+  // This isn't a stylistic choice — jobs.industry, jobs.state, and
+  // jobs.city are never populated by any adapter (only free-text
+  // location_raw), so there's no real database column to filter on for
+  // industry or location. Text/regex matching against location_raw,
+  // title_original, and description_text is the only option that
+  // actually works with the data that exists.
+  let allJobs = [];
+
+  const FL_REGION_CITIES = {
+    // Approximate — not real geocoding, just a reasonable city list per
+    // region. A city not in this list won't match any region filter even
+    // if it's genuinely in that area.
+    'central-fl': ['orlando', 'oxford', 'the villages', 'ocala', 'lakeland', 'kissimmee', 'winter park', 'sanford', 'lake mary', 'clermont', 'leesburg', 'tampa'],
+    'northeast-fl': ['jacksonville', 'st. augustine', 'st augustine', 'gainesville', 'palatka'],
+    'tampa-bay': ['tampa', 'st. petersburg', 'st petersburg', 'clearwater', 'brandon', 'sarasota'],
+  };
+
   (async () => {
     const token = await rookRequireAuth();
-    if (!token) return; // rookRequireAuth already redirected to login
-
-    const jobList = document.getElementById('jobList');
+    if (!token) return;
 
     try {
       const res = await rookApiFetch('/jobs?limit=50');
@@ -273,14 +290,129 @@
         return;
       }
 
-      jobList.dataset.demo = 'false';
-      jobList.innerHTML = jobs.map(renderRealJobRow).join('');
-      document.querySelector('.results-count').innerHTML = `<b>${jobs.length}</b> opportunities match your profile`;
-      showBanner(`Showing ${jobs.length} live job(s), scored against your profile (location and compensation only for now).`, 'info');
+      allJobs = jobs;
+      document.getElementById('jobList').dataset.demo = 'false';
+      applyFiltersAndRender();
+      showBanner(`Showing ${jobs.length} live job(s), scored against your profile.`, 'info');
+
+      // Wire up every filter control to re-filter on change.
+      document.getElementById('filterKeyword').addEventListener('input', applyFiltersAndRender);
+      document.querySelectorAll('.filter-location').forEach((el) => el.addEventListener('change', applyFiltersAndRender));
+      document.querySelectorAll('.filter-industry').forEach((el) => el.addEventListener('change', applyFiltersAndRender));
+      document.querySelectorAll('.filter-travel').forEach((el) => el.addEventListener('change', applyFiltersAndRender));
+      document.getElementById('filterMatchScore').addEventListener('input', applyFiltersAndRender);
+      document.getElementById('filterComp').addEventListener('input', applyFiltersAndRender);
+      document.getElementById('sortSelect').addEventListener('change', applyFiltersAndRender);
     } catch (err) {
       showBanner('Could not reach the ROOK API (' + err.message + '). Showing example matches below — see ROOK-Setup-Guide.pdf to get the backend running.');
     }
   })();
+
+  function extractJobSalary(job) {
+    if (job.salary_max) return Number(job.salary_max);
+    if (job.salary_min) return Number(job.salary_min);
+    const text = job.compensation_text || '';
+    const matches = [...text.matchAll(/\$?([\d,]+(?:\.\d+)?)\s*(k|K)?/g)];
+    let best = null;
+    for (const m of matches) {
+      let val = parseFloat(m[1].replace(/,/g, ''));
+      if (!val) continue;
+      if (m[2]) val *= 1000;
+      if (val < 1000) continue;
+      if (best === null || val > best) best = val;
+    }
+    return best;
+  }
+
+  function extractJobTravel(job) {
+    const text = `${job.compensation_text || ''} ${job.description_text || ''}`;
+    const match = text.match(/(\d{1,3})\s*%\s*travel/i);
+    return match ? Number(match[1]) : null;
+  }
+
+  function applyFiltersAndRender() {
+    const keyword = document.getElementById('filterKeyword').value.trim().toLowerCase();
+    const selectedLocations = Array.from(document.querySelectorAll('.filter-location:checked')).map((el) => el.value);
+    const selectedIndustries = Array.from(document.querySelectorAll('.filter-industry:checked')).map((el) => el.value.toLowerCase());
+    const selectedTravel = Array.from(document.querySelectorAll('.filter-travel:checked')).map((el) => el.value);
+    const minMatchScore = Number(document.getElementById('filterMatchScore').value);
+    const minComp = Number(document.getElementById('filterComp').value) * 1000;
+    const sortBy = document.getElementById('sortSelect').value;
+
+    document.getElementById('filterMatchScoreLabel').textContent = minMatchScore > 0 ? minMatchScore + '%+' : 'Any';
+    document.getElementById('filterCompLabel').textContent = minComp > 0 ? '$' + (minComp / 1000) + 'K+' : 'Any';
+
+    let filtered = allJobs.filter((job) => {
+      if (keyword) {
+        const haystack = `${job.title_original || ''} ${job.company_name || ''} ${job.description_text || ''}`.toLowerCase();
+        if (!haystack.includes(keyword)) return false;
+      }
+
+      if (selectedLocations.length > 0) {
+        const loc = (job.location_raw || '').toLowerCase();
+        const isRemote = /remote/.test(loc) || job.remote_status === 'remote';
+        const matchesAny = selectedLocations.some((region) => {
+          if (region === 'remote') return isRemote;
+          return (FL_REGION_CITIES[region] || []).some((city) => loc.includes(city));
+        });
+        if (!matchesAny) return false;
+      }
+
+      if (selectedIndustries.length > 0) {
+        const text = `${job.title_original || ''} ${job.description_text || ''}`.toLowerCase();
+        const matchesAny = selectedIndustries.some((ind) => text.includes(ind));
+        if (!matchesAny) return false;
+      }
+
+      if (minMatchScore > 0) {
+        const score = job.match?.overall_score;
+        if (score == null || score < minMatchScore) return false;
+      }
+
+      if (minComp > 0) {
+        const salary = extractJobSalary(job);
+        if (salary == null || salary < minComp) return false;
+      }
+
+      if (selectedTravel.length > 0) {
+        const travel = extractJobTravel(job);
+        if (travel == null) return false; // can't verify it matches, so exclude rather than guess
+        const matchesAny = selectedTravel.some((bucket) => {
+          if (bucket === 'under25') return travel < 25;
+          if (bucket === '25-50') return travel >= 25 && travel <= 50;
+          if (bucket === 'over50') return travel > 50;
+          return false;
+        });
+        if (!matchesAny) return false;
+      }
+
+      return true;
+    });
+
+    filtered.sort((a, b) => {
+      if (sortBy === 'newest') {
+        return new Date(b.last_seen_at || b.date_posted || 0) - new Date(a.last_seen_at || a.date_posted || 0);
+      }
+      if (sortBy === 'comp') {
+        return (extractJobSalary(b) ?? -1) - (extractJobSalary(a) ?? -1);
+      }
+      return (b.match?.overall_score ?? -1) - (a.match?.overall_score ?? -1); // Best Match, default
+    });
+
+    document.getElementById('jobList').innerHTML = filtered.length > 0
+      ? filtered.map(renderRealJobRow).join('')
+      : '<div style="text-align:center; padding:60px 20px; color:#5B6B85; font-size:14px;">No jobs match these filters. Try clearing some.</div>';
+    document.getElementById('resultsCount').textContent = filtered.length;
+  }
+
+  function clearAllFilters() {
+    document.getElementById('filterKeyword').value = '';
+    document.querySelectorAll('.filter-location, .filter-industry, .filter-travel').forEach((el) => (el.checked = false));
+    document.getElementById('filterMatchScore').value = 0;
+    document.getElementById('filterComp').value = 0;
+    document.getElementById('sortSelect').value = 'match';
+    applyFiltersAndRender();
+  }
 
   function matchLevelInfo(score) {
     if (score == null) return { label: 'Unscored', cls: 'ml-strong' };
