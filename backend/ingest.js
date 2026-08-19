@@ -207,11 +207,32 @@ function looksRelevant(title = "") {
   return hasRoleWord && hasDomainWord;
 }
 
+// DigitalOcean's App Platform Scheduled Jobs have a hard 30-minute
+// timeout — a run that hits it gets forcibly killed mid-request rather
+// than exiting cleanly. With employers this large (Illumina, Roche,
+// Genentech, Abbott, GE HealthCare can each have hundreds to thousands
+// of postings), a full pass across every employer can genuinely exceed
+// that. This budget makes the run stop itself cleanly with time to
+// spare, rather than getting cut off abruptly — nothing is corrupted
+// either way (progress is saved per-job throughout, not batched at the
+// end), but a clean stop logs which employers were skipped instead of
+// just vanishing mid-request.
+const TIME_BUDGET_MS = 25 * 60 * 1000; // 25 min — 5 min of buffer under DO's 30-min hard limit
+
 async function run() {
+  const startedAt = Date.now();
+
+  // Order by last_checked_at ascending (nulls first) rather than
+  // whatever order the table happens to return — this means employers
+  // that have never synced, or synced longest ago, get processed first.
+  // If the time budget cuts a run short, it's a different employer that
+  // gets skipped each time, not always the same ones at the end of an
+  // arbitrary list order.
   const { data: employers, error } = await supabase
     .from("employers")
     .select("*")
-    .eq("active", true);
+    .eq("active", true)
+    .order("last_checked_at", { ascending: true, nullsFirst: true });
 
   if (error) {
     console.error("Could not load employers:", error.message);
@@ -220,11 +241,23 @@ async function run() {
 
   console.log(`Found ${employers.length} active employer(s) to sync.\n`);
 
+  let processedCount = 0;
   for (const employer of employers) {
+    const elapsed = Date.now() - startedAt;
+    if (elapsed > TIME_BUDGET_MS) {
+      const remaining = employers.length - processedCount;
+      console.log(
+        `\nTime budget reached (${Math.round(elapsed / 60000)} min) — stopping cleanly. ` +
+          `${remaining} employer(s) not reached this run; they're now oldest-synced, so they'll be ` +
+          `prioritized on the next run.`
+      );
+      break;
+    }
     await ingestEmployer(employer);
+    processedCount++;
   }
 
-  console.log("\nIngestion run complete.");
+  console.log(`\nIngestion run complete. Processed ${processedCount} / ${employers.length} employer(s).`);
 }
 
 run();
