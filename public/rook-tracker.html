@@ -75,7 +75,7 @@
     <a href="rook-dashboard.html" class="btn btn-outline">Find More Jobs</a>
   </div>
 
-  <div class="board">
+  <div class="board" id="board">
     <div class="col">
       <div class="col-head"><h4>Interested</h4><span class="col-count">3</span></div>
       <div class="kcard">
@@ -96,47 +96,31 @@
     </div>
 
     <div class="col">
-      <div class="col-head"><h4>Preparing</h4><span class="col-count">2</span></div>
-      <div class="kcard">
-        <div class="company">Midmark</div>
-        <h5>Capital Equipment Specialist</h5>
-        <div class="kmeta"><span class="kscore">82% match</span><span>Tampa, FL</span></div>
-        <div class="next">Résumé package in progress</div>
-      </div>
-      <div class="kcard">
-        <div class="company">Covetrus</div>
-        <h5>Veterinary Territory Manager</h5>
-        <div class="kmeta"><span class="kscore">91% match</span><span>Jacksonville, FL</span></div>
-        <div class="next">Résumé package in progress</div>
-      </div>
-    </div>
-
-    <div class="col">
       <div class="col-head"><h4>Applied</h4><span class="col-count">4</span></div>
       <div class="kcard">
         <div class="company">Example Diagnostics</div>
         <h5>Diagnostic Account Executive</h5>
         <div class="kmeta"><span class="kscore">94% match</span><span>Applied Aug 16</span></div>
-        <div class="next">Résumé v2 submitted</div>
       </div>
       <div class="kcard">
         <div class="company">IDEXX</div>
         <h5>Territory Sales Manager</h5>
         <div class="kmeta"><span class="kscore">89% match</span><span>Applied Aug 14</span></div>
-        <div class="next">Résumé v2 submitted</div>
       </div>
       <div class="kcard">
         <div class="company">Elanco</div>
         <h5>Account Executive</h5>
         <div class="kmeta"><span class="kscore">85% match</span><span>Applied Aug 12</span></div>
-        <div class="next">Résumé v3 submitted</div>
       </div>
       <div class="kcard">
         <div class="company">Labcorp</div>
         <h5>Diagnostic Sales Rep</h5>
         <div class="kmeta"><span class="kscore">90% match</span><span>Applied Aug 10</span></div>
-        <div class="next">Résumé v2 submitted</div>
       </div>
+    </div>
+
+    <div class="col">
+      <div class="col-head"><h4>Screening</h4><span class="col-count">0</span></div>
     </div>
 
     <div class="col">
@@ -163,6 +147,101 @@
     </div>
   </div>
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="rook-config.js"></script>
+<script src="rook-auth.js"></script>
+<script>
+  // Maps ROOK's real application statuses (applications.status check
+  // constraint in backend/db/schema.sql) onto this board's 6 visual
+  // columns — several backend statuses share a column where a finer
+  // distinction wouldn't help a board this size (e.g. recruiter_contact
+  // and phone_screen both land under "Screening").
+  const COLUMNS = [
+    { label: 'Interested', statuses: ['interested', 'saved'] },
+    { label: 'Applied', statuses: ['applied'] },
+    { label: 'Screening', statuses: ['recruiter_contact', 'phone_screen'] },
+    { label: 'Interview', statuses: ['interview', 'final_interview'] },
+    { label: 'Offer', statuses: ['offer'] },
+    { label: 'Closed', statuses: ['rejected', 'withdrawn'] },
+  ];
+  // Every status a card can be moved to via the dropdown, in pipeline order.
+  const ALL_STATUSES = ['interested', 'applied', 'recruiter_contact', 'phone_screen', 'interview', 'final_interview', 'offer', 'rejected', 'withdrawn'];
+
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  (async () => {
+    const token = await rookRequireAuth();
+    if (!token) return;
+
+    const board = document.getElementById('board');
+
+    try {
+      const res = await rookApiFetch('/applications');
+      if (!res.ok) throw new Error('API returned ' + res.status);
+      const apps = await res.json();
+
+      if (!Array.isArray(apps) || apps.length === 0) {
+        board.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:60px 20px; color:#5B6B85; font-size:14px;">No applications tracked yet — use "Mark Applied" on a job from the Dashboard to start tracking it here.</div>';
+        return;
+      }
+
+      board.innerHTML = COLUMNS.map((col) => renderColumn(col, apps)).join('');
+    } catch (err) {
+      board.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:60px 20px; color:#5B6B85; font-size:14px;">Could not load applications (${escapeHtml(err.message)}). Showing example board below — see ROOK-Setup-Guide.pdf.</div>`;
+    }
+  })();
+
+  function renderColumn(col, apps) {
+    const colApps = apps.filter((a) => col.statuses.includes(a.status));
+    return `
+      <div class="col">
+        <div class="col-head"><h4>${escapeHtml(col.label)}</h4><span class="col-count">${colApps.length}</span></div>
+        ${colApps.map(renderCard).join('')}
+      </div>`;
+  }
+
+  function renderCard(app) {
+    const job = app.jobs || {};
+    const score = job.match?.overall_score;
+    const dateLabel = app.applied_at
+      ? 'Applied ' + new Date(app.applied_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      : new Date(app.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+    return `
+      <div class="kcard">
+        <div class="company">${escapeHtml(job.company_name || '')}</div>
+        <h5>${escapeHtml(job.title_original || 'Untitled role')}</h5>
+        <div class="kmeta">
+          <span class="kscore">${score != null ? score + '% match' : ''}</span>
+          <span>${escapeHtml(dateLabel)}</span>
+        </div>
+        <select onchange="changeStatus('${escapeHtml(app.job_id)}', this.value)" style="width:100%; margin-top:8px; font-size:11.5px; padding:5px; border-radius:6px; border:1px solid #E3E8F0; color:#5B6B85;">
+          ${ALL_STATUSES.map((s) => `<option value="${s}" ${s === app.status ? 'selected' : ''}>${s.replace(/_/g, ' ')}</option>`).join('')}
+        </select>
+      </div>`;
+  }
+
+  async function changeStatus(jobId, newStatus) {
+    try {
+      const res = await rookApiFetch('/applications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ job_id: jobId, status: newStatus }),
+      });
+      if (res.ok) {
+        // Re-fetch and re-render so the card moves to its new column.
+        const appsRes = await rookApiFetch('/applications');
+        const apps = await appsRes.json();
+        document.getElementById('board').innerHTML = COLUMNS.map((col) => renderColumn(col, apps)).join('');
+      }
+    } catch (err) {
+      console.error('Status change failed:', err);
+    }
+  }
+</script>
 
 </body>
 </html>
