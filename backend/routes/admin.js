@@ -90,6 +90,27 @@ router.post("/admin/employers", requireConfig, requireAuth, async (req, res) => 
     } catch {
       return res.status(400).json({ error: "careers_url isn't a valid URL." });
     }
+  } else if (ats_type_override === "oraclehcm") {
+    // Oracle HCM needs both a domain AND a siteNumber (see the /sites/
+    // {siteNumber}/... path segment in the employer's real careers URL)
+    // — a bare hostname isn't enough to build working API calls. Expect
+    // careers_url to be pasted as the FULL careers URL including that
+    // /sites/{siteNumber}/ segment, e.g.
+    // https://hdox.fa.us6.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1/jobs
+    try {
+      const parsed = new URL(careers_url.trim());
+      const siteMatch = parsed.pathname.match(/\/sites\/([^/]+)/i);
+      if (!siteMatch) {
+        return res.status(400).json({
+          error:
+            "For Oracle HCM, paste the full careers URL including the /sites/{siteNumber}/ segment, " +
+            "e.g. https://hdox.fa.us6.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1/jobs",
+        });
+      }
+      detected = { ats_type: "oraclehcm", ats_identifier: `${parsed.hostname}|${siteMatch[1]}` };
+    } catch {
+      return res.status(400).json({ error: "careers_url isn't a valid URL." });
+    }
   } else {
     detected = detectAts(careers_url.trim());
   }
