@@ -14,6 +14,7 @@ const { fetchLeverJobs, normalizeLeverJob } = require("./adapters/lever");
 const { fetchAshbyJobs, normalizeAshbyJob } = require("./adapters/ashby");
 const { fetchWorkdayJobs, normalizeWorkdayJob } = require("./adapters/workday");
 const { fetchTalentBrewJobs, normalizeTalentBrewJob } = require("./adapters/talentbrew");
+const { analyzeJob } = require("./ai/jobAnalysis");
 
 // Use the SERVICE ROLE key here, never the anon key — ingestion writes
 // to the jobs table and must bypass row-level security intentionally.
@@ -74,16 +75,33 @@ async function ingestEmployer(employer) {
     // raw posting unfiltered.
     if (!looksRelevant(job.title_original)) continue;
 
-    const { error } = await supabase
+    const { data: upsertedRow, error } = await supabase
       .from("jobs")
       .upsert(
         { ...job, last_seen_at: new Date().toISOString() },
         { onConflict: "employer_id,source_job_id" }
-      );
+      )
+      .select()
+      .single();
+
     if (error) {
       console.error(`  Upsert error for "${job.title_original}": ${error.message}`);
-    } else {
-      savedCount++;
+      continue;
+    }
+    savedCount++;
+
+    // AI job analysis runs once per job, ever — not on every re-ingestion
+    // run. This keeps API cost bounded: a job already analyzed on a
+    // previous run is skipped even if it's seen again today. A failure
+    // here doesn't affect the job being saved — it just means that job
+    // scores without the AI-derived factors until a later run retries it.
+    if (!upsertedRow.ai_analysis) {
+      try {
+        const analysis = await analyzeJob(upsertedRow.title_original, upsertedRow.description_text);
+        await supabase.from("jobs").update({ ai_analysis: analysis }).eq("id", upsertedRow.id);
+      } catch (err) {
+        console.error(`  AI analysis failed for "${job.title_original}": ${err.message}`);
+      }
     }
   }
 
