@@ -11,6 +11,7 @@ const multer = require("multer");
 const { createClient } = require("@supabase/supabase-js");
 const { extractResumeText } = require("../resumeParser");
 const { analyzeResume } = require("../ai/resumeAnalysis");
+const { generateEmbedding } = require("../ai/embeddings");
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -95,6 +96,7 @@ router.post("/resume", requireConfig, requireAuth, upload.single("resume"), asyn
 
   let resumeText = null;
   let resumeStructured = null;
+  let resumeEmbedding = null;
   let analysisStatus = "skipped";
 
   try {
@@ -110,6 +112,16 @@ router.post("/resume", requireConfig, requireAuth, upload.single("resume"), asyn
     } catch (err) {
       console.error(`Resume AI analysis failed: ${err.message}`);
       analysisStatus = "failed";
+    }
+
+    // Embedding generation is independent of the structured analysis —
+    // one failing doesn't block the other, since they serve different
+    // parts of the matching engine (category matching vs. semantic
+    // similarity).
+    try {
+      resumeEmbedding = await generateEmbedding(resumeText);
+    } catch (err) {
+      console.error(`Resume embedding generation failed: ${err.message}`);
     }
   } else {
     analysisStatus = "no_text_extracted";
@@ -128,6 +140,7 @@ router.post("/resume", requireConfig, requireAuth, upload.single("resume"), asyn
         resume_file_path: filePath,
         resume_text: resumeText,
         resume_structured: resumeStructured,
+        candidate_embedding: resumeEmbedding,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "user_id" }
