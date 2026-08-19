@@ -100,7 +100,7 @@
 <div class="container">
   <div class="pkg-header">
     <div class="pkg-eyebrow">Application Package</div>
-    <h1>Diagnostic Account Executive — Example Diagnostics</h1>
+    <h1 id="pkgTitle">Loading…</h1>
     <p>Everything below is built from your master résumé. Review and edit before you apply.</p>
   </div>
 
@@ -109,93 +109,132 @@
     ROOK only reorganizes and emphasizes experience already in your résumé — it never invents jobs, titles, dates, or accomplishments.
   </div>
 
-  <div class="tabs">
-    <div class="tab active">Résumé</div>
-    <div class="tab">Cover Letter</div>
-    <div class="tab">Recruiter Message</div>
-    <div class="tab">Interview Prep</div>
+  <div id="pkgLoading" style="text-align:center; padding:60px 20px; color:#5B6B85; font-size:14px;">
+    Generating your tailored package — this calls the AI fresh each time, so it can take a few seconds…
   </div>
 
-  <div class="compare-grid">
-    <div class="resume-card">
-      <div class="rc-head"><h4>Master Résumé</h4><span class="rc-tag original">Original</span></div>
-      <div class="resume-body">
-        <div class="rname">Gene Zentko</div>
-        <div class="rtitle">Healthcare & Diagnostics Sales Professional</div>
-        <h5>Summary</h5>
-        <p>15-year sales professional with experience across diagnostics, laboratory services, veterinary, and capital equipment sales.</p>
-        <h5>Experience</h5>
-        <ul>
-          <li>Managed a multi-county territory covering reference laboratory and point-of-care diagnostics accounts.</li>
-          <li>Sold diagnostic instrumentation and consumables to hospital, physician office, and veterinary accounts.</li>
-          <li>Built and maintained relationships with veterinary clinics and animal health distributors.</li>
-          <li>Consistently ranked among top territory performers on new account growth.</li>
-        </ul>
-        <h5>Skills</h5>
-        <p>Territory management, capital equipment sales, veterinary sales, laboratory diagnostics, account growth, contract negotiation.</p>
+  <div id="pkgContent" style="display:none;">
+    <div class="tabs">
+      <div class="tab active" data-tab="resume" onclick="showTab('resume', this)">Résumé</div>
+      <div class="tab" data-tab="cover" onclick="showTab('cover', this)">Cover Letter</div>
+      <div class="tab" data-tab="recruiter" onclick="showTab('recruiter', this)">Recruiter Message</div>
+      <div class="tab" data-tab="interview" onclick="showTab('interview', this)">Interview Prep</div>
+    </div>
+
+    <div class="tab-panel" data-panel="resume">
+      <div class="compare-grid">
+        <div class="resume-card">
+          <div class="rc-head"><h4>Master Résumé</h4><span class="rc-tag original">Original</span></div>
+          <div class="resume-body" id="originalResumeBody" style="white-space:pre-wrap;"></div>
+          <div class="match-note">Unchanged — this is exactly what you uploaded.</div>
+        </div>
+        <div class="resume-card">
+          <div class="rc-head"><h4>Tailored for This Role</h4><span class="rc-tag tailored" id="atsCount">Tailored</span></div>
+          <div class="resume-body">
+            <h5>Summary</h5>
+            <p id="tailoredSummary"></p>
+            <h5>Highlighted Achievements</h5>
+            <ul id="tailoredBullets"></ul>
+            <h5>ATS Keywords Emphasized</h5>
+            <p id="atsKeywords" style="color:#5B6B85;"></p>
+          </div>
+          <div class="match-note">Reordered and reworded to lead with what matches this job — every fact here is from your uploaded résumé.</div>
+        </div>
       </div>
-      <div class="match-note">Unchanged — this is exactly what you uploaded.</div>
     </div>
 
-    <div class="resume-card">
-      <div class="rc-head"><h4>Tailored for This Role</h4><span class="rc-tag tailored">94% Aligned</span></div>
-      <div class="resume-body">
-        <div class="rname">Gene Zentko</div>
-        <div class="rtitle">Diagnostics &amp; Territory Sales Professional</div>
-        <h5>Summary</h5>
-        <p><mark>Diagnostics-focused</mark> sales professional with 15 years selling <mark>reference laboratory and point-of-care diagnostic solutions</mark> across a defined Central Florida territory.</p>
-        <h5>Experience</h5>
-        <ul>
-          <li><mark>Managed reference laboratory and point-of-care diagnostics accounts</mark> across a multi-county territory — directly matching this role's core coverage area.</li>
-          <li><mark>Sold diagnostic instrumentation and consumables</mark> to hospital and physician-office accounts, including capital equipment components.</li>
-          <li>Built relationships with veterinary clinics and animal health distributors, broadening account reach.</li>
-          <li>Consistently ranked among top territory performers on new account growth.</li>
-        </ul>
-        <h5>Skills</h5>
-        <p><mark>Laboratory diagnostics</mark>, <mark>territory management</mark>, capital equipment sales, veterinary sales, account growth, contract negotiation.</p>
+    <div class="tab-panel" data-panel="cover" style="display:none;">
+      <div class="resume-card">
+        <div class="rc-head"><h4>Cover Letter</h4></div>
+        <div class="resume-body" id="coverLetterBody" style="white-space:pre-wrap;"></div>
       </div>
-      <div class="match-note">Reordered to lead with diagnostics; added the job's own terminology where your experience already supports it.</div>
+    </div>
+
+    <div class="tab-panel" data-panel="recruiter" style="display:none;">
+      <div class="resume-card">
+        <div class="rc-head"><h4>Recruiter / Hiring Manager Message</h4></div>
+        <div class="resume-body" id="recruiterMessageBody" style="white-space:pre-wrap;"></div>
+      </div>
+    </div>
+
+    <div class="tab-panel" data-panel="interview" style="display:none;">
+      <div class="resume-card">
+        <div class="rc-head"><h4>Interview Prep</h4></div>
+        <div class="resume-body" id="interviewPrepBody"></div>
+      </div>
     </div>
   </div>
 
-  <div class="module-grid">
-    <div class="module-card">
-      <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h7"/></svg></div>
-      <h5>ATS Alignment</h5>
-      <p>Terminology matched to this posting's language where your background supports it.</p>
-      <div class="status"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Ready</div>
-    </div>
-    <div class="module-card">
-      <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4zM4 9h16"/></svg></div>
-      <h5>Cover Letter</h5>
-      <p>A short, specific letter referencing this role and your diagnostics background.</p>
-      <div class="status"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Ready</div>
-    </div>
-    <div class="module-card">
-      <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg></div>
-      <h5>Recruiter Message</h5>
-      <p>A short LinkedIn/email note you can send to the hiring team.</p>
-      <div class="status"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Ready</div>
-    </div>
-    <div class="module-card">
-      <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
-      <h5>Interview Prep</h5>
-      <p>Likely questions for this role, and how your background answers them.</p>
-      <div class="status"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Ready</div>
-    </div>
-  </div>
-
-  <div class="final-actions">
-    <div class="l">
-      <h4>Package complete</h4>
-      <p>This version is saved to your résumé history and will attach automatically when you mark this job "Applied."</p>
-    </div>
-    <div class="r">
-      <a href="#" class="btn btn-outline">Download PDF</a>
-      <a href="rook-tracker.html" class="btn btn-primary">Move to Applied →</a>
-    </div>
-  </div>
+  <div id="pkgError" style="display:none; text-align:center; padding:60px 20px; color:#B98900; font-size:14px;"></div>
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="rook-config.js"></script>
+<script src="rook-auth.js"></script>
+<script>
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function showTab(name, el) {
+  document.querySelectorAll('.tab').forEach((t) => t.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach((p) => (p.style.display = 'none'));
+  el.classList.add('active');
+  document.querySelector(`.tab-panel[data-panel="${name}"]`).style.display = 'block';
+}
+
+(async () => {
+  const token = await rookRequireAuth();
+  if (!token) return;
+
+  const jobId = new URLSearchParams(window.location.search).get('job');
+  if (!jobId) {
+    showError("No job specified. Open this page from \"Create Application Package\" on a job's Match Analysis.");
+    return;
+  }
+
+  try {
+    const res = await rookApiFetch(`/application-package/${jobId}`);
+    const pkg = await res.json();
+    if (!res.ok) {
+      showError(pkg.error || 'Could not generate an application package for this job.');
+      return;
+    }
+    renderPackage(pkg);
+  } catch (err) {
+    showError('Could not reach the ROOK API: ' + err.message);
+  }
+})();
+
+function showError(message) {
+  document.getElementById('pkgLoading').style.display = 'none';
+  const errEl = document.getElementById('pkgError');
+  errEl.style.display = 'block';
+  errEl.textContent = message;
+}
+
+function renderPackage(pkg) {
+  document.title = `Application Package — ${pkg.job_title || 'Job'} — ROOK`;
+  document.getElementById('pkgTitle').textContent =
+    [pkg.job_title, pkg.company_name].filter(Boolean).join(' — ');
+
+  document.getElementById('originalResumeBody').textContent = pkg.resume_text || '(no résumé text available)';
+  document.getElementById('tailoredSummary').textContent = pkg.tailored_summary || '';
+  document.getElementById('tailoredBullets').innerHTML = (pkg.tailored_bullets || [])
+    .map((b) => `<li>${escapeHtml(b)}</li>`).join('');
+  document.getElementById('atsKeywords').textContent = (pkg.ats_keywords || []).join(', ');
+  document.getElementById('atsCount').textContent = (pkg.ats_keywords || []).length + ' keywords';
+
+  document.getElementById('coverLetterBody').textContent = pkg.cover_letter || '';
+  document.getElementById('recruiterMessageBody').textContent = pkg.recruiter_message || '';
+  document.getElementById('interviewPrepBody').innerHTML = (pkg.interview_prep_notes || [])
+    .map((n) => `<div style="margin-bottom:16px;"><b style="color:var(--navy);">${escapeHtml(n.question || '')}</b><p style="margin-top:4px; color:#5B6B85;">${escapeHtml(n.how_to_answer || '')}</p></div>`)
+    .join('');
+
+  document.getElementById('pkgLoading').style.display = 'none';
+  document.getElementById('pkgContent').style.display = 'block';
+}
+</script>
 
 </body>
 </html>
