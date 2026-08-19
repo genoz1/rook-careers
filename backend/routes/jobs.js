@@ -99,24 +99,64 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
   if (!profile) return res.json(data);
 
   // Pull dismissed/saved state and application status for this candidate
-  // in two extra queries, rather than N+1 queries per job.
+  // in two extra queries, rather than N+1 queries per job. The
+  // applications query also joins jobs(employer_id, title_original) so
+  // employer-history awareness (spec factor #43) can be computed without
+  // a third round trip — e.g. flagging "you already have an application
+  // in progress at this company" on a DIFFERENT role at the same employer.
   const [{ data: matchRows }, { data: appRows }] = await Promise.all([
     supabaseAdmin.from("candidate_job_matches").select("job_id, dismissed, saved").eq("candidate_id", profile.id),
-    supabaseAdmin.from("applications").select("job_id, status").eq("candidate_id", profile.id),
+    supabaseAdmin
+      .from("applications")
+      .select("job_id, status, jobs(employer_id, title_original)")
+      .eq("candidate_id", profile.id),
   ]);
 
   const dismissedIds = new Set((matchRows || []).filter((m) => m.dismissed).map((m) => m.job_id));
   const savedIds = new Set((matchRows || []).filter((m) => m.saved).map((m) => m.job_id));
   const appStatusByJob = new Map((appRows || []).map((a) => [a.job_id, a.status]));
 
+  // employer_id -> list of { title, status, job_id } for every application
+  // this candidate has at that employer, regardless of which specific role.
+  const employerHistory = new Map();
+  for (const app of appRows || []) {
+    const employerId = app.jobs?.employer_id;
+    if (!employerId) continue;
+    if (!employerHistory.has(employerId)) employerHistory.set(employerId, []);
+    employerHistory.get(employerId).push({
+      title: app.jobs.title_original,
+      status: app.status,
+      job_id: app.job_id,
+    });
+  }
+
   const scored = data
     .filter((job) => !dismissedIds.has(job.id))
-    .map((job) => ({
-      ...job,
-      match: scoreJob(job, profile),
-      saved: savedIds.has(job.id),
-      application_status: appStatusByJob.get(job.id) || null,
-    }))
+    .map((job) => {
+      // Other applications at the same employer, excluding this exact
+      // job (that's already covered by application_status above).
+      const priorAtEmployer = (employerHistory.get(job.employer_id) || []).filter((a) => a.job_id !== job.id);
+      let employer_note = null;
+      if (priorAtEmployer.length > 0) {
+        const rejected = priorAtEmployer.find((a) => a.status === "rejected");
+        const active = priorAtEmployer.find((a) => a.status !== "rejected" && a.status !== "withdrawn");
+        if (active) {
+          employer_note = `You have an application in progress at this company for "${active.title}"`;
+        } else if (rejected) {
+          employer_note = `You were previously not selected for "${rejected.title}" at this company`;
+        } else {
+          employer_note = `You've previously applied to this company`;
+        }
+      }
+
+      return {
+        ...job,
+        match: scoreJob(job, profile),
+        saved: savedIds.has(job.id),
+        application_status: appStatusByJob.get(job.id) || null,
+        employer_note,
+      };
+    })
     .sort((a, b) => (b.match.overall_score ?? -1) - (a.match.overall_score ?? -1));
 
   res.json(scored);
