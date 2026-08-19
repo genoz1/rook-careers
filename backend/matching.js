@@ -106,6 +106,34 @@ function findOverlap(listA, listB) {
   return listA.find((a) => setB.includes(String(a).toLowerCase())) || null;
 }
 
+// pgvector columns can come back from Supabase as either a real JS array
+// or a string like "[0.1,0.2,...]" depending on client/driver version —
+// handle both.
+function parseVector(raw) {
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function cosineSimilarity(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length || a.length === 0) return null;
+  let dot = 0, normA = 0, normB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  if (normA === 0 || normB === 0) return null;
+  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+
 /**
  * Score one job against one candidate profile.
  *
@@ -370,6 +398,39 @@ function scoreJob(job, profile) {
       dataPointsAvailable++;
       score += 5;
       reasons.push(`Holds relevant certifications: ${resumeCerts.slice(0, 2).join(", ")}`);
+    }
+
+    // --- Semantic similarity via embeddings (up to 15 points, spec
+    // factor #46) — genuine embedding-based matching, distinct from the
+    // categorized keyword overlap above. Catches conceptual similarity
+    // that category matching misses (e.g. "reference laboratory testing"
+    // relating to "diagnostic services" even when neither résumé nor job
+    // posting uses the other's exact wording).
+    //
+    // CALIBRATION CAVEAT: the point thresholds below (0.1-0.5 cosine
+    // similarity range) are a reasonable starting estimate, not measured
+    // against real ROOK résumé/job pairs — this couldn't be tested
+    // against the live OpenAI API from the environment this was written
+    // in. Expect to retune these thresholds once real embeddings exist
+    // to look at; cosine similarity between genuinely different
+    // documents rarely approaches 1.0, so treating it as a direct
+    // percentage would understate every score.
+    const candidateVec = parseVector(profile.candidate_embedding);
+    const jobVec = parseVector(job.job_embedding);
+    if (candidateVec && jobVec) {
+      maxScore += 15;
+      dataPointsPossible++;
+      dataPointsAvailable++;
+      const similarity = cosineSimilarity(candidateVec, jobVec);
+      if (similarity != null) {
+        const points = Math.max(0, Math.min(15, Math.round(((similarity - 0.1) / 0.4) * 15)));
+        score += points;
+        if (similarity >= 0.35) {
+          reasons.push("Your résumé and this job show strong conceptual overlap");
+        } else if (similarity <= 0.15) {
+          concerns.push("Your résumé and this job show limited conceptual overlap");
+        }
+      }
     }
 
     // --- Clinical requirement hard disqualifier (spec factor #8, #31) ---
