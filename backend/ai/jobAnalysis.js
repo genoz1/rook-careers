@@ -28,6 +28,8 @@ Classify each requirement's real strength based on the actual language used:
 - "preferred": phrases like "preferred", "a plus", "ideally"
 - "boilerplate": generic phrases that appear in nearly every posting regardless of actual necessity (e.g. "excellent communication skills", "team player")
 
+Keep every string value SHORT — a few words each, not full sentences. This keeps the whole response well within the token budget even for long, detailed postings.
+
 Use these controlled vocabularies where the posting content matches them, in addition to anything else genuinely stated:
 - industries: Medical Device, Diagnostics, Reference Laboratory, Point-of-Care Diagnostics, Pharmaceutical, Biotech/Life Sciences, Veterinary/Animal Health, Dental, Healthcare SaaS, Distribution, Capital Equipment, Consumables
 - seniority_level: Entry Level, Associate Rep, Territory Representative, Account Executive, Territory Manager, Key Account Manager, Regional Manager, Director, VP`;
@@ -44,7 +46,12 @@ async function analyzeJob(title, descriptionText) {
     throw new Error("Job title/description is too short to analyze");
   }
   const truncated = text.slice(0, 12000);
-  return callClaudeForJSON(SYSTEM_PROMPT, `Job posting:\n\n${truncated}`);
+  // Explicit 3000-token budget, higher than the client's 2500 default —
+  // job postings produced the most verbose responses in practice (long
+  // clinical_requirements and customer_types arrays), and were the
+  // source of every truncation failure seen in the first real ingestion
+  // run at volume (65 employers, some postings very detailed).
+  return callClaudeForJSON(SYSTEM_PROMPT, `Job posting:\n\n${truncated}`, 3000);
 }
 
 module.exports = { analyzeJob };
