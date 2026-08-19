@@ -9,6 +9,8 @@
 const express = require("express");
 const multer = require("multer");
 const { createClient } = require("@supabase/supabase-js");
+const { extractResumeText } = require("../resumeParser");
+const { analyzeResume } = require("../ai/resumeAnalysis");
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -71,10 +73,15 @@ router.put("/profile", requireConfig, requireAuth, async (req, res) => {
   res.json(data);
 });
 
-// POST /api/resume — upload a résumé file to Supabase Storage and store
-// its path on the candidate's profile. Text extraction and AI parsing
-// (architecture spec section 8) are intentionally NOT done here yet —
-// this route only handles the upload + storage side.
+// POST /api/resume — upload a résumé, extract its text, and run AI
+// analysis to produce structured data the matching engine can use
+// (industries, product categories, customer types, seniority, etc.).
+//
+// Every step after the file upload itself is best-effort: if text
+// extraction fails (e.g. a legacy .doc file) or the AI call fails (no
+// API key configured, API error, malformed response), the upload still
+// succeeds and returns a clear status on what worked. A résumé upload
+// should never fail just because analysis had a hiccup.
 router.post("/resume", requireConfig, requireAuth, upload.single("resume"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
@@ -86,14 +93,49 @@ router.post("/resume", requireConfig, requireAuth, upload.single("resume"), asyn
 
   if (uploadError) return res.status(500).json({ error: uploadError.message });
 
+  let resumeText = null;
+  let resumeStructured = null;
+  let analysisStatus = "skipped";
+
+  try {
+    resumeText = await extractResumeText(req.file.buffer, req.file.mimetype);
+  } catch (err) {
+    console.error(`Resume text extraction threw: ${err.message}`);
+  }
+
+  if (resumeText) {
+    try {
+      resumeStructured = await analyzeResume(resumeText);
+      analysisStatus = "ok";
+    } catch (err) {
+      console.error(`Resume AI analysis failed: ${err.message}`);
+      analysisStatus = "failed";
+    }
+  } else {
+    analysisStatus = "no_text_extracted";
+  }
+
+  // Upsert, not update — a brand-new user uploading a résumé on
+  // onboarding Step 1 doesn't have a candidate_profiles row yet (that's
+  // only created by the PUT /profile call on Step 7). Using update()
+  // here would previously silently affect zero rows for new users,
+  // meaning the file path never actually saved.
   const { error: dbError } = await supabaseAdmin
     .from("candidate_profiles")
-    .update({ resume_file_path: filePath, updated_at: new Date().toISOString() })
-    .eq("user_id", req.user.id);
+    .upsert(
+      {
+        user_id: req.user.id,
+        resume_file_path: filePath,
+        resume_text: resumeText,
+        resume_structured: resumeStructured,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id" }
+    );
 
   if (dbError) return res.status(500).json({ error: dbError.message });
 
-  res.json({ ok: true, path: filePath });
+  res.json({ ok: true, path: filePath, analysis_status: analysisStatus });
 });
 
 module.exports = router;
