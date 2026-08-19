@@ -1,8 +1,11 @@
 // GET /api/application-package/:jobId — generates a tailored application
 // package (résumé summary, cover letter, recruiter message, interview
-// prep) for the caller's résumé against one specific job. See
-// backend/ai/applicationPackage.js for what this is and its caching
-// tradeoff (regenerates on every request, not persisted).
+// prep) for the caller's résumé against one specific job.
+//
+// Cached in candidate_job_matches.generated_package — a real AI call
+// happens once per candidate+job, not once per page visit. Pass
+// ?regenerate=true to force a fresh generation (e.g. after updating a
+// résumé, or if the candidate just wants a different take).
 
 const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
@@ -39,7 +42,7 @@ async function requireAuth(req, res, next) {
 router.get("/application-package/:jobId", requireConfig, requireAuth, async (req, res) => {
   const { data: profile } = await supabaseAdmin
     .from("candidate_profiles")
-    .select("resume_text")
+    .select("id, resume_text")
     .eq("user_id", req.user.id)
     .maybeSingle();
 
@@ -56,9 +59,52 @@ router.get("/application-package/:jobId", requireConfig, requireAuth, async (req
   if (jobError) return res.status(500).json({ error: jobError.message });
   if (!job) return res.status(404).json({ error: "Job not found" });
 
+  const forceRegenerate = req.query.regenerate === "true";
+
+  if (!forceRegenerate) {
+    const { data: cached } = await supabaseAdmin
+      .from("candidate_job_matches")
+      .select("generated_package, generated_package_at")
+      .eq("candidate_id", profile.id)
+      .eq("job_id", req.params.jobId)
+      .maybeSingle();
+
+    if (cached?.generated_package) {
+      return res.json({
+        ...cached.generated_package,
+        job_title: job.title_original,
+        company_name: job.company_name,
+        resume_text: profile.resume_text,
+        cached: true,
+        generated_at: cached.generated_package_at,
+      });
+    }
+  }
+
   try {
     const pkg = await generateApplicationPackage(profile.resume_text, job.title_original, job.company_name, job.description_text);
-    res.json({ ...pkg, job_title: job.title_original, company_name: job.company_name, resume_text: profile.resume_text });
+
+    // Cache it — upsert since a candidate_job_matches row may or may not
+    // already exist for this pair (e.g. from a save/dismiss action).
+    await supabaseAdmin
+      .from("candidate_job_matches")
+      .upsert(
+        {
+          candidate_id: profile.id,
+          job_id: req.params.jobId,
+          generated_package: pkg,
+          generated_package_at: new Date().toISOString(),
+        },
+        { onConflict: "candidate_id,job_id" }
+      );
+
+    res.json({
+      ...pkg,
+      job_title: job.title_original,
+      company_name: job.company_name,
+      resume_text: profile.resume_text,
+      cached: false,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
