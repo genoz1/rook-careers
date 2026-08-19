@@ -12,6 +12,7 @@ const { createClient } = require("@supabase/supabase-js");
 const { extractResumeText } = require("../resumeParser");
 const { analyzeResume } = require("../ai/resumeAnalysis");
 const { generateEmbedding } = require("../ai/embeddings");
+const { suggestRoles } = require("../ai/roleSuggestions");
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -97,6 +98,7 @@ router.post("/resume", requireConfig, requireAuth, upload.single("resume"), asyn
   let resumeText = null;
   let resumeStructured = null;
   let resumeEmbedding = null;
+  let suggestedRoles = null;
   let analysisStatus = "skipped";
 
   try {
@@ -123,6 +125,19 @@ router.post("/resume", requireConfig, requireAuth, upload.single("resume"), asyn
     } catch (err) {
       console.error(`Resume embedding generation failed: ${err.message}`);
     }
+
+    // Role suggestions computed once here, alongside the rest of the
+    // analysis, rather than live on every Career Intelligence page
+    // visit — same "analyze once, read many times" pattern as
+    // resume_structured itself. Needs resumeStructured to have
+    // succeeded first (it's the input), so this only runs if that did.
+    if (resumeStructured) {
+      try {
+        suggestedRoles = await suggestRoles(resumeStructured);
+      } catch (err) {
+        console.error(`Role suggestion failed: ${err.message}`);
+      }
+    }
   } else {
     analysisStatus = "no_text_extracted";
   }
@@ -141,6 +156,7 @@ router.post("/resume", requireConfig, requireAuth, upload.single("resume"), asyn
         resume_text: resumeText,
         resume_structured: resumeStructured,
         candidate_embedding: resumeEmbedding,
+        suggested_roles: suggestedRoles,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "user_id" }
