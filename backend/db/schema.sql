@@ -16,7 +16,7 @@ create table if not exists employers (
   careers_url text,
   industry text,
   subindustry text,
-  ats_type text not null check (ats_type in ('greenhouse','lever','ashby','workday','talentbrew','custom','manual')),
+  ats_type text not null check (ats_type in ('greenhouse','lever','ashby','workday','talentbrew','workable','smartrecruiters','clinchtalent','custom','manual')),
   ats_identifier text,               -- greenhouse board token / lever site / ashby job board name
   source_url text,
   active boolean default true,
