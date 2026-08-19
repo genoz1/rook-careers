@@ -175,4 +175,32 @@ router.post("/jobs/:id/dismiss", requireConfig, requireAuth, loadCandidateId, as
   res.json(data);
 });
 
+// GET /api/saved-jobs — full job details for everything the caller has
+// saved, scored against their profile the same as the main listing.
+router.get("/saved-jobs", requireConfig, requireAuth, loadCandidateId, async (req, res) => {
+  const { data: matchRows, error } = await supabaseAdmin
+    .from("candidate_job_matches")
+    .select("job_id, jobs(*)")
+    .eq("candidate_id", req.candidateId)
+    .eq("saved", true);
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  const { data: profile } = await supabaseAdmin
+    .from("candidate_profiles")
+    .select("*")
+    .eq("user_id", req.user.id)
+    .maybeSingle();
+
+  const jobs = (matchRows || [])
+    .filter((m) => m.jobs) // guards against a job having been removed since it was saved
+    .map((m) => ({
+      ...m.jobs,
+      match: profile ? scoreJob(m.jobs, profile) : null,
+      saved: true,
+    }));
+
+  res.json(jobs);
+});
+
 module.exports = router;
