@@ -45,6 +45,11 @@ create table if not exists jobs (
 
   description_html text,
   description_text text,
+  ai_analysis jsonb,                 -- structured requirements from backend/ai/jobAnalysis.js
+                                      -- (required/preferred industries, product categories,
+                                      -- customer types, seniority, clinical requirements with
+                                      -- strength classification). Populated once per job by
+                                      -- ingest.js, not on every re-ingestion run.
 
   location_raw text,
   city text,
