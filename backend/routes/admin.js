@@ -56,6 +56,12 @@ function detectAts(url) {
   m = url.match(/^https?:\/\/([a-zA-Z0-9_-]+)\.(wd\d+)\.myworkdayjobs\.com\/([a-zA-Z0-9_-]+)/);
   if (m) return { ats_type: "workday", ats_identifier: `${m[1]}|${m[2]}|${m[3]}` };
 
+  m = url.match(/apply\.workable\.com\/([a-zA-Z0-9_-]+)/);
+  if (m) return { ats_type: "workable", ats_identifier: m[1] };
+
+  m = url.match(/(?:careers|jobs)\.smartrecruiters\.com\/([a-zA-Z0-9_-]+)/);
+  if (m) return { ats_type: "smartrecruiters", ats_identifier: m[1] };
+
   return null;
 }
 
@@ -63,11 +69,13 @@ function detectAts(url) {
 // Body: { company_name, careers_url, priority?, ats_type_override? }
 //
 // ats_type_override lets you manually specify the platform when
-// auto-detection can't work — this is needed for TalentBrew, since (unlike
-// Workday's shared myworkdayjobs.com domain) every TalentBrew employer
-// hosts on their own domain, so there's no URL pattern to detect it by.
-// Pass ats_type_override: "talentbrew" and careers_url as the employer's
-// careers-site hostname's full URL (e.g. https://careers.questdiagnostics.com).
+// auto-detection can't work — needed for TalentBrew and ClinchTalent,
+// since (unlike Workday/Workable/SmartRecruiters, which share a common
+// domain per platform) every TalentBrew or ClinchTalent employer hosts on
+// their own domain, so there's no URL pattern to detect it by. Pass
+// ats_type_override: "talentbrew" or "clinchtalent" and careers_url as
+// the employer's careers-site URL (e.g. https://careers.questdiagnostics.com
+// or https://careers.foundationmedicine.com).
 router.post("/admin/employers", requireConfig, requireAuth, async (req, res) => {
   const { company_name, careers_url, priority, ats_type_override } = req.body || {};
   if (!company_name || !careers_url) {
@@ -75,10 +83,10 @@ router.post("/admin/employers", requireConfig, requireAuth, async (req, res) => 
   }
 
   let detected;
-  if (ats_type_override === "talentbrew") {
+  if (ats_type_override === "talentbrew" || ats_type_override === "clinchtalent") {
     try {
       const hostname = new URL(careers_url.trim()).hostname;
-      detected = { ats_type: "talentbrew", ats_identifier: hostname };
+      detected = { ats_type: ats_type_override, ats_identifier: hostname };
     } catch {
       return res.status(400).json({ error: "careers_url isn't a valid URL." });
     }
@@ -91,8 +99,9 @@ router.post("/admin/employers", requireConfig, requireAuth, async (req, res) => 
       error:
         "Couldn't detect a supported ATS from that URL. Supported patterns: " +
         "job-boards.greenhouse.io/..., jobs.lever.co/..., jobs.ashbyhq.com/..., " +
-        "*.wdN.myworkdayjobs.com/... — or set ats_type_override to \"talentbrew\" " +
-        "for employers on Radancy/TalentBrew career sites.",
+        "*.wdN.myworkdayjobs.com/..., apply.workable.com/..., careers.smartrecruiters.com/... " +
+        "— or set ats_type_override to \"talentbrew\" or \"clinchtalent\" " +
+        "for employers on those platforms' own custom domains.",
     });
   }
 
