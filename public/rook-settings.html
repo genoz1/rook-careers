@@ -92,18 +92,19 @@
       <div class="card">
         <h3>Profile</h3>
         <div class="field-row">
-          <div class="field"><label>Full Name</label><input type="text" value="Gene Zentko"></div>
-          <div class="field"><label>Email</label><input type="text" value="gene@example.com"></div>
+          <div class="field"><label>Full Name</label><input type="text" id="fieldName"></div>
+          <div class="field"><label>Email</label><input type="text" id="fieldEmail"></div>
         </div>
         <div class="field-row">
-          <div class="field"><label>Phone</label><input type="text" placeholder="(555) 555-5555"></div>
-          <div class="field"><label>LinkedIn URL</label><input type="text" placeholder="linkedin.com/in/..."></div>
+          <div class="field"><label>Phone</label><input type="text" id="fieldPhone" placeholder="(555) 555-5555"></div>
+          <div class="field"><label>LinkedIn URL</label><input type="text" placeholder="linkedin.com/in/..." disabled title="Not yet connected to a saved field"></div>
         </div>
         <div class="field-row">
-          <div class="field"><label>City</label><input type="text" value="Oxford"></div>
-          <div class="field"><label>State</label><input type="text" value="Florida"></div>
+          <div class="field"><label>City</label><input type="text" id="fieldCity"></div>
+          <div class="field"><label>State</label><input type="text" id="fieldState"></div>
         </div>
-        <a href="#" class="btn btn-primary">Save Changes</a>
+        <a href="#" class="btn btn-primary" onclick="saveProfilePanel('profile', this); return false;">Save Changes</a>
+        <span id="profileSaveStatus" style="font-size:12.5px; color:#00806E; margin-left:10px; display:none;">Saved ✓</span>
       </div>
     </div>
 
@@ -111,20 +112,33 @@
       <div class="card">
         <h3>Job Preferences</h3>
         <div class="field-row">
-          <div class="field"><label>Minimum Base Salary</label><input type="text" value="$95,000"></div>
-          <div class="field"><label>Desired Total Compensation</label><input type="text" value="$130,000"></div>
+          <div class="field"><label>Minimum Base Salary</label><input type="text" id="fieldMinSalary" placeholder="$95,000"></div>
+          <div class="field"><label>Desired Total Compensation</label><input type="text" id="fieldTargetOte" placeholder="$130,000"></div>
         </div>
         <div class="field-row">
-          <div class="field"><label>Maximum Travel</label><input type="text" value="50%"></div>
+          <div class="field"><label>Maximum Travel</label><input type="text" id="fieldMaxTravel" placeholder="50%"></div>
           <div class="field"><label>Territory Preference</label>
-            <select><option>Local Territory</option><option>Single Metro</option><option selected>Multi-City Territory</option><option>Statewide Territory</option></select>
+            <select disabled title="Not yet connected to a saved field"><option>Local Territory</option><option>Single Metro</option><option selected>Multi-City Territory</option><option>Statewide Territory</option></select>
           </div>
         </div>
         <div class="field-row">
-          <div class="field"><label>Remote / Hybrid / On-site</label><select><option selected>Field / Territory-based</option><option>Hybrid</option><option>Remote</option><option>On-site</option></select></div>
-          <div class="field"><label>Relocation</label><select><option selected>Not willing to relocate</option><option>Open to relocation</option></select></div>
+          <div class="field"><label>Remote / Hybrid / On-site</label>
+            <select id="fieldWorkStyle">
+              <option value="Field / Territory-based">Field / Territory-based</option>
+              <option value="Hybrid">Hybrid</option>
+              <option value="Remote">Remote</option>
+              <option value="On-site">On-site</option>
+            </select>
+          </div>
+          <div class="field"><label>Relocation</label>
+            <select id="fieldRelocation">
+              <option value="false">Not willing to relocate</option>
+              <option value="true">Open to relocation</option>
+            </select>
+          </div>
         </div>
-        <a href="#" class="btn btn-primary">Save Changes</a>
+        <a href="#" class="btn btn-primary" onclick="saveProfilePanel('preferences', this); return false;">Save Changes</a>
+        <span id="preferencesSaveStatus" style="font-size:12.5px; color:#00806E; margin-left:10px; display:none;">Saved ✓</span>
       </div>
     </div>
 
@@ -192,12 +206,99 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="rook-config.js"></script>
+<script src="rook-auth.js"></script>
 <script>
 function showPanel(name, el){
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.settings-nav a').forEach(a => a.classList.remove('active'));
   document.getElementById('panel-' + name).classList.add('active');
   el.classList.add('active');
+}
+
+// Loads the real profile once and populates both the Profile and Job
+// Preferences panels — they're two tabs over the same underlying
+// candidate_profiles row, so one fetch covers both.
+let currentProfile = null;
+
+(async () => {
+  const token = await rookRequireAuth();
+  if (!token) return;
+
+  try {
+    const res = await rookApiFetch('/profile');
+    if (!res.ok) throw new Error('API returned ' + res.status);
+    currentProfile = await res.json();
+    if (!currentProfile) return; // no profile yet (onboarding not completed) — leave fields blank
+
+    setVal('fieldName', currentProfile.name);
+    setVal('fieldEmail', currentProfile.email);
+    setVal('fieldPhone', currentProfile.phone);
+    setVal('fieldCity', currentProfile.home_city);
+    setVal('fieldState', currentProfile.home_state);
+    setVal('fieldMinSalary', currentProfile.minimum_base_salary);
+    setVal('fieldTargetOte', currentProfile.target_ote);
+    setVal('fieldMaxTravel', currentProfile.maximum_travel_percentage != null ? currentProfile.maximum_travel_percentage + '%' : '');
+    if (currentProfile.work_style) setVal('fieldWorkStyle', currentProfile.work_style);
+    setVal('fieldRelocation', currentProfile.willing_to_relocate ? 'true' : 'false');
+  } catch (err) {
+    console.error('Could not load profile:', err);
+  }
+})();
+
+function setVal(id, value) {
+  const el = document.getElementById(id);
+  if (el && value !== undefined && value !== null) el.value = value;
+}
+
+async function saveProfilePanel(panel, btn) {
+  const numFromText = (id) => {
+    const raw = document.getElementById(id)?.value?.trim();
+    if (!raw) return null;
+    const n = Number(raw.replace(/[^0-9.]/g, ''));
+    return Number.isFinite(n) ? n : null;
+  };
+
+  let payload = {};
+  if (panel === 'profile') {
+    payload = {
+      name: document.getElementById('fieldName').value.trim() || null,
+      email: document.getElementById('fieldEmail').value.trim() || null,
+      phone: document.getElementById('fieldPhone').value.trim() || null,
+      home_city: document.getElementById('fieldCity').value.trim() || null,
+      home_state: document.getElementById('fieldState').value.trim() || null,
+    };
+  } else if (panel === 'preferences') {
+    payload = {
+      minimum_base_salary: numFromText('fieldMinSalary'),
+      target_ote: numFromText('fieldTargetOte'),
+      maximum_travel_percentage: numFromText('fieldMaxTravel'),
+      work_style: document.getElementById('fieldWorkStyle').value,
+      willing_to_relocate: document.getElementById('fieldRelocation').value === 'true',
+    };
+  }
+
+  const originalText = btn.textContent;
+  btn.textContent = 'Saving...';
+  try {
+    const res = await rookApiFetch('/profile', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (res.ok) {
+      currentProfile = await res.json();
+      const status = document.getElementById(panel + 'SaveStatus');
+      if (status) {
+        status.style.display = 'inline';
+        setTimeout(() => (status.style.display = 'none'), 2500);
+      }
+    }
+  } catch (err) {
+    console.error('Save failed:', err);
+  }
+  btn.textContent = originalText;
 }
 </script>
 
