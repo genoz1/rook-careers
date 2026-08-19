@@ -347,6 +347,7 @@
           <div class="job-meta-line">${job.date_posted ? 'Posted ' + escapeHtml(job.date_posted) : ''} · Sourced via ${escapeHtml(job.source_type || 'unknown')} ${confidenceLabel ? '· ' + confidenceLabel : ''}</div>
         </div>
         <div class="job-actions">
+          <a href="rook-job-analysis.html?job=${escapeHtml(job.id)}" class="btn btn-outline btn-sm">View Analysis</a>
           <a href="${job.source_url || '#'}" target="_blank" class="btn btn-outline btn-sm">View Original</a>
           <button type="button" class="btn btn-outline btn-sm" onclick="toggleSave('${escapeHtml(job.id)}', this)">${savedLabel}</button>
           <button type="button" class="btn btn-outline btn-sm" onclick="markApplied('${escapeHtml(job.id)}', this)" ${isApplied ? 'disabled' : ''}>${isApplied ? 'Applied ✓' : 'Mark Applied'}</button>
