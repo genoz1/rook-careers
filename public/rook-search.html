@@ -169,7 +169,7 @@
       </div>
     </div>
 
-    <div class="job-list">
+    <div class="job-list" id="jobList" data-demo="true">
       <div class="job-row">
         <div class="score-ring" style="--pct:96;"><span>96%</span></div>
         <div class="job-info">
@@ -249,6 +249,81 @@
     </div>
   </main>
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="rook-config.js"></script>
+<script src="rook-auth.js"></script>
+<script>
+  // Same live-data pattern as rook-dashboard.html: try to replace the demo
+  // rows with real, scored jobs; leave demo data in place (with a banner
+  // explaining why) if there's no session, no data yet, or a fetch error.
+  (async () => {
+    const token = await rookRequireAuth();
+    if (!token) return; // rookRequireAuth already redirected to login
+
+    const jobList = document.getElementById('jobList');
+
+    try {
+      const res = await rookApiFetch('/jobs?limit=50');
+      if (!res.ok) throw new Error('API returned ' + res.status);
+      const jobs = await res.json();
+
+      if (!Array.isArray(jobs) || jobs.length === 0) {
+        showBanner('No live jobs yet. Add employers and run <code>npm run ingest</code> — see ROOK-Setup-Guide.pdf. Showing example matches below in the meantime.');
+        return;
+      }
+
+      jobList.dataset.demo = 'false';
+      jobList.innerHTML = jobs.map(renderRealJobRow).join('');
+      document.querySelector('.results-count').innerHTML = `<b>${jobs.length}</b> opportunities match your profile`;
+      showBanner(`Showing ${jobs.length} live job(s), scored against your profile (location and compensation only for now).`, 'info');
+    } catch (err) {
+      showBanner('Could not reach the ROOK API (' + err.message + '). Showing example matches below — see ROOK-Setup-Guide.pdf to get the backend running.');
+    }
+  })();
+
+  function matchLevelInfo(score) {
+    if (score == null) return { label: 'Unscored', cls: 'ml-strong' };
+    if (score >= 90) return { label: 'Excellent Match', cls: 'ml-excellent' };
+    if (score >= 75) return { label: 'Strong Match', cls: 'ml-strong' };
+    return { label: 'Possible Match', cls: 'ml-possible' };
+  }
+
+  function renderRealJobRow(job) {
+    const comp = job.compensation_text || (job.salary_min ? `$${job.salary_min}${job.salary_max ? '–$' + job.salary_max : '+'}` : '');
+    const match = job.match;
+    const score = match?.overall_score;
+    const scoreDisplay = score != null ? `${score}%` : '—';
+    const level = matchLevelInfo(score);
+    const tags = (match?.reasons || []).slice(0, 3).map((r) => `<span class="jtag">${escapeHtml(r)}</span>`).join('');
+
+    return `
+      <div class="job-row">
+        <div class="score-ring" style="--pct:${score ?? 0};"><span>${scoreDisplay}</span></div>
+        <div class="job-info">
+          <h4>${escapeHtml(job.title_original || job.title_normalized || 'Untitled role')}</h4>
+          <div class="company">${escapeHtml(job.company_name || '')} — ${escapeHtml(job.location_raw || '')} ${comp ? '&nbsp;·&nbsp; ' + escapeHtml(comp) : ''}</div>
+          ${tags ? `<div class="tag-row">${tags}</div>` : ''}
+          <div class="job-meta-line">${job.date_posted ? 'Posted ' + escapeHtml(job.date_posted) : ''} · Sourced via ${escapeHtml(job.source_type || 'unknown')}</div>
+        </div>
+        <div class="job-actions">
+          <span class="match-level ${level.cls}">${level.label}</span>
+          <a href="${job.source_url || '#'}" target="_blank" class="btn btn-outline btn-sm">View Original</a>
+        </div>
+      </div>`;
+  }
+
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function showBanner(html, level) {
+    const banner = document.createElement('div');
+    banner.style.cssText = `background:${level === 'info' ? '#EAF7F4' : '#FFF7E6'}; border-left:3px solid ${level === 'info' ? '#00806E' : '#B98900'}; border-radius:8px; padding:12px 16px; margin-bottom:20px; font-size:13px; color:#3D4A63; line-height:1.5;`;
+    banner.innerHTML = html;
+    document.querySelector('.results-head').insertAdjacentElement('afterend', banner);
+  }
+</script>
 
 </body>
 </html>
