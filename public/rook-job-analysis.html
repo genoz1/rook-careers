@@ -109,49 +109,31 @@
     <div class="job-header">
       <div class="job-header-top">
         <div>
-          <h1>Diagnostic Account Executive</h1>
-          <div class="company-line">Example Diagnostics · Orlando, FL · $95K–$120K + Commission</div>
+          <h1 id="jobTitle">Loading…</h1>
+          <div class="company-line" id="jobCompanyLine"></div>
         </div>
         <div class="score-badge">
-          <div class="n">94%</div>
-          <div class="l">Career Match</div>
+          <div class="n" id="jobScoreN">—</div>
+          <div class="l" id="jobScoreL">Career Match</div>
         </div>
       </div>
-      <div class="meta-chips">
-        <span class="meta-chip">Posted 2 days ago</span>
-        <span class="meta-chip" style="color:#00806E;"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="3" style="vertical-align:-1px;"><path d="M5 13l4 4L19 7"/></svg> Verified 2 hours ago</span>
-        <span class="meta-chip">Diagnostics</span>
-        <span class="meta-chip">Territory Sales</span>
-        <span class="meta-chip">Full-time</span>
-        <span class="meta-chip">Sourced via employer career page</span>
-      </div>
+      <div class="meta-chips" id="jobMetaChips"></div>
     </div>
 
     <div class="card">
       <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>Match Breakdown</h3>
-      <div class="match-row"><span class="factor">Industry &amp; Product Experience</span><div style="display:flex; align-items:center; gap:12px;"><div class="bar-track"><div class="bar-fill" style="width:95%;"></div></div><span class="pct">95%</span></div></div>
-      <div class="match-row"><span class="factor">Territory &amp; Geography</span><div style="display:flex; align-items:center; gap:12px;"><div class="bar-track"><div class="bar-fill" style="width:100%;"></div></div><span class="pct">100%</span></div></div>
-      <div class="match-row"><span class="factor">Compensation Alignment</span><div style="display:flex; align-items:center; gap:12px;"><div class="bar-track"><div class="bar-fill" style="width:100%;"></div></div><span class="pct">100%</span></div></div>
-      <div class="match-row"><span class="factor">Capital Equipment Background</span><div style="display:flex; align-items:center; gap:12px;"><div class="bar-track"><div class="bar-fill" style="width:85%;"></div></div><span class="pct">85%</span></div></div>
-      <div class="match-row"><span class="factor">Travel Fit</span><div style="display:flex; align-items:center; gap:12px;"><div class="bar-track"><div class="bar-fill" style="width:90%;"></div></div><span class="pct">90%</span></div></div>
-      <div class="match-row"><span class="factor">Education Requirements</span><div style="display:flex; align-items:center; gap:12px;"><div class="bar-track"><div class="bar-fill" style="width:70%;"></div></div><span class="pct">70%</span></div></div>
+      <div id="matchBreakdown"></div>
+      <div class="disclaimer" style="margin-top:6px;">Candidate Fit measures whether you're qualified for this role (industry, product, and customer-type experience, seniority, years of experience). Preference Fit measures whether this role matches what you said you want (location, compensation, travel).</div>
     </div>
 
     <div class="card">
-      <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>Why You're a Strong Match</h3>
-      <ul class="why-list">
-        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>8 years of diagnostics sales experience across reference laboratory and point-of-care settings, directly matching this role's core requirement.</li>
-        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Existing territory management experience in Central Florida, the exact region this role covers.</li>
-        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Prior capital equipment sales experience aligns with this employer's hybrid consumables-plus-equipment model.</li>
-        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Compensation range fits your stated minimum base and OTE expectations.</li>
-      </ul>
+      <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>Why You're a Match</h3>
+      <ul class="why-list" id="whyList"></ul>
     </div>
 
     <div class="card">
       <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>Potential Concerns</h3>
-      <ul class="concern-list">
-        <li><span class="dot">△</span>Job posting lists a bachelor's degree as "preferred" — not required. Your work history may offset this depending on the hiring manager.</li>
-      </ul>
+      <ul class="concern-list" id="concernList"></ul>
       <div class="disclaimer">This is an AI-generated competitiveness estimate based on your profile and this job posting. It is not a guarantee of an interview or employment outcome.</div>
     </div>
   </div>
@@ -159,7 +141,7 @@
   <aside>
     <div class="package-card">
       <div class="tag">Application Package</div>
-      <h4>Your 94% Match Package</h4>
+      <h4 id="packageHeading">Your Match Package</h4>
       <ul class="pkg-list">
         <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Tailored résumé for this role</li>
         <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>ATS keyword alignment</li>
@@ -173,23 +155,108 @@
     <div class="side-card">
       <h4>Take Action</h4>
       <div class="action-stack">
-        <a href="#" class="btn btn-outline btn-block">Open Original Posting</a>
-        <a href="#" class="btn btn-outline btn-block">Save Job</a>
-        <a href="#" class="btn btn-outline btn-block" style="color:var(--muted);">Not Interested</a>
+        <a href="#" id="viewOriginalLink" target="_blank" class="btn btn-outline btn-block">Open Original Posting</a>
+        <a href="#" id="saveJobLink" class="btn btn-outline btn-block" onclick="return false;">Save Job</a>
+        <a href="#" id="dismissJobLink" class="btn btn-outline btn-block" style="color:var(--muted);" onclick="return false;">Not Interested</a>
       </div>
-    </div>
-
-    <div class="side-card">
-      <h4>Company Overview</h4>
-      <ul class="company-facts">
-        <li><span>Industry</span><b>Diagnostics</b></li>
-        <li><span>Company size</span><b>500–1,000 employees</b></li>
-        <li><span>Territory</span><b>Central Florida</b></li>
-        <li><span>Est. hiring manager</span><b>Regional Sales Director</b></li>
-      </ul>
     </div>
   </aside>
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="rook-config.js"></script>
+<script src="rook-auth.js"></script>
+<script>
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+(async () => {
+  const token = await rookRequireAuth();
+  if (!token) return;
+
+  const jobId = new URLSearchParams(window.location.search).get('job');
+  if (!jobId) {
+    document.getElementById('jobTitle').textContent = 'No job specified';
+    document.getElementById('jobCompanyLine').textContent = 'Open this page from a "View Analysis" link on the Dashboard or Job Search.';
+    return;
+  }
+
+  try {
+    const res = await rookApiFetch(`/jobs/${jobId}`);
+    if (!res.ok) throw new Error('API returned ' + res.status);
+    const job = await res.json();
+    renderJob(job);
+  } catch (err) {
+    document.getElementById('jobTitle').textContent = 'Could not load this job';
+    document.getElementById('jobCompanyLine').textContent = err.message;
+  }
+})();
+
+function renderJob(job) {
+  const match = job.match || {};
+  const comp = job.compensation_text || (job.salary_min ? `$${job.salary_min}${job.salary_max ? '–$' + job.salary_max : '+'}` : '');
+
+  document.title = `${job.title_original || 'Job'} — Match Analysis — ROOK`;
+  document.getElementById('jobTitle').textContent = job.title_original || job.title_normalized || 'Untitled role';
+  document.getElementById('jobCompanyLine').textContent =
+    [job.company_name, job.location_raw, comp].filter(Boolean).join(' · ');
+
+  document.getElementById('jobScoreN').textContent = match.overall_score != null ? match.overall_score + '%' : '—';
+  document.getElementById('jobScoreL').textContent = match.recommendation || 'Career Match';
+  document.getElementById('packageHeading').textContent =
+    match.overall_score != null ? `Your ${match.overall_score}% Match Package` : 'Your Match Package';
+
+  const chips = [];
+  if (job.date_posted) chips.push(job.date_posted.startsWith('Posted') ? job.date_posted : 'Posted ' + job.date_posted);
+  if (job.source_type) chips.push('Sourced via ' + job.source_type);
+  if (match.confidence) chips.push('Confidence: ' + match.confidence);
+  document.getElementById('jobMetaChips').innerHTML = chips.map((c) => `<span class="meta-chip">${escapeHtml(c)}</span>`).join('');
+
+  const breakdown = [];
+  if (match.candidate_fit != null) breakdown.push(['Candidate Fit — can you do this job', match.candidate_fit]);
+  if (match.preference_fit != null) breakdown.push(['Preference Fit — does this match what you want', match.preference_fit]);
+  document.getElementById('matchBreakdown').innerHTML = breakdown.length > 0
+    ? breakdown.map(([label, pct]) => `
+        <div class="match-row"><span class="factor">${escapeHtml(label)}</span><div style="display:flex; align-items:center; gap:12px;"><div class="bar-track"><div class="bar-fill" style="width:${pct}%;"></div></div><span class="pct">${pct}%</span></div></div>
+      `).join('')
+    : '<p style="font-size:13.5px; color:#5B6B85;">Sign in and complete onboarding to see a scored breakdown for this job.</p>';
+
+  document.getElementById('whyList').innerHTML = (match.reasons || []).length > 0
+    ? match.reasons.map((r) => `<li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>${escapeHtml(r)}</li>`).join('')
+    : '<li style="color:#5B6B85;">No specific match reasons available yet for this job.</li>';
+
+  document.getElementById('concernList').innerHTML = (match.concerns || []).length > 0
+    ? match.concerns.map((c) => `<li><span class="dot">△</span>${escapeHtml(c)}</li>`).join('')
+    : '<li style="color:#5B6B85;">No specific concerns flagged.</li>';
+
+  const viewOriginal = document.getElementById('viewOriginalLink');
+  if (job.source_url) viewOriginal.href = job.source_url;
+
+  document.getElementById('saveJobLink').onclick = async () => {
+    const btn = document.getElementById('saveJobLink');
+    const nowSaved = btn.textContent.trim() !== 'Saved ✓';
+    try {
+      const res = await rookApiFetch(`/jobs/${job.id}/save`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ saved: nowSaved }),
+      });
+      if (res.ok) btn.textContent = nowSaved ? 'Saved ✓' : 'Save Job';
+    } catch (err) { console.error(err); }
+    return false;
+  };
+  if (job.saved) document.getElementById('saveJobLink').textContent = 'Saved ✓';
+
+  document.getElementById('dismissJobLink').onclick = async () => {
+    try {
+      const res = await rookApiFetch(`/jobs/${job.id}/dismiss`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dismissed: true }),
+      });
+      if (res.ok) document.getElementById('dismissJobLink').textContent = 'Marked Not Interested ✓';
+    } catch (err) { console.error(err); }
+    return false;
+  };
+}
+</script>
 
 </body>
 </html>
