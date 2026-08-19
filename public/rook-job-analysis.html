@@ -149,7 +149,7 @@
         <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Recruiter outreach message</li>
         <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Interview prep notes</li>
       </ul>
-      <a href="rook-application-package.html" class="btn btn-teal btn-block">Create Application Package</a>
+      <a href="rook-application-package.html" id="createPackageLink" class="btn btn-teal btn-block">Create Application Package</a>
     </div>
 
     <div class="side-card">
@@ -232,6 +232,8 @@ function renderJob(job) {
 
   const viewOriginal = document.getElementById('viewOriginalLink');
   if (job.source_url) viewOriginal.href = job.source_url;
+
+  document.getElementById('createPackageLink').href = `rook-application-package.html?job=${encodeURIComponent(job.id)}`;
 
   document.getElementById('saveJobLink').onclick = async () => {
     const btn = document.getElementById('saveJobLink');
