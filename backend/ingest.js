@@ -14,6 +14,9 @@ const { fetchLeverJobs, normalizeLeverJob } = require("./adapters/lever");
 const { fetchAshbyJobs, normalizeAshbyJob } = require("./adapters/ashby");
 const { fetchWorkdayJobs, normalizeWorkdayJob } = require("./adapters/workday");
 const { fetchTalentBrewJobs, normalizeTalentBrewJob } = require("./adapters/talentbrew");
+const { fetchWorkableJobs, normalizeWorkableJob } = require("./adapters/workable");
+const { fetchSmartRecruitersJobs, normalizeSmartRecruitersJob } = require("./adapters/smartrecruiters");
+const { fetchClinchTalentJobs, normalizeClinchTalentJob } = require("./adapters/clinchtalent");
 const { analyzeJob } = require("./ai/jobAnalysis");
 const { generateEmbedding } = require("./ai/embeddings");
 
@@ -46,6 +49,15 @@ async function ingestEmployer(employer) {
     } else if (employer.ats_type === "talentbrew") {
       rawJobs = await fetchTalentBrewJobs(employer.ats_identifier);
       normalize = normalizeTalentBrewJob;
+    } else if (employer.ats_type === "workable") {
+      rawJobs = await fetchWorkableJobs(employer.ats_identifier);
+      normalize = normalizeWorkableJob;
+    } else if (employer.ats_type === "smartrecruiters") {
+      rawJobs = await fetchSmartRecruitersJobs(employer.ats_identifier);
+      normalize = normalizeSmartRecruitersJob;
+    } else if (employer.ats_type === "clinchtalent") {
+      rawJobs = await fetchClinchTalentJobs(employer.ats_identifier);
+      normalize = normalizeClinchTalentJob;
     } else {
       console.log(`  Skipping — no adapter for ats_type "${employer.ats_type}"`);
       return;
