@@ -6,6 +6,7 @@
 
 const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
+const { scoreJob } = require("../matching");
 
 const router = express.Router();
 
@@ -49,17 +50,30 @@ async function loadCandidateId(req, res, next) {
   next();
 }
 
-// GET /api/applications — the caller's applications, joined with basic
-// job/employer info so the Tracker page doesn't need a second round trip.
+// GET /api/applications — the caller's applications, joined with full
+// job info and scored against their profile, so the Tracker page can
+// show a match score per card without a second round trip.
 router.get("/applications", requireConfig, requireAuth, loadCandidateId, async (req, res) => {
   const { data, error } = await supabaseAdmin
     .from("applications")
-    .select("*, jobs(title_original, company_name, location_raw, source_url)")
+    .select("*, jobs(*)")
     .eq("candidate_id", req.candidateId)
     .order("updated_at", { ascending: false });
 
   if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+
+  const { data: profile } = await supabaseAdmin
+    .from("candidate_profiles")
+    .select("*")
+    .eq("user_id", req.user.id)
+    .maybeSingle();
+
+  const withScores = data.map((app) => ({
+    ...app,
+    jobs: app.jobs && profile ? { ...app.jobs, match: scoreJob(app.jobs, profile) } : app.jobs,
+  }));
+
+  res.json(withScores);
 });
 
 // POST /api/applications — create or update the caller's application for
