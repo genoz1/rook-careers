@@ -33,6 +33,8 @@
 // state-abbreviation matching rather than relying on structured columns
 // that are actually empty.
 
+const { distanceMiles } = require("./geocoding");
+
 const STATE_ABBR = {
   alabama: "AL", alaska: "AK", arizona: "AZ", arkansas: "AR", california: "CA",
   colorado: "CO", connecticut: "CT", delaware: "DE", florida: "FL", georgia: "GA",
@@ -234,6 +236,26 @@ function scoreJob(job, profile) {
         ? "Location matches your home state"
         : `Location matches one of your preferred states (${matchedAcceptedState})`
     );
+
+    // --- Proximity bonus (up to 10 extra points, spec-adjacent refinement) ---
+    // Only applies within an already-accepted state — this is a
+    // refinement of "which in-state job is closer to you," not a
+    // replacement for state matching. Needs both home_lat/lng (set once
+    // when the candidate saves a ZIP in Settings) and job_lat/lng (set
+    // once at ingestion) — see backend/geocoding.js. Distance is real
+    // straight-line miles (haversine), not driving distance.
+    if (profile.home_lat != null && profile.home_lng != null && job.job_lat != null && job.job_lng != null) {
+      prefMax += 10;
+      dataPointsPossible++;
+      dataPointsAvailable++;
+      const miles = distanceMiles(profile.home_lat, profile.home_lng, job.job_lat, job.job_lng);
+      let bonus = 0;
+      if (miles <= 25) bonus = 10;
+      else if (miles <= 75) bonus = 6;
+      else if (miles <= 150) bonus = 3;
+      prefScore += bonus;
+      if (bonus > 0) reasons.push(`About ${Math.round(miles)} miles from you`);
+    }
   } else if (remoteFriendly) {
     prefScore += 28;
     reasons.push("Remote-friendly role");
