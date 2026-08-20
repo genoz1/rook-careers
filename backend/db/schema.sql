@@ -126,6 +126,14 @@ create table if not exists candidate_profiles (
   phone text,
 
   home_city text,
+  digest_enabled boolean default true,   -- opt-out flag for the daily match
+                                          -- email; no settings UI toggle for
+                                          -- this yet, but the column exists
+                                          -- so a future UI doesn't need a migration
+  last_digest_sent_at timestamptz,       -- used to only email about jobs seen
+                                          -- since the last successful send,
+                                          -- so the same job doesn't get
+                                          -- re-emailed every single day
   home_state text,
   willing_to_relocate boolean default false,
   relocation_locations text[],
