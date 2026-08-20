@@ -72,6 +72,22 @@ async function loadCandidateId(req, res, next) {
 }
 
 // GET /api/jobs?industry=Veterinary&state=FL&limit=20
+//
+// IMPORTANT: `limit` only controls how many SCORED results come back —
+// it does NOT limit how many jobs get considered for scoring. The raw
+// database fetch always pulls a much larger pool (JOB_POOL_SIZE) ordered
+// by recency, scores everything in that pool, sorts by match score, THEN
+// trims to `limit`. Originally this fetched only `limit` jobs BEFORE
+// scoring — meaning as the employer list grew (80+ employers now), a
+// candidate's genuinely best matches could easily fall outside a small
+// date-ordered slice and never even get scored, especially since several
+// adapters (ClinchTalent, and sometimes others) leave date_posted null,
+// which sorts unpredictably. This was the real cause of "my matches
+// haven't changed" even after many new employers started ingesting real
+// jobs — the dashboard was quietly only ever looking at a tiny recent
+// slice of the whole pool.
+const JOB_POOL_SIZE = 1500;
+
 router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
   const { industry, state, limit = 20 } = req.query;
 
@@ -80,7 +96,10 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     .select("*")
     .eq("status", "active")
     .order("date_posted", { ascending: false })
-    .limit(Number(limit));
+    .limit(req.user ? JOB_POOL_SIZE : Number(limit));
+    // Anonymous requests still use the small requested limit directly —
+    // there's no scoring/personalization happening for them, so a plain
+    // most-recent-first slice is the correct behavior, not a bug to fix.
 
   if (industry) query = query.eq("industry", industry);
   if (state) query = query.eq("state", state);
@@ -179,7 +198,11 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     })
     .sort((a, b) => (b.match.overall_score ?? -1) - (a.match.overall_score ?? -1));
 
-  res.json(scored);
+  // Trim to the originally-requested amount NOW, after scoring/sorting —
+  // this is the step that was missing before. See JOB_POOL_SIZE comment
+  // above for why the raw fetch and this final limit are deliberately
+  // different numbers.
+  res.json(scored.slice(0, Number(limit)));
 });
 
 // GET /api/jobs/:id
