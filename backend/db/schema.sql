@@ -135,9 +135,15 @@ create table if not exists candidate_profiles (
                                           -- so the same job doesn't get
                                           -- re-emailed every single day
   home_state text,
+  preferred_states text[],               -- states this candidate wants to see
+                                          -- jobs from — distinct from home_state
+                                          -- (where they live) and willing_to_relocate
+                                          -- (how far they'd physically move). Drives
+                                          -- location scoring in backend/matching.js
+                                          -- alongside home_state, not instead of it.
   willing_to_relocate boolean default false,
-  relocation_locations text[],
-
+  relocation_locations text[],           -- unused leftover from the original schema
+                                          -- draft — nothing reads or writes this column
   preferred_states text[],
   preferred_cities text[],
   preferred_regions text[],
