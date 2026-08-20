@@ -190,6 +190,14 @@ create table if not exists candidate_job_matches (
   job_id uuid references jobs(id) on delete cascade,
 
   overall_score numeric,
+  candidate_fit numeric,              -- from backend/matching.js's current 3-score model —
+  preference_fit numeric,             -- these + overall_score/recommendation/confidence/
+  recommendation text,                -- hard_disqualifier are the real fields scoreJob()
+  reasons jsonb,                      -- outputs today. The columns below (industry_score,
+  concerns jsonb,                     -- experience_score, etc.) are leftover from the
+  confidence text,                    -- original schema draft, predating the current
+  hard_disqualifier boolean,          -- matching engine — left in place harmlessly rather
+  scored_at timestamptz,              -- than dropped, but nothing writes to them anymore.
   industry_score numeric,
   experience_score numeric,
   territory_score numeric,
