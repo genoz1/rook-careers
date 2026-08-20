@@ -14,6 +14,7 @@ const { analyzeResume } = require("../ai/resumeAnalysis");
 const { generateEmbedding } = require("../ai/embeddings");
 const { suggestRoles } = require("../ai/roleSuggestions");
 const { scoreAndStoreForCandidate } = require("../scoring/precompute");
+const { geocodeZip } = require("../geocoding");
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -65,6 +66,22 @@ router.get("/profile", requireConfig, requireAuth, async (req, res) => {
 // PUT /api/profile — create or update the caller's candidate profile
 router.put("/profile", requireConfig, requireAuth, async (req, res) => {
   const payload = { ...req.body, user_id: req.user.id, updated_at: new Date().toISOString() };
+
+  // If a ZIP was provided, geocode it once here so home_lat/home_lng save
+  // in the same write — powers the proximity bonus in backend/matching.js.
+  // A geocoding failure doesn't block saving the rest of the profile; it
+  // just means no proximity bonus until a later save succeeds.
+  if (payload.home_zip) {
+    try {
+      const coords = await geocodeZip(payload.home_zip);
+      if (coords) {
+        payload.home_lat = coords.lat;
+        payload.home_lng = coords.lng;
+      }
+    } catch (err) {
+      console.error(`Geocoding failed for ZIP ${payload.home_zip}: ${err.message}`);
+    }
+  }
 
   const { data, error } = await supabaseAdmin
     .from("candidate_profiles")
