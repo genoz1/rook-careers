@@ -170,7 +170,9 @@
       </div>
     </div>
 
-    <div class="job-list" id="jobList" data-demo="true">
+    <div id="jobListLoading" style="text-align:center; padding:60px 20px; color:#5B6B85; font-size:14px;">Loading matching jobs…</div>
+
+    <div class="job-list" id="jobList" data-demo="true" style="display:none;">
       <div class="job-row">
         <div class="score-ring" style="--pct:96;"><span>96%</span></div>
         <div class="job-info">
@@ -281,6 +283,13 @@
     const token = await rookRequireAuth();
     if (!token) return;
 
+    const jobList = document.getElementById('jobList');
+    const loading = document.getElementById('jobListLoading');
+    function revealDemo() {
+      loading.style.display = 'none';
+      jobList.style.display = '';
+    }
+
     try {
       const res = await rookApiFetch('/jobs?limit=300');
       if (!res.ok) throw new Error('API returned ' + res.status);
@@ -288,6 +297,7 @@
 
       if (!Array.isArray(jobs) || jobs.length === 0) {
         showBanner('No live jobs yet. Add employers and run <code>npm run ingest</code> — see ROOK-Setup-Guide.pdf. Showing example matches below in the meantime.');
+        revealDemo();
         return;
       }
 
@@ -295,6 +305,7 @@
       document.getElementById('jobList').dataset.demo = 'false';
       applyFiltersAndRender();
       showBanner(`Showing ${jobs.length} live job(s), scored against your profile.`, 'info');
+      revealDemo();
 
       // Wire up every filter control to re-filter on change.
       document.getElementById('filterKeyword').addEventListener('input', applyFiltersAndRender);
@@ -306,6 +317,7 @@
       document.getElementById('sortSelect').addEventListener('change', applyFiltersAndRender);
     } catch (err) {
       showBanner('Could not reach the ROOK API (' + err.message + '). Showing example matches below — see ROOK-Setup-Guide.pdf to get the backend running.');
+      revealDemo();
     }
   })();
 
