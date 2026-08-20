@@ -24,6 +24,11 @@ app.use("/api", require("./backend/routes/applications"));
 app.use("/api", require("./backend/routes/applicationPackage"));
 app.use("/api", require("./backend/routes/careerIntelligence"));
 
+// Server-rendered public pages (real per-job SEO meta tags + sitemap) —
+// registered before the static file server and the SPA catch-all below,
+// since /jobs/:id and /sitemap.xml aren't real files in /public.
+app.use("/", require("./backend/routes/publicPages"));
+
 // Static frontend (the UI prototype pages).
 app.use(express.static(path.join(__dirname, "public")));
 
