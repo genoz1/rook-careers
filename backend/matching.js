@@ -81,6 +81,30 @@ function mentionsADifferentState(locationRaw, candidateStateAbbr) {
   return false;
 }
 
+// Same problem as mentionsADifferentState, one level up: "China : Remote"
+// or "Germany - Remote" means remote WITHIN that country, not nationwide
+// US remote — but nothing was checking for non-US countries at all, so
+// jobs based in another country entirely were getting full remote credit
+// for a US-based candidate. Not an exhaustive country list — covers the
+// countries realistically likely to appear given the multinational
+// employers in ROOK's employer list (Abbott, Roche, Genentech, etc, all
+// of which post roles globally) — a country not on this list would still
+// slip through, same honest caveat as the single-state check above.
+const NON_US_COUNTRY_SIGNALS = [
+  "china", "india", "germany", "united kingdom", "canada", "mexico",
+  "brazil", "france", "japan", "australia", "singapore", "spain", "italy",
+  "netherlands", "switzerland", "ireland", "poland", "sweden", "belgium",
+  "south korea", "taiwan", "hong kong", "philippines", "vietnam",
+  "thailand", "malaysia", "indonesia", "south africa", "israel", "turkey",
+  "argentina", "colombia", "chile", "portugal", "austria", "denmark",
+  "norway", "finland", "czech republic", "romania", "hungary", "greece",
+  "new zealand", "united arab emirates", "saudi arabia", "egypt", "russia",
+];
+function mentionsNonUsCountry(locationRaw) {
+  if (!locationRaw) return false;
+  return NON_US_COUNTRY_SIGNALS.some((country) => new RegExp(`\\b${country}\\b`, "i").test(locationRaw));
+}
+
 function extractSalaryFigure(job) {
   if (job.salary_max) return Number(job.salary_max);
   if (job.salary_min) return Number(job.salary_min);
@@ -186,7 +210,8 @@ function scoreJob(job, profile) {
   // mentionsADifferentState's comment for why ("California... - Remote"
   // almost always means remote-within-California, not nationwide).
   const mentionsOtherState = mentionsADifferentState(job.location_raw, candidateStateAbbr);
-  const remoteFriendly = (/remote/i.test(job.location_raw || "") || job.remote_status === "remote") && !mentionsOtherState;
+  const mentionsForeignCountry = mentionsNonUsCountry(job.location_raw);
+  const remoteFriendly = (/remote/i.test(job.location_raw || "") || job.remote_status === "remote") && !mentionsOtherState && !mentionsForeignCountry;
 
   if (candidateStateAbbr && locationMentionsState(job.location_raw, candidateStateAbbr)) {
     prefScore += 35;
