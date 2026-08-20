@@ -60,6 +60,27 @@ function locationMentionsState(locationRaw, stateAbbr) {
   return pattern.test(locationRaw);
 }
 
+// True if locationRaw names a specific US state OTHER than the
+// candidate's own home state. Used to catch postings like "California,
+// United States - Remote" — the word "remote" there almost always means
+// "remote WITHIN California" (common Workday phrasing), not nationwide
+// remote. Without this check, any location string containing "remote"
+// was getting full remote credit regardless of which state it actually
+// named, even when that state was nowhere near the candidate and they
+// hadn't indicated willingness to relocate. A residual known gap: this
+// only catches a single named state, not broader regional phrasing like
+// "Remote (Southeast US)" — a harder text-matching problem left alone
+// for now rather than guessed at.
+function mentionsADifferentState(locationRaw, candidateStateAbbr) {
+  if (!locationRaw || !candidateStateAbbr) return false;
+  for (const [name, abbr] of Object.entries(STATE_ABBR)) {
+    if (abbr === candidateStateAbbr) continue;
+    const pattern = new RegExp(`\\b(${name}|${abbr})\\b`, "i");
+    if (pattern.test(locationRaw)) return true;
+  }
+  return false;
+}
+
 function extractSalaryFigure(job) {
   if (job.salary_max) return Number(job.salary_max);
   if (job.salary_min) return Number(job.salary_min);
@@ -157,9 +178,15 @@ function scoreJob(job, profile) {
   // --- Location (up to 35 points) ---
   prefMax += 35;
   dataPointsPossible++;
-  const remoteFriendly = /remote/i.test(job.location_raw || "") || job.remote_status === "remote";
   const candidateStateAbbr = stateAbbrFromName(profile.home_state);
   if (candidateStateAbbr) dataPointsAvailable++;
+
+  // A location string is only treated as genuinely remote-friendly if it
+  // doesn't also name a DIFFERENT specific state — see
+  // mentionsADifferentState's comment for why ("California... - Remote"
+  // almost always means remote-within-California, not nationwide).
+  const mentionsOtherState = mentionsADifferentState(job.location_raw, candidateStateAbbr);
+  const remoteFriendly = (/remote/i.test(job.location_raw || "") || job.remote_status === "remote") && !mentionsOtherState;
 
   if (candidateStateAbbr && locationMentionsState(job.location_raw, candidateStateAbbr)) {
     prefScore += 35;
@@ -172,10 +199,8 @@ function scoreJob(job, profile) {
     reasons.push("You've indicated openness to relocation");
   } else if (candidateStateAbbr && job.location_raw) {
     concerns.push(`Location (${job.location_raw}) may be outside your home state`);
-    if (!remoteFriendly) {
-      hardDisqualifier = true;
-      prefCap = Math.min(prefCap, 65);
-    }
+    hardDisqualifier = true;
+    prefCap = Math.min(prefCap, 65);
   }
 
   // --- Compensation (up to 30 points) ---
