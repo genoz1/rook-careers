@@ -68,6 +68,15 @@
     <div class="field"><label>Email</label><input type="email" id="signinEmail" autocomplete="email"></div>
     <div class="field"><label>Password</label><input type="password" id="signinPassword" autocomplete="current-password"></div>
     <button class="btn" id="signinBtn" onclick="handleSignIn()">Log In</button>
+    <div style="text-align:center; margin-top:14px;"><a href="#" onclick="showForgotPassword(); return false;" style="font-size:13px;">Forgot your password?</a></div>
+  </div>
+
+  <div id="panelForgot" style="display:none;">
+    <h2>Reset your password</h2>
+    <div class="sub">Enter your email and we'll send you a link to set a new password.</div>
+    <div class="field"><label>Email</label><input type="email" id="forgotEmail" autocomplete="email"></div>
+    <button class="btn" id="forgotBtn" onclick="handleForgotPassword()">Send Reset Link</button>
+    <div style="text-align:center; margin-top:14px;"><a href="#" onclick="switchTab('signin'); return false;" style="font-size:13px;">← Back to log in</a></div>
   </div>
 
   <div id="panelSignup" style="display:none;">
@@ -99,7 +108,43 @@
     document.getElementById('tabSignup').classList.toggle('active', tab === 'signup');
     document.getElementById('panelSignin').style.display = tab === 'signin' ? 'block' : 'none';
     document.getElementById('panelSignup').style.display = tab === 'signup' ? 'block' : 'none';
+    document.getElementById('panelForgot').style.display = 'none';
     setMsg('');
+  }
+
+  function showForgotPassword() {
+    document.getElementById('panelSignin').style.display = 'none';
+    document.getElementById('panelSignup').style.display = 'none';
+    document.getElementById('panelForgot').style.display = 'block';
+    document.getElementById('tabSignin').classList.remove('active');
+    document.getElementById('tabSignup').classList.remove('active');
+    setMsg('');
+  }
+
+  async function handleForgotPassword() {
+    if (!configured) return setMsg('Supabase isn\'t configured yet — see the warning below.', 'error');
+    const email = document.getElementById('forgotEmail').value.trim();
+    if (!email) return setMsg('Enter your email.', 'error');
+
+    document.getElementById('forgotBtn').disabled = true;
+    setMsg('Sending...');
+    // redirectTo must be an allowed Redirect URL in Supabase's
+    // Authentication → URL Configuration settings, same requirement as
+    // the email-confirmation flow — otherwise Supabase silently refuses
+    // to send the user anywhere useful after they click the emailed link.
+    try {
+      await client.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/rook-reset-password.html`,
+      });
+    } catch {
+      // Deliberately swallowed — see the message below.
+    }
+    document.getElementById('forgotBtn').disabled = false;
+    // Same message no matter what actually happened server-side —
+    // confirming or denying whether an email has an account, even via
+    // the wording of an error message, is a real account-enumeration
+    // risk, not just excess caution.
+    setMsg('If an account exists for that email, a reset link is on its way. Check your inbox.', 'success');
   }
 
   function setMsg(text, type) {
