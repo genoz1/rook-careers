@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "ingest": "node backend/ingest.js",
-    "send-digest": "node backend/sendDigest.js"
+    "send-digest": "node backend/sendDigest.js",
+    "precompute-scores": "node backend/precomputeScores.js"
   },
   "engines": {
     "node": ">=18.0.0"
