@@ -1,27 +1,28 @@
 // Public job-listing routes. Auth is optional here: signed-out visitors
-// can browse jobs same as before, but a signed-in candidate gets each
-// job scored against their profile — see backend/matching.js.
+// can browse jobs same as before, but a signed-in candidate sees their
+// PRECOMPUTED match scores — see backend/scoring/precompute.js and
+// backend/precomputeScores.js.
+//
+// This used to call scoreJob() live, fetching a pool of jobs (originally
+// 20, later raised to 1,500) and scoring only that pool before deciding
+// what to show. At real scale that pool size becomes a real ceiling — a
+// candidate's genuinely best match could sit outside it and never even
+// get considered. Scores are now computed ahead of time by a scheduled
+// job and stored in candidate_job_matches, so a request here just reads
+// already-scored rows sorted by score directly from the database. No
+// pool size to outgrow, genuinely unbounded by job volume.
 //
 // Auth model: same as profile.js — verify the caller's token with the
 // ANON client, then look up their profile with the SERVICE ROLE client.
-// Using the anon client for the profile lookup silently returns nothing
-// (row-level security correctly blocks it), because verifying a token
-// with supabase.auth.getUser() does NOT make subsequent queries on that
-// same client run "as" that user.
 //
 // Application/dismissal awareness: jobs a candidate has dismissed are
-// filtered out of results entirely (spec factor #48's practical intent
-// — "don't show jobs like this"); jobs they've saved or applied to are
-// annotated so the frontend can show the right button state, and applied
-// jobs are excluded from "New Matches" counting logic on the frontend.
-// This is done here in the route, not inside scoreJob() itself — keeping
-// scoreJob's signature to just (job, profile) means it stays a pure,
-// easily-testable function; list-level filtering/annotation belongs at
-// the query layer instead.
+// filtered out of results entirely; jobs they've saved or applied to are
+// annotated so the frontend can show the right button state.
 
 const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
 const { scoreJob } = require("../matching");
+const { scoreAndStoreForCandidate } = require("../scoring/precompute");
 
 const router = express.Router();
 
@@ -71,49 +72,72 @@ async function loadCandidateId(req, res, next) {
   next();
 }
 
-// GET /api/jobs?industry=Veterinary&state=FL&limit=20
-//
-// IMPORTANT: `limit` only controls how many SCORED results come back —
-// it does NOT limit how many jobs get considered for scoring. The raw
-// database fetch always pulls a much larger pool (JOB_POOL_SIZE) ordered
-// by recency, scores everything in that pool, sorts by match score, THEN
-// trims to `limit`. Originally this fetched only `limit` jobs BEFORE
-// scoring — meaning as the employer list grew (80+ employers now), a
-// candidate's genuinely best matches could easily fall outside a small
-// date-ordered slice and never even get scored, especially since several
-// adapters (ClinchTalent, and sometimes others) leave date_posted null,
-// which sorts unpredictably. This was the real cause of "my matches
-// haven't changed" even after many new employers started ingesting real
-// jobs — the dashboard was quietly only ever looking at a tiny recent
-// slice of the whole pool.
-const JOB_POOL_SIZE = 1500;
+function matchFromRow(row) {
+  return {
+    overall_score: row.overall_score,
+    candidate_fit: row.candidate_fit,
+    preference_fit: row.preference_fit,
+    recommendation: row.recommendation,
+    reasons: row.reasons || [],
+    concerns: row.concerns || [],
+    confidence: row.confidence,
+    hard_disqualifier: row.hard_disqualifier,
+  };
+}
 
+// Builds the employer_note map (spec factor #43, employer-history
+// awareness) — unrelated to match scoring, still computed live here
+// since it's a small, fast query, not something worth precomputing.
+async function loadEmployerHistory(candidateId) {
+  const { data: appRows } = await supabaseAdmin
+    .from("applications")
+    .select("job_id, status, jobs(employer_id, title_original)")
+    .eq("candidate_id", candidateId);
+
+  const appStatusByJob = new Map((appRows || []).map((a) => [a.job_id, a.status]));
+  const employerHistory = new Map();
+  for (const app of appRows || []) {
+    const employerId = app.jobs?.employer_id;
+    if (!employerId) continue;
+    if (!employerHistory.has(employerId)) employerHistory.set(employerId, []);
+    employerHistory.get(employerId).push({ title: app.jobs.title_original, status: app.status, job_id: app.job_id });
+  }
+
+  function noteFor(job) {
+    const priorAtEmployer = (employerHistory.get(job.employer_id) || []).filter((a) => a.job_id !== job.id);
+    if (priorAtEmployer.length === 0) return null;
+    const rejected = priorAtEmployer.find((a) => a.status === "rejected");
+    const active = priorAtEmployer.find((a) => a.status !== "rejected" && a.status !== "withdrawn");
+    if (active) return `You have an application in progress at this company for "${active.title}"`;
+    if (rejected) return `You were previously not selected for "${rejected.title}" at this company`;
+    return "You've previously applied to this company";
+  }
+
+  return { appStatusByJob, noteFor };
+}
+
+// GET /api/jobs?industry=Veterinary&state=FL&limit=20
 router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
   const { industry, state, limit = 20 } = req.query;
 
-  let query = supabaseAnon
-    .from("jobs")
-    .select("*")
-    .eq("status", "active")
-    .order("date_posted", { ascending: false })
-    .limit(req.user ? JOB_POOL_SIZE : Number(limit));
-    // Anonymous requests still use the small requested limit directly —
-    // there's no scoring/personalization happening for them, so a plain
-    // most-recent-first slice is the correct behavior, not a bug to fix.
-
-  if (industry) query = query.eq("industry", industry);
-  if (state) query = query.eq("state", state);
-
-  const { data, error } = await query;
-  if (error) return res.status(500).json({ error: error.message });
-
-  // Anonymous browsing — teaser only. Company name and any way to
-  // actually apply (source_url / application_url) are the two things
-  // that make a listing worth joining to see, so those are withheld;
-  // everything about the role itself (title, location, comp, posting
-  // date, a short description preview) stays visible, since the goal is
-  // to be genuinely enticing, not to tease an empty box.
+  // Anonymous browsing — teaser only, unchanged from before: company
+  // name and any way to actually apply stay withheld; everything about
+  // the role itself stays visible. No scoring concept applies here, so
+  // this still queries jobs directly by recency, not through
+  // candidate_job_matches.
   if (!req.user) {
+    let query = supabaseAnon
+      .from("jobs")
+      .select("*")
+      .eq("status", "active")
+      .order("date_posted", { ascending: false })
+      .limit(Number(limit));
+    if (industry) query = query.eq("industry", industry);
+    if (state) query = query.eq("state", state);
+
+    const { data, error } = await query;
+    if (error) return res.status(500).json({ error: error.message });
+
     const teaser = data.map((job) => ({
       id: job.id,
       title_original: job.title_original,
@@ -135,74 +159,68 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     .eq("user_id", req.user.id)
     .maybeSingle();
 
-  if (!profile) return res.json(data);
-
-  // Pull dismissed/saved state and application status for this candidate
-  // in two extra queries, rather than N+1 queries per job. The
-  // applications query also joins jobs(employer_id, title_original) so
-  // employer-history awareness (spec factor #43) can be computed without
-  // a third round trip — e.g. flagging "you already have an application
-  // in progress at this company" on a DIFFERENT role at the same employer.
-  const [{ data: matchRows }, { data: appRows }] = await Promise.all([
-    supabaseAdmin.from("candidate_job_matches").select("job_id, dismissed, saved").eq("candidate_id", profile.id),
-    supabaseAdmin
-      .from("applications")
-      .select("job_id, status, jobs(employer_id, title_original)")
-      .eq("candidate_id", profile.id),
-  ]);
-
-  const dismissedIds = new Set((matchRows || []).filter((m) => m.dismissed).map((m) => m.job_id));
-  const savedIds = new Set((matchRows || []).filter((m) => m.saved).map((m) => m.job_id));
-  const appStatusByJob = new Map((appRows || []).map((a) => [a.job_id, a.status]));
-
-  // employer_id -> list of { title, status, job_id } for every application
-  // this candidate has at that employer, regardless of which specific role.
-  const employerHistory = new Map();
-  for (const app of appRows || []) {
-    const employerId = app.jobs?.employer_id;
-    if (!employerId) continue;
-    if (!employerHistory.has(employerId)) employerHistory.set(employerId, []);
-    employerHistory.get(employerId).push({
-      title: app.jobs.title_original,
-      status: app.status,
-      job_id: app.job_id,
-    });
+  if (!profile) {
+    // No profile yet at all (onboarding not completed) — nothing to
+    // score against. Same as before: fall back to the plain job list.
+    let query = supabaseAnon.from("jobs").select("*").eq("status", "active").order("date_posted", { ascending: false }).limit(Number(limit));
+    if (industry) query = query.eq("industry", industry);
+    if (state) query = query.eq("state", state);
+    const { data } = await query;
+    return res.json(data);
   }
 
-  const scored = data
-    .filter((job) => !dismissedIds.has(job.id))
-    .map((job) => {
-      // Other applications at the same employer, excluding this exact
-      // job (that's already covered by application_status above).
-      const priorAtEmployer = (employerHistory.get(job.employer_id) || []).filter((a) => a.job_id !== job.id);
-      let employer_note = null;
-      if (priorAtEmployer.length > 0) {
-        const rejected = priorAtEmployer.find((a) => a.status === "rejected");
-        const active = priorAtEmployer.find((a) => a.status !== "rejected" && a.status !== "withdrawn");
-        if (active) {
-          employer_note = `You have an application in progress at this company for "${active.title}"`;
-        } else if (rejected) {
-          employer_note = `You were previously not selected for "${rejected.title}" at this company`;
-        } else {
-          employer_note = `You've previously applied to this company`;
-        }
+  async function fetchScoredRows() {
+    let query = supabaseAdmin
+      .from("candidate_job_matches")
+      .select("*, jobs!inner(*)")
+      .eq("candidate_id", profile.id)
+      .eq("dismissed", false)
+      .eq("jobs.status", "active")
+      .order("overall_score", { ascending: false, nullsFirst: false })
+      .limit(Number(limit));
+    if (industry) query = query.eq("jobs.industry", industry);
+    if (state) query = query.eq("jobs.state", state);
+    return query;
+  }
+
+  let { data: rows, error } = await fetchScoredRows();
+  if (error) return res.status(500).json({ error: error.message });
+
+  // Fallback for a brand-new candidate whose scores haven't been
+  // computed yet — the fire-and-forget rescore in profile.js normally
+  // covers this within a few seconds of onboarding, but if a request
+  // lands before that finishes (or before this candidate's very first
+  // scheduled precompute run), do one synchronous scoring pass now
+  // rather than showing an empty dashboard with no explanation. This
+  // only ever runs once per candidate — after it succeeds, rows exist
+  // and every future request hits the fast path above.
+  if ((!rows || rows.length === 0)) {
+    const { count } = await supabaseAdmin
+      .from("candidate_job_matches")
+      .select("id", { count: "exact", head: true })
+      .eq("candidate_id", profile.id);
+    if (!count || count === 0) {
+      try {
+        await scoreAndStoreForCandidate(supabaseAdmin, profile);
+        ({ data: rows, error } = await fetchScoredRows());
+        if (error) return res.status(500).json({ error: error.message });
+      } catch (err) {
+        console.error(`Fallback synchronous scoring failed for candidate ${profile.id}: ${err.message}`);
       }
+    }
+  }
 
-      return {
-        ...job,
-        match: scoreJob(job, profile),
-        saved: savedIds.has(job.id),
-        application_status: appStatusByJob.get(job.id) || null,
-        employer_note,
-      };
-    })
-    .sort((a, b) => (b.match.overall_score ?? -1) - (a.match.overall_score ?? -1));
+  const { appStatusByJob, noteFor } = await loadEmployerHistory(profile.id);
 
-  // Trim to the originally-requested amount NOW, after scoring/sorting —
-  // this is the step that was missing before. See JOB_POOL_SIZE comment
-  // above for why the raw fetch and this final limit are deliberately
-  // different numbers.
-  res.json(scored.slice(0, Number(limit)));
+  const results = (rows || []).map((row) => ({
+    ...row.jobs,
+    match: matchFromRow(row),
+    saved: Boolean(row.saved),
+    application_status: appStatusByJob.get(row.job_id) || null,
+    employer_note: noteFor(row.jobs),
+  }));
+
+  res.json(results);
 });
 
 // GET /api/jobs/:id
@@ -237,7 +255,23 @@ router.get("/jobs/:id", requireConfig, optionalAuth, async (req, res) => {
     .eq("user_id", req.user.id)
     .maybeSingle();
 
-  res.json(profile ? { ...data, match: scoreJob(data, profile) } : data);
+  if (!profile) return res.json(data);
+
+  // Single-job page: fall back to a live score if no precomputed row
+  // exists yet (e.g. this job was ingested very recently and hasn't
+  // been through a precompute run). Cheap to do for just one job, and
+  // ensures a direct link (from the daily digest email, or right after
+  // sign-up from the public teaser page) always shows a real score
+  // rather than nothing.
+  const { data: row } = await supabaseAdmin
+    .from("candidate_job_matches")
+    .select("*")
+    .eq("candidate_id", profile.id)
+    .eq("job_id", data.id)
+    .maybeSingle();
+
+  const match = row ? matchFromRow(row) : scoreJob(data, profile);
+  res.json({ ...data, match, saved: Boolean(row?.saved) });
 });
 
 // POST /api/jobs/:id/save — toggle whether this job is saved. Body: { saved: true|false }.
@@ -246,7 +280,7 @@ router.post("/jobs/:id/save", requireConfig, requireAuth, loadCandidateId, async
   const { data, error } = await supabaseAdmin
     .from("candidate_job_matches")
     .upsert(
-      { candidate_id: req.candidateId, job_id: req.params.id, saved, calculated_at: new Date().toISOString() },
+      { candidate_id: req.candidateId, job_id: req.params.id, saved },
       { onConflict: "candidate_id,job_id" }
     )
     .select()
@@ -262,7 +296,7 @@ router.post("/jobs/:id/dismiss", requireConfig, requireAuth, loadCandidateId, as
   const { data, error } = await supabaseAdmin
     .from("candidate_job_matches")
     .upsert(
-      { candidate_id: req.candidateId, job_id: req.params.id, dismissed, calculated_at: new Date().toISOString() },
+      { candidate_id: req.candidateId, job_id: req.params.id, dismissed },
       { onConflict: "candidate_id,job_id" }
     )
     .select()
@@ -272,27 +306,21 @@ router.post("/jobs/:id/dismiss", requireConfig, requireAuth, loadCandidateId, as
 });
 
 // GET /api/saved-jobs — full job details for everything the caller has
-// saved, scored against their profile the same as the main listing.
+// saved, with precomputed scores (same source as the main listing).
 router.get("/saved-jobs", requireConfig, requireAuth, loadCandidateId, async (req, res) => {
-  const { data: matchRows, error } = await supabaseAdmin
+  const { data: rows, error } = await supabaseAdmin
     .from("candidate_job_matches")
-    .select("job_id, jobs(*)")
+    .select("*, jobs(*)")
     .eq("candidate_id", req.candidateId)
     .eq("saved", true);
 
   if (error) return res.status(500).json({ error: error.message });
 
-  const { data: profile } = await supabaseAdmin
-    .from("candidate_profiles")
-    .select("*")
-    .eq("user_id", req.user.id)
-    .maybeSingle();
-
-  const jobs = (matchRows || [])
-    .filter((m) => m.jobs) // guards against a job having been removed since it was saved
-    .map((m) => ({
-      ...m.jobs,
-      match: profile ? scoreJob(m.jobs, profile) : null,
+  const jobs = (rows || [])
+    .filter((row) => row.jobs) // guards against a job having been removed since it was saved
+    .map((row) => ({
+      ...row.jobs,
+      match: row.overall_score != null ? matchFromRow(row) : null,
       saved: true,
     }));
 
