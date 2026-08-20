@@ -23,20 +23,7 @@
 
 const BASE_URL = "https://api.smartrecruiters.com/v1/companies";
 
-const STRONG_TITLE_SIGNALS = [
-  "sales", "account executive", "territory manager", "business development", "key account",
-];
-const ROLE_WORDS = ["representative", "specialist", "manager", "executive", "consultant"];
-const DOMAIN_WORDS = [
-  "sales", "territory", "account", "veterinary", "medical", "pharmaceutical", "diagnostic", "clinical",
-];
-function titleLooksRelevant(title = "") {
-  const t = title.toLowerCase();
-  if (STRONG_TITLE_SIGNALS.some((k) => t.includes(k))) return true;
-  const hasRoleWord = ROLE_WORDS.some((k) => t.includes(k));
-  const hasDomainWord = DOMAIN_WORDS.some((k) => t.includes(k));
-  return hasRoleWord && hasDomainWord;
-}
+const { titleLooksRelevant } = require('../relevanceFilter');
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
   const controller = new AbortController();
