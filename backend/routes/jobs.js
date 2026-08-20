@@ -258,11 +258,13 @@ router.get("/jobs/:id", requireConfig, optionalAuth, async (req, res) => {
   if (!profile) return res.json(data);
 
   // Single-job page: fall back to a live score if no precomputed row
-  // exists yet (e.g. this job was ingested very recently and hasn't
-  // been through a precompute run). Cheap to do for just one job, and
-  // ensures a direct link (from the daily digest email, or right after
-  // sign-up from the public teaser page) always shows a real score
-  // rather than nothing.
+  // exists yet, OR if the row that does exist predates the scoring
+  // columns being added (candidate_fit/preference_fit/overall_score all
+  // null) — this account had rows created by earlier testing before
+  // that migration, so "row exists" alone isn't enough to trust it; it
+  // has to actually contain a real score. `row.scored_at` is only ever
+  // set by scoreAndStoreForCandidate(), so its presence is what
+  // distinguishes a genuinely fresh row from an old, empty one.
   const { data: row } = await supabaseAdmin
     .from("candidate_job_matches")
     .select("*")
@@ -270,7 +272,8 @@ router.get("/jobs/:id", requireConfig, optionalAuth, async (req, res) => {
     .eq("job_id", data.id)
     .maybeSingle();
 
-  const match = row ? matchFromRow(row) : scoreJob(data, profile);
+  const hasRealScore = row && row.scored_at != null;
+  const match = hasRealScore ? matchFromRow(row) : scoreJob(data, profile);
   res.json({ ...data, match, saved: Boolean(row?.saved) });
 });
 
