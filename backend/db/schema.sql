@@ -52,6 +52,10 @@ create table if not exists jobs (
                                       -- ingest.js, not on every re-ingestion run.
 
   location_raw text,
+  job_lat numeric,                       -- geocoded once at ingestion time from
+  job_lng numeric,                       -- location_raw (see backend/geocoding.js),
+                                          -- cached forever after — used for proximity
+                                          -- scoring within an accepted state
   city text,
   state text,
   region text,
@@ -135,6 +139,10 @@ create table if not exists candidate_profiles (
                                           -- so the same job doesn't get
                                           -- re-emailed every single day
   home_state text,
+  home_zip text,
+  home_lat numeric,                      -- geocoded once when home_zip is saved
+  home_lng numeric,                      -- (see backend/geocoding.js) — used for
+                                          -- proximity scoring within an accepted state
   preferred_states text[],               -- states this candidate wants to see
                                           -- jobs from — distinct from home_state
                                           -- (where they live) and willing_to_relocate
