@@ -1,0 +1,13 @@
+User-agent: *
+Allow: /
+Disallow: /rook-dashboard.html
+Disallow: /rook-settings.html
+Disallow: /rook-tracker.html
+Disallow: /rook-saved.html
+Disallow: /rook-intelligence.html
+Disallow: /rook-application-package.html
+Disallow: /rook-job-analysis.html
+Disallow: /rook-admin-employers.html
+Disallow: /api/
+
+Sitemap: https://seashell-app-hbjuo.ondigitalocean.app/sitemap.xml
