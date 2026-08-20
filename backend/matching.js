@@ -71,10 +71,10 @@ function locationMentionsState(locationRaw, stateAbbr) {
 // only catches a single named state, not broader regional phrasing like
 // "Remote (Southeast US)" — a harder text-matching problem left alone
 // for now rather than guessed at.
-function mentionsADifferentState(locationRaw, candidateStateAbbr) {
-  if (!locationRaw || !candidateStateAbbr) return false;
+function mentionsADifferentState(locationRaw, acceptedStateAbbrs) {
+  if (!locationRaw || !acceptedStateAbbrs || acceptedStateAbbrs.size === 0) return false;
   for (const [name, abbr] of Object.entries(STATE_ABBR)) {
-    if (abbr === candidateStateAbbr) continue;
+    if (acceptedStateAbbrs.has(abbr)) continue;
     const pattern = new RegExp(`\\b(${name}|${abbr})\\b`, "i");
     if (pattern.test(locationRaw)) return true;
   }
@@ -202,28 +202,46 @@ function scoreJob(job, profile) {
   // --- Location (up to 35 points) ---
   prefMax += 35;
   dataPointsPossible++;
-  const candidateStateAbbr = stateAbbrFromName(profile.home_state);
-  if (candidateStateAbbr) dataPointsAvailable++;
+
+  // A candidate can accept jobs from their home state AND any additional
+  // states they've explicitly said they want to see (preferred_states) —
+  // e.g. someone based in Florida who also wants Southeast-region jobs.
+  // Built as a Set of abbreviations so matching against it is order-
+  // independent and O(1) per check, regardless of how many states are in it.
+  const acceptedStateAbbrs = new Set();
+  const homeStateAbbr = stateAbbrFromName(profile.home_state);
+  if (homeStateAbbr) acceptedStateAbbrs.add(homeStateAbbr);
+  for (const s of profile.preferred_states || []) {
+    const abbr = stateAbbrFromName(s);
+    if (abbr) acceptedStateAbbrs.add(abbr);
+  }
+  if (acceptedStateAbbrs.size > 0) dataPointsAvailable++;
 
   // A location string is only treated as genuinely remote-friendly if it
-  // doesn't also name a DIFFERENT specific state — see
-  // mentionsADifferentState's comment for why ("California... - Remote"
-  // almost always means remote-within-California, not nationwide).
-  const mentionsOtherState = mentionsADifferentState(job.location_raw, candidateStateAbbr);
+  // doesn't also name a DIFFERENT state (one not in the candidate's
+  // accepted set) — see mentionsADifferentState's comment for why
+  // ("California... - Remote" almost always means remote-within-
+  // California, not nationwide).
+  const mentionsOtherState = mentionsADifferentState(job.location_raw, acceptedStateAbbrs);
   const mentionsForeignCountry = mentionsNonUsCountry(job.location_raw);
   const remoteFriendly = (/remote/i.test(job.location_raw || "") || job.remote_status === "remote") && !mentionsOtherState && !mentionsForeignCountry;
 
-  if (candidateStateAbbr && locationMentionsState(job.location_raw, candidateStateAbbr)) {
+  const matchedAcceptedState = [...acceptedStateAbbrs].find((abbr) => locationMentionsState(job.location_raw, abbr));
+  if (matchedAcceptedState) {
     prefScore += 35;
-    reasons.push("Location matches your home state");
+    reasons.push(
+      matchedAcceptedState === homeStateAbbr
+        ? "Location matches your home state"
+        : `Location matches one of your preferred states (${matchedAcceptedState})`
+    );
   } else if (remoteFriendly) {
     prefScore += 28;
     reasons.push("Remote-friendly role");
   } else if (profile.willing_to_relocate) {
     prefScore += 14;
     reasons.push("You've indicated openness to relocation");
-  } else if (candidateStateAbbr && job.location_raw) {
-    concerns.push(`Location (${job.location_raw}) may be outside your home state`);
+  } else if (acceptedStateAbbrs.size > 0 && job.location_raw) {
+    concerns.push(`Location (${job.location_raw}) may be outside your preferred states`);
     hardDisqualifier = true;
     prefCap = Math.min(prefCap, 65);
   }
