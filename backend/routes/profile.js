@@ -160,20 +160,29 @@ router.post("/resume", requireConfig, requireAuth, upload.single("resume"), asyn
   // only created by the PUT /profile call on Step 7). Using update()
   // here would previously silently affect zero rows for new users,
   // meaning the file path never actually saved.
+  //
+  // CRITICAL: only include resume_text/resume_structured/
+  // candidate_embedding/suggested_roles in the payload when THIS
+  // attempt actually produced a value. Earlier versions of this route
+  // always included them — even as null when extraction or analysis
+  // failed — which meant a failed re-upload silently wiped out
+  // previously-good résumé data, since Supabase upsert writes whatever
+  // columns are present in the payload, null or not. resume_file_path
+  // is the exception: the file itself did genuinely upload regardless
+  // of downstream analysis success, so that always updates.
+  const updatePayload = {
+    user_id: req.user.id,
+    resume_file_path: filePath,
+    updated_at: new Date().toISOString(),
+  };
+  if (resumeText) updatePayload.resume_text = resumeText;
+  if (resumeStructured) updatePayload.resume_structured = resumeStructured;
+  if (resumeEmbedding) updatePayload.candidate_embedding = resumeEmbedding;
+  if (suggestedRoles) updatePayload.suggested_roles = suggestedRoles;
+
   const { data: updatedProfile, error: dbError } = await supabaseAdmin
     .from("candidate_profiles")
-    .upsert(
-      {
-        user_id: req.user.id,
-        resume_file_path: filePath,
-        resume_text: resumeText,
-        resume_structured: resumeStructured,
-        candidate_embedding: resumeEmbedding,
-        suggested_roles: suggestedRoles,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "user_id" }
-    )
+    .upsert(updatePayload, { onConflict: "user_id" })
     .select()
     .single();
 
