@@ -13,6 +13,7 @@ const { extractResumeText } = require("../resumeParser");
 const { analyzeResume } = require("../ai/resumeAnalysis");
 const { generateEmbedding } = require("../ai/embeddings");
 const { suggestRoles } = require("../ai/roleSuggestions");
+const { scoreAndStoreForCandidate } = require("../scoring/precompute");
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -73,6 +74,18 @@ router.put("/profile", requireConfig, requireAuth, async (req, res) => {
 
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
+
+  // Fire-and-forget rescore — location, comp expectations, travel limits,
+  // and desired industries all feed directly into scoring, so a profile
+  // edit should refresh this candidate's stored scores promptly rather
+  // than waiting for the next scheduled precompute run. Deliberately
+  // not awaited: scoring against a large active-job pool can take a
+  // couple of seconds, and there's no reason to make the save itself
+  // feel slow for that — a page loaded a few seconds later will already
+  // see fresh scores either way.
+  scoreAndStoreForCandidate(supabaseAdmin, data).catch((err) => {
+    console.error(`Rescore after profile update failed for candidate ${data.id}: ${err.message}`);
+  });
 });
 
 // POST /api/resume — upload a résumé, extract its text, and run AI
@@ -147,7 +160,7 @@ router.post("/resume", requireConfig, requireAuth, upload.single("resume"), asyn
   // only created by the PUT /profile call on Step 7). Using update()
   // here would previously silently affect zero rows for new users,
   // meaning the file path never actually saved.
-  const { error: dbError } = await supabaseAdmin
+  const { data: updatedProfile, error: dbError } = await supabaseAdmin
     .from("candidate_profiles")
     .upsert(
       {
@@ -160,11 +173,24 @@ router.post("/resume", requireConfig, requireAuth, upload.single("resume"), asyn
         updated_at: new Date().toISOString(),
       },
       { onConflict: "user_id" }
-    );
+    )
+    .select()
+    .single();
 
   if (dbError) return res.status(500).json({ error: dbError.message });
 
   res.json({ ok: true, path: filePath, analysis_status: analysisStatus });
+
+  // Fire-and-forget rescore — a new résumé changes candidate_fit
+  // substantially (industries, product categories, seniority, the
+  // semantic embedding), so this candidate's stored scores should
+  // refresh right away rather than waiting for the next scheduled
+  // precompute run. Same not-awaited reasoning as the PUT /profile
+  // rescore trigger — the upload response shouldn't wait on scoring
+  // potentially thousands of jobs.
+  scoreAndStoreForCandidate(supabaseAdmin, updatedProfile).catch((err) => {
+    console.error(`Rescore after resume upload failed for candidate ${updatedProfile.id}: ${err.message}`);
+  });
 });
 
 module.exports = router;
