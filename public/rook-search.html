@@ -282,7 +282,7 @@
     if (!token) return;
 
     try {
-      const res = await rookApiFetch('/jobs?limit=50');
+      const res = await rookApiFetch('/jobs?limit=300');
       if (!res.ok) throw new Error('API returned ' + res.status);
       const jobs = await res.json();
 
