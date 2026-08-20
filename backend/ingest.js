@@ -196,20 +196,7 @@ async function ingestEmployer(employer) {
 // veterinary organization (e.g. a front-desk client service rep at a vet
 // clinic) — genuinely distinguishing those from a sales-facing "Veterinary
 // Territory Manager" needs real classification, not keyword matching.
-const STRONG_TITLE_SIGNALS = [
-  "sales", "account executive", "territory manager", "business development", "key account",
-];
-const ROLE_WORDS = ["representative", "specialist", "manager", "executive", "consultant"];
-const DOMAIN_WORDS = [
-  "sales", "territory", "account", "veterinary", "medical", "pharmaceutical", "diagnostic", "clinical",
-];
-function looksRelevant(title = "") {
-  const t = title.toLowerCase();
-  if (STRONG_TITLE_SIGNALS.some((k) => t.includes(k))) return true;
-  const hasRoleWord = ROLE_WORDS.some((k) => t.includes(k));
-  const hasDomainWord = DOMAIN_WORDS.some((k) => t.includes(k));
-  return hasRoleWord && hasDomainWord;
-}
+const { titleLooksRelevant: looksRelevant } = require('./relevanceFilter');
 
 // DigitalOcean's App Platform Scheduled Jobs have a hard 30-minute
 // timeout — a run that hits it gets forcibly killed mid-request rather
