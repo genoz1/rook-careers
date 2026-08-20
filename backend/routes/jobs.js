@@ -88,7 +88,27 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
   const { data, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
 
-  if (!req.user) return res.json(data);
+  // Anonymous browsing — teaser only. Company name and any way to
+  // actually apply (source_url / application_url) are the two things
+  // that make a listing worth joining to see, so those are withheld;
+  // everything about the role itself (title, location, comp, posting
+  // date, a short description preview) stays visible, since the goal is
+  // to be genuinely enticing, not to tease an empty box.
+  if (!req.user) {
+    const teaser = data.map((job) => ({
+      id: job.id,
+      title_original: job.title_original,
+      title_normalized: job.title_normalized,
+      location_raw: job.location_raw,
+      compensation_text: job.compensation_text,
+      salary_min: job.salary_min,
+      salary_max: job.salary_max,
+      date_posted: job.date_posted,
+      description_preview: (job.description_text || "").slice(0, 160),
+      gated: true,
+    }));
+    return res.json(teaser);
+  }
 
   const { data: profile } = await supabaseAdmin
     .from("candidate_profiles")
@@ -173,7 +193,20 @@ router.get("/jobs/:id", requireConfig, optionalAuth, async (req, res) => {
   if (error) return res.status(500).json({ error: error.message });
   if (!data) return res.status(404).json({ error: "Job not found" });
 
-  if (!req.user) return res.json(data);
+  if (!req.user) {
+    return res.json({
+      id: data.id,
+      title_original: data.title_original,
+      title_normalized: data.title_normalized,
+      location_raw: data.location_raw,
+      compensation_text: data.compensation_text,
+      salary_min: data.salary_min,
+      salary_max: data.salary_max,
+      date_posted: data.date_posted,
+      description_preview: (data.description_text || "").slice(0, 300),
+      gated: true,
+    });
+  }
 
   const { data: profile } = await supabaseAdmin
     .from("candidate_profiles")
