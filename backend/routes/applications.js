@@ -51,8 +51,13 @@ async function loadCandidateId(req, res, next) {
 }
 
 // GET /api/applications — the caller's applications, joined with full
-// job info and scored against their profile, so the Tracker page can
-// show a match score per card without a second round trip.
+// job info and their precomputed match score (see
+// backend/scoring/precompute.js), so the Tracker page can show a score
+// per card without a second round trip. Applications are always a small
+// set per candidate, so unlike the main job listing, this just looks up
+// precomputed scores for the specific jobs involved directly rather than
+// doing a big join — with a live scoreJob() fallback for the rare case
+// where a job's precomputed row doesn't exist yet.
 router.get("/applications", requireConfig, requireAuth, loadCandidateId, async (req, res) => {
   const { data, error } = await supabaseAdmin
     .from("applications")
@@ -68,10 +73,35 @@ router.get("/applications", requireConfig, requireAuth, loadCandidateId, async (
     .eq("user_id", req.user.id)
     .maybeSingle();
 
-  const withScores = data.map((app) => ({
-    ...app,
-    jobs: app.jobs && profile ? { ...app.jobs, match: scoreJob(app.jobs, profile) } : app.jobs,
-  }));
+  const jobIds = data.map((app) => app.jobs?.id).filter(Boolean);
+  const { data: matchRows } = jobIds.length > 0
+    ? await supabaseAdmin
+        .from("candidate_job_matches")
+        .select("*")
+        .eq("candidate_id", req.candidateId)
+        .in("job_id", jobIds)
+    : { data: [] };
+  const matchByJobId = new Map((matchRows || []).map((row) => [row.job_id, row]));
+
+  const withScores = data.map((app) => {
+    if (!app.jobs) return app;
+    const row = matchByJobId.get(app.jobs.id);
+    const match = row
+      ? {
+          overall_score: row.overall_score,
+          candidate_fit: row.candidate_fit,
+          preference_fit: row.preference_fit,
+          recommendation: row.recommendation,
+          reasons: row.reasons || [],
+          concerns: row.concerns || [],
+          confidence: row.confidence,
+          hard_disqualifier: row.hard_disqualifier,
+        }
+      : profile
+        ? scoreJob(app.jobs, profile) // fallback: no precomputed row yet for this job
+        : null;
+    return { ...app, jobs: { ...app.jobs, match } };
+  });
 
   res.json(withScores);
 });
