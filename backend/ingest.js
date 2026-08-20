@@ -20,6 +20,7 @@ const { fetchClinchTalentJobs, normalizeClinchTalentJob } = require("./adapters/
 const { fetchOracleHcmJobs, normalizeOracleHcmJob } = require("./adapters/oraclehcm");
 const { analyzeJob } = require("./ai/jobAnalysis");
 const { generateEmbedding } = require("./ai/embeddings");
+const { geocodeLocation } = require("./geocoding");
 
 // Use the SERVICE ROLE key here, never the anon key — ingestion writes
 // to the jobs table and must bypass row-level security intentionally.
@@ -149,6 +150,22 @@ async function ingestEmployer(employer) {
         await supabase.from("jobs").update({ job_embedding: embedding }).eq("id", upsertedRow.id);
       } catch (err) {
         console.error(`  Embedding generation failed for "${job.title_original}": ${err.message}`);
+      }
+    }
+
+    if (upsertedRow.job_lat == null && upsertedRow.location_raw) {
+      try {
+        const coords = await geocodeLocation(upsertedRow.location_raw);
+        if (coords) {
+          await supabase.from("jobs").update({ job_lat: coords.lat, job_lng: coords.lng }).eq("id", upsertedRow.id);
+        }
+        // A null result (e.g. messy location text like "Multiple US
+        // Locations" that Nominatim can't resolve) is expected and fine
+        // — proximity scoring is a bonus on top of state-matching, not a
+        // requirement, so a job with no coordinates just doesn't get
+        // that bonus rather than breaking anything.
+      } catch (err) {
+        console.error(`  Geocoding failed for "${job.location_raw}": ${err.message}`);
       }
     }
   }
