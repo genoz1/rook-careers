@@ -151,7 +151,9 @@
       </div>
     </div>
 
-    <div class="job-list" id="jobList" data-demo="true">
+    <div id="jobListLoading" style="text-align:center; padding:60px 20px; color:#5B6B85; font-size:14px;">Loading your matches…</div>
+
+    <div class="job-list" id="jobList" data-demo="true" style="display:none;">
 
       <div class="job-row">
         <div class="score-ring" style="--pct:94;"><span>94%</span></div>
@@ -239,11 +241,26 @@
   // architecture spec. This script tries to replace it with real jobs
   // from the backend; if that fails (no auth, no data yet, backend not
   // running), the demo rows stay, with a banner explaining why.
+  //
+  // The demo rows are hidden by default (see the #jobListLoading div
+  // above) rather than shown immediately — they used to render right
+  // away in the raw HTML and only get swapped out once the fetch
+  // finished, which meant real users briefly saw old sample data flash
+  // on screen every time the dashboard loaded. Now nothing but a
+  // loading message shows until we actually know whether real data
+  // exists; the demo rows only ever appear as a genuine fallback, not
+  // as a default first frame.
   (async () => {
     const token = await rookRequireAuth();
     if (!token) return; // rookRequireAuth already redirected to login
 
     const jobList = document.getElementById('jobList');
+    const loading = document.getElementById('jobListLoading');
+
+    function revealDemo() {
+      loading.style.display = 'none';
+      jobList.style.display = '';
+    }
 
     try {
       const res = await rookApiFetch('/jobs?limit=20');
@@ -252,6 +269,7 @@
 
       if (!Array.isArray(jobs) || jobs.length === 0) {
         showBanner('No live jobs yet. Add employers and run <code>npm run ingest</code> — see ROOK-Setup-Guide.pdf. Showing example matches below in the meantime.');
+        revealDemo();
         return;
       }
 
@@ -262,8 +280,10 @@
       jobList.innerHTML = jobs.map(renderRealJobRow).join('');
       updateStats(jobs);
       showBanner('Showing ' + jobs.length + ' live job(s) from your database, ranked by your real match score.', 'info');
+      revealDemo();
     } catch (err) {
       showBanner('Could not reach the ROOK API (' + err.message + '). Showing example matches below — see ROOK-Setup-Guide.pdf to get the backend running.');
+      revealDemo();
     }
   })();
 
