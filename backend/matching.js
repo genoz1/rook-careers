@@ -202,14 +202,26 @@ function scoreJob(job, profile) {
   // ============================================================
 
   // --- Location (up to 35 points) ---
+  //
+  // Distance is now the PRIMARY signal when both sides have real
+  // coordinates — state matching is only a FALLBACK for when a ZIP or a
+  // job's coordinates aren't available yet (common early on, or for
+  // messy job-location text that fails to geocode). State boundaries
+  // are an administrative convenience, not a real proxy for how far a
+  // job actually is — someone near the FL/GA border could have a job
+  // just across the state line that's genuinely closer than one on the
+  // far side of their own state, and treating that as a hard
+  // disqualifier (as the state-only version of this did) was a real,
+  // reported flaw, not a hypothetical one.
   prefMax += 35;
   dataPointsPossible++;
 
   // A candidate can accept jobs from their home state AND any additional
-  // states they've explicitly said they want to see (preferred_states) —
-  // e.g. someone based in Florida who also wants Southeast-region jobs.
-  // Built as a Set of abbreviations so matching against it is order-
-  // independent and O(1) per check, regardless of how many states are in it.
+  // states they've explicitly said they want to see (preferred_states).
+  // In the distance-primary path below, this set no longer gates
+  // location outright — it's what keeps a genuinely FAR job from being a
+  // hard disqualifier if it's somewhere the candidate said they're open
+  // to (or willing to relocate for), rather than being the main signal.
   const acceptedStateAbbrs = new Set();
   const homeStateAbbr = stateAbbrFromName(profile.home_state);
   if (homeStateAbbr) acceptedStateAbbrs.add(homeStateAbbr);
@@ -220,45 +232,67 @@ function scoreJob(job, profile) {
   if (acceptedStateAbbrs.size > 0) dataPointsAvailable++;
 
   // A location string is only treated as genuinely remote-friendly if it
-  // doesn't also name a DIFFERENT state (one not in the candidate's
-  // accepted set) — see mentionsADifferentState's comment for why
-  // ("California... - Remote" almost always means remote-within-
-  // California, not nationwide).
+  // doesn't also name a specific state/country — see
+  // mentionsADifferentState's comment for why ("California... - Remote"
+  // almost always means remote-within-California, not nationwide).
+  // Remote is checked first and short-circuits distance entirely, since
+  // a genuinely remote role has no meaningful commute distance.
   const mentionsOtherState = mentionsADifferentState(job.location_raw, acceptedStateAbbrs);
   const mentionsForeignCountry = mentionsNonUsCountry(job.location_raw);
   const remoteFriendly = (/remote/i.test(job.location_raw || "") || job.remote_status === "remote") && !mentionsOtherState && !mentionsForeignCountry;
 
-  const matchedAcceptedState = [...acceptedStateAbbrs].find((abbr) => locationMentionsState(job.location_raw, abbr));
-  if (matchedAcceptedState) {
-    prefScore += 35;
-    reasons.push(
-      matchedAcceptedState === homeStateAbbr
-        ? "Location matches your home state"
-        : `Location matches one of your preferred states (${matchedAcceptedState})`
-    );
+  const hasRealCoordinates = profile.home_lat != null && profile.home_lng != null && job.job_lat != null && job.job_lng != null;
 
-    // --- Proximity bonus (up to 10 extra points, spec-adjacent refinement) ---
-    // Only applies within an already-accepted state — this is a
-    // refinement of "which in-state job is closer to you," not a
-    // replacement for state matching. Needs both home_lat/lng (set once
-    // when the candidate saves a ZIP in Settings) and job_lat/lng (set
-    // once at ingestion) — see backend/geocoding.js. Distance is real
-    // straight-line miles (haversine), not driving distance.
-    if (profile.home_lat != null && profile.home_lng != null && job.job_lat != null && job.job_lng != null) {
-      prefMax += 10;
-      dataPointsPossible++;
-      dataPointsAvailable++;
-      const miles = distanceMiles(profile.home_lat, profile.home_lng, job.job_lat, job.job_lng);
-      let bonus = 0;
-      if (miles <= 25) bonus = 10;
-      else if (miles <= 75) bonus = 6;
-      else if (miles <= 150) bonus = 3;
-      prefScore += bonus;
-      if (bonus > 0) reasons.push(`About ${Math.round(miles)} miles from you`);
-    }
-  } else if (remoteFriendly) {
+  if (remoteFriendly) {
     prefScore += 28;
     reasons.push("Remote-friendly role");
+  } else if (hasRealCoordinates) {
+    // --- Distance-primary path ---
+    dataPointsAvailable++; // this data point (real coordinates) was actually available
+    const miles = distanceMiles(profile.home_lat, profile.home_lng, job.job_lat, job.job_lng);
+    const jobStateAbbr = [...acceptedStateAbbrs].find((abbr) => locationMentionsState(job.location_raw, abbr))
+      || Object.values(STATE_ABBR).find((abbr) => locationMentionsState(job.location_raw, abbr));
+    const inAcceptedRegion = acceptedStateAbbrs.size === 0 || [...acceptedStateAbbrs].some((abbr) => locationMentionsState(job.location_raw, abbr));
+
+    if (miles <= 25) {
+      prefScore += 35;
+      reasons.push(`About ${Math.round(miles)} miles from you`);
+    } else if (miles <= 75) {
+      prefScore += 30;
+      reasons.push(`About ${Math.round(miles)} miles from you`);
+    } else if (miles <= 150) {
+      prefScore += 22;
+      reasons.push(`About ${Math.round(miles)} miles from you`);
+    } else if (miles <= 300) {
+      prefScore += 14;
+      reasons.push(`About ${Math.round(miles)} miles from you`);
+    } else if (inAcceptedRegion || profile.willing_to_relocate) {
+      // Genuinely far, but somewhere the candidate said they're open to
+      // (an accepted state/region) or willing to relocate for — real
+      // partial credit, not a hard disqualifier.
+      prefScore += 8;
+      reasons.push(
+        profile.willing_to_relocate
+          ? "Far from you, but you've indicated openness to relocation"
+          : "Far from you, but within a region you said you're open to"
+      );
+    } else {
+      concerns.push(`Location (${job.location_raw}, about ${Math.round(miles)} miles away) is far outside your area and not in a region you've said you're open to`);
+      hardDisqualifier = true;
+      prefCap = Math.min(prefCap, 65);
+    }
+  } else if (acceptedStateAbbrs.size > 0 && [...acceptedStateAbbrs].some((abbr) => locationMentionsState(job.location_raw, abbr))) {
+    // --- Fallback: no real coordinates on one or both sides, so fall
+    // back to the state-matching logic this replaced as the primary
+    // signal. Reasonable when a ZIP hasn't been set yet, or a job's
+    // location text failed to geocode.
+    const matchedAbbr = [...acceptedStateAbbrs].find((abbr) => locationMentionsState(job.location_raw, abbr));
+    prefScore += 35;
+    reasons.push(
+      matchedAbbr === homeStateAbbr
+        ? "Location matches your home state"
+        : `Location matches one of your preferred states (${matchedAbbr})`
+    );
   } else if (profile.willing_to_relocate) {
     prefScore += 14;
     reasons.push("You've indicated openness to relocation");
