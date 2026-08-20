@@ -47,20 +47,7 @@ function parseWorkdayIdentifier(identifier) {
 // full descriptions for obviously-irrelevant jobs (warehouse, lab tech,
 // packaging) wastes most of the run's time on titles that will just get
 // filtered out afterward anyway.
-const STRONG_TITLE_SIGNALS = [
-  "sales", "account executive", "territory manager", "business development", "key account",
-];
-const ROLE_WORDS = ["representative", "specialist", "manager", "executive", "consultant"];
-const DOMAIN_WORDS = [
-  "sales", "territory", "account", "veterinary", "medical", "pharmaceutical", "diagnostic", "clinical",
-];
-function titleLooksRelevant(title = "") {
-  const t = title.toLowerCase();
-  if (STRONG_TITLE_SIGNALS.some((k) => t.includes(k))) return true;
-  const hasRoleWord = ROLE_WORDS.some((k) => t.includes(k));
-  const hasDomainWord = DOMAIN_WORDS.some((k) => t.includes(k));
-  return hasRoleWord && hasDomainWord;
-}
+const { titleLooksRelevant } = require('../relevanceFilter');
 
 // Wraps fetch() with a timeout so one stalled request can't hang the
 // entire ingestion run forever — without this, a single unresponsive
