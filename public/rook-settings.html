@@ -104,6 +104,14 @@
           <div class="field"><label>City</label><input type="text" id="fieldCity"></div>
           <div class="field"><label>State</label><input type="text" id="fieldState"></div>
         </div>
+        <div class="field-row">
+          <div class="field">
+            <label>ZIP Code</label>
+            <input type="text" id="fieldZip" placeholder="33602" maxlength="5">
+            <div style="font-size:11.5px; color:#8B96AB; margin-top:4px;">Used to rank in-state jobs by how close they are to you.</div>
+          </div>
+          <div class="field"></div>
+        </div>
         <a href="#" class="btn btn-primary" onclick="saveProfilePanel('profile', this); return false;">Save Changes</a>
         <span id="profileSaveStatus" style="font-size:12.5px; color:#00806E; margin-left:10px; display:none;">Saved ✓</span>
       </div>
@@ -287,6 +295,7 @@ function addRegion(region) {
     setVal('fieldPhone', currentProfile.phone);
     setVal('fieldCity', currentProfile.home_city);
     setVal('fieldState', currentProfile.home_state);
+    setVal('fieldZip', currentProfile.home_zip);
     setVal('fieldMinSalary', currentProfile.minimum_base_salary);
     setVal('fieldTargetOte', currentProfile.target_ote);
     setVal('fieldMaxTravel', currentProfile.maximum_travel_percentage != null ? currentProfile.maximum_travel_percentage + '%' : '');
@@ -323,6 +332,7 @@ async function saveProfilePanel(panel, btn) {
       phone: document.getElementById('fieldPhone').value.trim() || null,
       home_city: document.getElementById('fieldCity').value.trim() || null,
       home_state: document.getElementById('fieldState').value.trim() || null,
+      home_zip: document.getElementById('fieldZip').value.trim() || null,
     };
   } else if (panel === 'preferences') {
     const preferredStates = Array.from(document.querySelectorAll('.state-check:checked')).map((el) => el.value);
