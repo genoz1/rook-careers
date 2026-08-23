@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="assets/favicon.ico" sizes="any">
+  <meta name="theme-color" content="#071E41">
+  <title>Post a Job — ROOK for Recruiters</title>
+  <meta name="description" content="Post a medical or veterinary sales job free — ROOK matches it directly with qualified candidates.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --navy:#071E41; --royal:#1463FF; --teal:#12B8A6; --gray:#F5F7FA; --white:#FFFFFF;
+      --muted:#5B6B85; --border:#E3E8F0; --radius:14px;
+      --font-display:'Space Grotesk', sans-serif; --font-body:'Inter', sans-serif;
+    }
+    *{box-sizing:border-box; margin:0; padding:0;}
+    body{font-family:var(--font-body); color:var(--navy); background:var(--gray); -webkit-font-smoothing:antialiased;}
+    h1,h2,h3{font-family:var(--font-display); letter-spacing:-0.01em;}
+    a{color:inherit; text-decoration:none;}
+    .btn{display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:12px 24px; border-radius:999px; font-size:14px; font-weight:600; cursor:pointer; border:none;}
+    .btn-primary{background:var(--royal); color:#fff;}
+    .btn-primary:disabled{background:#B9C6DE; cursor:not-allowed;}
+    .btn-outline{background:#fff; color:var(--navy); border:1px solid var(--border);}
+
+    .topbar{background:var(--navy); padding:16px 32px; display:flex; align-items:center; justify-content:space-between;}
+    .topbar .logo{font-family:var(--font-display); font-weight:700; font-size:18px; color:#fff; display:flex; align-items:center; gap:8px;}
+
+    .hero{max-width:680px; margin:0 auto; padding:48px 24px 8px; text-align:center;}
+    .hero-eyebrow{color:var(--teal); font-size:12.5px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; margin-bottom:14px;}
+    .hero h1{font-size:32px; margin-bottom:12px;}
+    .hero p{color:var(--muted); font-size:15px; line-height:1.6;}
+
+    .container{max-width:640px; margin:0 auto; padding:24px 24px 60px;}
+    .card{background:#fff; border:1px solid var(--border); border-radius:var(--radius); padding:32px;}
+    .field-row{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;}
+    .field{display:flex; flex-direction:column; gap:6px;}
+    .field.full{grid-column:1/-1;}
+    .field label{font-size:12.5px; font-weight:600; color:var(--muted);}
+    .field label .req{color:#C23B3B;}
+    .field input, .field textarea{padding:11px 13px; border-radius:9px; border:1px solid var(--border); font-size:14px; font-family:var(--font-body);}
+    .field textarea{resize:vertical; min-height:120px;}
+    .section-label{font-size:13px; font-weight:700; color:var(--navy); margin:24px 0 12px; text-transform:uppercase; letter-spacing:0.02em;}
+    .msg{font-size:13px; margin-top:14px; line-height:1.5;}
+    .msg.error{color:#C23B3B;}
+    .msg.success{color:#00806E;}
+    .note{font-size:12px; color:#8B96AB; margin-top:16px; line-height:1.5;}
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="index.html" class="logo">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+    ROOK
+  </a>
+</div>
+
+<div class="hero">
+  <div class="hero-eyebrow">For Recruiters — Free</div>
+  <h1>Post a role, reach real candidates</h1>
+  <p>Free to post. Every submission is reviewed before it goes live, and matched directly against ROOK's candidate pool the same way employer-verified jobs are.</p>
+</div>
+
+<div class="container">
+  <div class="card" id="formCard">
+    <div class="section-label">Job Details</div>
+    <div class="field-row">
+      <div class="field full"><label>Job Title <span class="req">*</span></label><input type="text" id="jobTitle" placeholder="Territory Sales Manager"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Location</label><input type="text" id="location" placeholder="Tampa, FL"></div>
+      <div class="field"><label>Compensation</label><input type="text" id="compensation" placeholder="$90K–$120K + commission"></div>
+    </div>
+    <div class="field-row">
+      <div class="field full"><label>Hiring Company <span style="font-weight:400;">(optional — leave blank for a confidential search)</span></label><input type="text" id="companyName" placeholder="Company name, if you can share it"></div>
+    </div>
+    <div class="field-row">
+      <div class="field full"><label>Job Description <span class="req">*</span></label><textarea id="description" placeholder="Responsibilities, requirements, what makes this role a fit..."></textarea></div>
+    </div>
+
+    <div class="section-label">Your Contact Info</div>
+    <div class="field-row">
+      <div class="field"><label>Your Name <span class="req">*</span></label><input type="text" id="recruiterName"></div>
+      <div class="field"><label>Your Email <span class="req">*</span></label><input type="email" id="recruiterEmail"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Agency / Company</label><input type="text" id="recruiterCompany" placeholder="Your staffing firm's name"></div>
+      <div class="field"><label>How should candidates reach you?</label><input type="text" id="contactMethod" placeholder="Email me directly, or apply via..."></div>
+    </div>
+
+    <a href="#" class="btn btn-primary" id="submitBtn" onclick="submitPosting(); return false;" style="width:100%; margin-top:8px;">Submit for Review</a>
+    <div class="msg" id="formMsg"></div>
+    <div class="note">Submissions are reviewed before appearing on ROOK — this keeps every listing candidates see genuinely trustworthy, not a flood of unverified postings.</div>
+  </div>
+</div>
+
+<script>
+async function submitPosting() {
+  const msg = document.getElementById('formMsg');
+  const btn = document.getElementById('submitBtn');
+
+  const payload = {
+    job_title: document.getElementById('jobTitle').value.trim(),
+    location_raw: document.getElementById('location').value.trim(),
+    compensation_text: document.getElementById('compensation').value.trim(),
+    company_name: document.getElementById('companyName').value.trim() || null,
+    description_text: document.getElementById('description').value.trim(),
+    recruiter_name: document.getElementById('recruiterName').value.trim(),
+    recruiter_email: document.getElementById('recruiterEmail').value.trim(),
+    recruiter_company: document.getElementById('recruiterCompany').value.trim() || null,
+    recruiter_contact_method: document.getElementById('contactMethod').value.trim() || null,
+  };
+
+  if (!payload.job_title || !payload.description_text || !payload.recruiter_name || !payload.recruiter_email) {
+    msg.className = 'msg error';
+    msg.textContent = 'Please fill in job title, description, your name, and your email — those are required.';
+    return;
+  }
+
+  btn.textContent = 'Submitting...';
+  btn.style.pointerEvents = 'none';
+  try {
+    const res = await fetch('/api/recruiter-postings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Something went wrong.');
+
+    document.getElementById('formCard').innerHTML = `
+      <div style="text-align:center; padding:20px 0;">
+        <h2 style="font-size:20px; margin-bottom:10px;">Submitted ✓</h2>
+        <p style="color:var(--muted); font-size:14px; line-height:1.6;">Your posting is in review. Once approved, it'll be live on ROOK and matched against candidates automatically — no further action needed from you.</p>
+      </div>`;
+  } catch (err) {
+    msg.className = 'msg error';
+    msg.textContent = err.message;
+    btn.textContent = 'Submit for Review';
+    btn.style.pointerEvents = '';
+  }
+}
+</script>
+
+</body>
+</html>
