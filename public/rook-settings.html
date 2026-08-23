@@ -358,8 +358,19 @@ async function saveProfilePanel(panel, btn) {
       currentProfile = await res.json();
       const status = document.getElementById(panel + 'SaveStatus');
       if (status) {
+        // Saving city/state/ZIP or job preferences (comp, travel,
+        // relocation, preferred states) all feed directly into scoring
+        // — a save here does trigger a real rescore of every job
+        // automatically, but that happens in the background and can
+        // take anywhere from a few seconds to around a minute depending
+        // on how many active jobs exist. Reloading the dashboard right
+        // after saving doesn't force that recalculation to happen faster
+        // (it's already running) — it just might catch it mid-flight.
+        // Saying so explicitly here is the fix for that, not making
+        // page reloads themselves trigger scoring work.
+        status.textContent = 'Saved ✓ — your matches are recalculating in the background (may take up to a minute)';
         status.style.display = 'inline';
-        setTimeout(() => (status.style.display = 'none'), 2500);
+        setTimeout(() => (status.style.display = 'none'), 6000);
       }
     }
   } catch (err) {
