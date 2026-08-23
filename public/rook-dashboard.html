@@ -151,6 +151,11 @@
       </div>
     </div>
 
+    <label style="display:flex; align-items:center; gap:7px; font-size:12.5px; color:#5B6B85; font-weight:600; margin-bottom:14px; cursor:pointer;">
+      <input type="checkbox" id="showRecruiterToggle" checked onchange="applyRecruiterToggle()">
+      Show recruiter-posted jobs
+    </label>
+
     <div id="jobListLoading" style="text-align:center; padding:60px 20px; color:#5B6B85; font-size:14px;">Loading your matches…</div>
 
     <div class="job-list" id="jobList" data-demo="true" style="display:none;">
@@ -250,6 +255,8 @@
   // loading message shows until we actually know whether real data
   // exists; the demo rows only ever appear as a genuine fallback, not
   // as a default first frame.
+  let currentJobs = [];
+
   (async () => {
     const token = await rookRequireAuth();
     if (!token) return; // rookRequireAuth already redirected to login
@@ -276,8 +283,9 @@
       // Real jobs exist — replace the demo rows and update the stat
       // cards / greeting to reflect real counts instead of the original
       // hardcoded mockup numbers.
+      currentJobs = jobs;
       jobList.dataset.demo = 'false';
-      jobList.innerHTML = jobs.map(renderRealJobRow).join('');
+      applyRecruiterToggle();
       updateStats(jobs);
       showBanner('Showing ' + jobs.length + ' live job(s) from your database, ranked by your real match score.', 'info');
       revealDemo();
@@ -316,6 +324,14 @@
       `We found ${jobs.length} opportunit${jobs.length === 1 ? 'y' : 'ies'} matching your career profile.`;
   }
 
+  function applyRecruiterToggle() {
+    const showRecruiters = document.getElementById('showRecruiterToggle').checked;
+    const visible = showRecruiters ? currentJobs : currentJobs.filter((j) => j.source_type !== 'recruiter_posted');
+    document.getElementById('jobList').innerHTML = visible.length > 0
+      ? visible.map(renderRealJobRow).join('')
+      : '<div style="text-align:center; padding:40px 20px; color:#5B6B85; font-size:14px;">No jobs match with this filter.</div>';
+  }
+
   function renderRealJobRow(job) {
     const comp = job.compensation_text || (job.salary_min ? `$${job.salary_min}${job.salary_max ? '–$' + job.salary_max : '+'}` : '');
     const match = job.match; // present when the request was authenticated — see rook-auth.js / jobs.js
@@ -351,15 +367,40 @@
       ? `<div style="font-size:11.5px; color:#1463FF; font-weight:600; margin-top:4px;">ⓘ ${escapeHtml(job.employer_note)}</div>`
       : '';
 
+    // Recruiter-posted jobs get a visibly distinct treatment — a purple
+    // accent border and a clear badge — rather than blending in with
+    // employer-verified, ATS-pulled listings. The distinction matters:
+    // recruiter postings are reviewed before going live, but they're
+    // not independently verifiable against a real employer system the
+    // way every other job on ROOK is.
+    const isRecruiterPosted = job.source_type === 'recruiter_posted';
+    const rowStyle = isRecruiterPosted ? 'border-left:4px solid #7C3AED; background:#FAF8FF;' : '';
+    const recruiterBadge = isRecruiterPosted
+      ? `<span style="font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:99px; background:#7C3AED18; color:#7C3AED; text-transform:uppercase; letter-spacing:0.02em;">Posted by Recruiter</span>`
+      : '';
+
+    // Non-subscribed candidates get this shape from the API (see
+    // redactForNonSubscriber in backend/routes/jobs.js) — company_name,
+    // source_url, and any recruiter contact fields are simply absent.
+    // Real match score and reasons stay fully visible; only the "who"
+    // and "how to apply" are gated, same principle as MedReps.
+    const companyLine = job.subscription_required
+      ? `<span style="color:#7C3AED; font-weight:600;">🔒 Subscribe to see who's hiring</span> — ${escapeHtml(job.location_raw || '')} ${comp ? '&nbsp;·&nbsp; ' + escapeHtml(comp) : ''}`
+      : `${escapeHtml(job.company_name || (isRecruiterPosted ? 'Confidential search' : ''))} — ${escapeHtml(job.location_raw || '')} ${comp ? '&nbsp;·&nbsp; ' + escapeHtml(comp) : ''}`;
+    const primaryActionBtn = job.subscription_required
+      ? `<a href="rook-pricing.html" class="btn btn-primary btn-sm">Subscribe to Unlock</a>`
+      : `<a href="${job.source_url || '#'}" target="_blank" class="btn btn-outline btn-sm">View Original</a>`;
+
     return `
-      <div class="job-row" data-job-id="${escapeHtml(job.id)}">
+      <div class="job-row" data-job-id="${escapeHtml(job.id)}" style="${rowStyle}">
         <div class="score-ring" style="--pct:${scorePct};"><span>${scoreDisplay}</span></div>
         <div class="job-info">
           <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
             <h4 style="margin:0;">${escapeHtml(job.title_original || job.title_normalized || 'Untitled role')}</h4>
             ${recBadge}
+            ${recruiterBadge}
           </div>
-          <div class="company">${escapeHtml(job.company_name || '')} — ${escapeHtml(job.location_raw || '')} ${comp ? '&nbsp;·&nbsp; ' + escapeHtml(comp) : ''}</div>
+          <div class="company">${companyLine}</div>
           ${subScores}
           ${(reasonTags || concernTags) ? `<div class="why-row">${reasonTags}${concernTags}</div>` : ''}
           ${disqualifierNote}
@@ -369,7 +410,7 @@
         </div>
         <div class="job-actions">
           <a href="rook-job-analysis.html?job=${escapeHtml(job.id)}" class="btn btn-outline btn-sm">View Analysis</a>
-          <a href="${job.source_url || '#'}" target="_blank" class="btn btn-outline btn-sm">View Original</a>
+          ${primaryActionBtn}
           <button type="button" class="btn btn-outline btn-sm" onclick="toggleSave('${escapeHtml(job.id)}', this)">${savedLabel}</button>
           <button type="button" class="btn btn-outline btn-sm" onclick="markApplied('${escapeHtml(job.id)}', this)" ${isApplied ? 'disabled' : ''}>${isApplied ? 'Applied ✓' : 'Mark Applied'}</button>
           <button type="button" class="btn btn-outline btn-sm" onclick="dismissJob('${escapeHtml(job.id)}', this)" style="color:#8B96AB;">Not interested</button>
