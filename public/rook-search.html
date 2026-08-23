@@ -162,6 +162,10 @@
       <div class="check-row"><input type="checkbox" class="filter-travel" value="25-50"> 25–50%</div>
       <div class="check-row"><input type="checkbox" class="filter-travel" value="over50"> 50%+</div>
     </div>
+    <div class="filter-group">
+      <label>Source</label>
+      <div class="check-row"><input type="checkbox" id="showRecruiterFilter" checked> Show recruiter-posted jobs</div>
+    </div>
     <a href="#" class="clear-link" onclick="clearAllFilters(); return false;">Clear all filters</a>
   </aside>
 
@@ -373,6 +377,7 @@
       document.getElementById('filterMatchScore').addEventListener('input', applyFiltersAndRender);
       document.getElementById('filterComp').addEventListener('input', applyFiltersAndRender);
       document.getElementById('sortSelect').addEventListener('change', applyFiltersAndRender);
+      document.getElementById('showRecruiterFilter').addEventListener('change', applyFiltersAndRender);
     } catch (err) {
       showBanner('Could not reach the ROOK API (' + err.message + '). Showing example matches below — see ROOK-Setup-Guide.pdf to get the backend running.');
       revealDemo();
@@ -457,6 +462,10 @@
         if (!matchesAny) return false;
       }
 
+      if (!document.getElementById('showRecruiterFilter').checked && job.source_type === 'recruiter_posted') {
+        return false;
+      }
+
       if (nearLocationCoords && (job.job_lat == null || job.job_lng == null)) {
         return false; // no way to gauge distance for this job, so it can't participate in a "near X" search
       }
@@ -518,12 +527,29 @@
       ? `<div style="font-size:12px; color:var(--royal); font-weight:600; margin-top:4px;">${Math.round(distanceMilesClient(nearLocationCoords.lat, nearLocationCoords.lng, job.job_lat, job.job_lng))} miles from your search location</div>`
       : '';
 
+    // Same treatment as the dashboard: recruiter-posted jobs get a
+    // visibly distinct card (purple accent, badge) rather than blending
+    // in with employer-verified listings, and non-subscribed candidates
+    // see their real match score/reasons but not the employer identity
+    // or apply link — see redactForNonSubscriber in backend/routes/jobs.js.
+    const isRecruiterPosted = job.source_type === 'recruiter_posted';
+    const rowStyle = isRecruiterPosted ? 'border-left:4px solid #7C3AED; background:#FAF8FF;' : '';
+    const recruiterBadge = isRecruiterPosted
+      ? `<span style="font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:99px; background:#7C3AED18; color:#7C3AED; text-transform:uppercase; letter-spacing:0.02em; margin-left:8px;">Posted by Recruiter</span>`
+      : '';
+    const companyLine = job.subscription_required
+      ? `<span style="color:#7C3AED; font-weight:600;">🔒 Subscribe to see who's hiring</span> — ${escapeHtml(job.location_raw || '')} ${comp ? '&nbsp;·&nbsp; ' + escapeHtml(comp) : ''}`
+      : `${escapeHtml(job.company_name || (isRecruiterPosted ? 'Confidential search' : ''))} — ${escapeHtml(job.location_raw || '')} ${comp ? '&nbsp;·&nbsp; ' + escapeHtml(comp) : ''}`;
+    const primaryActionBtn = job.subscription_required
+      ? `<a href="rook-pricing.html" class="btn btn-primary btn-sm">Subscribe to Unlock</a>`
+      : `<a href="${job.source_url || '#'}" target="_blank" class="btn btn-outline btn-sm">View Original</a>`;
+
     return `
-      <div class="job-row">
+      <div class="job-row" style="${rowStyle}">
         <div class="score-ring" style="--pct:${score ?? 0};"><span>${scoreDisplay}</span></div>
         <div class="job-info">
-          <h4>${escapeHtml(job.title_original || job.title_normalized || 'Untitled role')}</h4>
-          <div class="company">${escapeHtml(job.company_name || '')} — ${escapeHtml(job.location_raw || '')} ${comp ? '&nbsp;·&nbsp; ' + escapeHtml(comp) : ''}</div>
+          <h4>${escapeHtml(job.title_original || job.title_normalized || 'Untitled role')}${recruiterBadge}</h4>
+          <div class="company">${companyLine}</div>
           ${nearDistance}
           ${tags ? `<div class="tag-row">${tags}</div>` : ''}
           <div class="job-meta-line">${job.date_posted ? 'Posted ' + escapeHtml(job.date_posted) : ''} · Sourced via ${escapeHtml(job.source_type || 'unknown')}</div>
@@ -531,7 +557,7 @@
         <div class="job-actions">
           <span class="match-level ${level.cls}">${level.label}</span>
           <a href="rook-job-analysis.html?job=${escapeHtml(job.id)}" class="btn btn-outline btn-sm">View Analysis</a>
-          <a href="${job.source_url || '#'}" target="_blank" class="btn btn-outline btn-sm">View Original</a>
+          ${primaryActionBtn}
         </div>
       </div>`;
   }
