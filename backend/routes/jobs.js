@@ -100,7 +100,11 @@ function isSubscribed(profile) {
 }
 
 function redactForNonSubscriber(job) {
-  const { company_name, source_url, application_url, ...rest } = job;
+  const {
+    company_name, source_url, application_url,
+    recruiter_name, recruiter_email, recruiter_company, recruiter_contact_method, // same gate applies to recruiter postings
+    ...rest
+  } = job;
   return { ...rest, subscription_required: true };
 }
 
@@ -149,6 +153,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
       .from("jobs")
       .select("*")
       .eq("status", "active")
+      .eq("moderation_status", "approved")
       .order("date_posted", { ascending: false })
       .limit(Number(limit));
     if (industry) query = query.eq("industry", industry);
@@ -181,7 +186,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
   if (!profile) {
     // No profile yet at all (onboarding not completed) — nothing to
     // score against. Same as before: fall back to the plain job list.
-    let query = supabaseAnon.from("jobs").select("*").eq("status", "active").order("date_posted", { ascending: false }).limit(Number(limit));
+    let query = supabaseAnon.from("jobs").select("*").eq("status", "active").eq("moderation_status", "approved").order("date_posted", { ascending: false }).limit(Number(limit));
     if (industry) query = query.eq("industry", industry);
     if (state) query = query.eq("state", state);
     const { data } = await query;
@@ -195,6 +200,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
       .eq("candidate_id", profile.id)
       .eq("dismissed", false)
       .eq("jobs.status", "active")
+      .eq("jobs.moderation_status", "approved")
       .order("overall_score", { ascending: false, nullsFirst: false })
       .limit(Number(limit));
     if (industry) query = query.eq("jobs.industry", industry);
@@ -252,6 +258,14 @@ router.get("/jobs/:id", requireConfig, optionalAuth, async (req, res) => {
 
   if (error) return res.status(500).json({ error: error.message });
   if (!data) return res.status(404).json({ error: "Job not found" });
+  if (data.moderation_status && data.moderation_status !== "approved") {
+    // Same protection as the listing endpoints — a pending or rejected
+    // recruiter posting shouldn't be viewable even via a direct/guessed
+    // link. ATS-ingested jobs always have moderation_status='approved'
+    // by default, so this only ever actually blocks something for
+    // recruiter-submitted rows.
+    return res.status(404).json({ error: "Job not found" });
+  }
 
   if (!req.user) {
     return res.json({
