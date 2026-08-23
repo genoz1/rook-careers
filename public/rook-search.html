@@ -124,6 +124,14 @@
       <input type="text" id="filterKeyword" placeholder="Title, company, product...">
     </div>
     <div class="filter-group">
+      <label>Show jobs near</label>
+      <div style="display:flex; gap:6px;">
+        <input type="text" id="nearLocationInput" placeholder="Tampa, FL or 33602" style="flex:1;">
+        <a href="#" class="btn btn-outline" onclick="searchNearLocation(); return false;" style="padding:9px 14px; font-size:13px; white-space:nowrap;">Go</a>
+      </div>
+      <div id="nearLocationStatus" style="font-size:11.5px; color:#8B96AB; margin-top:6px;"></div>
+    </div>
+    <div class="filter-group">
       <label>Location</label>
       <div class="check-row"><input type="checkbox" class="filter-location" value="central-fl"> Central Florida</div>
       <div class="check-row"><input type="checkbox" class="filter-location" value="northeast-fl"> Northeast Florida</div>
@@ -269,6 +277,56 @@
   // title_original, and description_text is the only option that
   // actually works with the data that exists.
   let allJobs = [];
+  let nearLocationCoords = null; // { lat, lng } once a "show jobs near" search is active
+
+  function distanceMilesClient(lat1, lng1, lat2, lng2) {
+    if (lat1 == null || lng1 == null || lat2 == null || lng2 == null) return Infinity;
+    const R = 3958.8;
+    const toRad = (deg) => (deg * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLng = toRad(lng2 - lng1);
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  async function searchNearLocation() {
+    const query = document.getElementById('nearLocationInput').value.trim();
+    const status = document.getElementById('nearLocationStatus');
+    if (!query) {
+      // Empty input + Go pressed = clear the active "near" search and
+      // go back to normal sorting.
+      nearLocationCoords = null;
+      status.textContent = '';
+      applyFiltersAndRender();
+      return;
+    }
+
+    status.textContent = 'Looking up "' + query + '"...';
+    try {
+      const res = await rookApiFetch('/geocode?q=' + encodeURIComponent(query));
+      const data = await res.json();
+      if (!res.ok) {
+        nearLocationCoords = null;
+        status.textContent = data.error || 'Could not find that location.';
+        applyFiltersAndRender();
+        return;
+      }
+      nearLocationCoords = data;
+      status.innerHTML = `Showing jobs closest to "${escapeHtml(query)}" first. <a href="#" onclick="clearNearLocation(); return false;" style="color:var(--royal); font-weight:600;">Clear</a>`;
+      applyFiltersAndRender();
+    } catch (err) {
+      nearLocationCoords = null;
+      status.textContent = 'Could not reach the location lookup: ' + err.message;
+      applyFiltersAndRender();
+    }
+  }
+
+  function clearNearLocation() {
+    nearLocationCoords = null;
+    document.getElementById('nearLocationInput').value = '';
+    document.getElementById('nearLocationStatus').textContent = '';
+    applyFiltersAndRender();
+  }
 
   const FL_REGION_CITIES = {
     // Approximate — not real geocoding, just a reasonable city list per
@@ -399,10 +457,25 @@
         if (!matchesAny) return false;
       }
 
+      if (nearLocationCoords && (job.job_lat == null || job.job_lng == null)) {
+        return false; // no way to gauge distance for this job, so it can't participate in a "near X" search
+      }
+
       return true;
     });
 
     filtered.sort((a, b) => {
+      if (nearLocationCoords) {
+        // "Show jobs near" is active — this takes priority over the
+        // normal sort dropdown while it's active, since the whole point
+        // is proximity to that specific place, not the general sort
+        // criteria. Jobs without coordinates were already filtered out
+        // above them being sorted, since there's no way to gauge their
+        // distance at all.
+        const distA = distanceMilesClient(nearLocationCoords.lat, nearLocationCoords.lng, a.job_lat, a.job_lng);
+        const distB = distanceMilesClient(nearLocationCoords.lat, nearLocationCoords.lng, b.job_lat, b.job_lng);
+        return distA - distB;
+      }
       if (sortBy === 'newest') {
         return new Date(b.last_seen_at || b.date_posted || 0) - new Date(a.last_seen_at || a.date_posted || 0);
       }
@@ -441,6 +514,9 @@
     const scoreDisplay = score != null ? `${score}%` : '—';
     const level = matchLevelInfo(score);
     const tags = (match?.reasons || []).slice(0, 3).map((r) => `<span class="jtag">${escapeHtml(r)}</span>`).join('');
+    const nearDistance = nearLocationCoords
+      ? `<div style="font-size:12px; color:var(--royal); font-weight:600; margin-top:4px;">${Math.round(distanceMilesClient(nearLocationCoords.lat, nearLocationCoords.lng, job.job_lat, job.job_lng))} miles from your search location</div>`
+      : '';
 
     return `
       <div class="job-row">
@@ -448,6 +524,7 @@
         <div class="job-info">
           <h4>${escapeHtml(job.title_original || job.title_normalized || 'Untitled role')}</h4>
           <div class="company">${escapeHtml(job.company_name || '')} — ${escapeHtml(job.location_raw || '')} ${comp ? '&nbsp;·&nbsp; ' + escapeHtml(comp) : ''}</div>
+          ${nearDistance}
           ${tags ? `<div class="tag-row">${tags}</div>` : ''}
           <div class="job-meta-line">${job.date_posted ? 'Posted ' + escapeHtml(job.date_posted) : ''} · Sourced via ${escapeHtml(job.source_type || 'unknown')}</div>
         </div>
