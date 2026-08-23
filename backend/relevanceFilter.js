@@ -26,6 +26,15 @@ const EXCLUSION_SIGNALS = [
   "human resources", "finance", "accounting", "legal counsel", "compliance officer",
   "customer service", "help desk", "warehouse", "logistics", "procurement",
   "biomedical engineer", "lab technician", "research scientist", "r&d",
+  // Sales-ADJACENT roles — these all contain "sales" (which would
+  // otherwise auto-pass via STRONG_TITLE_SIGNALS below), but describe
+  // training, supporting, or managing sales operations rather than an
+  // actual quota-carrying field sales role. A real, reported case:
+  // "Sales Training Manager" matched the old filter purely because it
+  // contains the word "sales", despite being a training role, not a
+  // selling role.
+  "sales training", "sales enablement", "sales operations", "sales excellence",
+  "sales compensation", "sales analytics", "sales systems", "sales strategy",
 ];
 
 const STRONG_TITLE_SIGNALS = [
