@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="assets/favicon.ico" sizes="any">
+<link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="icon" href="assets/favicon-16.png" type="image/png" sizes="16x16">
+<link rel="apple-touch-icon" href="assets/rook-icon-180.png">
+<link rel="icon" href="assets/rook-icon-192.png" type="image/png" sizes="192x192">
+<meta name="theme-color" content="#071E41">
+<title>Recruiter Log In — ROOK</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --navy:#071E41; --royal:#1463FF; --teal:#12B8A6; --gray:#F5F7FA; --recruiter:#7C3AED;
+    --muted:#5B6B85; --border:#E3E8F0;
+    --font-display:'Space Grotesk', sans-serif; --font-body:'Inter', sans-serif;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    font-family:var(--font-body); color:var(--navy); background:var(--gray);
+    min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:24px;
+  }
+  h1,h2{font-family:var(--font-display); letter-spacing:-0.01em;}
+  a{color:var(--recruiter); text-decoration:none;}
+  .logo{display:flex; align-items:center; gap:12px; font-family:var(--font-display); font-weight:700; font-size:22px; margin-bottom:14px;}
+  .eyebrow{color:var(--recruiter); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:24px;}
+  .card{background:#fff; border-radius:16px; padding:36px; width:100%; max-width:400px; box-shadow:0 20px 45px -18px rgba(11,29,58,0.2);}
+  .tabs{display:flex; gap:4px; background:var(--gray); border-radius:10px; padding:4px; margin-bottom:24px;}
+  .tab{flex:1; text-align:center; padding:9px; border-radius:8px; font-size:13.5px; font-weight:600; color:var(--muted); cursor:pointer;}
+  .tab.active{background:#fff; color:var(--navy); box-shadow:0 1px 3px rgba(11,29,58,0.1);}
+  h2{font-size:20px; margin-bottom:6px;}
+  .sub{font-size:13.5px; color:var(--muted); margin-bottom:22px;}
+  .field{display:flex; flex-direction:column; gap:6px; margin-bottom:16px;}
+  .field label{font-size:12.5px; font-weight:600; color:var(--muted);}
+  .field input{padding:11px 13px; border-radius:9px; border:1px solid var(--border); font-size:14px; font-family:var(--font-body);}
+  .btn{width:100%; padding:12px; border-radius:999px; border:none; background:var(--recruiter); color:#fff; font-size:14.5px; font-weight:600; cursor:pointer; margin-top:6px;}
+  .btn:disabled{background:#C9B9F5; cursor:not-allowed;}
+  .msg{font-size:13px; margin-top:14px; text-align:center; line-height:1.5;}
+  .msg.error{color:#C23B3B;}
+  .msg.success{color:#00806E;}
+  .config-warning{
+    max-width:400px; width:100%; margin-top:16px; font-size:12px; color:var(--muted);
+    background:#fff; border-left:3px solid #B98900; border-radius:8px; padding:12px 14px; line-height:1.5;
+  }
+  .switch-note{font-size:12.5px; color:var(--muted); margin-top:18px; text-align:center;}
+</style>
+</head>
+<body>
+
+<div class="logo">
+  <img src="assets/rook-icon-192.png" alt="ROOK" style="height:46px; width:auto; display:block;">
+  <span style="font-family:var(--font-display); font-weight:700; font-size:36px; letter-spacing:-0.02em; color:var(--navy); line-height:1;">ROOK</span>
+</div>
+<div class="eyebrow">Recruiter Portal</div>
+
+<div class="card">
+  <div class="tabs">
+    <div class="tab active" id="tabSignin" onclick="switchTab('signin')">Log In</div>
+    <div class="tab" id="tabSignup" onclick="switchTab('signup')">Create Account</div>
+  </div>
+
+  <div id="panelSignin">
+    <h2>Welcome back</h2>
+    <div class="sub">Log in to manage your postings.</div>
+    <div class="field"><label>Email</label><input type="email" id="signinEmail" autocomplete="email"></div>
+    <div class="field"><label>Password</label><input type="password" id="signinPassword" autocomplete="current-password"></div>
+    <button class="btn" id="signinBtn" onclick="handleSignIn()">Log In</button>
+    <div style="text-align:center; margin-top:14px;"><a href="#" onclick="showForgotPassword(); return false;" style="font-size:13px;">Forgot your password?</a></div>
+  </div>
+
+  <div id="panelForgot" style="display:none;">
+    <h2>Reset your password</h2>
+    <div class="sub">Enter your email and we'll send you a link to set a new password.</div>
+    <div class="field"><label>Email</label><input type="email" id="forgotEmail" autocomplete="email"></div>
+    <button class="btn" id="forgotBtn" onclick="handleForgotPassword()">Send Reset Link</button>
+    <div style="text-align:center; margin-top:14px;"><a href="#" onclick="switchTab('signin'); return false;" style="font-size:13px;">← Back to log in</a></div>
+  </div>
+
+  <div id="panelSignup" style="display:none;">
+    <h2>Create your recruiter account</h2>
+    <div class="sub">Free to post. You'll add your company details next.</div>
+    <div class="field"><label>Email</label><input type="email" id="signupEmail" autocomplete="email"></div>
+    <div class="field"><label>Password</label><input type="password" id="signupPassword" autocomplete="new-password"></div>
+    <button class="btn" id="signupBtn" onclick="handleSignUp()">Create Account</button>
+  </div>
+
+  <div class="msg" id="authMsg"></div>
+</div>
+
+<div class="switch-note">Looking for a job instead? <a href="rook-login.html">Candidate login</a></div>
+
+<div class="config-warning" id="configWarning" style="display:none;">
+  ⚠ ROOK_CONFIG in rook-config.js still has placeholder Supabase values. Auth won't work until you fill in your real Supabase URL and anon key — see ROOK-Setup-Guide.pdf, Section 1.4.
+</div>
+
+<script src="rook-config.js"></script>
+<script>
+  const configured = window.ROOK_CONFIG.SUPABASE_URL !== "YOUR_SUPABASE_PROJECT_URL";
+  if (!configured) document.getElementById('configWarning').style.display = 'block';
+
+  const client = configured
+    ? window.supabase.createClient(window.ROOK_CONFIG.SUPABASE_URL, window.ROOK_CONFIG.SUPABASE_ANON_KEY)
+    : null;
+
+  // Same fix as the candidate login page: no auth call here is allowed
+  // to hang forever if the SMTP relay is slow or failing.
+  function withTimeout(promise, ms, timeoutMessage) {
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error(timeoutMessage)), ms)),
+    ]);
+  }
+
+  function switchTab(tab) {
+    document.getElementById('tabSignin').classList.toggle('active', tab === 'signin');
+    document.getElementById('tabSignup').classList.toggle('active', tab === 'signup');
+    document.getElementById('panelSignin').style.display = tab === 'signin' ? 'block' : 'none';
+    document.getElementById('panelSignup').style.display = tab === 'signup' ? 'block' : 'none';
+    document.getElementById('panelForgot').style.display = 'none';
+    setMsg('');
+  }
+
+  function showForgotPassword() {
+    document.getElementById('panelSignin').style.display = 'none';
+    document.getElementById('panelSignup').style.display = 'none';
+    document.getElementById('panelForgot').style.display = 'block';
+    document.getElementById('tabSignin').classList.remove('active');
+    document.getElementById('tabSignup').classList.remove('active');
+    setMsg('');
+  }
+
+  async function handleForgotPassword() {
+    if (!configured) return setMsg('Supabase isn\'t configured yet — see the warning below.', 'error');
+    const email = document.getElementById('forgotEmail').value.trim();
+    if (!email) return setMsg('Enter your email.', 'error');
+
+    document.getElementById('forgotBtn').disabled = true;
+    setMsg('Sending...');
+    let result;
+    try {
+      result = await withTimeout(
+        client.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/rook-reset-password.html` }),
+        15000,
+        'The request timed out — the email server may be having trouble right now. Please try again shortly.'
+      );
+    } catch (err) {
+      document.getElementById('forgotBtn').disabled = false;
+      return setMsg(err.message, 'error');
+    }
+    document.getElementById('forgotBtn').disabled = false;
+
+    if (result.error) {
+      return setMsg('Could not send the reset email: ' + result.error.message, 'error');
+    }
+    setMsg('If an account exists for that email, a reset link is on its way. Check your inbox.', 'success');
+  }
+
+  function setMsg(text, type) {
+    const el = document.getElementById('authMsg');
+    el.textContent = text;
+    el.className = 'msg' + (type ? ' ' + type : '');
+  }
+
+  // Recruiter routing is simpler than the candidate side — always land
+  // on the recruiter dashboard, which itself checks whether a
+  // recruiter_profiles row exists and shows a short "complete your
+  // profile" form inline if not, rather than needing a whole separate
+  // onboarding page for a handful of fields (name, company, phone).
+  async function routeAfterLogin() {
+    window.location.href = 'rook-recruiter-dashboard.html';
+  }
+
+  async function handleSignIn() {
+    if (!configured) return setMsg('Supabase isn\'t configured yet — see the warning below.', 'error');
+    const email = document.getElementById('signinEmail').value.trim();
+    const password = document.getElementById('signinPassword').value;
+    if (!email || !password) return setMsg('Enter your email and password.', 'error');
+
+    document.getElementById('signinBtn').disabled = true;
+    setMsg('Logging in...');
+    let result;
+    try {
+      result = await withTimeout(
+        client.auth.signInWithPassword({ email, password }),
+        15000,
+        'The request timed out. Please try again.'
+      );
+    } catch (err) {
+      document.getElementById('signinBtn').disabled = false;
+      return setMsg(err.message, 'error');
+    }
+
+    if (result.error) {
+      document.getElementById('signinBtn').disabled = false;
+      return setMsg(result.error.message, 'error');
+    }
+    setMsg('Logging in...');
+    await routeAfterLogin();
+  }
+
+  async function handleSignUp() {
+    if (!configured) return setMsg('Supabase isn\'t configured yet — see the warning below.', 'error');
+    const email = document.getElementById('signupEmail').value.trim();
+    const password = document.getElementById('signupPassword').value;
+    if (!email || password.length < 8) return setMsg('Enter a valid email and an 8+ character password.', 'error');
+
+    document.getElementById('signupBtn').disabled = true;
+    setMsg('Creating your account...');
+    let result;
+    try {
+      result = await withTimeout(
+        client.auth.signUp({ email, password }),
+        15000,
+        'The request timed out — the email server may be having trouble sending your confirmation email right now. Please try again shortly.'
+      );
+    } catch (err) {
+      document.getElementById('signupBtn').disabled = false;
+      return setMsg(err.message, 'error');
+    }
+    document.getElementById('signupBtn').disabled = false;
+
+    if (result.error) return setMsg(result.error.message, 'error');
+    setMsg('Account created — check your email to confirm, then log in.', 'success');
+    switchTab('signin');
+  }
+</script>
+
+</body>
+</html>
