@@ -147,6 +147,14 @@
         <div class="field"><label>City</label><input type="text" id="fieldCity" value="Oxford"></div>
         <div class="field"><label>State</label><input type="text" id="fieldState" value="Florida"></div>
       </div>
+      <div class="field-row">
+        <div class="field">
+          <label>ZIP Code <span style="color:#C23B3B;">*</span></label>
+          <input type="text" id="fieldZip" placeholder="33602" maxlength="5">
+          <div style="font-size:11.5px; color:#8B96AB; margin-top:4px;">Required — this is how ROOK ranks jobs by how close they actually are to you, not just which state they're in.</div>
+        </div>
+        <div class="field"></div>
+      </div>
     </div>
   </div>
 
@@ -384,6 +392,7 @@
       phone: val('fieldPhone'),
       home_city: val('fieldCity'),
       home_state: val('fieldState'),
+      home_zip: val('fieldZip'),
       minimum_base_salary: numFromMoney('fieldMinSalary'),
       target_ote: numFromMoney('fieldTargetOte'),
       maximum_travel_percentage: numFromPercent('fieldMaxTravel'),
@@ -428,6 +437,20 @@
     if(current === total && dir === 1){
       saveProfileAndFinish();
       return;
+    }
+    // ZIP is required before leaving step 2 — proximity scoring (real
+    // distance to a job, not just "somewhere in your state") has no way
+    // to work at all without it, and leaving it as a purely optional
+    // Settings field meant most people would never find or fill it in.
+    if (current === 2 && dir === 1) {
+      const zip = document.getElementById('fieldZip').value.trim();
+      if (!/^\d{5}$/.test(zip)) {
+        document.getElementById('fieldZip').style.borderColor = '#C23B3B';
+        document.getElementById('fieldZip').focus();
+        alert('Please enter a valid 5-digit ZIP code — ROOK uses this to rank jobs by real distance from you, not just which state they\'re in.');
+        return;
+      }
+      document.getElementById('fieldZip').style.borderColor = '';
     }
     current = Math.min(total, Math.max(1, current + dir));
     render();
