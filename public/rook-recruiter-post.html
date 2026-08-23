@@ -55,6 +55,7 @@
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
     ROOK
   </a>
+  <a href="rook-recruiter-dashboard.html" class="btn btn-outline">← My Postings</a>
 </div>
 
 <div class="hero">
@@ -79,15 +80,8 @@
     <div class="field-row">
       <div class="field full"><label>Job Description <span class="req">*</span></label><textarea id="description" placeholder="Responsibilities, requirements, what makes this role a fit..."></textarea></div>
     </div>
-
-    <div class="section-label">Your Contact Info</div>
     <div class="field-row">
-      <div class="field"><label>Your Name <span class="req">*</span></label><input type="text" id="recruiterName"></div>
-      <div class="field"><label>Your Email <span class="req">*</span></label><input type="email" id="recruiterEmail"></div>
-    </div>
-    <div class="field-row">
-      <div class="field"><label>Agency / Company</label><input type="text" id="recruiterCompany" placeholder="Your staffing firm's name"></div>
-      <div class="field"><label>How should candidates reach you?</label><input type="text" id="contactMethod" placeholder="Email me directly, or apply via..."></div>
+      <div class="field full"><label>How should candidates reach you? <span style="font-weight:400;">(optional — defaults to your account email)</span></label><input type="text" id="contactMethod" placeholder="e.g. Apply via this email, or call me directly at..."></div>
     </div>
 
     <a href="#" class="btn btn-primary" id="submitBtn" onclick="submitPosting(); return false;" style="width:100%; margin-top:8px;">Submit for Review</a>
@@ -96,7 +90,14 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="rook-config.js"></script>
+<script src="rook-auth.js"></script>
 <script>
+(async () => {
+  await rookRequireAuth('rook-recruiter-login.html');
+})();
+
 async function submitPosting() {
   const msg = document.getElementById('formMsg');
   const btn = document.getElementById('submitBtn');
@@ -107,22 +108,19 @@ async function submitPosting() {
     compensation_text: document.getElementById('compensation').value.trim(),
     company_name: document.getElementById('companyName').value.trim() || null,
     description_text: document.getElementById('description').value.trim(),
-    recruiter_name: document.getElementById('recruiterName').value.trim(),
-    recruiter_email: document.getElementById('recruiterEmail').value.trim(),
-    recruiter_company: document.getElementById('recruiterCompany').value.trim() || null,
     recruiter_contact_method: document.getElementById('contactMethod').value.trim() || null,
   };
 
-  if (!payload.job_title || !payload.description_text || !payload.recruiter_name || !payload.recruiter_email) {
+  if (!payload.job_title || !payload.description_text) {
     msg.className = 'msg error';
-    msg.textContent = 'Please fill in job title, description, your name, and your email — those are required.';
+    msg.textContent = 'Please fill in job title and description — those are required.';
     return;
   }
 
   btn.textContent = 'Submitting...';
   btn.style.pointerEvents = 'none';
   try {
-    const res = await fetch('/api/recruiter-postings', {
+    const res = await rookApiFetch('/recruiter-postings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -133,7 +131,8 @@ async function submitPosting() {
     document.getElementById('formCard').innerHTML = `
       <div style="text-align:center; padding:20px 0;">
         <h2 style="font-size:20px; margin-bottom:10px;">Submitted ✓</h2>
-        <p style="color:var(--muted); font-size:14px; line-height:1.6;">Your posting is in review. Once approved, it'll be live on ROOK and matched against candidates automatically — no further action needed from you.</p>
+        <p style="color:var(--muted); font-size:14px; line-height:1.6; margin-bottom:20px;">Your posting is in review. Once approved, it'll be live on ROOK and matched against candidates automatically.</p>
+        <a href="rook-recruiter-dashboard.html" class="btn btn-outline">View My Postings</a>
       </div>`;
   } catch (err) {
     msg.className = 'msg error';
