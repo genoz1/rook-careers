@@ -92,6 +92,21 @@ create table if not exists jobs (
   status text default 'active' check (status in ('active','closed')),
   source_verified boolean default true,
 
+  -- Recruiter-submitted postings: unlike every other source_type (all
+  -- ATS-pulled and inherently verified), a recruiter can submit
+  -- ANYTHING through a public form — moderation_status is what keeps an
+  -- unreviewed submission invisible to candidates until a human (Gene,
+  -- via the admin review page) approves it. ATS-ingested jobs default
+  -- to 'approved' immediately since they're already verified by being
+  -- pulled straight from the employer's own system.
+  moderation_status text default 'approved' check (moderation_status in ('pending','approved','rejected')),
+  recruiter_name text,
+  recruiter_email text,
+  recruiter_company text,             -- the staffing/recruiting agency's own name —
+                                       -- distinct from company_name, which may be left
+                                       -- blank for a confidential/undisclosed search
+  recruiter_contact_method text,      -- free text: how a candidate should reach out
+
   job_embedding vector(1536),
 
   created_at timestamptz default now(),
