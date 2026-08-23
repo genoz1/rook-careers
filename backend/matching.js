@@ -283,15 +283,26 @@ function scoreJob(job, profile) {
     }
   } else if (acceptedStateAbbrs.size > 0 && [...acceptedStateAbbrs].some((abbr) => locationMentionsState(job.location_raw, abbr))) {
     // --- Fallback: no real coordinates on one or both sides, so fall
-    // back to the state-matching logic this replaced as the primary
-    // signal. Reasonable when a ZIP hasn't been set yet, or a job's
-    // location text failed to geocode.
+    // back to state-matching. Reasonable when a ZIP hasn't been set yet,
+    // or a job's location text failed to geocode.
+    //
+    // IMPORTANT: this deliberately does NOT award the full 35 points a
+    // confirmed close-distance match gets. It used to, which created a
+    // real, reported inconsistency — an ungeocoded same-state job (full
+    // credit, distance genuinely unknown) could outrank a geocoded job
+    // confirmed to be much closer (correctly earning less than full
+    // credit at real distances beyond ~25 miles). Matching within a
+    // state is real information, worth more than nothing, but it's
+    // never worth MORE than a distance that's actually been verified —
+    // 20 points sits deliberately between the confirmed 150-mile tier
+    // (22) and the confirmed 300-mile tier (14), reflecting genuine
+    // "somewhere in this state, exact distance unknown" uncertainty.
     const matchedAbbr = [...acceptedStateAbbrs].find((abbr) => locationMentionsState(job.location_raw, abbr));
-    prefScore += 35;
+    prefScore += 20;
     reasons.push(
       matchedAbbr === homeStateAbbr
-        ? "Location matches your home state"
-        : `Location matches one of your preferred states (${matchedAbbr})`
+        ? "Location matches your home state (exact distance not yet available for this job)"
+        : `Location matches one of your preferred states (${matchedAbbr}) — exact distance not yet available`
     );
   } else if (profile.willing_to_relocate) {
     prefScore += 14;
