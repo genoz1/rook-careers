@@ -106,6 +106,10 @@ create table if not exists jobs (
                                        -- distinct from company_name, which may be left
                                        -- blank for a confidential/undisclosed search
   recruiter_contact_method text,      -- free text: how a candidate should reach out
+  -- recruiter_id added via ALTER TABLE further down, after
+  -- recruiter_profiles exists — Postgres can't reference a table that
+  -- hasn't been created yet, and recruiter_profiles is defined later
+  -- in this file (near its own RLS policies)
 
   job_embedding vector(1536),
 
@@ -321,4 +325,40 @@ create policy "candidates write own applications" on applications
 -- unaffected — ingestion uses the service_role key, which bypasses RLS.
 alter table jobs enable row level security;
 create policy "public can read active jobs" on jobs
-  for select using (status = 'active');
+  for select using (status = 'active' and moderation_status = 'approved');
+  -- IMPORTANT: this used to only check status, not moderation_status —
+  -- a real gap, since RLS is meant to be the actual last line of
+  -- defense regardless of whether every application code path
+  -- remembers to filter correctly. Without this, someone querying
+  -- Supabase directly with the public anon key (which is necessarily
+  -- exposed client-side) could see pending/rejected recruiter
+  -- postings even though the backend's own queries correctly filter
+  -- them out.
+
+-- Recruiter accounts — a real auth account (Supabase Auth, same system
+-- candidates use), not the free-text-only submission this started as.
+-- Mirrors candidate_profiles: one row per authenticated recruiter,
+-- keyed by user_id, matching MedReps' real employer-account model
+-- rather than a one-shot anonymous form.
+create table if not exists recruiter_profiles (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade unique,
+  name text,
+  email text,
+  company_name text,
+  phone text,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+alter table recruiter_profiles enable row level security;
+create policy "recruiters read own profile" on recruiter_profiles
+  for select using (user_id = auth.uid());
+create policy "recruiters write own profile" on recruiter_profiles
+  for all using (user_id = auth.uid());
+
+-- Now that recruiter_profiles exists, jobs can reference it — real
+-- ownership link so a logged-in recruiter can see/manage exactly their
+-- own postings, not just free-text fields with no actual account behind
+-- them.
+alter table jobs add column if not exists recruiter_id uuid references recruiter_profiles(id) on delete set null;
