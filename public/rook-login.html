@@ -103,6 +103,20 @@
     ? window.supabase.createClient(window.ROOK_CONFIG.SUPABASE_URL, window.ROOK_CONFIG.SUPABASE_ANON_KEY)
     : null;
 
+  // No auth call here was protected against hanging forever — if
+  // Supabase's SMTP relay is slow or failing (it tries to send a
+  // confirmation/reset email as part of these same requests), the
+  // underlying call can hang indefinitely with the button stuck
+  // disabled and no error ever shown. This wraps any promise with a
+  // hard time limit so that failure mode always resolves into a real,
+  // visible error instead.
+  function withTimeout(promise, ms, timeoutMessage) {
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error(timeoutMessage)), ms)),
+    ]);
+  }
+
   function switchTab(tab) {
     document.getElementById('tabSignin').classList.toggle('active', tab === 'signin');
     document.getElementById('tabSignup').classList.toggle('active', tab === 'signup');
@@ -132,18 +146,30 @@
     // Authentication → URL Configuration settings, same requirement as
     // the email-confirmation flow — otherwise Supabase silently refuses
     // to send the user anywhere useful after they click the emailed link.
+    let result;
     try {
-      await client.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/rook-reset-password.html`,
-      });
-    } catch {
-      // Deliberately swallowed — see the message below.
+      result = await withTimeout(
+        client.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/rook-reset-password.html` }),
+        15000,
+        'The request timed out — the email server may be having trouble right now. Please try again shortly.'
+      );
+    } catch (err) {
+      document.getElementById('forgotBtn').disabled = false;
+      return setMsg(err.message, 'error');
     }
     document.getElementById('forgotBtn').disabled = false;
-    // Same message no matter what actually happened server-side —
-    // confirming or denying whether an email has an account, even via
-    // the wording of an error message, is a real account-enumeration
-    // risk, not just excess caution.
+
+    // IMPORTANT: this used to swallow every error unconditionally, which
+    // meant a genuine SMTP delivery failure looked identical to success
+    // — "check your inbox" with nothing actually sent. Supabase never
+    // reports "no account with that email" as an error here (that's
+    // deliberate on their end, real account-enumeration protection) — so
+    // any error that DOES come back is a real infrastructure problem
+    // (bad SMTP config, rate limiting, etc.), not an account-existence
+    // signal, and is safe to show directly.
+    if (result.error) {
+      return setMsg('Could not send the reset email: ' + result.error.message, 'error');
+    }
     setMsg('If an account exists for that email, a reset link is on its way. Check your inbox.', 'success');
   }
 
@@ -182,11 +208,21 @@
 
     document.getElementById('signinBtn').disabled = true;
     setMsg('Logging in...');
-    const { error } = await client.auth.signInWithPassword({ email, password });
-
-    if (error) {
+    let result;
+    try {
+      result = await withTimeout(
+        client.auth.signInWithPassword({ email, password }),
+        15000,
+        'The request timed out. Please try again.'
+      );
+    } catch (err) {
       document.getElementById('signinBtn').disabled = false;
-      return setMsg(error.message, 'error');
+      return setMsg(err.message, 'error');
+    }
+
+    if (result.error) {
+      document.getElementById('signinBtn').disabled = false;
+      return setMsg(result.error.message, 'error');
     }
     setMsg('Checking your profile...');
     await routeAfterLogin();
@@ -200,10 +236,25 @@
 
     document.getElementById('signupBtn').disabled = true;
     setMsg('Creating your account...');
-    const { error } = await client.auth.signUp({ email, password });
+    let result;
+    try {
+      // 15s timeout — Supabase's signUp() call attempts to send the
+      // confirmation email as part of this same request; if the SMTP
+      // relay is failing or slow, this used to hang indefinitely with
+      // the button stuck disabled and no error ever shown. This is what
+      // "the page froze" on sign-up actually was.
+      result = await withTimeout(
+        client.auth.signUp({ email, password }),
+        15000,
+        'The request timed out — the email server may be having trouble sending your confirmation email right now. Please try again shortly.'
+      );
+    } catch (err) {
+      document.getElementById('signupBtn').disabled = false;
+      return setMsg(err.message, 'error');
+    }
     document.getElementById('signupBtn').disabled = false;
 
-    if (error) return setMsg(error.message, 'error');
+    if (result.error) return setMsg(result.error.message, 'error');
     setMsg('Account created — check your email to confirm, then log in.', 'success');
     switchTab('signin');
   }
