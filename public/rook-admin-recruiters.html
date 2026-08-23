@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="assets/favicon.ico" sizes="any">
+<meta name="theme-color" content="#071E41">
+<title>Review Recruiter Postings — ROOK Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#071E41; --royal:#1463FF; --teal:#12B8A6; --gray:#F5F7FA; --white:#FFFFFF;
+    --muted:#5B6B85; --border:#E3E8F0; --radius:14px;
+    --font-display:'Space Grotesk', sans-serif; --font-body:'Inter', sans-serif;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{font-family:var(--font-body); color:var(--navy); background:var(--gray); -webkit-font-smoothing:antialiased;}
+  h1,h2,h3{font-family:var(--font-display); letter-spacing:-0.01em;}
+  a{color:inherit; text-decoration:none;}
+  .btn{display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:9px 18px; border-radius:999px; font-size:13px; font-weight:600; cursor:pointer; border:none;}
+  .btn-approve{background:#00806E; color:#fff;}
+  .btn-reject{background:#fff; color:#C23B3B; border:1px solid #F0C4C4;}
+  .btn-outline{background:#fff; color:var(--navy); border:1px solid var(--border);}
+  .topbar{background:var(--navy); padding:16px 0;}
+  .topbar-inner{max-width:900px; margin:0 auto; padding:0 24px; display:flex; align-items:center; justify-content:space-between;}
+  .logo{font-family:var(--font-display); font-weight:700; font-size:18px; color:#fff; display:flex; align-items:center; gap:8px;}
+  .container{max-width:900px; margin:0 auto; padding:32px 24px 60px;}
+  .tabs{display:flex; gap:8px; margin-bottom:20px;}
+  .tab{padding:8px 16px; border-radius:999px; font-size:13px; font-weight:600; cursor:pointer; background:#fff; border:1px solid var(--border); color:var(--muted);}
+  .tab.active{background:var(--navy); color:#fff; border-color:var(--navy);}
+  .card{background:#fff; border:1px solid var(--border); border-radius:var(--radius); padding:22px; margin-bottom:14px;}
+  .card h4{font-size:16px; margin-bottom:6px;}
+  .meta{font-size:12.5px; color:var(--muted); margin-bottom:12px;}
+  .desc{font-size:13.5px; color:#3D4A63; line-height:1.6; margin-bottom:14px; max-height:120px; overflow-y:auto; background:var(--gray); border-radius:8px; padding:12px;}
+  .recruiter-info{font-size:12.5px; color:var(--muted); background:rgba(20,99,255,0.06); border-radius:8px; padding:10px 12px; margin-bottom:14px;}
+  .actions{display:flex; gap:10px;}
+  #empty{text-align:center; padding:60px 20px; color:var(--muted); font-size:14px;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <a href="index.html" class="logo">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+      ROOK Admin
+    </a>
+    <a href="rook-dashboard.html" class="btn btn-outline">← Back to Dashboard</a>
+  </div>
+</div>
+
+<div class="container">
+  <h1 style="font-size:24px; margin-bottom:6px;">Recruiter Postings</h1>
+  <p style="color:var(--muted); font-size:14px; margin-bottom:20px;">Every recruiter submission lands here first — nothing is visible to candidates until approved.</p>
+
+  <div class="tabs">
+    <div class="tab active" id="tabPending" onclick="loadTab('pending')">Pending</div>
+    <div class="tab" id="tabApproved" onclick="loadTab('approved')">Approved</div>
+    <div class="tab" id="tabRejected" onclick="loadTab('rejected')">Rejected</div>
+  </div>
+
+  <div id="list"><div id="empty">Loading…</div></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="rook-config.js"></script>
+<script src="rook-auth.js"></script>
+<script>
+function escapeHtml(str) {
+  return String(str || '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+let currentTab = 'pending';
+
+(async () => {
+  await rookRequireAuth();
+  loadTab('pending');
+})();
+
+async function loadTab(status) {
+  currentTab = status;
+  document.getElementById('tabPending').classList.toggle('active', status === 'pending');
+  document.getElementById('tabApproved').classList.toggle('active', status === 'approved');
+  document.getElementById('tabRejected').classList.toggle('active', status === 'rejected');
+
+  const list = document.getElementById('list');
+  list.innerHTML = '<div id="empty">Loading…</div>';
+
+  try {
+    const res = await rookApiFetch('/admin/recruiter-postings?status=' + status);
+    const postings = await res.json();
+    if (!res.ok) throw new Error(postings.error || 'Could not load postings');
+
+    if (!Array.isArray(postings) || postings.length === 0) {
+      list.innerHTML = `<div id="empty">No ${escapeHtml(status)} postings.</div>`;
+      return;
+    }
+
+    list.innerHTML = postings.map(renderCard).join('');
+  } catch (err) {
+    list.innerHTML = `<div id="empty">Could not load: ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+function renderCard(job) {
+  const comp = job.compensation_text || '';
+  const actions = currentTab === 'pending'
+    ? `<button class="btn btn-approve" onclick="moderate('${escapeHtml(job.id)}', 'approve', this)">Approve</button>
+       <button class="btn btn-reject" onclick="moderate('${escapeHtml(job.id)}', 'reject', this)">Reject</button>`
+    : `<span style="font-size:12.5px; color:var(--muted); font-weight:600;">${currentTab === 'approved' ? '✓ Approved' : '✕ Rejected'}</span>`;
+
+  return `
+    <div class="card" data-job-id="${escapeHtml(job.id)}">
+      <h4>${escapeHtml(job.title_original)}</h4>
+      <div class="meta">${escapeHtml(job.location_raw || 'No location given')}${comp ? ' · ' + escapeHtml(comp) : ''}${job.company_name ? ' · ' + escapeHtml(job.company_name) : ' · Confidential search'}</div>
+      <div class="desc">${escapeHtml(job.description_text)}</div>
+      <div class="recruiter-info">
+        <b>${escapeHtml(job.recruiter_name)}</b> — ${escapeHtml(job.recruiter_email)}
+        ${job.recruiter_company ? '<br>Agency: ' + escapeHtml(job.recruiter_company) : ''}
+        ${job.recruiter_contact_method ? '<br>Contact method: ' + escapeHtml(job.recruiter_contact_method) : ''}
+      </div>
+      <div class="actions">${actions}</div>
+    </div>`;
+}
+
+async function moderate(jobId, action, btn) {
+  btn.closest('.actions').querySelectorAll('button').forEach((b) => (b.disabled = true));
+  try {
+    const res = await rookApiFetch(`/admin/recruiter-postings/${jobId}/${action}`, { method: 'POST' });
+    if (!res.ok) throw new Error('Action failed');
+    const card = document.querySelector(`[data-job-id="${jobId}"]`);
+    if (card) card.remove();
+    if (!document.querySelector('.card')) {
+      document.getElementById('list').innerHTML = `<div id="empty">No ${escapeHtml(currentTab)} postings.</div>`;
+    }
+  } catch (err) {
+    console.error(err);
+    btn.closest('.actions').querySelectorAll('button').forEach((b) => (b.disabled = false));
+  }
+}
+</script>
+
+</body>
+</html>
