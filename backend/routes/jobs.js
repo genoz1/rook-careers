@@ -85,6 +85,25 @@ function matchFromRow(row) {
   };
 }
 
+// The actual paywall: a signed-in candidate without an active
+// subscription still sees their REAL match score, reasons, and every
+// other job detail — that's what makes the paywall worth paying past,
+// unlike the anonymous teaser, which hides that too. Only the employer's
+// identity and the real way to apply are withheld, the same two fields
+// gated from anonymous visitors. subscription_status is written by the
+// Stripe webhook (backend/routes/stripe.js) — anything other than the
+// literal string 'active' (null, 'cancelled', undefined) is treated as
+// not subscribed, so a candidate is gated by default unless payment has
+// genuinely gone through.
+function isSubscribed(profile) {
+  return profile?.subscription_status === "active";
+}
+
+function redactForNonSubscriber(job) {
+  const { company_name, source_url, application_url, ...rest } = job;
+  return { ...rest, subscription_required: true };
+}
+
 // Builds the employer_note map (spec factor #43, employer-history
 // awareness) — unrelated to match scoring, still computed live here
 // since it's a small, fast query, not something worth precomputing.
@@ -220,7 +239,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     employer_note: noteFor(row.jobs),
   }));
 
-  res.json(results);
+  res.json(isSubscribed(profile) ? results : results.map(redactForNonSubscriber));
 });
 
 // GET /api/jobs/:id
@@ -274,7 +293,8 @@ router.get("/jobs/:id", requireConfig, optionalAuth, async (req, res) => {
 
   const hasRealScore = row && row.scored_at != null;
   const match = hasRealScore ? matchFromRow(row) : scoreJob(data, profile);
-  res.json({ ...data, match, saved: Boolean(row?.saved) });
+  const result = { ...data, match, saved: Boolean(row?.saved) };
+  res.json(isSubscribed(profile) ? result : redactForNonSubscriber(result));
 });
 
 // POST /api/jobs/:id/save — toggle whether this job is saved. Body: { saved: true|false }.
@@ -319,6 +339,12 @@ router.get("/saved-jobs", requireConfig, requireAuth, loadCandidateId, async (re
 
   if (error) return res.status(500).json({ error: error.message });
 
+  const { data: profile } = await supabaseAdmin
+    .from("candidate_profiles")
+    .select("subscription_status")
+    .eq("id", req.candidateId)
+    .maybeSingle();
+
   const jobs = (rows || [])
     .filter((row) => row.jobs) // guards against a job having been removed since it was saved
     .map((row) => ({
@@ -327,7 +353,7 @@ router.get("/saved-jobs", requireConfig, requireAuth, loadCandidateId, async (re
       saved: true,
     }));
 
-  res.json(jobs);
+  res.json(isSubscribed(profile) ? jobs : jobs.map(redactForNonSubscriber));
 });
 
 module.exports = router;
