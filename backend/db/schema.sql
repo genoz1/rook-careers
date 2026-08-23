@@ -134,6 +134,12 @@ create table if not exists candidate_profiles (
                                           -- email; no settings UI toggle for
                                           -- this yet, but the column exists
                                           -- so a future UI doesn't need a migration
+  subscription_status text,              -- written by backend/routes/stripe.js's
+                                          -- webhook ('active'/'cancelled') — this
+                                          -- column didn't exist even though the
+                                          -- webhook code referencing it has been
+                                          -- sitting in the repo since before tonight
+  stripe_customer_id text,               -- also written by the same webhook
   last_digest_sent_at timestamptz,       -- used to only email about jobs seen
                                           -- since the last successful send,
                                           -- so the same job doesn't get
