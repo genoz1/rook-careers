@@ -38,7 +38,8 @@ async function scoreAndStoreForCandidate(supabase, profile) {
   const { data: activeJobs, error } = await supabase
     .from("jobs")
     .select("*")
-    .eq("status", "active");
+    .eq("status", "active")
+    .eq("moderation_status", "approved");
 
   if (error) throw new Error(`Could not load active jobs: ${error.message}`);
 
