@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="assets/favicon.ico" sizes="any">
+<link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="icon" href="assets/favicon-16.png" type="image/png" sizes="16x16">
+<link rel="apple-touch-icon" href="assets/rook-icon-180.png">
+<link rel="icon" href="assets/rook-icon-192.png" type="image/png" sizes="192x192">
+<meta name="theme-color" content="#071E41">
+<title>Recruiter Jobs — ROOK</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#071E41; --royal:#1463FF; --teal:#12B8A6; --gray:#F5F7FA; --white:#FFFFFF;
+    --muted:#5B6B85; --border:#E3E8F0; --radius:14px; --recruiter:#7C3AED;
+    --font-display:'Space Grotesk', sans-serif; --font-body:'Inter', sans-serif;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{font-family:var(--font-body); color:var(--navy); background:var(--gray); -webkit-font-smoothing:antialiased;}
+  h1,h2,h3{font-family:var(--font-display); letter-spacing:-0.01em;}
+  a{color:inherit; text-decoration:none;}
+  .btn{display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:10px 18px; border-radius:999px; font-size:13.5px; font-weight:600; cursor:pointer; border:none;}
+  .btn-primary{background:var(--royal); color:#fff;}
+  .btn-outline{background:#fff; color:var(--navy); border:1px solid var(--border);}
+  .btn-sm{padding:8px 14px; font-size:12.5px;}
+
+  .shell{display:grid; grid-template-columns:236px 1fr; min-height:100vh;}
+  .sidebar{background:var(--navy); color:#fff; padding:26px 20px; display:flex; flex-direction:column;}
+  .logo{display:flex; align-items:center; gap:12px; font-family:var(--font-display); font-weight:700; font-size:19px; margin-bottom:36px; padding:0 6px;}
+  .side-nav{display:flex; flex-direction:column; gap:2px; flex:1;}
+  .side-nav a{display:flex; align-items:center; gap:12px; padding:11px 12px; border-radius:9px; font-size:14px; font-weight:500; color:#AEB9CF;}
+  .side-nav a svg{width:17px; height:17px;}
+  .side-nav a.active{background:rgba(255,255,255,0.08); color:#fff;}
+  .side-nav a:hover{color:#fff;}
+  .side-foot{border-top:1px solid rgba(255,255,255,0.1); padding-top:16px; display:flex; align-items:center; gap:10px;}
+  .avatar{width:34px; height:34px; border-radius:50%; background:linear-gradient(135deg,var(--royal),var(--teal)); display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700;}
+  .side-foot .n{font-size:13.5px; font-weight:600;}
+  .side-foot .r{font-size:11.5px; color:#8B96AB;}
+
+  .main{padding:36px 44px 80px;}
+  .topline{margin-bottom:8px;}
+  .topline h1{font-size:26px; font-weight:700;}
+  .topline p{font-size:14.5px; color:var(--muted); margin-top:4px; max-width:640px; line-height:1.6;}
+
+  /* MedReps-style clean list — deliberately simpler than the main
+     dashboard's full match-score cards: a bold title link, one small
+     meta line, a match badge, and a single "View Job" button. No
+     reasons/tags/concerns clutter — the point of this page is the
+     familiar, scannable feel of a plain job digest, not a detailed
+     match breakdown (that's still one click away via View Job). */
+  .job-list{background:#fff; border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; margin-top:20px;}
+  .job-row{display:flex; align-items:center; gap:16px; padding:20px 24px; border-bottom:1px solid var(--border);}
+  .job-row:last-child{border-bottom:none;}
+  .job-main{flex:1; min-width:0;}
+  .job-title{font-size:15.5px; font-weight:700; color:var(--royal);}
+  .job-meta{font-size:13px; color:var(--muted); margin-top:4px;}
+  .match-badge{font-size:11.5px; font-weight:700; padding:3px 10px; border-radius:99px; background:rgba(124,58,237,0.1); color:var(--recruiter); white-space:nowrap;}
+  #loading, #empty{text-align:center; padding:60px 20px; color:var(--muted); font-size:14px;}
+
+  @media(max-width:900px){
+    .shell{grid-template-columns:1fr;}
+    .sidebar{display:none;}
+    .job-row{flex-wrap:wrap;}
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="logo" style="gap:8px;">
+      <img src="assets/rook-icon-192.png" alt="ROOK" style="height:43px; width:auto; display:block; filter:brightness(2.1) contrast(1.15) saturate(1.5) drop-shadow(0 0 2px rgba(255,255,255,0.4));"><span style="font-family:var(--font-display); font-weight:700; font-size:36px; letter-spacing:-0.02em; color:#EDF3FF; line-height:1;">ROOK</span>
+    </div>
+    <nav class="side-nav">
+      <a href="rook-dashboard.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l9-9 9 9M5 10v10h14V10"/></svg>Dashboard</a>
+      <a href="rook-search.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>Job Search</a>
+      <a href="rook-recruiter-jobs.html" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>Recruiter Jobs</a>
+      <a href="rook-tracker.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>Applications</a>
+      <a href="rook-saved.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-4-7 4V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>Saved Jobs</a>
+      <a href="rook-intelligence.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>Career Intelligence</a>
+      <a href="rook-onboarding.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>My Résumés</a>
+      <a href="rook-settings.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09A1.65 1.65 0 0015 4.6a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>Settings</a>
+    </nav>
+    <div class="side-foot">
+      <div class="avatar" id="sideAvatar">—</div>
+      <div><div class="n" id="sideName">Loading…</div><div class="r">Member</div></div>
+    </div>
+    <a href="#" onclick="rookSignOut(); return false;" style="display:block; text-align:center; font-size:12.5px; font-weight:600; color:#8B96AB; padding:12px 0 4px;">Log Out</a>
+  </aside>
+
+  <main class="main">
+    <div class="topline">
+      <h1>Recruiter-Posted Jobs</h1>
+      <p>Roles submitted directly by recruiters, reviewed before appearing here. These are also blended into your main Dashboard — this page is just a focused, all-in-one-place view of recruiter listings specifically.</p>
+    </div>
+
+    <div id="loading">Loading…</div>
+    <div id="empty" style="display:none;">No recruiter-posted jobs are live right now — check back soon.</div>
+    <div class="job-list" id="jobList" style="display:none;"></div>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="rook-config.js"></script>
+<script src="rook-auth.js"></script>
+<script>
+function escapeHtml(str) {
+  return String(str || '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+(async () => {
+  const token = await rookRequireAuth();
+  if (!token) return;
+
+  try {
+    const meRes = await rookApiFetch('/profile');
+    const me = await meRes.json();
+    if (me?.name) {
+      document.getElementById('sideName').textContent = me.name;
+      document.getElementById('sideAvatar').textContent = me.name.split(' ').map((s) => s[0]).slice(0, 2).join('').toUpperCase();
+    }
+  } catch {}
+
+  const loading = document.getElementById('loading');
+  const empty = document.getElementById('empty');
+  const jobList = document.getElementById('jobList');
+
+  try {
+    // Reuses the same GET /jobs endpoint everything else uses (real
+    // scores, real gating) — this page just filters down to
+    // source_type='recruiter_posted' and renders them in a simpler
+    // list, rather than needing its own backend route.
+    const res = await rookApiFetch('/jobs?limit=300');
+    if (!res.ok) throw new Error('API returned ' + res.status);
+    const jobs = await res.json();
+    const recruiterJobs = (Array.isArray(jobs) ? jobs : []).filter((j) => j.source_type === 'recruiter_posted');
+
+    loading.style.display = 'none';
+
+    if (recruiterJobs.length === 0) {
+      empty.style.display = 'block';
+      return;
+    }
+
+    jobList.innerHTML = recruiterJobs.map(renderRow).join('');
+    jobList.style.display = 'block';
+  } catch (err) {
+    loading.textContent = 'Could not load recruiter jobs: ' + err.message;
+  }
+})();
+
+function renderRow(job) {
+  const comp = job.compensation_text || (job.salary_min ? `$${job.salary_min}${job.salary_max ? '–$' + job.salary_max : '+'}` : '');
+  const companyLine = job.subscription_required
+    ? `🔒 Subscribe to see who's hiring — ${escapeHtml(job.location_raw || '')}`
+    : `${escapeHtml(job.company_name || 'Confidential search')} — ${escapeHtml(job.location_raw || '')}`;
+  const score = job.match?.overall_score;
+  const matchBadge = score != null ? `<span class="match-badge">${score}% Match</span>` : '';
+  const actionHref = `rook-job-analysis.html?job=${encodeURIComponent(job.id)}`;
+  const actionLabel = job.subscription_required ? 'Subscribe to Unlock' : 'View Job';
+
+  return `
+    <div class="job-row">
+      <div class="job-main">
+        <a href="${actionHref}" class="job-title">${escapeHtml(job.title_original || 'Untitled role')}</a>
+        <div class="job-meta">${companyLine}${comp ? ' · ' + escapeHtml(comp) : ''}</div>
+      </div>
+      ${matchBadge}
+      <a href="${actionHref}" class="btn btn-primary btn-sm">${actionLabel}</a>
+    </div>`;
+}
+</script>
+
+</body>
+</html>
