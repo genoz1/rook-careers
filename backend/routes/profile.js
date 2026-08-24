@@ -205,7 +205,19 @@ router.post("/resume", requireConfig, requireAuth, upload.single("resume"), asyn
 
   if (dbError) return res.status(500).json({ error: dbError.message });
 
-  res.json({ ok: true, path: filePath, analysis_status: analysisStatus });
+  res.json({
+    ok: true,
+    path: filePath,
+    analysis_status: analysisStatus,
+    // Include the structured result directly so the onboarding UI can
+    // populate the Career Experience step from THIS response, instead
+    // of needing a second round-trip. Previously this response only
+    // returned analysis_status, never the actual data — meaning the
+    // frontend always fell back to "couldn't automatically read your
+    // work history" regardless of whether extraction actually
+    // succeeded, since the field it was checking simply wasn't here.
+    resume_structured: resumeStructured,
+  });
 
   // Fire-and-forget rescore — a new résumé changes candidate_fit
   // substantially (industries, product categories, seniority, the
