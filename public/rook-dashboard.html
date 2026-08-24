@@ -98,6 +98,14 @@
     .job-row{grid-template-columns:1fr; text-align:left;}
     .job-actions{align-items:flex-start; flex-direction:row;}
   }
+.job-actions-overflow { position:relative; display:inline-block; }
+.btn-icon { border:1px solid #E2E7F0; background:#fff; border-radius:8px; width:32px; height:32px; font-size:16px; color:#5B6B85; cursor:pointer; line-height:1; }
+.btn-icon:hover { background:#F5F7FA; }
+.overflow-menu { display:none; position:absolute; right:0; top:38px; background:#fff; border:1px solid #E2E7F0; border-radius:10px; box-shadow:0 8px 24px rgba(20,30,50,0.12); z-index:20; min-width:150px; overflow:hidden; }
+.overflow-menu.open { display:block; }
+.overflow-menu button { display:block; width:100%; text-align:left; padding:9px 14px; background:none; border:none; font-size:12.5px; color:#3D4A63; cursor:pointer; }
+.overflow-menu button:hover { background:#F5F7FA; }
+.overflow-menu button:disabled { color:#B7C0D1; cursor:default; }
 </style>
 </head>
 <body>
@@ -285,15 +293,56 @@
       // cards / greeting to reflect real counts instead of the original
       // hardcoded mockup numbers.
       currentJobs = jobs;
+
+      // The "Show recruiter-posted jobs" toggle implies recruiter jobs
+      // belong on this main list, not just the separate Recruiter Jobs
+      // page — but /jobs only returns jobs that already have a
+      // precomputed score row, so a just-approved recruiter posting can
+      // sit invisible here until the next scheduled scoring run. Merge
+      // in any recruiter-posted jobs from /recruiter-jobs (which reads
+      // straight from the jobs table, no scoring dependency) that
+      // aren't already present, so the toggle actually has something to
+      // show/hide the moment a job is approved, not hours later.
+      try {
+        const recRes = await rookApiFetch('/recruiter-jobs');
+        if (recRes.ok) {
+          const recJobs = await recRes.json();
+          const knownIds = new Set(currentJobs.map((j) => j.id));
+          const missing = (Array.isArray(recJobs) ? recJobs : []).filter((j) => !knownIds.has(j.id));
+          currentJobs = [...currentJobs, ...missing];
+        }
+      } catch {}
+
       jobList.dataset.demo = 'false';
       applyRecruiterToggle();
       updateStats(jobs);
-      showBanner('Showing ' + jobs.length + ' live job(s) from your database, ranked by your real match score.', 'info');
+      showBanner('Showing ' + currentJobs.length + ' live job(s) from your database, ranked by your real match score.', 'info');
       revealDemo();
     } catch (err) {
       showBanner('Could not reach the ROOK API (' + err.message + '). Showing example matches below — see ROOK-Setup-Guide.pdf to get the backend running.');
       revealDemo();
     }
+
+    // Guarantee tracker banner — "We've found N of your 5 guaranteed
+    // Excellent Matches, X days remaining." Silently does nothing for a
+    // candidate with no subscription_started_at yet (not subscribed, or
+    // subscribed before this column existed).
+    try {
+      const gRes = await rookApiFetch('/guarantee-status');
+      if (gRes.ok) {
+        const g = await gRes.json();
+        if (g.applicable) {
+          const guaranteeBanner = document.createElement('div');
+          guaranteeBanner.style.cssText = 'background:#F5F0FF; border:1px solid #7C3AED30; border-radius:10px; padding:14px 18px; margin-bottom:20px; font-size:13.5px; color:#3D4A63;';
+          guaranteeBanner.innerHTML = g.met
+            ? `<b style="color:#7C3AED;">✓ Guarantee met</b> — we've found ${g.excellent_count} of your 5 guaranteed Excellent Matches.`
+            : g.window_open
+              ? `<b style="color:#7C3AED;">We've found ${g.excellent_count} of your 5 guaranteed Excellent Matches.</b> ${g.days_remaining} day${g.days_remaining === 1 ? '' : 's'} remaining in your first 30 days.`
+              : `We found ${g.excellent_count} of 5 guaranteed Excellent Matches in your first 30 days. ${g.eligible_for_refund ? 'You\'re eligible for a first-month refund — contact support.' : ''}`;
+          document.querySelector('.panel-head')?.insertAdjacentElement('afterend', guaranteeBanner);
+        }
+      }
+    } catch {}
   })();
 
   async function updateStats(jobs) {
@@ -333,35 +382,72 @@
       : '<div style="text-align:center; padding:40px 20px; color:#5B6B85; font-size:14px;">No jobs match with this filter.</div>';
   }
 
+  // Five fixed categories, always shown in this order, same set on every
+  // card — the whole point is a candidate can scan 20 cards in seconds
+  // because the layout never changes shape from job to job. Ratings come
+  // straight from backend/matching.js's scoreJob() (see `categories` on
+  // the match object); this function only renders them, it doesn't
+  // compute anything.
+  const CATEGORY_ORDER = ['experience', 'industry_product', 'customer_specialty', 'location_prefs', 'requirements'];
+  const RATING_STYLE = {
+    Strong:  { icon: '✓', color: '#00806E' },
+    Good:    { icon: '✓', color: '#1463FF' },
+    Partial: { icon: '△', color: '#B98900' },
+    Gap:     { icon: '✕', color: '#C0392B' },
+  };
+  function renderCategoryRows(categories) {
+    if (!categories) {
+      return `<div style="font-size:11.5px; color:#8B96AB; margin-top:6px;">Not enough information yet to break this down — upload a résumé for full category scoring.</div>`;
+    }
+    return `<div style="display:grid; grid-template-columns:1fr 1fr; gap:4px 16px; margin-top:8px;">
+      ${CATEGORY_ORDER.map((key) => {
+        const c = categories[key];
+        if (!c) return '';
+        const style = c.rating ? RATING_STYLE[c.rating] : { icon: '—', color: '#8B96AB' };
+        const ratingText = c.rating || 'Not enough info';
+        return `<div style="display:flex; align-items:center; gap:6px; font-size:12px;">
+          <span style="color:${style.color}; font-weight:700;">${style.icon}</span>
+          <span style="color:#3D4A63;">${escapeHtml(c.label)}</span>
+          <span style="color:${style.color}; font-weight:600; margin-left:auto;">${escapeHtml(ratingText)}</span>
+        </div>`;
+      }).join('')}
+    </div>`;
+  }
+
   function renderRealJobRow(job) {
     const comp = job.compensation_text || (job.salary_min ? `$${job.salary_min}${job.salary_max ? '–$' + job.salary_max : '+'}` : '');
     const match = job.match; // present when the request was authenticated — see rook-auth.js / jobs.js
     const scoreDisplay = match && match.overall_score != null ? `${match.overall_score}%` : '—';
     const scorePct = match && match.overall_score != null ? match.overall_score : 0;
-    const reasonTags = (match?.reasons || []).map((r) =>
-      `<span class="why-tag"><svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>${escapeHtml(r)}</span>`
-    ).join('');
-    const concernTags = (match?.concerns || []).map((c) =>
-      `<span class="concern-tag">△ ${escapeHtml(c)}</span>`
-    ).join('');
-    const confidenceLabel = match?.confidence
-      ? `<span style="font-size:11px; font-weight:600; color:#8B96AB; text-transform:uppercase; letter-spacing:0.03em;">Confidence: ${match.confidence}</span>`
+
+    // One short AI-generated line, not the full reasons/concerns list —
+    // the most important reason to apply if the score is strong, or the
+    // most significant gap if it's not. Detailed evidence (all reasons,
+    // all concerns, résumé-vs-job breakdowns) moved to View Analysis.
+    const topLine = (match?.concerns?.length && (match?.overall_score ?? 100) < 90)
+      ? match.concerns[0]
+      : (match?.reasons?.[0] || '');
+    const summarySentence = topLine
+      ? `<div style="font-size:12.5px; color:#5B6B85; margin-top:8px; line-height:1.4;">${escapeHtml(topLine)}</div>`
       : '';
-    const disqualifierNote = match?.hard_disqualifier
-      ? `<div style="font-size:11.5px; color:#B98900; font-weight:600; margin-top:4px;">△ Score capped — this job misses at least one of your stated requirements</div>`
-      : '';
+
     const isApplied = job.application_status && job.application_status !== 'interested';
     const savedLabel = job.saved ? 'Saved ✓' : 'Save';
 
+    // EXCELLENT MATCH is a distinct tier above the normal recommendation
+    // ladder — see backend/matching.js's excellent_match determination
+    // (stricter than overall_score >= 90 alone; it also requires every
+    // category to clear its bar) and this ties directly to the 30-day/
+    // 5-match guarantee shown in the dashboard banner.
     const REC_COLORS = { 'Strong Apply': '#00806E', 'Apply': '#1463FF', 'Stretch Apply': '#B98900', 'Skip': '#8B96AB' };
-    const recColor = REC_COLORS[match?.recommendation] || '#8B96AB';
-    const recBadge = match?.recommendation
-      ? `<span style="font-size:11px; font-weight:700; padding:3px 9px; border-radius:99px; background:${recColor}18; color:${recColor}; text-transform:uppercase; letter-spacing:0.02em;">${escapeHtml(match.recommendation)}</span>`
+    const recColor = match?.excellent_match ? '#7C3AED' : (REC_COLORS[match?.recommendation] || '#8B96AB');
+    const recLabel = match?.excellent_match ? 'Excellent Match' : match?.recommendation;
+    const recBadge = recLabel
+      ? `<span style="font-size:11px; font-weight:700; padding:3px 9px; border-radius:99px; background:${recColor}18; color:${recColor}; text-transform:uppercase; letter-spacing:0.02em;">${escapeHtml(recLabel)}</span>`
       : '';
     const subScores = (match?.candidate_fit != null || match?.preference_fit != null)
-      ? `<div style="display:flex; gap:14px; font-size:11px; color:#8B96AB; margin-top:4px;">
-          ${match.candidate_fit != null ? `<span>Candidate Fit: <b style="color:#3D4A63;">${match.candidate_fit}%</b></span>` : ''}
-          ${match.preference_fit != null ? `<span>Preference Fit: <b style="color:#3D4A63;">${match.preference_fit}%</b></span>` : ''}
+      ? `<div style="font-size:11px; color:#8B96AB; margin-top:2px;">
+          Qualifications ${match.candidate_fit ?? '—'}% · Preferences ${match.preference_fit ?? '—'}%
         </div>`
       : '';
     const employerNote = job.employer_note
@@ -403,18 +489,23 @@
           </div>
           <div class="company">${companyLine}</div>
           ${subScores}
-          ${(reasonTags || concernTags) ? `<div class="why-row">${reasonTags}${concernTags}</div>` : ''}
-          ${disqualifierNote}
+          ${renderCategoryRows(match?.categories)}
+          ${summarySentence}
           ${employerNote}
           ${isApplied ? `<div style="font-size:11.5px; color:#00806E; font-weight:600; margin-top:4px;">✓ Application status: ${escapeHtml(job.application_status)}</div>` : ''}
-          <div class="job-meta-line">${job.date_posted ? 'Posted ' + escapeHtml(job.date_posted) : ''} · Sourced via ${escapeHtml(job.source_type || 'unknown')} ${confidenceLabel ? '· ' + confidenceLabel : ''}</div>
+          <div class="job-meta-line">${job.date_posted ? 'Posted ' + escapeHtml(job.date_posted) : ''}</div>
         </div>
         <div class="job-actions">
           <a href="rook-job-analysis.html?job=${escapeHtml(job.id)}" class="btn btn-outline btn-sm">View Analysis</a>
           ${primaryActionBtn}
           <button type="button" class="btn btn-outline btn-sm" onclick="toggleSave('${escapeHtml(job.id)}', this)">${savedLabel}</button>
-          <button type="button" class="btn btn-outline btn-sm" onclick="markApplied('${escapeHtml(job.id)}', this)" ${isApplied ? 'disabled' : ''}>${isApplied ? 'Applied ✓' : 'Mark Applied'}</button>
-          <button type="button" class="btn btn-outline btn-sm" onclick="dismissJob('${escapeHtml(job.id)}', this)" style="color:#8B96AB;">Not interested</button>
+          <div class="job-actions-overflow">
+            <button type="button" class="btn-icon" onclick="this.nextElementSibling.classList.toggle('open')" aria-label="More actions">⋯</button>
+            <div class="overflow-menu">
+              <button type="button" onclick="markApplied('${escapeHtml(job.id)}', this)" ${isApplied ? 'disabled' : ''}>${isApplied ? 'Applied ✓' : 'Mark Applied'}</button>
+              <button type="button" onclick="dismissJob('${escapeHtml(job.id)}', this)">Not interested</button>
+            </div>
+          </div>
         </div>
       </div>`;
   }
