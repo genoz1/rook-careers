@@ -162,31 +162,8 @@
     <div class="step-eyebrow">Build Your Career Profile</div>
     <h1 class="step-h">Career experience</h1>
     <p class="step-sub">Confirm the roles we found — add or edit anything that's missing.</p>
-    <div class="exp-entry">
-      <span class="remove">Remove</span>
-      <div class="field-row">
-        <div class="field"><label>Company</label><input type="text" value="HealthTrackRx"></div>
-        <div class="field"><label>Job Title</label><input type="text" value="Territory Manager"></div>
-      </div>
-      <div class="field-row">
-        <div class="field"><label>Industry</label><select><option selected>Diagnostics</option><option>Veterinary</option><option>Pharmaceutical</option></select></div>
-        <div class="field"><label>Dates</label><input type="text" value="2021 – Present"></div>
-      </div>
-      <div class="field full"><label>Achievements</label><textarea>Grew territory revenue through new diagnostic account development across reference lab and point-of-care segments.</textarea></div>
-    </div>
-    <div class="exp-entry">
-      <span class="remove">Remove</span>
-      <div class="field-row">
-        <div class="field"><label>Company</label><input type="text" value="MWI Animal Health"></div>
-        <div class="field"><label>Job Title</label><input type="text" value="Sales Representative"></div>
-      </div>
-      <div class="field-row">
-        <div class="field"><label>Industry</label><select><option>Diagnostics</option><option selected>Veterinary</option><option>Pharmaceutical</option></select></div>
-        <div class="field"><label>Dates</label><input type="text" value="2017 – 2021"></div>
-      </div>
-      <div class="field full"><label>Achievements</label><textarea>Managed veterinary clinic accounts across Central Florida territory.</textarea></div>
-    </div>
-    <a class="add-entry">+ Add another position</a>
+    <div id="expEntriesContainer"></div>
+    <a href="#" class="add-entry" onclick="addExperienceEntry(); return false;">+ Add another position</a>
   </div>
 
   <div class="step-panel" data-step="4">
@@ -339,6 +316,68 @@
     window.scrollTo({top:0, behavior:'smooth'});
   }
 
+  let lastResumeStructured = null; // set from the real POST /resume response, not a placeholder
+
+  function escapeAttr(str) {
+    return String(str || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  }
+
+  function experienceEntryHtml(emp) {
+    const company = escapeAttr(emp?.company);
+    const title = escapeAttr(emp?.title);
+    const dates = escapeAttr([emp?.start, emp?.end].filter(Boolean).join(' – '));
+    return `<div class="exp-entry">
+      <span class="remove" onclick="this.closest('.exp-entry').remove()">Remove</span>
+      <div class="field-row">
+        <div class="field"><label>Company</label><input type="text" class="exp-company" value="${company}"></div>
+        <div class="field"><label>Job Title</label><input type="text" class="exp-title" value="${title}"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Industry</label>
+          <select class="exp-industry">
+            <option ${!emp?.industry ? 'selected' : ''}></option>
+            <option ${emp?.industry === 'Diagnostics' ? 'selected' : ''}>Diagnostics</option>
+            <option ${emp?.industry === 'Veterinary' ? 'selected' : ''}>Veterinary</option>
+            <option ${emp?.industry === 'Pharmaceutical' ? 'selected' : ''}>Pharmaceutical</option>
+            <option ${emp?.industry === 'Medical Device' ? 'selected' : ''}>Medical Device</option>
+          </select>
+        </div>
+        <div class="field"><label>Dates</label><input type="text" class="exp-dates" value="${dates}"></div>
+      </div>
+      <div class="field full"><label>Achievements</label><textarea class="exp-achievements"></textarea></div>
+    </div>`;
+  }
+
+  // Renders the real, AI-extracted work history from the résumé we just
+  // uploaded — replaces what used to be two permanently hardcoded example
+  // entries (HealthTrackRx / MWI Animal Health) shown to every candidate
+  // regardless of what résumé they actually uploaded.
+  function renderExperienceEntries(employers) {
+    const container = document.getElementById('expEntriesContainer');
+    const list = Array.isArray(employers) && employers.length > 0 ? employers : [{}];
+    container.innerHTML = list.map(experienceEntryHtml).join('');
+  }
+
+  function addExperienceEntry() {
+    document.getElementById('expEntriesContainer').insertAdjacentHTML('beforeend', experienceEntryHtml({}));
+  }
+
+  function collectExperienceEntries() {
+    return Array.from(document.querySelectorAll('#expEntriesContainer .exp-entry')).map((el) => {
+      const dates = el.querySelector('.exp-dates').value.split('–').map((s) => s.trim());
+      return {
+        company: el.querySelector('.exp-company').value.trim(),
+        title: el.querySelector('.exp-title').value.trim(),
+        industry: el.querySelector('.exp-industry').value.trim() || null,
+        start: dates[0] || null,
+        end: dates[1] || null,
+        achievements: el.querySelector('.exp-achievements').value.trim() || null,
+      };
+    }).filter((e) => e.company || e.title);
+  }
+
+  renderExperienceEntries([]); // shows one blank entry until a résumé is analyzed
+
   async function handleResumeFile(file) {
     if (!file) return;
     document.getElementById('dropzone').style.display = 'none';
@@ -356,6 +395,13 @@
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Upload failed');
       document.getElementById('uploadedFileStatus').textContent = 'Uploaded successfully';
+      lastResumeStructured = data.resume_structured || null;
+      if (lastResumeStructured?.employers?.length) {
+        renderExperienceEntries(lastResumeStructured.employers);
+      } else {
+        document.getElementById('uploadedFileStatus').textContent =
+          "Uploaded — we couldn't automatically read your work history, so please add your positions below.";
+      }
     } catch (err) {
       document.getElementById('uploadedFileStatus').textContent = 'Upload failed: ' + err.message;
       document.getElementById('uploadedFileStatus').style.color = '#C23B3B';
@@ -408,6 +454,14 @@
       sales_experience: {
         customer_types: selectedChips('customerTypes'),
         sales_types: selectedChips('salesType'),
+      },
+      // Candidate-confirmed work history from the Career Experience step —
+      // merged over the raw AI extraction (same resume_structured.employers
+      // shape) so any edits/adds/removes the candidate made are what
+      // actually gets saved, not just whatever the AI first produced.
+      resume_structured: {
+        ...(lastResumeStructured || {}),
+        employers: collectExperienceEntries(),
       },
     };
   }
