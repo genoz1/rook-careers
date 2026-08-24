@@ -162,7 +162,11 @@ function renderRow(job) {
     ? `🔒 Subscribe to see who's hiring — ${escapeHtml(job.location_raw || '')}`
     : `${escapeHtml(job.company_name || 'Confidential search')} — ${escapeHtml(job.location_raw || '')}`;
   const score = job.match?.overall_score;
-  const matchBadge = score != null ? `<span class="match-badge">${score}% Match</span>` : '';
+  const matchBadge = job.match?.excellent_match
+    ? `<span class="match-badge" style="background:#7C3AED18; color:#7C3AED;">Excellent Match</span>`
+    : score != null
+      ? `<span class="match-badge">${score}% Match</span>`
+      : `<span class="match-badge" style="background:#F5F7FA; color:#8B96AB;">Just added</span>`;
   const actionHref = `rook-job-analysis.html?job=${encodeURIComponent(job.id)}`;
   const actionLabel = job.subscription_required ? 'Subscribe to Unlock' : 'View Job';
 
