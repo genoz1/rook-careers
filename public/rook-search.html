@@ -132,13 +132,6 @@
       <div id="nearLocationStatus" style="font-size:11.5px; color:#8B96AB; margin-top:6px;"></div>
     </div>
     <div class="filter-group">
-      <label>Location</label>
-      <div class="check-row"><input type="checkbox" class="filter-location" value="central-fl"> Central Florida</div>
-      <div class="check-row"><input type="checkbox" class="filter-location" value="northeast-fl"> Northeast Florida</div>
-      <div class="check-row"><input type="checkbox" class="filter-location" value="tampa-bay"> Tampa Bay</div>
-      <div class="check-row"><input type="checkbox" class="filter-location" value="remote"> Remote</div>
-    </div>
-    <div class="filter-group">
       <label>Industry</label>
       <div class="check-row"><input type="checkbox" class="filter-industry" value="Diagnostics"> Diagnostics</div>
       <div class="check-row"><input type="checkbox" class="filter-industry" value="Veterinary"> Veterinary / Animal Health</div>
@@ -165,6 +158,7 @@
     <div class="filter-group">
       <label>Source</label>
       <div class="check-row"><input type="checkbox" id="showRecruiterFilter" checked> Show recruiter-posted jobs</div>
+      <div class="check-row"><input type="checkbox" id="remoteOnlyFilter"> Remote only</div>
     </div>
     <a href="#" class="clear-link" onclick="clearAllFilters(); return false;">Clear all filters</a>
   </aside>
@@ -332,15 +326,6 @@
     applyFiltersAndRender();
   }
 
-  const FL_REGION_CITIES = {
-    // Approximate — not real geocoding, just a reasonable city list per
-    // region. A city not in this list won't match any region filter even
-    // if it's genuinely in that area.
-    'central-fl': ['orlando', 'oxford', 'the villages', 'ocala', 'lakeland', 'kissimmee', 'winter park', 'sanford', 'lake mary', 'clermont', 'leesburg', 'tampa'],
-    'northeast-fl': ['jacksonville', 'st. augustine', 'st augustine', 'gainesville', 'palatka'],
-    'tampa-bay': ['tampa', 'st. petersburg', 'st petersburg', 'clearwater', 'brandon', 'sarasota'],
-  };
-
   (async () => {
     const token = await rookRequireAuth();
     if (!token) return;
@@ -371,7 +356,7 @@
 
       // Wire up every filter control to re-filter on change.
       document.getElementById('filterKeyword').addEventListener('input', applyFiltersAndRender);
-      document.querySelectorAll('.filter-location').forEach((el) => el.addEventListener('change', applyFiltersAndRender));
+      document.getElementById('remoteOnlyFilter').addEventListener('change', applyFiltersAndRender);
       document.querySelectorAll('.filter-industry').forEach((el) => el.addEventListener('change', applyFiltersAndRender));
       document.querySelectorAll('.filter-travel').forEach((el) => el.addEventListener('change', applyFiltersAndRender));
       document.getElementById('filterMatchScore').addEventListener('input', applyFiltersAndRender);
@@ -408,7 +393,7 @@
 
   function applyFiltersAndRender() {
     const keyword = document.getElementById('filterKeyword').value.trim().toLowerCase();
-    const selectedLocations = Array.from(document.querySelectorAll('.filter-location:checked')).map((el) => el.value);
+    const remoteOnly = document.getElementById('remoteOnlyFilter').checked;
     const selectedIndustries = Array.from(document.querySelectorAll('.filter-industry:checked')).map((el) => el.value.toLowerCase());
     const selectedTravel = Array.from(document.querySelectorAll('.filter-travel:checked')).map((el) => el.value);
     const minMatchScore = Number(document.getElementById('filterMatchScore').value);
@@ -424,14 +409,10 @@
         if (!haystack.includes(keyword)) return false;
       }
 
-      if (selectedLocations.length > 0) {
+      if (remoteOnly) {
         const loc = (job.location_raw || '').toLowerCase();
         const isRemote = /remote/.test(loc) || job.remote_status === 'remote';
-        const matchesAny = selectedLocations.some((region) => {
-          if (region === 'remote') return isRemote;
-          return (FL_REGION_CITIES[region] || []).some((city) => loc.includes(city));
-        });
-        if (!matchesAny) return false;
+        if (!isRemote) return false;
       }
 
       if (selectedIndustries.length > 0) {
@@ -502,7 +483,8 @@
 
   function clearAllFilters() {
     document.getElementById('filterKeyword').value = '';
-    document.querySelectorAll('.filter-location, .filter-industry, .filter-travel').forEach((el) => (el.checked = false));
+    document.getElementById('remoteOnlyFilter').checked = false;
+    document.querySelectorAll('.filter-industry, .filter-travel').forEach((el) => (el.checked = false));
     document.getElementById('filterMatchScore').value = 0;
     document.getElementById('filterComp').value = 0;
     document.getElementById('sortSelect').value = 'match';
