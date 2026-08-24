@@ -48,6 +48,10 @@
     background:#fff; border-left:3px solid #B98900; border-radius:8px; padding:12px 14px; line-height:1.5;
   }
   .switch-note{font-size:12.5px; color:var(--muted); margin-top:18px; text-align:center;}
+  .pw-wrap{position:relative;}
+  .pw-wrap input{width:100%; padding-right:40px; box-sizing:border-box;}
+  .pw-toggle{position:absolute; right:10px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; padding:4px; color:#8B96AB; display:flex;}
+  .pw-toggle:hover{color:#3D4A63;}
 </style>
 </head>
 <body>
@@ -68,7 +72,12 @@
     <h2>Welcome back</h2>
     <div class="sub">Log in to manage your postings.</div>
     <div class="field"><label>Email</label><input type="email" id="signinEmail" autocomplete="email"></div>
-    <div class="field"><label>Password</label><input type="password" id="signinPassword" autocomplete="current-password"></div>
+    <div class="field"><label>Password</label>
+      <div class="pw-wrap">
+        <input type="password" id="signinPassword" autocomplete="current-password">
+        <button type="button" class="pw-toggle" onclick="togglePasswordVisibility('signinPassword', this)" aria-label="Show password">👁</button>
+      </div>
+    </div>
     <button class="btn" id="signinBtn" onclick="handleSignIn()">Log In</button>
     <div style="text-align:center; margin-top:14px;"><a href="#" onclick="showForgotPassword(); return false;" style="font-size:13px;">Forgot your password?</a></div>
   </div>
@@ -85,8 +94,18 @@
     <h2>Create your recruiter account</h2>
     <div class="sub">Free to post. You'll add your company details next.</div>
     <div class="field"><label>Email</label><input type="email" id="signupEmail" autocomplete="email"></div>
-    <div class="field"><label>Password</label><input type="password" id="signupPassword" autocomplete="new-password"></div>
-    <div class="field"><label>Confirm Password</label><input type="password" id="signupPasswordConfirm" autocomplete="new-password"></div>
+    <div class="field"><label>Password</label>
+      <div class="pw-wrap">
+        <input type="password" id="signupPassword" autocomplete="new-password">
+        <button type="button" class="pw-toggle" onclick="togglePasswordVisibility('signupPassword', this)" aria-label="Show password">👁</button>
+      </div>
+    </div>
+    <div class="field"><label>Confirm Password</label>
+      <div class="pw-wrap">
+        <input type="password" id="signupPasswordConfirm" autocomplete="new-password">
+        <button type="button" class="pw-toggle" onclick="togglePasswordVisibility('signupPasswordConfirm', this)" aria-label="Show password">👁</button>
+      </div>
+    </div>
     <button class="btn" id="signupBtn" onclick="handleSignUp()">Create Account</button>
   </div>
 
@@ -174,6 +193,14 @@
   // onboarding page for a handful of fields (name, company, phone).
   async function routeAfterLogin() {
     window.location.href = 'rook-recruiter-dashboard.html';
+  }
+
+  function togglePasswordVisibility(id, btn) {
+    const input = document.getElementById(id);
+    const showing = input.type === 'text';
+    input.type = showing ? 'password' : 'text';
+    btn.textContent = showing ? '👁' : '🙈';
+    btn.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
   }
 
   async function handleSignIn() {
