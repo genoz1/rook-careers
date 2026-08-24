@@ -417,6 +417,39 @@ router.get("/jobs/:id", requireConfig, optionalAuth, async (req, res) => {
 
   const hasRealScore = row && row.scored_at != null;
   const match = hasRealScore ? matchFromRow(row) : scoreJob(data, profile);
+
+  // Persist a freshly-computed live fallback score so list views
+  // (dashboard, recruiter-jobs) pick it up on their next load instead
+  // of staying stuck showing this job as unscored until the next
+  // scheduled precompute run. Reported bug: View Analysis showed a real
+  // 77% score for a job that still showed "—" / "Just added" on both
+  // list pages, because this fallback used to be display-only.
+  if (!hasRealScore) {
+    supabaseAdmin
+      .from("candidate_job_matches")
+      .upsert(
+        {
+          candidate_id: profile.id,
+          job_id: data.id,
+          overall_score: match.overall_score,
+          candidate_fit: match.candidate_fit,
+          preference_fit: match.preference_fit,
+          recommendation: match.recommendation,
+          reasons: match.reasons,
+          concerns: match.concerns,
+          confidence: match.confidence,
+          hard_disqualifier: match.hard_disqualifier,
+          categories: match.categories,
+          excellent_match: match.excellent_match,
+          scored_at: new Date().toISOString(),
+        },
+        { onConflict: "candidate_id,job_id" }
+      )
+      .then(({ error }) => {
+        if (error) console.error(`Failed to persist live fallback score for job ${data.id}: ${error.message}`);
+      });
+  }
+
   const result = { ...data, match, saved: Boolean(row?.saved) };
   res.json(isSubscribed(profile) ? result : redactForNonSubscriber(result));
 });
