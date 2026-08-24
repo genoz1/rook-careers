@@ -282,11 +282,19 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
 // their visibility on scoring timing doesn't serve any purpose here.
 // This queries jobs directly and left-joins a score if one happens to
 // already exist, but never requires one.
+//
+// Includes source_type='agency_aggregated' alongside native
+// 'recruiter_posted' jobs — real, live listings pulled from staffing/
+// recruiting agencies via backend/ingestAdzuna.js, used to seed this
+// section with genuine content until real recruiters are posting
+// directly. Frontend must keep treating the two differently for
+// "how to apply" (agency_aggregated has no real recruiter_email and
+// must link to its real source_url, never ROOK's in-site Apply flow).
 router.get("/recruiter-jobs", requireConfig, optionalAuth, async (req, res) => {
   const { data: jobsData, error } = await supabaseAnon
     .from("jobs")
     .select("*")
-    .eq("source_type", "recruiter_posted")
+    .in("source_type", ["recruiter_posted", "agency_aggregated"])
     .eq("status", "active")
     .eq("moderation_status", "approved")
     .order("first_seen_at", { ascending: false });
