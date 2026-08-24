@@ -43,7 +43,23 @@ const SEARCH_KEYWORDS = [
   "veterinary sales representative",
   "clinical sales specialist",
   "capital equipment sales healthcare",
+  "surgical sales representative",
+  "orthopedic sales representative",
+  "biotech sales representative",
+  "healthcare account executive",
+  "medical territory manager",
+  "animal health sales",
+  "hospital sales representative",
+  "laboratory sales representative",
 ];
+
+// Pages to pull per keyword. Adzuna returns 50 results/page; three
+// pages per keyword (150 results) instead of one (50) meaningfully
+// increases the pool the agency filter runs against — the filter
+// itself was already conservative and working correctly (see prior run:
+// 9/290 matched, no false positives found), the shortfall was in how
+// much it had to search through, not the filter being too strict.
+const PAGES_PER_KEYWORD = 3;
 
 // Known staffing/recruiting agency names in the medical & veterinary
 // sales space, plus generic staffing-firm words. A company name
@@ -58,16 +74,44 @@ const KNOWN_AGENCY_NAMES = [
   "aston carter", "randstad", "manpower", "professional medical",
   "medical sales college", "rxinsider", "iqvia talent", "pharmalink",
   "hireminds", "hirebridge", "clinical recruiter", "premier medical staffing",
+  "rep-lite", "replite", "medzilla", "klein hersh", "divergx", "russell tobin",
+  "medcareerfit", "intepros", "the medical sales rep", "med sales careers",
+  "cannon medical staffing", "sales recruiters", "medsurg sales staffing",
+  "blake smith staffing", "ciel healthcare", "healthcare businesswomen",
+  "clinical staffing", "life sciences recruiting", "scientific search",
+  "hunter recruiting", "mrinetwork", "mri network", "sanford rose",
+  "lucas group", "beacon hill staffing", "kelly services", "vaco",
 ];
 const AGENCY_KEYWORDS = [
   "recruiting", "recruiter", "recruitment", "staffing", "talent solutions",
   "executive search", "headhunt", "placement firm", "search firm", "personnel",
+  "talent acquisition", "workforce solutions",
 ];
 
-function looksLikeAgency(companyName) {
-  if (!companyName) return false;
-  const lower = companyName.toLowerCase();
-  return KNOWN_AGENCY_NAMES.some((n) => lower.includes(n)) || AGENCY_KEYWORDS.some((k) => lower.includes(k));
+// Recruiting firms very often post on behalf of an undisclosed employer
+// — the company_name field is blank, generic ("Confidential"), or is
+// the RECRUITING FIRM's own name, but the actual "this is a third-party
+// search" signal only shows up in the posting's own text ("our client
+// is seeking...", "on behalf of our client", "we've been retained to
+// find..."). Checking description text alongside company name catches
+// these — the same MedReps-style listing pattern seen earlier in this
+// project (the QIAGEN/Boston listing: "Our Client is a well established,
+// fast growing medical device company... They've asked us to help them
+// find a Region Sales Manager").
+const AGENCY_DESCRIPTION_PHRASES = [
+  "our client is", "on behalf of our client", "our client, a", "confidential search",
+  "we have been retained", "we've been retained", "retained search",
+  "our client is seeking", "they've asked us to help", "staffing agency",
+  "leading staffing", "recruiting firm", "search firm",
+];
+
+function looksLikeAgency(companyName, descriptionText) {
+  const lowerCompany = (companyName || "").toLowerCase();
+  const lowerDesc = (descriptionText || "").toLowerCase();
+  if (KNOWN_AGENCY_NAMES.some((n) => lowerCompany.includes(n))) return true;
+  if (AGENCY_KEYWORDS.some((k) => lowerCompany.includes(k))) return true;
+  if (AGENCY_DESCRIPTION_PHRASES.some((p) => lowerDesc.includes(p))) return true;
+  return false;
 }
 
 async function run() {
@@ -80,18 +124,22 @@ async function run() {
   for (const keyword of SEARCH_KEYWORDS) {
     console.log(`\nSearching Adzuna for "${keyword}"...`);
     let rawJobs = [];
-    try {
-      rawJobs = await fetchAdzunaJobs(keyword, 1, 50);
-    } catch (err) {
-      console.error(`  FAILED: ${err.message}`);
-      continue;
+    for (let page = 1; page <= PAGES_PER_KEYWORD; page++) {
+      try {
+        const pageResults = await fetchAdzunaJobs(keyword, page, 50);
+        if (pageResults.length === 0) break; // no more pages for this keyword
+        rawJobs.push(...pageResults);
+      } catch (err) {
+        console.error(`  FAILED on page ${page}: ${err.message}`);
+        break;
+      }
     }
     totalFetched += rawJobs.length;
-    console.log(`  ${rawJobs.length} result(s) returned.`);
+    console.log(`  ${rawJobs.length} result(s) returned across up to ${PAGES_PER_KEYWORD} page(s).`);
 
     for (const raw of rawJobs) {
       const companyName = raw.company?.display_name || "";
-      if (!looksLikeAgency(companyName)) continue; // direct employer, not an agency — skip, this pass is agency-only by design
+      if (!looksLikeAgency(companyName, raw.description)) continue; // direct employer, not an agency — skip, this pass is agency-only by design
       totalAgencyMatched++;
 
       const job = normalizeAdzunaJob(raw);
