@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "ingest": "node backend/ingest.js",
+    "ingest-adzuna": "node backend/ingestAdzuna.js",
     "send-digest": "node backend/sendDigest.js",
     "precompute-scores": "node backend/precomputeScores.js"
   },
