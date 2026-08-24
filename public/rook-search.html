@@ -338,9 +338,12 @@
     }
 
     try {
-      const res = await rookApiFetch('/jobs?limit=300');
-      if (!res.ok) throw new Error('API returned ' + res.status);
-      const jobs = await res.json();
+      const [jobsRes, profileRes] = await Promise.all([
+        rookApiFetch('/jobs?limit=300'),
+        rookApiFetch('/profile').catch(() => null),
+      ]);
+      if (!jobsRes.ok) throw new Error('API returned ' + jobsRes.status);
+      const jobs = await jobsRes.json();
 
       if (!Array.isArray(jobs) || jobs.length === 0) {
         showBanner('No live jobs yet. Add employers and run <code>npm run ingest</code> — see ROOK-Setup-Guide.pdf. Showing example matches below in the meantime.');
@@ -353,6 +356,20 @@
       applyFiltersAndRender();
       showBanner(`Showing ${jobs.length} live job(s), scored against your profile.`, 'info');
       revealDemo();
+
+      // Prefill "Show jobs near" with the candidate's own saved home zip
+      // and run it automatically, rather than making them re-type the
+      // location they already gave us during onboarding every visit.
+      // Doesn't overwrite anything if they've already typed something.
+      try {
+        if (profileRes?.ok && !document.getElementById('nearLocationInput').value) {
+          const me = await profileRes.json();
+          if (me?.home_zip) {
+            document.getElementById('nearLocationInput').value = me.home_zip;
+            searchNearLocation();
+          }
+        }
+      } catch {}
 
       // Wire up every filter control to re-filter on change.
       document.getElementById('filterKeyword').addEventListener('input', applyFiltersAndRender);
