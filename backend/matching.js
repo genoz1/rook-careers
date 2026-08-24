@@ -197,6 +197,26 @@ function scoreJob(job, profile) {
   let prefCap = 100;
   let candCap = 100;
 
+  // Five simplified categories for the job-card UI (spec: Experience,
+  // Industry & Product, Customer & Specialty, Location & Preferences,
+  // Requirements). These bucket the SAME points computed below — the
+  // detailed per-factor scoring is unchanged, this is purely a simpler
+  // view derived from it, not a second scoring pass. Each block below
+  // snapshots prefScore/candScore before and after to see how many
+  // points that block actually contributed, then adds that delta to the
+  // relevant category. Job freshness and the embedding-similarity bonus
+  // are deliberately left out of category totals — they're real signals
+  // for the overall score, but don't map cleanly to any one card
+  // category and would just make the buckets muddier.
+  const cat = {
+    experience: { score: 0, max: 0 },
+    industry_product: { score: 0, max: 0 },
+    customer_specialty: { score: 0, max: 0 },
+    location_prefs: { score: 0, max: 0 },
+    requirements: { score: 0, max: 0 },
+  };
+  const catGap = new Set(); // categories forced to "Gap" by a hard disqualifier
+
   // ============================================================
   // PREFERENCE FIT — would the candidate want this job
   // ============================================================
@@ -215,6 +235,7 @@ function scoreJob(job, profile) {
   // reported flaw, not a hypothetical one.
   prefMax += 35;
   dataPointsPossible++;
+  const _locPrefBefore = prefScore;
 
   // A candidate can accept jobs from their home state AND any additional
   // states they've explicitly said they want to see (preferred_states).
@@ -313,9 +334,14 @@ function scoreJob(job, profile) {
     prefCap = Math.min(prefCap, 65);
   }
 
+  cat.location_prefs.max += 35;
+  cat.location_prefs.score += (prefScore - _locPrefBefore);
+  if (hardDisqualifier && prefCap <= 65) catGap.add("location_prefs");
+
   // --- Compensation (up to 30 points) ---
   prefMax += 30;
   dataPointsPossible++;
+  const _compBefore = prefScore;
   const jobSalary = extractSalaryFigure(job);
   if (jobSalary) dataPointsAvailable++;
 
@@ -338,8 +364,13 @@ function scoreJob(job, profile) {
     prefScore += 15;
   }
 
+  cat.location_prefs.max += 30;
+  cat.location_prefs.score += (prefScore - _compBefore);
+  if (hardDisqualifier && prefCap <= 55) catGap.add("location_prefs");
+
   // --- Travel fit (up to 12 points) ---
   const jobTravel = extractJobTravelPercentage(job);
+  const _travelBefore = prefScore;
   if (profile.maximum_travel_percentage != null && jobTravel != null) {
     prefMax += 12;
     dataPointsPossible++;
@@ -355,7 +386,11 @@ function scoreJob(job, profile) {
     }
   }
 
+  cat.location_prefs.max += 12;
+  cat.location_prefs.score += Math.max(0, prefScore - _travelBefore);
+
   // --- Onboarding-stated industry interest (up to 15 points) ---
+  const _indInterestBefore = prefScore;
   if (Array.isArray(profile.desired_industries) && profile.desired_industries.length > 0) {
     prefMax += 15;
     dataPointsPossible++;
@@ -371,6 +406,9 @@ function scoreJob(job, profile) {
       if (avoided) concerns.push(`Mentions ${avoided}, which you asked to avoid`);
     }
   }
+
+  cat.industry_product.max += 15;
+  cat.industry_product.score += (prefScore - _indInterestBefore);
 
   // --- Job freshness (up to 8 points) ---
   prefMax += 8;
@@ -413,9 +451,12 @@ function scoreJob(job, profile) {
       concerns.push(`Job requires industry experience (${jobAI.required_industries.join(", ")}) not found on your résumé`);
       hardDisqualifier = true;
       candCap = Math.min(candCap, 70);
+      catGap.add("industry_product");
     } else {
       candScore += 10;
     }
+    cat.industry_product.max += 25;
+    cat.industry_product.score += matchedRequired ? 25 : matchedPreferred ? 16 : 10;
 
     // --- AI product-category match (up to 18 points, spec factor #3) ---
     candMax += 18;
@@ -429,6 +470,8 @@ function scoreJob(job, profile) {
     } else {
       candScore += 8;
     }
+    cat.industry_product.max += 18;
+    cat.industry_product.score += matchedProduct ? 18 : 8;
 
     // --- AI customer/call-point match (up to 18 points, spec factor #4) ---
     candMax += 18;
@@ -442,8 +485,11 @@ function scoreJob(job, profile) {
     } else {
       candScore += 8;
     }
+    cat.customer_specialty.max += 18;
+    cat.customer_specialty.score += matchedCustomer ? 18 : 8;
 
     // --- AI seniority fit (up to 12 points, spec factor #6) ---
+    const _seniorityBefore = candScore;
     if (resume.seniority_level && jobAI.seniority_level) {
       candMax += 12;
       dataPointsPossible++;
@@ -456,9 +502,13 @@ function scoreJob(job, profile) {
       }
     }
 
+    cat.experience.max += 12;
+    cat.experience.score += (candScore - _seniorityBefore);
+
     // --- Sales-motion fit (up to 10 points, spec factor #5) ---
     const resumeMotion = resume.sales_motion || [];
     const jobMotion = jobAI.sales_motion || [];
+    const _motionBefore = candScore;
     if (resumeMotion.length > 0 && jobMotion.length > 0) {
       candMax += 10;
       dataPointsPossible++;
@@ -471,8 +521,11 @@ function scoreJob(job, profile) {
         candScore += 4;
       }
     }
+    cat.experience.max += 10;
+    cat.experience.score += (candScore - _motionBefore);
 
     // --- Required years of experience (up to 10 points, spec factor #7) ---
+    const _yearsBefore = candScore;
     if (resume.total_sales_years != null && jobAI.required_years_experience != null) {
       candMax += 10;
       dataPointsPossible++;
@@ -489,6 +542,8 @@ function scoreJob(job, profile) {
         concerns.push(`Well under the stated ${jobAI.required_years_experience}-year requirement`);
       }
     }
+    cat.experience.max += 10;
+    cat.experience.score += (candScore - _yearsBefore);
 
     // --- Specialty experience (up to 8 points, spec factor #9) ---
     const resumeSpecialties = resume.specialties || [];
@@ -498,8 +553,10 @@ function scoreJob(job, profile) {
       dataPointsPossible++;
       if (resumeSpecialties.length > 0) dataPointsAvailable++;
       const matchedSpecialty = findOverlap(jobSpecialties, resumeSpecialties);
+      cat.customer_specialty.max += 8;
       if (matchedSpecialty) {
         candScore += 8;
+        cat.customer_specialty.score += 8;
         reasons.push(`Your ${matchedSpecialty} specialty experience is a direct match`);
       } else {
         concerns.push(`Job calls for specialty experience (${jobSpecialties.join(", ")}) not shown on your résumé`);
@@ -512,6 +569,8 @@ function scoreJob(job, profile) {
       dataPointsPossible++;
       dataPointsAvailable++;
       candScore += 6;
+      cat.experience.max += 6;
+      cat.experience.score += 6;
       reasons.push("Résumé shows documented sales performance achievements");
     }
 
@@ -522,6 +581,8 @@ function scoreJob(job, profile) {
       dataPointsPossible++;
       dataPointsAvailable++;
       candScore += 5;
+      cat.requirements.max += 5;
+      cat.requirements.score += 5;
       reasons.push(`Holds relevant certifications: ${resumeCerts.slice(0, 2).join(", ")}`);
     }
 
@@ -559,8 +620,38 @@ function scoreJob(job, profile) {
         concerns.push(`Job requires "${unmet.requirement}" — not clearly shown on your résumé`);
         hardDisqualifier = true;
         candCap = Math.min(candCap, 60);
+        catGap.add("requirements");
       }
     }
+  }
+
+  // ============================================================
+  // Category ratings for the job-card UI — bucket each category's
+  // score/max ratio into Strong/Good/Partial/Gap. A category with a
+  // forced Gap (from a hard disqualifier) always shows Gap regardless
+  // of ratio. A category with no underlying data at all (max === 0 —
+  // e.g. no résumé uploaded yet, so nothing fed Experience) shows null
+  // rather than guessing; the card should say "not enough info", not
+  // silently claim a rating that has no basis.
+  // ============================================================
+  const CATEGORY_LABELS = {
+    experience: "Experience",
+    industry_product: "Industry & Product",
+    customer_specialty: "Customer & Specialty",
+    location_prefs: "Location & Preferences",
+    requirements: "Requirements",
+  };
+  const categories = {};
+  for (const [key, label] of Object.entries(CATEGORY_LABELS)) {
+    const { score, max } = cat[key];
+    let rating = null;
+    if (catGap.has(key)) {
+      rating = "Gap";
+    } else if (max > 0) {
+      const ratio = score / max;
+      rating = ratio >= 0.85 ? "Strong" : ratio >= 0.6 ? "Good" : ratio >= 0.35 ? "Partial" : "Gap";
+    }
+    categories[key] = { label, rating };
   }
 
   // ============================================================
@@ -589,6 +680,26 @@ function scoreJob(job, profile) {
   const availabilityRatio = dataPointsPossible > 0 ? dataPointsAvailable / dataPointsPossible : 0;
   const confidence = availabilityRatio >= 0.75 ? "high" : availabilityRatio >= 0.4 ? "medium" : "low";
 
+  // --- Excellent Match determination (backs the 30-day guarantee) ---
+  // Deliberately stricter than just "overall_score >= 90" — scoring 90%
+  // on preference-fit alone with no résumé/job-AI data at all would
+  // otherwise qualify, which isn't a real "excellent match," it's an
+  // absence of information. Every category that has data must clear its
+  // bar, and any category with no data (rating === null) fails the
+  // requirement rather than being ignored, since the guarantee shouldn't
+  // be gameable by incomplete candidate/job data.
+  const goodOrStrong = (r) => r === "Strong" || r === "Good";
+  const excellent_match = Boolean(
+    overall_score != null &&
+    overall_score >= 90 &&
+    !hardDisqualifier &&
+    categories.experience.rating === "Strong" &&
+    goodOrStrong(categories.industry_product.rating) &&
+    goodOrStrong(categories.customer_specialty.rating) &&
+    categories.location_prefs.rating === "Strong" &&
+    goodOrStrong(categories.requirements.rating)
+  );
+
   return {
     candidate_fit,
     preference_fit,
@@ -598,6 +709,8 @@ function scoreJob(job, profile) {
     concerns,
     confidence,
     hard_disqualifier: hardDisqualifier,
+    categories,
+    excellent_match,
   };
 }
 
