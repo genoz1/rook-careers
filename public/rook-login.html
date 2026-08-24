@@ -84,6 +84,7 @@
     <div class="sub">Takes about a minute — you'll build your profile next.</div>
     <div class="field"><label>Email</label><input type="email" id="signupEmail" autocomplete="email"></div>
     <div class="field"><label>Password</label><input type="password" id="signupPassword" autocomplete="new-password"></div>
+    <div class="field"><label>Confirm Password</label><input type="password" id="signupPasswordConfirm" autocomplete="new-password"></div>
     <button class="btn" id="signupBtn" onclick="handleSignUp()">Create Account</button>
   </div>
 
@@ -232,7 +233,9 @@
     if (!configured) return setMsg('Supabase isn\'t configured yet — see the warning below.', 'error');
     const email = document.getElementById('signupEmail').value.trim();
     const password = document.getElementById('signupPassword').value;
+    const passwordConfirm = document.getElementById('signupPasswordConfirm').value;
     if (!email || password.length < 8) return setMsg('Enter a valid email and an 8+ character password.', 'error');
+    if (password !== passwordConfirm) return setMsg('Passwords don\'t match — please re-enter them.', 'error');
 
     document.getElementById('signupBtn').disabled = true;
     setMsg('Creating your account...');
