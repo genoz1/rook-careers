@@ -136,16 +136,16 @@
     <p class="step-sub">Confirm your contact details.</p>
     <div class="card">
       <div class="field-row">
-        <div class="field"><label>Full Name</label><input type="text" id="fieldName" value="Gene Zentko"></div>
-        <div class="field"><label>Email</label><input type="text" id="fieldEmail" value="gene@example.com"></div>
+        <div class="field"><label>Full Name</label><input type="text" id="fieldName" placeholder="Your full name"></div>
+        <div class="field"><label>Email</label><input type="text" id="fieldEmail" placeholder="you@example.com"></div>
       </div>
       <div class="field-row">
         <div class="field"><label>Phone</label><input type="text" id="fieldPhone" placeholder="(555) 555-5555"></div>
         <div class="field"><label>LinkedIn URL</label><input type="text" id="fieldLinkedin" placeholder="linkedin.com/in/..."></div>
       </div>
       <div class="field-row">
-        <div class="field"><label>City</label><input type="text" id="fieldCity" value="Oxford"></div>
-        <div class="field"><label>State</label><input type="text" id="fieldState" value="Florida"></div>
+        <div class="field"><label>City</label><input type="text" id="fieldCity" placeholder="Your city"></div>
+        <div class="field"><label>State</label><input type="text" id="fieldState" placeholder="Your state"></div>
       </div>
       <div class="field-row">
         <div class="field">
@@ -174,24 +174,24 @@
       <div class="field full" style="margin-bottom:20px;">
         <label style="margin-bottom:10px;">Customer types</label>
         <div class="chip-grid" data-group="customerTypes">
-          <div class="chip selected">Veterinary Clinics</div>
+          <div class="chip">Veterinary Clinics</div>
           <div class="chip">Hospitals</div>
           <div class="chip">Physicians</div>
-          <div class="chip selected">Specialty Hospitals</div>
+          <div class="chip">Specialty Hospitals</div>
           <div class="chip">Corporate Veterinary Groups</div>
           <div class="chip">Distributors</div>
           <div class="chip">IDNs</div>
-          <div class="chip selected">Reference Laboratories</div>
+          <div class="chip">Reference Laboratories</div>
         </div>
       </div>
       <div class="field full">
         <label style="margin-bottom:10px;">Sales type</label>
         <div class="chip-grid" data-group="salesType">
-          <div class="chip selected">Hunter</div>
+          <div class="chip">Hunter</div>
           <div class="chip">Account Management</div>
-          <div class="chip selected">Territory Management</div>
+          <div class="chip">Territory Management</div>
           <div class="chip">Capital Equipment</div>
-          <div class="chip selected">Consumables</div>
+          <div class="chip">Consumables</div>
           <div class="chip">Recurring Revenue</div>
           <div class="chip">Contract Negotiation</div>
         </div>
@@ -205,22 +205,22 @@
     <p class="step-sub">What you're looking for next.</p>
     <div class="card">
       <div class="field-row">
-        <div class="field"><label>Minimum Base Salary</label><input type="text" id="fieldMinSalary" value="$95,000"></div>
-        <div class="field"><label>Desired Total Compensation</label><input type="text" id="fieldTargetOte" value="$130,000"></div>
+        <div class="field"><label>Minimum Base Salary</label><input type="text" id="fieldMinSalary" placeholder="$90,000"></div>
+        <div class="field"><label>Desired Total Compensation</label><input type="text" id="fieldTargetOte" placeholder="$130,000"></div>
       </div>
       <div class="field-row">
-        <div class="field"><label>Maximum Travel</label><input type="text" id="fieldMaxTravel" value="50%"></div>
-        <div class="field"><label>Overnight Travel</label><select id="fieldOvernightTravel"><option selected>Occasionally</option><option>Frequently</option><option>Rarely / Never</option></select></div>
+        <div class="field"><label>Maximum Travel</label><input type="text" id="fieldMaxTravel" placeholder="50%"></div>
+        <div class="field"><label>Overnight Travel</label><select id="fieldOvernightTravel"><option value="">Select...</option><option>Occasionally</option><option>Frequently</option><option>Rarely / Never</option></select></div>
       </div>
       <div class="field-row">
-        <div class="field"><label>Remote / Hybrid / On-site</label><select id="fieldWorkStyle"><option selected>Field / Territory-based</option><option>Hybrid</option><option>Remote</option></select></div>
-        <div class="field"><label>Relocation</label><select id="fieldRelocation"><option selected>Not willing to relocate</option><option>Open to relocation</option></select></div>
+        <div class="field"><label>Remote / Hybrid / On-site</label><select id="fieldWorkStyle"><option value="">Select...</option><option>Field / Territory-based</option><option>Hybrid</option><option>Remote</option></select></div>
+        <div class="field"><label>Relocation</label><select id="fieldRelocation"><option value="">Select...</option><option>Not willing to relocate</option><option>Open to relocation</option></select></div>
       </div>
       <div class="field full">
         <label style="margin-bottom:10px;">Desired industries</label>
         <div class="chip-grid" data-group="desiredIndustries">
-          <div class="chip selected">Diagnostics</div>
-          <div class="chip selected">Veterinary / Animal Health</div>
+          <div class="chip">Diagnostics</div>
+          <div class="chip">Veterinary / Animal Health</div>
           <div class="chip">Medical Device</div>
           <div class="chip">Capital Equipment</div>
           <div class="chip">Pharmaceutical</div>
@@ -260,19 +260,19 @@
     <div class="card">
       <div class="review-section">
         <h4>Basic Info</h4>
-        <div class="review-row"><span class="k">Name</span><span class="v">Gene Zentko</span></div>
-        <div class="review-row"><span class="k">Location</span><span class="v">Oxford, Florida</span></div>
+        <div class="review-row"><span class="k">Name</span><span class="v" id="reviewName"></span></div>
+        <div class="review-row"><span class="k">Location</span><span class="v" id="reviewLocation"></span></div>
       </div>
       <div class="review-section">
         <h4>Experience</h4>
-        <div class="review-row"><span class="k">Current Role</span><span class="v">Territory Manager, HealthTrackRx</span></div>
-        <div class="review-row"><span class="k">Industries</span><span class="v">Diagnostics, Veterinary</span></div>
+        <div class="review-row"><span class="k">Current Role</span><span class="v" id="reviewRole"></span></div>
+        <div class="review-row"><span class="k">Industries</span><span class="v" id="reviewIndustries"></span></div>
       </div>
       <div class="review-section">
         <h4>Preferences</h4>
-        <div class="review-row"><span class="k">Minimum Base</span><span class="v">$95,000</span></div>
-        <div class="review-row"><span class="k">Max Travel</span><span class="v">50%</span></div>
-        <div class="review-row"><span class="k">Relocation</span><span class="v">Not willing</span></div>
+        <div class="review-row"><span class="k">Minimum Base</span><span class="v" id="reviewMinSalary"></span></div>
+        <div class="review-row"><span class="k">Max Travel</span><span class="v" id="reviewMaxTravel"></span></div>
+        <div class="review-row"><span class="k">Relocation</span><span class="v" id="reviewRelocation"></span></div>
       </div>
     </div>
   </div>
@@ -313,7 +313,33 @@
     document.getElementById('progressLabel').textContent = 'Step ' + current + ' of ' + total + ' — ' + stepLabels[current-1];
     document.getElementById('backBtn').style.visibility = current === 1 ? 'hidden' : 'visible';
     document.getElementById('nextBtn').textContent = current === total ? 'Start Finding My Jobs →' : 'Continue →';
+    if (current === total) populateReviewStep();
     window.scrollTo({top:0, behavior:'smooth'});
+  }
+
+  // Fills the Review step from the candidate's actual entered values —
+  // this used to be permanently hardcoded text ("Gene Zentko", "Oxford,
+  // Florida", "Territory Manager, HealthTrackRx") shown to every
+  // candidate regardless of what they'd actually entered on the
+  // previous six steps. Reads straight from the same form fields
+  // collectProfileData() reads at save time, so what's shown here always
+  // matches what's about to be submitted.
+  function populateReviewStep() {
+    const val = (id) => document.getElementById(id)?.value?.trim() || '';
+    const first = document.querySelector('#expEntriesContainer .exp-entry');
+    const currentTitle = first?.querySelector('.exp-title')?.value?.trim() || '';
+    const currentCompany = first?.querySelector('.exp-company')?.value?.trim() || '';
+    const industries = Array.from(document.querySelectorAll('[data-group="desiredIndustries"] .chip.selected')).map((c) => c.textContent.trim());
+
+    document.getElementById('reviewName').textContent = val('fieldName') || '—';
+    document.getElementById('reviewLocation').textContent = [val('fieldCity'), val('fieldState')].filter(Boolean).join(', ') || '—';
+    document.getElementById('reviewRole').textContent = (currentTitle || currentCompany)
+      ? [currentTitle, currentCompany].filter(Boolean).join(', ')
+      : '—';
+    document.getElementById('reviewIndustries').textContent = industries.length ? industries.join(', ') : '—';
+    document.getElementById('reviewMinSalary').textContent = val('fieldMinSalary') || '—';
+    document.getElementById('reviewMaxTravel').textContent = val('fieldMaxTravel') || '—';
+    document.getElementById('reviewRelocation').textContent = val('fieldRelocation') || '—';
   }
 
   let lastResumeStructured = null; // set from the real POST /resume response, not a placeholder
@@ -516,6 +542,14 @@
 
   (async () => {
     await rookRequireAuth();
+    // Prefill email from the real signed-in account — the one field with
+    // a legitimate, always-correct default. Everything else starts
+    // blank; there's no honest source for a default name, city, salary,
+    // etc. before the candidate has told us anything.
+    try {
+      const { data: { user } } = await rookSupabase.auth.getUser();
+      if (user?.email) document.getElementById('fieldEmail').value = user.email;
+    } catch {}
     render();
   })();
 </script>
