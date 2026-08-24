@@ -90,9 +90,24 @@ router.post("/stripe/webhook", requireConfig, async (req, res) => {
       // Mark the candidate as subscribed. Add a `subscription_status`
       // and `stripe_customer_id` column to candidate_profiles if you
       // want to track this in the same table.
+      // subscription_started_at is only ever set here, the first time a
+      // given candidate goes active — NOT overwritten on later renewal
+      // events, since it anchors the 30-day/5-Excellent-Match guarantee
+      // window to when they first paid, not to unrelated later webhook
+      // activity. checkout.session.completed only fires on that initial
+      // purchase, so a plain update on every hit here is already safe,
+      // but the guard below makes that explicit instead of relying on
+      // Stripe's event semantics alone.
+      const { data: existing } = await supabaseAdmin
+        .from("candidate_profiles")
+        .select("subscription_started_at")
+        .eq("user_id", userId)
+        .maybeSingle();
+      const update = { subscription_status: "active", stripe_customer_id: session.customer };
+      if (!existing?.subscription_started_at) update.subscription_started_at = new Date().toISOString();
       await supabaseAdmin
         .from("candidate_profiles")
-        .update({ subscription_status: "active", stripe_customer_id: session.customer })
+        .update(update)
         .eq("user_id", userId);
       break;
     }
