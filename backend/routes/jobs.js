@@ -24,6 +24,11 @@ const { createClient } = require("@supabase/supabase-js");
 const { scoreJob } = require("../matching");
 const { scoreAndStoreForCandidate } = require("../scoring/precompute");
 const { distanceMiles } = require("../geocoding");
+const { sendEmail } = require("../email/resend");
+
+function escapeHtmlServer(str) {
+  return String(str || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
 
 const router = express.Router();
 
@@ -372,6 +377,92 @@ router.get("/guarantee-status", requireConfig, requireAuth, loadCandidateId, asy
     window_open: windowOpen,
     eligible_for_refund: windowOpen === false && excellentCount < GUARANTEE_TARGET,
   });
+});
+
+// POST /api/jobs/:id/apply — in-site application for a recruiter-posted
+// job (real ATS-sourced jobs still send candidates to source_url, same
+// as before; this only applies to source_type='recruiter_posted', which
+// has no external posting to apply through). Modeled on MedReps' Apply
+// Now flow: a real submission housed in ROOK rather than handing the
+// candidate off to compose their own email. Under the hood it still has
+// to reach the recruiter by email (there's no ATS to submit into for a
+// manually-posted job), but the candidate never sees that — they get a
+// real in-product application experience with a real "Applied" record.
+router.post("/jobs/:id/apply", requireConfig, requireAuth, loadCandidateId, async (req, res) => {
+  const { data: job, error: jobError } = await supabaseAdmin
+    .from("jobs")
+    .select("*")
+    .eq("id", req.params.id)
+    .maybeSingle();
+  if (jobError) return res.status(500).json({ error: jobError.message });
+  if (!job) return res.status(404).json({ error: "Job not found" });
+  if (job.source_type !== "recruiter_posted") {
+    return res.status(400).json({ error: "This job isn't recruiter-posted — use its original posting link to apply." });
+  }
+  if (!job.recruiter_email) {
+    return res.status(400).json({ error: "No recruiter contact is on file for this posting." });
+  }
+
+  const coverLetter = String(req.body?.cover_letter || "").trim();
+  if (!coverLetter) return res.status(400).json({ error: "Cover letter is required." });
+
+  const { data: profile } = await supabaseAdmin
+    .from("candidate_profiles")
+    .select("*")
+    .eq("id", req.candidateId)
+    .maybeSingle();
+
+  let resumeUrl = null;
+  if (profile?.resume_file_path) {
+    const { data: signed } = await supabaseAdmin.storage
+      .from("resumes")
+      .createSignedUrl(profile.resume_file_path, 60 * 60 * 24 * 14); // 14-day link, same pattern as any Storage-backed download elsewhere in the app
+    resumeUrl = signed?.signedUrl || null;
+  }
+
+  const html = `
+    <p><strong>${escapeHtmlServer(profile?.name || "A ROOK candidate")}</strong> applied to your posting on ROOK: <strong>${escapeHtmlServer(job.title_original || "this role")}</strong>.</p>
+    ${coverLetter.split("\n").filter(Boolean).map((p) => `<p>${escapeHtmlServer(p)}</p>`).join("")}
+    ${resumeUrl ? `<p><a href="${resumeUrl}">Download résumé</a> (link active 14 days)</p>` : "<p>No résumé is on file for this candidate.</p>"}
+    <p style="color:#5B6B85; font-size:13px;">Reply directly to this email to reach the candidate${profile?.email ? ` at ${escapeHtmlServer(profile.email)}` : ""}${profile?.phone ? ` or ${escapeHtmlServer(profile.phone)}` : ""}.</p>
+  `;
+
+  try {
+    await sendEmail({
+      to: job.recruiter_email,
+      subject: `New ROOK application: ${job.title_original || "your posting"}`,
+      html,
+    });
+  } catch (err) {
+    return res.status(502).json({ error: `Could not deliver the application email: ${err.message}. Nothing was recorded — try again.` });
+  }
+
+  // Record the application for the candidate's own Application History —
+  // no unique constraint on (candidate_id, job_id) in the schema, so
+  // check-then-write rather than upsert.
+  const { data: existing } = await supabaseAdmin
+    .from("applications")
+    .select("id")
+    .eq("candidate_id", req.candidateId)
+    .eq("job_id", job.id)
+    .maybeSingle();
+
+  const appRow = {
+    candidate_id: req.candidateId,
+    job_id: job.id,
+    status: "applied",
+    applied_at: new Date().toISOString(),
+    notes: coverLetter, // reusing the free-text notes column to keep a record of what was actually sent — no dedicated cover-letter column on this table yet
+    contact_name: job.recruiter_name || null,
+    contact_email: job.recruiter_email || null,
+  };
+  if (existing) {
+    await supabaseAdmin.from("applications").update(appRow).eq("id", existing.id);
+  } else {
+    await supabaseAdmin.from("applications").insert(appRow);
+  }
+
+  res.json({ ok: true });
 });
 
 // GET /api/jobs/:id
