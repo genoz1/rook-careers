@@ -82,6 +82,8 @@ function matchFromRow(row) {
     concerns: row.concerns || [],
     confidence: row.confidence,
     hard_disqualifier: row.hard_disqualifier,
+    categories: row.categories || null,
+    excellent_match: Boolean(row.excellent_match),
   };
 }
 
@@ -310,6 +312,50 @@ router.get("/recruiter-jobs", requireConfig, optionalAuth, async (req, res) => {
   // candidates without an active subscription both get the redacted
   // view (company identity and the real apply link withheld).
   res.json(isSubscribed(profile) ? results : results.map(redactForNonSubscriber));
+});
+
+// GET /api/guarantee-status — powers the "We've found N of your 5
+// guaranteed Excellent Matches, X days remaining" dashboard banner.
+// Excellent Match is computed and stored per-job in
+// candidate_job_matches.excellent_match by backend/matching.js — this
+// just counts and adds the day-remaining math against
+// subscription_started_at (set once, on first successful Stripe
+// checkout — see backend/routes/stripe.js).
+router.get("/guarantee-status", requireConfig, requireAuth, loadCandidateId, async (req, res) => {
+  const { data: profile } = await supabaseAdmin
+    .from("candidate_profiles")
+    .select("subscription_started_at, subscription_status")
+    .eq("id", req.candidateId)
+    .maybeSingle();
+
+  if (!profile?.subscription_started_at) {
+    return res.json({ applicable: false, reason: "No active subscription start date on file yet." });
+  }
+
+  const GUARANTEE_TARGET = 5;
+  const GUARANTEE_WINDOW_DAYS = 30;
+  const startedAt = new Date(profile.subscription_started_at);
+  const daysElapsed = (Date.now() - startedAt.getTime()) / (1000 * 60 * 60 * 24);
+  const daysRemaining = Math.max(0, Math.ceil(GUARANTEE_WINDOW_DAYS - daysElapsed));
+  const windowOpen = daysElapsed <= GUARANTEE_WINDOW_DAYS;
+
+  const { count } = await supabaseAdmin
+    .from("candidate_job_matches")
+    .select("id", { count: "exact", head: true })
+    .eq("candidate_id", req.candidateId)
+    .eq("excellent_match", true);
+
+  const excellentCount = count || 0;
+
+  res.json({
+    applicable: true,
+    excellent_count: excellentCount,
+    target: GUARANTEE_TARGET,
+    met: excellentCount >= GUARANTEE_TARGET,
+    days_remaining: daysRemaining,
+    window_open: windowOpen,
+    eligible_for_refund: windowOpen === false && excellentCount < GUARANTEE_TARGET,
+  });
 });
 
 // GET /api/jobs/:id
