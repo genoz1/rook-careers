@@ -167,6 +167,9 @@ function renderRow(job) {
     : score != null
       ? `<span class="match-badge">${score}% Match</span>`
       : `<span class="match-badge" style="background:#F5F7FA; color:#8B96AB;">Just added</span>`;
+  const sourceTag = job.source_type === 'agency_aggregated'
+    ? `<span class="match-badge" style="background:#7C3AED18; color:#7C3AED;">Agency Listing</span>`
+    : `<span class="match-badge" style="background:#7C3AED18; color:#7C3AED;">Posted by Recruiter</span>`;
   const actionHref = `rook-job-analysis.html?job=${encodeURIComponent(job.id)}`;
   const actionLabel = job.subscription_required ? 'Subscribe to Unlock' : 'View Job';
 
@@ -176,6 +179,7 @@ function renderRow(job) {
         <a href="${actionHref}" class="job-title">${escapeHtml(job.title_original || 'Untitled role')}</a>
         <div class="job-meta">${companyLine}${comp ? ' · ' + escapeHtml(comp) : ''}</div>
       </div>
+      ${sourceTag}
       ${matchBadge}
       <a href="${actionHref}" class="btn btn-primary btn-sm">${actionLabel}</a>
     </div>`;
