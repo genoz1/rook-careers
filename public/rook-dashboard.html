@@ -387,7 +387,7 @@
   function applyRecruiterToggle() {
     const showRecruiters = document.getElementById('showRecruiterToggle').checked;
     const sortBy = document.getElementById('sortSelect').value;
-    let visible = showRecruiters ? currentJobs : currentJobs.filter((j) => j.source_type !== 'recruiter_posted');
+    let visible = showRecruiters ? currentJobs : currentJobs.filter((j) => j.source_type !== 'recruiter_posted' && j.source_type !== 'agency_aggregated');
 
     // "Best Match" is the default order the API already returns (sorted
     // by overall_score). "Closest to You" and "Newest" are pulled out
@@ -491,10 +491,19 @@
     // not independently verifiable against a real employer system the
     // way every other job on ROOK is.
     const isRecruiterPosted = job.source_type === 'recruiter_posted';
-    const rowStyle = isRecruiterPosted ? 'border-left:4px solid #7C3AED; background:#FAF8FF;' : '';
+    const isAgencySourced = job.source_type === 'agency_aggregated';
+    const rowStyle = (isRecruiterPosted || isAgencySourced) ? 'border-left:4px solid #7C3AED; background:#FAF8FF;' : '';
     const recruiterBadge = isRecruiterPosted
       ? `<span style="font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:99px; background:#7C3AED18; color:#7C3AED; text-transform:uppercase; letter-spacing:0.02em;">Posted by Recruiter</span>`
-      : '';
+      : isAgencySourced
+        // Deliberately different wording from "Posted by Recruiter" — this
+        // job wasn't submitted through ROOK by a recruiter, it's a real,
+        // live listing pulled from a staffing agency's own posting
+        // elsewhere. Calling it a native recruiter posting would overstate
+        // ROOK's relationship to it, which runs against the "don't
+        // fabricate" standard the whole recruiter-jobs section is held to.
+        ? `<span style="font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:99px; background:#7C3AED18; color:#7C3AED; text-transform:uppercase; letter-spacing:0.02em;">Agency Listing</span>`
+        : '';
 
     // Non-subscribed candidates get this shape from the API (see
     // redactForNonSubscriber in backend/routes/jobs.js) — company_name,
