@@ -97,17 +97,39 @@ async function run() {
       const job = normalizeAdzunaJob(raw);
       if (!titleLooksRelevant(job.title_original)) continue;
 
-      const { data: upsertedRow, error } = await supabase
+      // Manual check-then-write rather than .upsert()+onConflict: the
+      // dedup index on source_job_id is a PARTIAL index (only applies
+      // where source_type='agency_aggregated'), and Postgres won't use a
+      // partial index as an ON CONFLICT arbiter unless the conflict
+      // clause repeats that exact WHERE condition — which supabase-js's
+      // upsert() doesn't support specifying. This avoids that limitation
+      // entirely instead of fighting it.
+      const { data: existing } = await supabase
         .from("jobs")
-        .upsert(
-          { ...job, last_seen_at: new Date().toISOString() },
-          { onConflict: "source_job_id", ignoreDuplicates: false }
-        )
-        .select()
-        .single();
+        .select("id, ai_analysis, job_embedding, job_lat, location_raw")
+        .eq("source_type", "agency_aggregated")
+        .eq("source_job_id", job.source_job_id)
+        .maybeSingle();
+
+      let upsertedRow;
+      let error;
+      if (existing) {
+        ({ data: upsertedRow, error } = await supabase
+          .from("jobs")
+          .update({ ...job, last_seen_at: new Date().toISOString() })
+          .eq("id", existing.id)
+          .select()
+          .single());
+      } else {
+        ({ data: upsertedRow, error } = await supabase
+          .from("jobs")
+          .insert({ ...job, last_seen_at: new Date().toISOString() })
+          .select()
+          .single());
+      }
 
       if (error) {
-        console.error(`  Upsert error for "${job.title_original}" (${companyName}): ${error.message}`);
+        console.error(`  Save error for "${job.title_original}" (${companyName}): ${error.message}`);
         continue;
       }
       totalSaved++;
