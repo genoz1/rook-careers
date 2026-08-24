@@ -1,0 +1,154 @@
+// Adzuna ingestion — seeds real, currently-live job postings sourced
+// from staffing/recruiting agencies into the "Recruiter Jobs" section,
+// as a stand-in until real recruiters are posting directly through
+// ROOK's own recruiter portal.
+//
+// IMPORTANT — this is explicitly NOT the same thing as a ROOK-native
+// recruiter posting: there is no real recruiter_email / recruiter_name
+// on file for these, so they're tagged source_type='agency_aggregated'
+// (never 'recruiter_posted') and always link out to their real Adzuna
+// posting to apply — never through ROOK's in-site Apply flow, which
+// requires an actual recruiter contact to email. See adapters/adzuna.js.
+//
+// Every job saved here is a REAL, live listing pulled from Adzuna's own
+// licensed API — nothing here is fabricated or synthetic. The
+// agency-detection filter below is a best-effort heuristic (keyword
+// match against company name / description), not a guarantee — it will
+// occasionally miss a real agency listing or let through a borderline
+// one, same limitation as the relevance filter used for ATS ingestion.
+//
+// Usage: node backend/ingestAdzuna.js
+
+require("dotenv").config();
+const { createClient } = require("@supabase/supabase-js");
+const { fetchAdzunaJobs, normalizeAdzunaJob } = require("./adapters/adzuna");
+const { analyzeJob } = require("./ai/jobAnalysis");
+const { generateEmbedding } = require("./ai/embeddings");
+const { geocodeLocation } = require("./geocoding");
+const { titleLooksRelevant } = require("./relevanceFilter");
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
+// Searched independently per keyword since Adzuna's "what" param is a
+// single free-text query — covers the medical/veterinary sales space
+// this platform is built for, same territory as the rest of ROOK.
+const SEARCH_KEYWORDS = [
+  "medical sales representative",
+  "medical device sales",
+  "pharmaceutical sales representative",
+  "diagnostics sales",
+  "veterinary sales representative",
+  "clinical sales specialist",
+  "capital equipment sales healthcare",
+];
+
+// Known staffing/recruiting agency names in the medical & veterinary
+// sales space, plus generic staffing-firm words. A company name
+// matching either counts as agency-sourced. This is a starting list,
+// not exhaustive — real agency names not on it will be skipped rather
+// than guessed at, which is the safer direction to err given the "never
+// fabricate" requirement: missing a real agency listing is much better
+// than mis-tagging a direct employer as an agency.
+const KNOWN_AGENCY_NAMES = [
+  "insight global", "culvercareers", "culver careers", "sales talent",
+  "global edge recruiting", "medreps", "kforce", "adecco", "robert half",
+  "aston carter", "randstad", "manpower", "professional medical",
+  "medical sales college", "rxinsider", "iqvia talent", "pharmalink",
+  "hireminds", "hirebridge", "clinical recruiter", "premier medical staffing",
+];
+const AGENCY_KEYWORDS = [
+  "recruiting", "recruiter", "recruitment", "staffing", "talent solutions",
+  "executive search", "headhunt", "placement firm", "search firm", "personnel",
+];
+
+function looksLikeAgency(companyName) {
+  if (!companyName) return false;
+  const lower = companyName.toLowerCase();
+  return KNOWN_AGENCY_NAMES.some((n) => lower.includes(n)) || AGENCY_KEYWORDS.some((k) => lower.includes(k));
+}
+
+async function run() {
+  let totalFetched = 0;
+  let totalAgencyMatched = 0;
+  let totalSaved = 0;
+  let aiAnalyzedThisRun = 0;
+  const AI_ANALYSIS_CAP_THIS_RUN = 60;
+
+  for (const keyword of SEARCH_KEYWORDS) {
+    console.log(`\nSearching Adzuna for "${keyword}"...`);
+    let rawJobs = [];
+    try {
+      rawJobs = await fetchAdzunaJobs(keyword, 1, 50);
+    } catch (err) {
+      console.error(`  FAILED: ${err.message}`);
+      continue;
+    }
+    totalFetched += rawJobs.length;
+    console.log(`  ${rawJobs.length} result(s) returned.`);
+
+    for (const raw of rawJobs) {
+      const companyName = raw.company?.display_name || "";
+      if (!looksLikeAgency(companyName)) continue; // direct employer, not an agency — skip, this pass is agency-only by design
+      totalAgencyMatched++;
+
+      const job = normalizeAdzunaJob(raw);
+      if (!titleLooksRelevant(job.title_original)) continue;
+
+      const { data: upsertedRow, error } = await supabase
+        .from("jobs")
+        .upsert(
+          { ...job, last_seen_at: new Date().toISOString() },
+          { onConflict: "source_job_id", ignoreDuplicates: false }
+        )
+        .select()
+        .single();
+
+      if (error) {
+        console.error(`  Upsert error for "${job.title_original}" (${companyName}): ${error.message}`);
+        continue;
+      }
+      totalSaved++;
+      console.log(`  Saved: "${job.title_original}" — ${companyName}`);
+
+      if (aiAnalyzedThisRun < AI_ANALYSIS_CAP_THIS_RUN && !upsertedRow.ai_analysis) {
+        aiAnalyzedThisRun++;
+        try {
+          const analysis = await analyzeJob(upsertedRow.title_original, upsertedRow.description_text);
+          await supabase.from("jobs").update({ ai_analysis: analysis }).eq("id", upsertedRow.id);
+        } catch (err) {
+          console.error(`  AI analysis failed for "${job.title_original}": ${err.message}`);
+        }
+      }
+
+      if (!upsertedRow.job_embedding) {
+        try {
+          const embeddingText = `${upsertedRow.title_original || ""}\n\n${upsertedRow.description_text || ""}`.trim();
+          const embedding = await generateEmbedding(embeddingText);
+          await supabase.from("jobs").update({ job_embedding: embedding }).eq("id", upsertedRow.id);
+        } catch (err) {
+          console.error(`  Embedding generation failed for "${job.title_original}": ${err.message}`);
+        }
+      }
+
+      if (upsertedRow.job_lat == null && upsertedRow.location_raw) {
+        try {
+          const coords = await geocodeLocation(upsertedRow.location_raw);
+          if (coords) {
+            await supabase.from("jobs").update({ job_lat: coords.lat, job_lng: coords.lng }).eq("id", upsertedRow.id);
+          }
+        } catch (err) {
+          console.error(`  Geocoding failed for "${job.location_raw}": ${err.message}`);
+        }
+      }
+    }
+  }
+
+  console.log(
+    `\nDone. ${totalFetched} total result(s) examined, ${totalAgencyMatched} matched the agency filter, ${totalSaved} saved/updated.`
+  );
+}
+
+run();
