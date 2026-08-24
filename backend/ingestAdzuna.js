@@ -219,6 +219,43 @@ async function run() {
   console.log(
     `\nDone. ${totalFetched} total result(s) examined, ${totalAgencyMatched} matched the agency filter, ${totalSaved} saved/updated.`
   );
+
+  // Close out stale listings. Unlike ingest.js's per-employer ATS sync
+  // (which fetches a company's ENTIRE job list every run, so "missing
+  // this run" reliably means "removed from the source"), Adzuna search
+  // results are a ranked, partial sample of a much larger pool — a
+  // still-live job can simply not resurface in one particular run's top
+  // results due to search ranking, not because it was actually filled.
+  // Closing on a single miss would risk hiding jobs that are still real
+  // and live — the opposite failure from what this is meant to prevent.
+  // Instead: any agency_aggregated job not re-seen (last_seen_at not
+  // refreshed) in STALE_AFTER_DAYS is closed. At the every-2-to-3-days
+  // schedule this runs on, that's roughly 2-3 consecutive misses before
+  // a listing is treated as gone — enough buffer to absorb normal
+  // search-ranking noise between runs, while still reliably closing out
+  // genuinely-filled listings within about a week rather than leaving
+  // them visible indefinitely.
+  const STALE_AFTER_DAYS = 7;
+  const staleCutoff = new Date(Date.now() - STALE_AFTER_DAYS * 24 * 60 * 60 * 1000).toISOString();
+
+  const { data: staleJobs, error: staleErr } = await supabase
+    .from("jobs")
+    .select("id")
+    .eq("source_type", "agency_aggregated")
+    .eq("status", "active")
+    .lt("last_seen_at", staleCutoff);
+
+  if (staleErr) {
+    console.error(`Could not check for stale agency listings: ${staleErr.message}`);
+  } else if (staleJobs?.length) {
+    await supabase
+      .from("jobs")
+      .update({ status: "closed" })
+      .in("id", staleJobs.map((j) => j.id));
+    console.log(`Closed ${staleJobs.length} agency listing(s) not re-confirmed live in over ${STALE_AFTER_DAYS} days.`);
+  } else {
+    console.log("No stale agency listings to close.");
+  }
 }
 
 run();
