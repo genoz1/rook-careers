@@ -130,10 +130,29 @@ function extractJobTravelPercentage(job) {
   return match ? Number(match[1]) : null;
 }
 
+// Matches an item from listA against listB. Checks exact match first;
+// if none, falls back to substring containment either direction. This
+// fallback exists because job and résumé industry/product/customer/
+// specialty labels come from two SEPARATE AI extraction passes — even
+// when both are drawing from the same controlled vocabulary, they don't
+// always land on identical phrasing for the same real thing ("Animal
+// Health" vs "Veterinary/Animal Health"). An exact-match-only comparison
+// was giving zero credit for what a human reviewer would immediately
+// recognize as the same match — a real false-negative bug, found after
+// genuinely-strong-fit jobs were topping out around 80% overall score
+// with no clear reason why. This does NOT lower the bar for what counts
+// as a match; it only recognizes the same match when phrased slightly
+// differently, which exact-string matching was structurally unable to do.
 function findOverlap(listA, listB) {
   if (!Array.isArray(listA) || !Array.isArray(listB)) return null;
-  const setB = listB.map((s) => String(s).toLowerCase());
-  return listA.find((a) => setB.includes(String(a).toLowerCase())) || null;
+  const bStrings = listB.map((s) => String(s).toLowerCase().trim());
+  const exact = listA.find((a) => bStrings.includes(String(a).toLowerCase().trim()));
+  if (exact) return exact;
+  return listA.find((a) => {
+    const aLower = String(a).toLowerCase().trim();
+    if (aLower.length <= 3) return false; // too short for substring containment to be meaningful (avoids e.g. "OR" matching everything)
+    return bStrings.some((b) => b.length > 3 && (b.includes(aLower) || aLower.includes(b)));
+  }) || null;
 }
 
 function parseVector(raw) {
