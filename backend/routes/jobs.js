@@ -248,6 +248,70 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
   res.json(isSubscribed(profile) ? results : results.map(redactForNonSubscriber));
 });
 
+// GET /api/recruiter-jobs — every live recruiter-posted job, independent
+// of candidate_job_matches. The main /api/jobs endpoint only returns jobs
+// that already have a precomputed score row (inner join on
+// candidate_job_matches), so a freshly-approved recruiter posting is
+// invisible there until the next scheduled precompute run picks it up —
+// reported as a real bug (job approved, confirmed active+approved in the
+// DB, still didn't show). Recruiter postings are a small, browsable set
+// (not the whole job pool candidates are matched against), so gating
+// their visibility on scoring timing doesn't serve any purpose here.
+// This queries jobs directly and left-joins a score if one happens to
+// already exist, but never requires one.
+router.get("/recruiter-jobs", requireConfig, optionalAuth, async (req, res) => {
+  const { data: jobsData, error } = await supabaseAnon
+    .from("jobs")
+    .select("*")
+    .eq("source_type", "recruiter_posted")
+    .eq("status", "active")
+    .eq("moderation_status", "approved")
+    .order("first_seen_at", { ascending: false });
+  if (error) return res.status(500).json({ error: error.message });
+
+  let profile = null;
+  if (req.user) {
+    const { data } = await supabaseAdmin
+      .from("candidate_profiles")
+      .select("*")
+      .eq("user_id", req.user.id)
+      .maybeSingle();
+    profile = data;
+  }
+
+  let scoresByJobId = new Map();
+  let appStatusByJob = new Map();
+  let noteFor = () => null;
+  if (profile) {
+    const { data: matchRows } = await supabaseAdmin
+      .from("candidate_job_matches")
+      .select("*")
+      .eq("candidate_id", profile.id)
+      .eq("dismissed", false)
+      .in("job_id", jobsData.map((j) => j.id));
+    scoresByJobId = new Map((matchRows || []).map((r) => [r.job_id, r]));
+    ({ appStatusByJob, noteFor } = await loadEmployerHistory(profile.id));
+  }
+
+  const results = jobsData.map((job) => {
+    const matchRow = scoresByJobId.get(job.id);
+    return {
+      ...job,
+      match: matchRow ? matchFromRow(matchRow) : null,
+      scored: Boolean(matchRow),
+      saved: Boolean(matchRow?.saved),
+      application_status: appStatusByJob.get(job.id) || null,
+      employer_note: noteFor(job),
+    };
+  });
+
+  // Same paywall as the main /jobs endpoint: full detail only for a
+  // signed-in, subscribed candidate. Anonymous visitors and signed-in
+  // candidates without an active subscription both get the redacted
+  // view (company identity and the real apply link withheld).
+  res.json(isSubscribed(profile) ? results : results.map(redactForNonSubscriber));
+});
+
 // GET /api/jobs/:id
 router.get("/jobs/:id", requireConfig, optionalAuth, async (req, res) => {
   const { data, error } = await supabaseAnon
