@@ -513,11 +513,8 @@
     let primaryActionBtn;
     if (job.subscription_required) {
       primaryActionBtn = `<a href="rook-pricing.html" class="btn btn-primary btn-sm">Subscribe to Unlock</a>`;
-    } else if (isRecruiterPosted && job.recruiter_email) {
-      const subject = encodeURIComponent(`Interested in: ${job.title_original || 'your posting'}`);
-      primaryActionBtn = `<a href="mailto:${escapeHtml(job.recruiter_email)}?subject=${subject}" class="btn btn-outline btn-sm">Email Recruiter</a>`;
     } else if (isRecruiterPosted) {
-      primaryActionBtn = `<span class="btn btn-outline btn-sm" style="opacity:0.6; cursor:default;">No contact info on file</span>`;
+      primaryActionBtn = `<a href="rook-apply.html?job=${escapeHtml(job.id)}" class="btn btn-primary btn-sm">Apply Now</a>`;
     } else {
       primaryActionBtn = `<a href="${job.source_url || '#'}" target="_blank" class="btn btn-outline btn-sm">View Original</a>`;
     }
