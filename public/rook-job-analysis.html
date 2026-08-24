@@ -232,7 +232,25 @@ function renderJob(job) {
     : '<li style="color:#5B6B85;">No specific concerns flagged.</li>';
 
   const viewOriginal = document.getElementById('viewOriginalLink');
-  if (job.source_url) viewOriginal.href = job.source_url;
+  // Recruiter-posted jobs have no external source_url — the recruiter
+  // themselves is the application path, so this link needs to become a
+  // mailto rather than staying a dead "#" (reported: no way to apply to
+  // a recruiter-posted job anywhere in the product).
+  if (job.source_url) {
+    viewOriginal.href = job.source_url;
+    viewOriginal.textContent = 'Open Original Posting';
+  } else if (job.source_type === 'recruiter_posted' && job.recruiter_email) {
+    const subject = encodeURIComponent(`Interested in: ${job.title_original || 'your posting'}`);
+    viewOriginal.href = `mailto:${job.recruiter_email}?subject=${subject}`;
+    viewOriginal.target = '_self';
+    viewOriginal.textContent = 'Email Recruiter';
+  } else if (job.source_type === 'recruiter_posted') {
+    viewOriginal.textContent = 'No contact info on file';
+    viewOriginal.style.opacity = '0.6';
+    viewOriginal.onclick = () => false;
+  } else {
+    viewOriginal.style.display = 'none';
+  }
 
   document.getElementById('createPackageLink').href = `rook-application-package.html?job=${encodeURIComponent(job.id)}`;
 
