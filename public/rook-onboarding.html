@@ -424,6 +424,13 @@
       lastResumeStructured = data.resume_structured || null;
       if (lastResumeStructured?.employers?.length) {
         renderExperienceEntries(lastResumeStructured.employers);
+      } else if (data.analysis_status === 'ok') {
+        // AI analysis genuinely ran and returned data, it just didn't
+        // find distinct employer entries — different situation from a
+        // real extraction failure, so it gets a different message
+        // rather than implying something went wrong.
+        document.getElementById('uploadedFileStatus').textContent =
+          "Uploaded and read — we didn't find distinct positions to list automatically, so please add yours below.";
       } else {
         document.getElementById('uploadedFileStatus').textContent =
           "Uploaded — we couldn't automatically read your work history, so please add your positions below.";
