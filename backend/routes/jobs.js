@@ -23,6 +23,7 @@ const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
 const { scoreJob } = require("../matching");
 const { scoreAndStoreForCandidate } = require("../scoring/precompute");
+const { distanceMiles } = require("../geocoding");
 
 const router = express.Router();
 
@@ -70,6 +71,21 @@ async function loadCandidateId(req, res, next) {
   if (!data) return res.status(404).json({ error: "Complete onboarding first" });
   req.candidateId = data.id;
   next();
+}
+
+// Real, exact distance in miles — separate from the coarse tiered credit
+// scoreJob() gives location within Preference Fit. Attached to every job
+// result so the frontend can offer a real "Closest to You" sort without
+// distorting the fit score itself (see conversation: Location &
+// Preferences was doing double duty as both a geographic-acceptability
+// gate and a fine-grained proximity signal — pulling raw distance out
+// into its own field, sortable independently, resolves that).
+function attachDistance(job, profile) {
+  const hasCoords = profile?.home_lat != null && profile?.home_lng != null && job.job_lat != null && job.job_lng != null;
+  return {
+    ...job,
+    distance_miles: hasCoords ? Math.round(distanceMiles(profile.home_lat, profile.home_lng, job.job_lat, job.job_lng)) : null,
+  };
 }
 
 function matchFromRow(row) {
@@ -240,7 +256,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
   const { appStatusByJob, noteFor } = await loadEmployerHistory(profile.id);
 
   const results = (rows || []).map((row) => ({
-    ...row.jobs,
+    ...attachDistance(row.jobs, profile),
     match: matchFromRow(row),
     saved: Boolean(row.saved),
     application_status: appStatusByJob.get(row.job_id) || null,
@@ -298,7 +314,7 @@ router.get("/recruiter-jobs", requireConfig, optionalAuth, async (req, res) => {
   const results = jobsData.map((job) => {
     const matchRow = scoresByJobId.get(job.id);
     return {
-      ...job,
+      ...attachDistance(job, profile),
       match: matchRow ? matchFromRow(matchRow) : null,
       scored: Boolean(matchRow),
       saved: Boolean(matchRow?.saved),
