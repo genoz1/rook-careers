@@ -128,14 +128,19 @@ function escapeHtml(str) {
   const jobList = document.getElementById('jobList');
 
   try {
-    // Reuses the same GET /jobs endpoint everything else uses (real
-    // scores, real gating) — this page just filters down to
-    // source_type='recruiter_posted' and renders them in a simpler
-    // list, rather than needing its own backend route.
-    const res = await rookApiFetch('/jobs?limit=300');
+    // Uses GET /api/recruiter-jobs, which queries recruiter-posted jobs
+    // directly rather than going through the precomputed-score table
+    // the main dashboard uses. That endpoint only ever returns jobs
+    // that already have a score row, so a just-approved recruiter
+    // posting was invisible here until the next scheduled scoring run
+    // caught up with it (sometimes hours). Recruiter postings are a
+    // small, browsable list, not the full pool candidates get matched
+    // against — no reason their visibility here should depend on
+    // scoring timing at all.
+    const res = await rookApiFetch('/recruiter-jobs');
     if (!res.ok) throw new Error('API returned ' + res.status);
     const jobs = await res.json();
-    const recruiterJobs = (Array.isArray(jobs) ? jobs : []).filter((j) => j.source_type === 'recruiter_posted');
+    const recruiterJobs = Array.isArray(jobs) ? jobs : [];
 
     loading.style.display = 'none';
 
