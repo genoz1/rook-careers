@@ -160,10 +160,20 @@
       </div>
     </div>
 
-    <label style="display:flex; align-items:center; gap:7px; font-size:12.5px; color:#5B6B85; font-weight:600; margin-bottom:14px; cursor:pointer;">
-      <input type="checkbox" id="showRecruiterToggle" checked onchange="applyRecruiterToggle()">
-      Show recruiter-posted jobs
-    </label>
+    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:14px;">
+      <label style="display:flex; align-items:center; gap:7px; font-size:12.5px; color:#5B6B85; font-weight:600; cursor:pointer; margin:0;">
+        <input type="checkbox" id="showRecruiterToggle" checked onchange="applyRecruiterToggle()">
+        Show recruiter-posted jobs
+      </label>
+      <label style="display:flex; align-items:center; gap:7px; font-size:12.5px; color:#5B6B85; font-weight:600; margin:0;">
+        Sort by
+        <select id="sortSelect" onchange="applyRecruiterToggle()" style="border:1px solid #E2E7F0; border-radius:8px; padding:5px 9px; font-size:12.5px; color:#3D4A63; font-weight:600; background:#fff;">
+          <option value="best_match">Best Match</option>
+          <option value="closest">Closest to You</option>
+          <option value="newest">Newest</option>
+        </select>
+      </label>
+    </div>
 
     <div id="jobListLoading" style="text-align:center; padding:60px 20px; color:#5B6B85; font-size:14px;">Loading your matches…</div>
 
@@ -376,7 +386,27 @@
 
   function applyRecruiterToggle() {
     const showRecruiters = document.getElementById('showRecruiterToggle').checked;
-    const visible = showRecruiters ? currentJobs : currentJobs.filter((j) => j.source_type !== 'recruiter_posted');
+    const sortBy = document.getElementById('sortSelect').value;
+    let visible = showRecruiters ? currentJobs : currentJobs.filter((j) => j.source_type !== 'recruiter_posted');
+
+    // "Best Match" is the default order the API already returns (sorted
+    // by overall_score). "Closest to You" and "Newest" are pulled out
+    // as independent sorts rather than folded into the score itself —
+    // see conversation: distance shouldn't distort fit, it should be a
+    // separate way to look at the same list.
+    visible = [...visible];
+    if (sortBy === 'closest') {
+      visible.sort((a, b) => {
+        if (a.distance_miles == null) return 1;
+        if (b.distance_miles == null) return -1;
+        return a.distance_miles - b.distance_miles;
+      });
+    } else if (sortBy === 'newest') {
+      visible.sort((a, b) => new Date(b.date_posted || b.first_seen_at || 0) - new Date(a.date_posted || a.first_seen_at || 0));
+    } else {
+      visible.sort((a, b) => (b.match?.overall_score ?? -1) - (a.match?.overall_score ?? -1));
+    }
+
     document.getElementById('jobList').innerHTML = visible.length > 0
       ? visible.map(renderRealJobRow).join('')
       : '<div style="text-align:center; padding:40px 20px; color:#5B6B85; font-size:14px;">No jobs match with this filter.</div>';
@@ -493,7 +523,7 @@
           ${summarySentence}
           ${employerNote}
           ${isApplied ? `<div style="font-size:11.5px; color:#00806E; font-weight:600; margin-top:4px;">✓ Application status: ${escapeHtml(job.application_status)}</div>` : ''}
-          <div class="job-meta-line">${job.date_posted ? 'Posted ' + escapeHtml(job.date_posted) : ''}</div>
+          <div class="job-meta-line">${job.date_posted ? 'Posted ' + escapeHtml(job.date_posted) : ''}${job.distance_miles != null ? ' · ' + job.distance_miles + ' mi away' : ''}</div>
         </div>
         <div class="job-actions">
           <a href="rook-job-analysis.html?job=${escapeHtml(job.id)}" class="btn btn-outline btn-sm">View Analysis</a>
