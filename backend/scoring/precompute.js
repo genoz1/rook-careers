@@ -57,6 +57,8 @@ async function scoreAndStoreForCandidate(supabase, profile) {
       concerns: match.concerns,
       confidence: match.confidence,
       hard_disqualifier: match.hard_disqualifier,
+      categories: match.categories,
+      excellent_match: match.excellent_match,
       scored_at: now,
     };
   });
