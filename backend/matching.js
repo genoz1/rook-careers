@@ -434,59 +434,79 @@ function scoreJob(job, profile) {
 
   if (resume && jobAI) {
     // --- AI industry experience match (up to 25 points, spec factor #2) ---
-    candMax += 25;
-    dataPointsPossible++;
+    // Only counted when the job's AI analysis actually names required OR
+    // preferred industries. A thin listing (common for recruiter-posted
+    // jobs, which start from a short manual description rather than a
+    // full ATS posting) that says nothing about industry shouldn't drag
+    // down Candidate Fit just because there's nothing to match against —
+    // that's an absence of job detail, not a résumé gap. Real "job
+    // requires X and résumé doesn't show it" cases are unaffected; those
+    // still score/disqualify exactly as before.
+    const jobStatesIndustry = (Array.isArray(jobAI.required_industries) && jobAI.required_industries.length > 0)
+      || (Array.isArray(jobAI.preferred_industries) && jobAI.preferred_industries.length > 0);
     const resumeIndustries = (resume.industries_experience || []).map((i) => i.industry);
-    if (resumeIndustries.length > 0) dataPointsAvailable++;
+    if (jobStatesIndustry) {
+      candMax += 25;
+      dataPointsPossible++;
+      if (resumeIndustries.length > 0) dataPointsAvailable++;
 
-    const matchedRequired = findOverlap(jobAI.required_industries, resumeIndustries);
-    const matchedPreferred = findOverlap(jobAI.preferred_industries, resumeIndustries);
-    if (matchedRequired) {
-      candScore += 25;
-      reasons.push(`Your ${matchedRequired} experience matches a required industry`);
-    } else if (matchedPreferred) {
-      candScore += 16;
-      reasons.push(`Your ${matchedPreferred} experience matches a preferred industry`);
-    } else if (Array.isArray(jobAI.required_industries) && jobAI.required_industries.length > 0) {
-      concerns.push(`Job requires industry experience (${jobAI.required_industries.join(", ")}) not found on your résumé`);
-      hardDisqualifier = true;
-      candCap = Math.min(candCap, 70);
-      catGap.add("industry_product");
-    } else {
-      candScore += 10;
+      const matchedRequired = findOverlap(jobAI.required_industries, resumeIndustries);
+      const matchedPreferred = findOverlap(jobAI.preferred_industries, resumeIndustries);
+      if (matchedRequired) {
+        candScore += 25;
+        reasons.push(`Your ${matchedRequired} experience matches a required industry`);
+      } else if (matchedPreferred) {
+        candScore += 16;
+        reasons.push(`Your ${matchedPreferred} experience matches a preferred industry`);
+      } else if (Array.isArray(jobAI.required_industries) && jobAI.required_industries.length > 0) {
+        concerns.push(`Job requires industry experience (${jobAI.required_industries.join(", ")}) not found on your résumé`);
+        hardDisqualifier = true;
+        candCap = Math.min(candCap, 70);
+        catGap.add("industry_product");
+      } else {
+        candScore += 10;
+      }
+      cat.industry_product.max += 25;
+      cat.industry_product.score += matchedRequired ? 25 : matchedPreferred ? 16 : 10;
     }
-    cat.industry_product.max += 25;
-    cat.industry_product.score += matchedRequired ? 25 : matchedPreferred ? 16 : 10;
 
     // --- AI product-category match (up to 18 points, spec factor #3) ---
-    candMax += 18;
-    dataPointsPossible++;
+    // Same principle: only counted if the job's AI analysis actually
+    // lists product categories to match against.
     const resumeProducts = resume.product_categories || [];
-    if (resumeProducts.length > 0) dataPointsAvailable++;
-    const matchedProduct = findOverlap(jobAI.product_categories, resumeProducts);
-    if (matchedProduct) {
-      candScore += 18;
-      reasons.push(`You have direct ${matchedProduct} product experience`);
-    } else {
-      candScore += 8;
+    if (Array.isArray(jobAI.product_categories) && jobAI.product_categories.length > 0) {
+      candMax += 18;
+      dataPointsPossible++;
+      if (resumeProducts.length > 0) dataPointsAvailable++;
+      const matchedProduct = findOverlap(jobAI.product_categories, resumeProducts);
+      if (matchedProduct) {
+        candScore += 18;
+        reasons.push(`You have direct ${matchedProduct} product experience`);
+      } else {
+        candScore += 8;
+      }
+      cat.industry_product.max += 18;
+      cat.industry_product.score += matchedProduct ? 18 : 8;
     }
-    cat.industry_product.max += 18;
-    cat.industry_product.score += matchedProduct ? 18 : 8;
 
     // --- AI customer/call-point match (up to 18 points, spec factor #4) ---
-    candMax += 18;
-    dataPointsPossible++;
+    // Same principle: only counted if the job actually names required
+    // customer types to match against.
     const resumeCustomers = resume.customer_types || [];
-    if (resumeCustomers.length > 0) dataPointsAvailable++;
-    const matchedCustomer = findOverlap(jobAI.required_customer_types, resumeCustomers);
-    if (matchedCustomer) {
-      candScore += 18;
-      reasons.push(`You've sold to ${matchedCustomer} before`);
-    } else {
-      candScore += 8;
+    if (Array.isArray(jobAI.required_customer_types) && jobAI.required_customer_types.length > 0) {
+      candMax += 18;
+      dataPointsPossible++;
+      if (resumeCustomers.length > 0) dataPointsAvailable++;
+      const matchedCustomer = findOverlap(jobAI.required_customer_types, resumeCustomers);
+      if (matchedCustomer) {
+        candScore += 18;
+        reasons.push(`You've sold to ${matchedCustomer} before`);
+      } else {
+        candScore += 8;
+      }
+      cat.customer_specialty.max += 18;
+      cat.customer_specialty.score += matchedCustomer ? 18 : 8;
     }
-    cat.customer_specialty.max += 18;
-    cat.customer_specialty.score += matchedCustomer ? 18 : 8;
 
     // --- AI seniority fit (up to 12 points, spec factor #6) ---
     const _seniorityBefore = candScore;
