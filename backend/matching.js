@@ -582,7 +582,25 @@ function scoreJob(job, profile) {
       candMax += 12;
       dataPointsPossible++;
       dataPointsAvailable++;
-      if (resume.seniority_level.toLowerCase() === jobAI.seniority_level.toLowerCase()) {
+      // In field medical/vet sales, "Territory Manager," "Account
+      // Executive," "Account Manager," "Territory Representative," and
+      // "Sales Representative" are functionally the same individual-
+      // contributor role — the exact label is a company-naming
+      // convention, not a real seniority difference, per direct
+      // industry-expert correction. The one exception is a role tied to
+      // a specific clinical specialty (toxicology, cardiology, etc.) —
+      // that's a real distinction, but it's captured separately by the
+      // specialty/customer-type matching below, not by seniority_level
+      // at all, so treating these titles as equivalent here doesn't
+      // paper over a genuine specialty mismatch elsewhere on the card.
+      // "Key Account Manager," "Regional Manager," "Director," and "VP"
+      // are deliberately NOT included — those are real seniority steps
+      // up from an individual-contributor field role.
+      const GENERIC_FIELD_TITLES = new Set(["territory manager", "account executive", "account manager", "territory representative", "sales representative"]);
+      const resumeLevel = resume.seniority_level.toLowerCase();
+      const jobLevel = jobAI.seniority_level.toLowerCase();
+      const bothGenericField = GENERIC_FIELD_TITLES.has(resumeLevel) && GENERIC_FIELD_TITLES.has(jobLevel);
+      if (resumeLevel === jobLevel || bothGenericField) {
         candScore += 12;
         reasons.push(`Seniority level (${jobAI.seniority_level}) matches your background`);
       } else {
