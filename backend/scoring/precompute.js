@@ -35,13 +35,28 @@ const UPSERT_BATCH_SIZE = 500; // keeps individual requests to Supabase a reason
  * @returns {Promise<{scoredCount: number}>}
  */
 async function scoreAndStoreForCandidate(supabase, profile) {
-  const { data: activeJobs, error } = await supabase
-    .from("jobs")
-    .select("*")
-    .eq("status", "active")
-    .eq("moderation_status", "approved");
-
-  if (error) throw new Error(`Could not load active jobs: ${error.message}`);
+  // Paginated fetch — Supabase/PostgREST caps a single query at 1000
+  // rows by default, and a plain .select("*") with no .range() silently
+  // truncates rather than erroring. With ATS + Adzuna ingestion now
+  // regularly producing more than 1000 active+approved jobs, that
+  // default was silently excluding every job past the first 1000 from
+  // ever being scored for anyone — no error, no warning, the run just
+  // reported success against whatever 1000 happened to come back.
+  // Reported symptom that led here: a specific real, approved job never
+  // got scored no matter how many times precompute-scores was rerun.
+  const PAGE_SIZE = 1000;
+  let activeJobs = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data: page, error } = await supabase
+      .from("jobs")
+      .select("*")
+      .eq("status", "active")
+      .eq("moderation_status", "approved")
+      .range(from, from + PAGE_SIZE - 1);
+    if (error) throw new Error(`Could not load active jobs: ${error.message}`);
+    activeJobs = activeJobs.concat(page || []);
+    if (!page || page.length < PAGE_SIZE) break; // last page reached
+  }
 
   const now = new Date().toISOString();
   const rows = (activeJobs || []).map((job) => {
