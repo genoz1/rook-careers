@@ -693,6 +693,24 @@ function scoreJob(job, profile) {
     categories[key] = { label, rating };
   }
 
+  // A "Gap" in any candidate-side category (Experience, Industry &
+  // Product, Customer & Specialty, Requirements) must actually restrain
+  // the score, not just cost that category's own small slice of points.
+  // Before this, only two specific hard disqualifiers (missing required
+  // industry, missing mandatory clinical requirement) ever touched
+  // candCap — a specialty mismatch (e.g. a job requiring surgical/OR
+  // experience the résumé doesn't show) only lost its own ~8 points out
+  // of a much larger pool, which barely moved the percentage. Real
+  // reported case: a Detroit job with a stated Customer & Specialty Gap
+  // still outscored a no-Gap Florida job 72 miles away, because losing
+  // 8 points didn't dent an otherwise-strong Qualifications number.
+  // location_prefs is deliberately excluded here — a location/
+  // compensation mismatch already caps prefCap directly above.
+  const CANDIDATE_SIDE_GAP_CATEGORIES = ["experience", "industry_product", "customer_specialty", "requirements"];
+  if (CANDIDATE_SIDE_GAP_CATEGORIES.some((key) => categories[key].rating === "Gap")) {
+    candCap = Math.min(candCap, 78);
+  }
+
   // ============================================================
   // Combine into candidate_fit / preference_fit / overall_score
   // ============================================================
