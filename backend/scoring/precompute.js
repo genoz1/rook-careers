@@ -119,10 +119,26 @@ async function scoreAndStoreForCandidate(supabase, profile, activeJobs = null) {
   // Matches earlier — exactly the kind of thing that turns into an
   // unresolvable "I saw 5, your system says 3" dispute. Insert-only,
   // never updated or deleted once a job first qualifies.
-  const newlyExcellent = rows.filter((r) => r.excellent_match).map((r) => ({
-    candidate_id: r.candidate_id,
-    job_id: r.job_id,
-  }));
+  //
+  // Job title/company are snapshotted here rather than joined from the
+  // live jobs table at read time, and job_id's foreign key is
+  // ON DELETE SET NULL rather than CASCADE — jobs are normally only
+  // ever marked status='closed', never actually deleted, but if a job
+  // row were ever genuinely deleted (a manual cleanup, for instance), a
+  // CASCADE would have silently deleted this log entry too and dropped
+  // the candidate's count. This makes the log fully self-contained and
+  // immune to that.
+  const newlyExcellent = rows
+    .filter((r) => r.excellent_match)
+    .map((r) => {
+      const job = jobs.find((j) => j.id === r.job_id);
+      return {
+        candidate_id: r.candidate_id,
+        job_id: r.job_id,
+        job_title: job?.title_original || null,
+        company_name: job?.company_name || null,
+      };
+    });
   if (newlyExcellent.length > 0) {
     const { error: logError } = await supabase
       .from("excellent_match_log")
