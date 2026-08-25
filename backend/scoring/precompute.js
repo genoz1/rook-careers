@@ -61,6 +61,7 @@ async function fetchActiveJobs(supabase) {
       .select(JOB_COLUMNS)
       .eq("status", "active")
       .eq("moderation_status", "approved")
+      .order("id", { ascending: true }) // deterministic pagination — .range() without an explicit order is unreliable in Postgres and harder for the planner to use an index for
       .range(from, from + PAGE_SIZE - 1);
     if (error) throw new Error(`Could not load active jobs: ${error.message}`);
     activeJobs = activeJobs.concat(page || []);
