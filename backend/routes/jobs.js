@@ -172,20 +172,70 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
   // this still queries jobs directly by recency, not through
   // candidate_job_matches.
   if (!req.user) {
+    // Real total count of active+approved jobs platform-wide, not just
+    // however many this request happens to fetch. Reported real bug:
+    // the public browse page was showing "30 open roles" — the literal
+    // request's ?limit=30 value, not the actual database size (~2,500
+    // real active jobs) — which made the whole platform look far
+    // thinner than it actually is right at the moment meant to convince
+    // someone to pay.
+    const { count: totalCount } = await supabaseAnon
+      .from("jobs")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "active")
+      .eq("moderation_status", "approved");
+
     let query = supabaseAnon
       .from("jobs")
       .select("*")
       .eq("status", "active")
       .eq("moderation_status", "approved")
       .order("date_posted", { ascending: false })
-      .limit(Number(limit));
+      .limit(Math.max(Number(limit), 200)); // pull enough candidates to sort by distance below, not just the final display count
     if (industry) query = query.eq("industry", industry);
     if (state) query = query.eq("state", state);
 
     const { data, error } = await query;
     if (error) return res.status(500).json({ error: error.message });
 
-    const teaser = data.map((job) => ({
+    // Sort by the anonymous visitor's real approximate location, not
+    // raw recency. Reported real problem: an anonymous visitor in
+    // Florida was seeing jobs in Australia and Texas at the top of the
+    // page meant to convince them to sign up — nothing was using
+    // location at all for this page. There's no candidate profile yet
+    // (they haven't signed up), so this uses IP-based geolocation
+    // (ipwho.is, free, no API key, no permission prompt needed unlike
+    // the browser Geolocation API) as a reasonable approximation of
+    // where the visitor actually is.
+    let visitorCoords = null;
+    try {
+      const forwardedFor = req.headers["x-forwarded-for"];
+      const ip = (forwardedFor ? forwardedFor.split(",")[0].trim() : null) || req.socket.remoteAddress;
+      if (ip && ip !== "::1" && ip !== "127.0.0.1") {
+        const geoRes = await fetch(`https://ipwho.is/${ip}`);
+        const geo = await geoRes.json();
+        if (geo?.success && geo.latitude != null && geo.longitude != null) {
+          visitorCoords = { lat: geo.latitude, lng: geo.longitude };
+        }
+      }
+    } catch (err) {
+      console.error(`IP geolocation failed for anonymous browse request: ${err.message}`);
+    }
+
+    let sorted = data;
+    if (visitorCoords) {
+      sorted = [...data].sort((a, b) => {
+        const distA = (a.job_lat != null && a.job_lng != null) ? distanceMiles(visitorCoords.lat, visitorCoords.lng, a.job_lat, a.job_lng) : null;
+        const distB = (b.job_lat != null && b.job_lng != null) ? distanceMiles(visitorCoords.lat, visitorCoords.lng, b.job_lat, b.job_lng) : null;
+        if (distA == null && distB == null) return 0;
+        if (distA == null) return 1;
+        if (distB == null) return -1;
+        return distA - distB;
+      });
+    }
+    sorted = sorted.slice(0, Number(limit));
+
+    const teaser = sorted.map((job) => ({
       id: job.id,
       title_original: job.title_original,
       title_normalized: job.title_normalized,
@@ -197,7 +247,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
       description_preview: (job.description_text || "").slice(0, 160),
       gated: true,
     }));
-    return res.json(teaser);
+    return res.json({ jobs: teaser, total_count: totalCount || 0, sorted_by_location: Boolean(visitorCoords) });
   }
 
   const { data: profile } = await supabaseAdmin
