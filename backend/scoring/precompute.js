@@ -34,7 +34,7 @@ const UPSERT_BATCH_SIZE = 500; // keeps individual requests to Supabase a reason
  * @param {object} profile - a full candidate_profiles row (must include .id)
  * @returns {Promise<{scoredCount: number}>}
  */
-async function scoreAndStoreForCandidate(supabase, profile) {
+async function fetchActiveJobs(supabase) {
   // Paginated fetch — Supabase/PostgREST caps a single query at 1000
   // rows by default, and a plain .select("*") with no .range() silently
   // truncates rather than erroring. With ATS + Adzuna ingestion now
@@ -44,12 +44,21 @@ async function scoreAndStoreForCandidate(supabase, profile) {
   // reported success against whatever 1000 happened to come back.
   // Reported symptom that led here: a specific real, approved job never
   // got scored no matter how many times precompute-scores was rerun.
-  const PAGE_SIZE = 1000;
+  //
+  // Column list trimmed to only what scoreJob() actually reads, and page
+  // size dropped from 1000 to 300 — at ~2,500 active jobs, a full-row
+  // (job_embedding vectors + full ai_analysis/description JSON) 1000-row
+  // page was large enough to occasionally hit a real "upstream request
+  // timeout" from Supabase. Smaller, narrower pages cost more round
+  // trips but each one is far lighter, which is the right trade here —
+  // this only runs on a schedule, not on a user-facing request path.
+  const PAGE_SIZE = 300;
+  const JOB_COLUMNS = "id, title_original, description_text, location_raw, job_lat, job_lng, compensation_text, salary_min, salary_max, ai_analysis, job_embedding, remote_status, travel_percentage, date_posted, last_seen_at";
   let activeJobs = [];
   for (let from = 0; ; from += PAGE_SIZE) {
     const { data: page, error } = await supabase
       .from("jobs")
-      .select("*")
+      .select(JOB_COLUMNS)
       .eq("status", "active")
       .eq("moderation_status", "approved")
       .range(from, from + PAGE_SIZE - 1);
@@ -57,9 +66,21 @@ async function scoreAndStoreForCandidate(supabase, profile) {
     activeJobs = activeJobs.concat(page || []);
     if (!page || page.length < PAGE_SIZE) break; // last page reached
   }
+  return activeJobs;
+}
+
+async function scoreAndStoreForCandidate(supabase, profile, activeJobs = null) {
+  // activeJobs can be passed in by a caller that's scoring many
+  // candidates in the same run (see precomputeScores.js) so the same
+  // ~2,500-job list isn't re-fetched from scratch for every single
+  // candidate — that redundant re-fetch was real, unnecessary load
+  // directly contributing to the timeout above. A caller scoring just
+  // one candidate on demand (the live-fallback path in
+  // backend/routes/jobs.js) can omit it and this fetches for itself.
+  const jobs = activeJobs || (await fetchActiveJobs(supabase));
 
   const now = new Date().toISOString();
-  const rows = (activeJobs || []).map((job) => {
+  const rows = jobs.map((job) => {
     const match = scoreJob(job, profile);
     return {
       candidate_id: profile.id,
@@ -89,4 +110,4 @@ async function scoreAndStoreForCandidate(supabase, profile) {
   return { scoredCount: rows.length };
 }
 
-module.exports = { scoreAndStoreForCandidate };
+module.exports = { scoreAndStoreForCandidate, fetchActiveJobs };
