@@ -841,7 +841,17 @@ function scoreJob(job, profile) {
     goodOrStrong(categories.industry_product.rating) &&
     goodOrStrong(categories.customer_specialty.rating) &&
     categories.location_prefs.rating === "Strong" &&
-    goodOrStrong(categories.requirements.rating)
+    // Requirements has real underlying data (mandatory clinical
+    // requirements, certifications) for only a small minority of jobs —
+    // ROOK doesn't currently extract education/licensing at all. Before
+    // this fix, a null (no-data) rating counted as FAILING this check,
+    // making Excellent Match nearly unreachable regardless of how
+    // strong every other category was — Requirements showed "Not
+    // enough info" on almost every job tonight, and every one of them
+    // was silently blocked from ever qualifying. No data means nothing
+    // to grade, not a gap — it shouldn't block the designation the same
+    // way an actual stated mismatch (rating === "Gap") should.
+    (categories.requirements.rating === null || goodOrStrong(categories.requirements.rating))
   );
 
   return {
