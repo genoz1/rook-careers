@@ -335,11 +335,18 @@ function scoreJob(job, profile) {
       || Object.values(STATE_ABBR).find((abbr) => locationMentionsState(job.location_raw, abbr));
     const inAcceptedRegion = acceptedStateAbbrs.size === 0 || [...acceptedStateAbbrs].some((abbr) => locationMentionsState(job.location_raw, abbr));
 
-    if (miles <= 25) {
+    if (miles <= 90) {
+      // Explicit business rule: anything within 90 miles of the
+      // candidate is a real, comfortable commute/territory distance for
+      // field sales and should score as a full match on distance itself
+      // — not a partial credit tier. Note this only controls the
+      // distance sub-factor; Location & Preferences as a whole still
+      // blends in compensation, travel %, and industry-interest match,
+      // so a close job with a real gap in one of those can still land
+      // below "Strong" overall. That's a real, separate design question
+      // (should distance alone ever override the blended category
+      // label?) worth a direct answer rather than silently deciding it.
       prefScore += 35;
-      reasons.push(`About ${Math.round(miles)} miles from you`);
-    } else if (miles <= 75) {
-      prefScore += 30;
       reasons.push(`About ${Math.round(miles)} miles from you`);
     } else if (miles <= 150) {
       prefScore += 22;
