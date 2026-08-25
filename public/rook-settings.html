@@ -195,10 +195,11 @@
       <div class="card">
         <h3>Subscription</h3>
         <div class="plan-row">
-          <div><div class="t">Professional — $29/month</div><div class="d">Renews Sep 16, 2026</div></div>
+          <div><div class="t" id="subStatusText">Loading...</div><div class="d">Manage billing, invoices, and your card on file through Stripe</div></div>
           <a href="rook-pricing.html" class="btn btn-outline">Change Plan</a>
         </div>
-        <a href="#" class="btn btn-outline">Update Payment Method</a>
+        <button type="button" class="btn btn-outline" onclick="openBillingPortal()">Update Payment Method</button>
+        <div id="billingMsg" style="font-size:13px; margin-top:10px;"></div>
       </div>
     </div>
 
@@ -206,14 +207,15 @@
       <div class="card">
         <h3>Account</h3>
         <div class="field-row">
-          <div class="field"><label>Change Password</label><input type="password" placeholder="New password"></div>
+          <div class="field"><label>Change Password</label><input type="password" id="newPasswordInput" placeholder="New password"></div>
         </div>
-        <a href="#" class="btn btn-primary">Update Password</a>
+        <button type="button" class="btn btn-primary" onclick="updatePassword()">Update Password</button>
+        <div id="passwordMsg" style="font-size:13px; margin-top:10px;"></div>
       </div>
       <div class="card">
         <h3>Delete Account</h3>
         <p style="font-size:13.5px; color:var(--muted); margin-bottom:16px;">Permanently deletes your profile, résumé, and match history. This cannot be undone.</p>
-        <a href="#" class="btn btn-danger">Delete My Account</a>
+        <a href="mailto:support@rookcareers.com?subject=Delete%20my%20account" class="btn btn-danger">Delete My Account</a>
       </div>
     </div>
   </div>
@@ -228,6 +230,44 @@ function showPanel(name, el){
   document.querySelectorAll('.settings-nav a').forEach(a => a.classList.remove('active'));
   document.getElementById('panel-' + name).classList.add('active');
   el.classList.add('active');
+}
+
+async function openBillingPortal() {
+  const msg = document.getElementById('billingMsg');
+  msg.textContent = 'Opening billing portal...';
+  msg.style.color = '';
+  try {
+    const res = await rookApiFetch('/stripe/create-portal-session', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not open billing portal');
+    window.location.href = data.url;
+  } catch (err) {
+    msg.textContent = err.message;
+    msg.style.color = '#C23B3B';
+  }
+}
+
+async function updatePassword() {
+  const input = document.getElementById('newPasswordInput');
+  const msg = document.getElementById('passwordMsg');
+  const password = input.value;
+  if (password.length < 8) {
+    msg.textContent = 'Password must be at least 8 characters.';
+    msg.style.color = '#C23B3B';
+    return;
+  }
+  msg.textContent = 'Updating...';
+  msg.style.color = '';
+  try {
+    const { error } = await rookSupabase.auth.updateUser({ password });
+    if (error) throw error;
+    msg.textContent = 'Password updated.';
+    msg.style.color = '#00806E';
+    input.value = '';
+  } catch (err) {
+    msg.textContent = 'Could not update password: ' + err.message;
+    msg.style.color = '#C23B3B';
+  }
 }
 
 // Loads the real profile once and populates both the Profile and Job
@@ -289,6 +329,9 @@ function addRegion(region) {
     if (!res.ok) throw new Error('API returned ' + res.status);
     currentProfile = await res.json();
     if (!currentProfile) return; // no profile yet (onboarding not completed) — leave fields blank
+
+    document.getElementById('subStatusText').textContent =
+      currentProfile.subscription_status === 'active' ? 'Professional plan — Active' : 'Not currently subscribed';
 
     setVal('fieldName', currentProfile.name);
     setVal('fieldEmail', currentProfile.email);
