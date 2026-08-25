@@ -108,6 +108,19 @@ async function scoreAndStoreForCandidate(supabase, profile, activeJobs = null) {
     if (upsertError) throw new Error(`Could not store scores (batch starting at ${i}): ${upsertError.message}`);
   }
 
+  // Marks when this candidate was last fully scored, so a time-boxed
+  // precompute run (see precomputeScores.js) can order candidates
+  // oldest-scored-first and always make real progress on whoever's most
+  // overdue — same "keep track of where you left off" principle already
+  // used for employers in ingest.js. Best-effort: if this update fails,
+  // scoring itself already succeeded and was already returned above, so
+  // this doesn't throw and undo that.
+  const { error: markError } = await supabase
+    .from("candidate_profiles")
+    .update({ last_scored_at: now })
+    .eq("id", profile.id);
+  if (markError) console.error(`Could not update last_scored_at for candidate ${profile.id}: ${markError.message}`);
+
   return { scoredCount: rows.length };
 }
 
