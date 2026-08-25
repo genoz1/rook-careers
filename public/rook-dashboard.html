@@ -384,6 +384,13 @@
       `We found ${jobs.length} opportunit${jobs.length === 1 ? 'y' : 'ies'} matching your career profile.`;
   }
 
+  // Shared by applyRecruiterToggle's sort and renderRealJobRow's card
+  // display — one definition of "remote" used everywhere distance
+  // logic touches a job.
+  function isRemoteJob(j) {
+    return j.remote_status === 'remote' || /remote/i.test(j.location_raw || '');
+  }
+
   function applyRecruiterToggle() {
     const showRecruiters = document.getElementById('showRecruiterToggle').checked;
     const sortBy = document.getElementById('sortSelect').value;
@@ -394,12 +401,26 @@
     // as independent sorts rather than folded into the score itself —
     // see conversation: distance shouldn't distort fit, it should be a
     // separate way to look at the same list.
+    //
+    // Remote jobs are excluded from distance entirely, both here and in
+    // the card display below (see isRemoteJob, defined once at module
+    // scope so both this sort and renderRealJobRow's card rendering use
+    // the same definition). Reported bug: several unrelated remote
+    // listings (different companies, different states) all showed the
+    // exact same "2503 mi away" — a dead giveaway that geocoding a
+    // free-text "Remote" location resolves to some arbitrary fixed
+    // point, not a real distance. Rather than trying to make that
+    // number trustworthy, a remote job's distance is being treated as
+    // inapplicable, same as a job with no coordinates at all.
     visible = [...visible];
     if (sortBy === 'closest') {
       visible.sort((a, b) => {
-        if (a.distance_miles == null) return 1;
-        if (b.distance_miles == null) return -1;
-        return a.distance_miles - b.distance_miles;
+        const aDist = isRemoteJob(a) ? null : a.distance_miles;
+        const bDist = isRemoteJob(b) ? null : b.distance_miles;
+        if (aDist == null && bDist == null) return 0;
+        if (aDist == null) return 1;
+        if (bDist == null) return -1;
+        return aDist - bDist;
       });
     } else if (sortBy === 'newest') {
       visible.sort((a, b) => new Date(b.date_posted || b.first_seen_at || 0) - new Date(a.date_posted || a.first_seen_at || 0));
@@ -543,7 +564,7 @@
           ${summarySentence}
           ${employerNote}
           ${isApplied ? `<div style="font-size:11.5px; color:#00806E; font-weight:600; margin-top:4px;">✓ Application status: ${escapeHtml(job.application_status)}</div>` : ''}
-          <div class="job-meta-line">${job.date_posted ? 'Posted ' + escapeHtml(job.date_posted) : ''}${job.distance_miles != null ? ' · ' + job.distance_miles + ' mi away' : ''}</div>
+          <div class="job-meta-line">${job.date_posted ? 'Posted ' + escapeHtml(job.date_posted) : ''}${(!isRemoteJob(job) && job.distance_miles != null) ? ' · ' + job.distance_miles + ' mi away' : ''}</div>
         </div>
         <div class="job-actions">
           <a href="rook-job-analysis.html?job=${escapeHtml(job.id)}" class="btn btn-outline btn-sm">View Analysis</a>
