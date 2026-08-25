@@ -110,20 +110,29 @@ function escapeHtml(str) {
   try {
     // Deliberately no auth header — the backend automatically returns a
     // redacted "teaser" shape (no company name, no apply link) for any
-    // request with no valid session, regardless of how it arrived.
+    // request with no valid session, regardless of how it arrived. It
+    // also sorts these by the visitor's real IP-based location and
+    // returns the true platform-wide count (total_count) separately
+    // from however many jobs this particular request displays —
+    // previously this page showed the literal ?limit=30 value as "30
+    // open roles right now," which understated the real ~2,500-job
+    // database by two orders of magnitude, right on the page meant to
+    // convince someone to pay.
     const res = await fetch('/api/jobs?limit=30');
     if (!res.ok) throw new Error('API returned ' + res.status);
-    const jobs = await res.json();
+    const data = await res.json();
+    const jobs = Array.isArray(data) ? data : (data.jobs || []); // Array.isArray fallback covers any cached/older response shape
+    const totalCount = Array.isArray(data) ? jobs.length : (data.total_count || jobs.length);
 
     document.getElementById('loading').style.display = 'none';
 
-    if (!Array.isArray(jobs) || jobs.length === 0) {
+    if (jobs.length === 0) {
       document.getElementById('empty').style.display = 'block';
       return;
     }
 
     document.getElementById('resultsBar').style.display = 'flex';
-    document.getElementById('resultsCount').textContent = jobs.length;
+    document.getElementById('resultsCount').textContent = totalCount.toLocaleString();
     document.getElementById('jobList').innerHTML = jobs.map(renderTeaserCard).join('');
   } catch (err) {
     document.getElementById('loading').textContent = 'Could not load jobs right now (' + err.message + ').';
