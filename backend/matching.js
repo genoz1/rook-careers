@@ -507,13 +507,26 @@ function scoreJob(job, profile) {
 
       const matchedRequired = findOverlap(jobAI.required_industries, resumeIndustries);
       const matchedPreferred = findOverlap(jobAI.preferred_industries, resumeIndustries);
+      const jobHasRequiredList = Array.isArray(jobAI.required_industries) && jobAI.required_industries.length > 0;
       if (matchedRequired) {
         candScore += 25;
         reasons.push(`Your ${matchedRequired} experience matches a required industry`);
       } else if (matchedPreferred) {
-        candScore += 16;
+        // Full credit when the job never stated a required industry at
+        // all — matching preferred is the best any candidate could ever
+        // do here, so 25/25 isn't actually unreachable the way it would
+        // be if a real required list existed and this candidate merely
+        // fell back to a preferred match. Real bug, concrete case: a
+        // Quest Diagnostics posting with an empty required_industries
+        // list and Diagnostics/Reference Laboratory as preferred — a
+        // candidate with 15 years in exactly those industries was still
+        // only getting 16/25 (64%) on a factor no one could ever max out.
+        // Partial credit (16) is kept for the genuine case: a required
+        // list DOES exist and this candidate matched preferred instead —
+        // there, a strictly better outcome really was possible.
+        candScore += jobHasRequiredList ? 16 : 25;
         reasons.push(`Your ${matchedPreferred} experience matches a preferred industry`);
-      } else if (Array.isArray(jobAI.required_industries) && jobAI.required_industries.length > 0) {
+      } else if (jobHasRequiredList) {
         concerns.push(`Job requires industry experience (${jobAI.required_industries.join(", ")}) not found on your résumé`);
         hardDisqualifier = true;
         candCap = Math.min(candCap, 70);
@@ -522,7 +535,7 @@ function scoreJob(job, profile) {
         candScore += 10;
       }
       cat.industry_product.max += 25;
-      cat.industry_product.score += matchedRequired ? 25 : matchedPreferred ? 16 : 10;
+      cat.industry_product.score += matchedRequired ? 25 : matchedPreferred ? (jobHasRequiredList ? 16 : 25) : 10;
     }
 
     // --- AI product-category match (up to 18 points, spec factor #3) ---
