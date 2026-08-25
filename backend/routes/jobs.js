@@ -445,10 +445,24 @@ router.post("/jobs/:id/apply", requireConfig, requireAuth, loadCandidateId, asyn
 
   let resumeUrl = null;
   if (profile?.resume_file_path) {
-    const { data: signed } = await supabaseAdmin.storage
-      .from("resumes")
-      .createSignedUrl(profile.resume_file_path, 60 * 60 * 24 * 14); // 14-day link, same pattern as any Storage-backed download elsewhere in the app
-    resumeUrl = signed?.signedUrl || null;
+    // Wrapped in try/catch, unlike before — this was the one step in
+    // the whole endpoint with no error handling at all. If it threw
+    // (a malformed/unexpected stored path, for instance), the entire
+    // request crashed unhandled with a raw, unhelpful message ("The
+    // string did not match the expected pattern") instead of the
+    // graceful degradation every other step in this route has. A
+    // missing or broken résumé link shouldn't block the whole
+    // application from being submitted — the recruiter still gets the
+    // cover letter and a note that no résumé is attached.
+    try {
+      const { data: signed, error: signError } = await supabaseAdmin.storage
+        .from("resumes")
+        .createSignedUrl(profile.resume_file_path, 60 * 60 * 24 * 14); // 14-day link, same pattern as any Storage-backed download elsewhere in the app
+      if (signError) throw signError;
+      resumeUrl = signed?.signedUrl || null;
+    } catch (err) {
+      console.error(`Could not generate résumé link for candidate ${profile.id} (path: ${profile.resume_file_path}): ${err.message}`);
+    }
   }
 
   const html = `
