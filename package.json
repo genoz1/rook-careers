@@ -8,7 +8,8 @@
     "ingest": "node backend/ingest.js",
     "ingest-adzuna": "node backend/ingestAdzuna.js",
     "send-digest": "node backend/sendDigest.js",
-    "precompute-scores": "node backend/precomputeScores.js"
+    "precompute-scores": "node backend/precomputeScores.js",
+    "archive-old-jobs": "node backend/archiveOldJobs.js"
   },
   "engines": {
     "node": ">=18.0.0"
