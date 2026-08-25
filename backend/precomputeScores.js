@@ -14,7 +14,7 @@
 
 require("dotenv").config();
 const { createClient } = require("@supabase/supabase-js");
-const { scoreAndStoreForCandidate } = require("./scoring/precompute");
+const { scoreAndStoreForCandidate, fetchActiveJobs } = require("./scoring/precompute");
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -33,10 +33,19 @@ async function run() {
 
   console.log(`Found ${profiles.length} candidate profile(s) to score.\n`);
 
+  // Fetched ONCE and shared across every candidate in this run, rather
+  // than each candidate independently re-fetching the same ~2,500-job
+  // list from scratch. That redundant per-candidate re-fetch was real,
+  // avoidable load — and part of why one candidate's fetch was timing
+  // out while running back-to-back with another's.
+  console.log("Loading active jobs...");
+  const activeJobs = await fetchActiveJobs(supabase);
+  console.log(`Loaded ${activeJobs.length} active job(s).\n`);
+
   let successCount = 0;
   for (const profile of profiles) {
     try {
-      const result = await scoreAndStoreForCandidate(supabase, profile);
+      const result = await scoreAndStoreForCandidate(supabase, profile, activeJobs);
       successCount++;
       console.log(`  Scored ${profile.email || profile.id} against ${result.scoredCount} active job(s)`);
     } catch (err) {
