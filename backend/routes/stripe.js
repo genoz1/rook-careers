@@ -68,6 +68,36 @@ router.post("/stripe/create-checkout-session", requireConfig, requireAuth, async
   }
 });
 
+// POST /api/stripe/create-portal-session
+// Called from Settings → Subscription's "Update Payment Method" button.
+// Uses Stripe's own hosted billing portal — the candidate updates their
+// card, views invoices, or cancels there directly, rather than ROOK
+// needing to build any of that itself. Requires a stripe_customer_id on
+// file, which is set once the candidate's first checkout completes (see
+// the webhook handler below) — someone who's never subscribed has
+// nothing to manage yet.
+router.post("/stripe/create-portal-session", requireConfig, requireAuth, async (req, res) => {
+  const { data: profile } = await supabaseAdmin
+    .from("candidate_profiles")
+    .select("stripe_customer_id")
+    .eq("user_id", req.user.id)
+    .maybeSingle();
+
+  if (!profile?.stripe_customer_id) {
+    return res.status(400).json({ error: "No billing account on file yet — subscribe first from the Pricing page." });
+  }
+
+  try {
+    const session = await stripe.billingPortal.sessions.create({
+      customer: profile.stripe_customer_id,
+      return_url: `${process.env.PUBLIC_APP_URL}/rook-settings.html`,
+    });
+    res.json({ url: session.url });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/stripe/webhook
 // Stripe calls this directly (not the browser) to notify you of
 // subscription events. Must receive the RAW request body — see the
