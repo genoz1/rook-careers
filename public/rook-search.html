@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="assets/favicon.ico" sizes="any">
+<link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="icon" href="assets/favicon-16.png" type="image/png" sizes="16x16">
+<link rel="apple-touch-icon" href="assets/rook-icon-180.png">
+<link rel="icon" href="assets/rook-icon-192.png" type="image/png" sizes="192x192">
+<meta name="theme-color" content="#071E41">
+<title>Job Search — ROOK</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#071E41; --royal:#1463FF; --teal:#12B8A6; --gray:#F5F7FA; --white:#FFFFFF;
+    --muted:#5B6B85; --border:#E3E8F0; --radius:14px;
+    --excellent:#00806E; --excellent-bg:rgba(0,194,168,0.12);
+    --strong:#1463FF; --strong-bg:rgba(20,99,255,0.1);
+    --possible:#B98900; --possible-bg:rgba(185,137,0,0.1);
+    --font-display:'Space Grotesk', sans-serif; --font-body:'Inter', sans-serif;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{font-family:var(--font-body); color:var(--navy); background:var(--gray); -webkit-font-smoothing:antialiased;}
+  h1,h2,h3{font-family:var(--font-display); letter-spacing:-0.01em;}
+  a{color:inherit; text-decoration:none;}
+  .btn{display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:10px 18px; border-radius:999px; font-size:13.5px; font-weight:600; cursor:pointer; border:none;}
+  .btn-primary{background:var(--royal); color:#fff;}
+  .btn-outline{background:#fff; color:var(--navy); border:1px solid var(--border);}
+  .btn-outline:hover{border-color:var(--royal); color:var(--royal);}
+  .btn-sm{padding:8px 14px; font-size:12.5px;}
+
+  .shell{display:grid; grid-template-columns:236px 1fr; min-height:100vh;}
+  .sidebar{background:var(--navy); color:#fff; padding:26px 20px; display:flex; flex-direction:column;}
+  .side-nav{display:flex; flex-direction:column; gap:2px; flex:1;}
+  .side-nav a{display:flex; align-items:center; gap:12px; padding:11px 12px; border-radius:9px; font-size:14px; font-weight:500; color:#AEB9CF;}
+  .side-nav a svg{width:17px; height:17px;}
+  .side-nav a.active{background:rgba(255,255,255,0.08); color:#fff;}
+  .side-nav a:hover{color:#fff;}
+  .side-nav .count{margin-left:auto; background:var(--teal); color:#03261F; font-size:11px; font-weight:700; padding:2px 7px; border-radius:99px;}
+  .side-foot{border-top:1px solid rgba(255,255,255,0.1); padding-top:16px; display:flex; align-items:center; gap:10px;}
+  .side-foot .n{font-size:13.5px; font-weight:600;}
+  .side-foot .r{font-size:11.5px; color:#8B96AB;}
+
+  .avatar{width:32px; height:32px; border-radius:50%; background:linear-gradient(135deg,var(--royal),var(--teal)); display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:#fff;}
+
+  .layout{max-width:1320px; margin:0 auto; padding:32px 24px 80px; display:grid; grid-template-columns:260px 1fr; gap:28px; align-items:start;}
+
+  .filters{background:#fff; border-radius:var(--radius); padding:22px; box-shadow:0 2px 10px -4px rgba(11,29,58,0.08);}
+  .filters h3{font-size:14px; font-weight:700; margin-bottom:16px;}
+  .filter-group{margin-bottom:22px;}
+  .filter-group:last-child{margin-bottom:0;}
+  .filter-group label{display:block; font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:10px;}
+  .filter-group input[type="text"]{
+    width:100%; padding:9px 12px; border-radius:8px; border:1px solid var(--border); font-size:13.5px; font-family:var(--font-body);
+  }
+  .check-row{display:flex; align-items:center; gap:8px; font-size:13.5px; margin-bottom:9px; color:var(--navy);}
+  .check-row input{accent-color:var(--royal);}
+  .range-labels{display:flex; justify-content:space-between; font-size:12px; color:var(--muted); margin-top:6px;}
+  input[type="range"]{width:100%; accent-color:var(--royal);}
+  .clear-link{font-size:12.5px; font-weight:600; color:var(--royal); margin-top:18px; display:block; text-align:center;}
+
+  .results-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; flex-wrap:wrap; gap:12px;}
+  .results-count{font-size:14.5px; color:var(--muted);}
+  .results-count b{color:var(--navy);}
+  .sort-row{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted);}
+  .sort-row select{border:1px solid var(--border); border-radius:8px; padding:7px 10px; font-size:13px; font-family:var(--font-body); color:var(--navy);}
+
+  .job-list{display:flex; flex-direction:column; gap:14px;}
+  .job-row{
+    background:#fff; border-radius:var(--radius); padding:22px 24px; box-shadow:0 2px 10px -4px rgba(11,29,58,0.08);
+    display:grid; grid-template-columns:auto 1fr auto; gap:22px; align-items:center;
+  }
+  .score-ring{
+    width:56px; height:56px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-family:var(--font-display); font-weight:700; font-size:14px; flex-shrink:0;
+    background:conic-gradient(var(--teal) calc(var(--pct) * 1%), #EDF1F7 0);
+    position:relative;
+  }
+  .score-ring::before{content:""; position:absolute; inset:5px; background:#fff; border-radius:50%;}
+  .score-ring span{position:relative; z-index:1;}
+  .job-info h4{font-size:16px; font-weight:700; margin-bottom:3px;}
+  .job-info .company{font-size:13.5px; color:var(--muted); margin-bottom:10px;}
+  .tag-row{display:flex; flex-wrap:wrap; gap:8px;}
+  .jtag{font-size:11.5px; font-weight:600; padding:4px 10px; border-radius:6px; background:var(--gray); color:var(--muted);}
+  .job-meta-line{font-size:12.5px; color:#8B96AB; margin-top:8px;}
+  .job-actions{display:flex; flex-direction:column; gap:8px; align-items:flex-end;}
+  .match-level{font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.03em; padding:3px 9px; border-radius:99px;}
+  .ml-excellent{background:var(--excellent-bg); color:var(--excellent);}
+  .ml-strong{background:var(--strong-bg); color:var(--strong);}
+  .ml-possible{background:var(--possible-bg); color:var(--possible);}
+
+  .pagination{display:flex; justify-content:center; gap:8px; margin-top:28px;}
+  .pagination a{width:34px; height:34px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:600; background:#fff; box-shadow:0 2px 8px -4px rgba(11,29,58,0.1);}
+  .pagination a.active{background:var(--navy); color:#fff;}
+
+  @media(max-width:900px){
+    .layout{grid-template-columns:1fr;}
+    .job-row{grid-template-columns:1fr; text-align:left;}
+    .job-actions{flex-direction:row; align-items:center;}
+    .shell{grid-template-columns:1fr;}
+    .sidebar{display:none;}
+  }
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <aside class="sidebar">
+    <div class="logo" style="gap:8px;">
+      <img src="assets/rook-icon-192.png" alt="ROOK" style="height:43px; width:auto; display:block; filter:brightness(2.1) contrast(1.15) saturate(1.5) drop-shadow(0 0 2px rgba(255,255,255,0.4));"><span style="font-family:var(--font-display); font-weight:700; font-size:36px; letter-spacing:-0.02em; color:#EDF3FF; line-height:1;">ROOK</span>
+    </div>
+    <nav class="side-nav">
+      <a href="rook-dashboard.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l9-9 9 9M5 10v10h14V10"/></svg>Dashboard</a>
+      <a href="rook-search.html" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>Job Search</a>
+      <a href="rook-recruiter-jobs.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>Recruiter Jobs</a>
+      <a href="rook-tracker.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>Applications</a>
+      <a href="rook-saved.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-4-7 4V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>Saved Jobs</a>
+      <a href="rook-intelligence.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>Career Intelligence</a>
+      <a href="rook-onboarding.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>My Résumés</a>
+      <a href="rook-settings.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09A1.65 1.65 0 0015 4.6a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>Settings</a>
+    </nav>
+    <div class="side-foot">
+      <div class="avatar">GZ</div>
+      <div><div class="n">Gene Zentko</div><div class="r">Professional Plan</div></div>
+    </div>
+    <a href="#" onclick="rookSignOut(); return false;" style="display:block; text-align:center; font-size:12.5px; font-weight:600; color:#8B96AB; padding:12px 0 4px;">Log Out</a>
+  </aside>
+
+  <div class="layout">
+    <aside class="filters">
+    <h3>Filters</h3>
+    <div class="filter-group">
+      <label>Keyword</label>
+      <input type="text" id="filterKeyword" placeholder="Title, company, product...">
+    </div>
+    <div class="filter-group">
+      <label>Show jobs near</label>
+      <div style="display:flex; gap:6px;">
+        <input type="text" id="nearLocationInput" placeholder="Tampa, FL or 33602" style="flex:1;">
+        <a href="#" class="btn btn-outline" onclick="searchNearLocation(); return false;" style="padding:9px 14px; font-size:13px; white-space:nowrap;">Go</a>
+      </div>
+      <select id="radiusSelect" onchange="applyFiltersAndRender()" style="margin-top:8px; width:100%; border:1px solid var(--border); border-radius:8px; padding:7px 9px; font-size:12.5px; color:var(--navy); background:#fff;">
+        <option value="0">Any distance</option>
+        <option value="10">Within 10 miles</option>
+        <option value="25">Within 25 miles</option>
+        <option value="50">Within 50 miles</option>
+        <option value="100">Within 100 miles</option>
+      </select>
+      <div id="nearLocationStatus" style="font-size:11.5px; color:#8B96AB; margin-top:6px;"></div>
+    </div>
+    <div class="filter-group">
+      <label>Industry</label>
+      <div class="check-row"><input type="checkbox" class="filter-industry" value="Diagnostics"> Diagnostics</div>
+      <div class="check-row"><input type="checkbox" class="filter-industry" value="Veterinary"> Veterinary / Animal Health</div>
+      <div class="check-row"><input type="checkbox" class="filter-industry" value="Medical Device"> Medical Device</div>
+      <div class="check-row"><input type="checkbox" class="filter-industry" value="Capital Equipment"> Capital Equipment</div>
+      <div class="check-row"><input type="checkbox" class="filter-industry" value="Pharmaceutical"> Pharmaceutical</div>
+    </div>
+    <div class="filter-group">
+      <label>Match Score</label>
+      <input type="range" id="filterMatchScore" min="0" max="100" value="0">
+      <div class="range-labels"><span>0%</span><span id="filterMatchScoreLabel">Any</span><span>100%</span></div>
+    </div>
+    <div class="filter-group">
+      <label>Compensation (minimum base)</label>
+      <input type="range" id="filterComp" min="0" max="200" value="0">
+      <div class="range-labels"><span>$0</span><span id="filterCompLabel">Any</span><span>$200K</span></div>
+    </div>
+    <div class="filter-group">
+      <label>Travel</label>
+      <div class="check-row"><input type="checkbox" class="filter-travel" value="under25"> Under 25%</div>
+      <div class="check-row"><input type="checkbox" class="filter-travel" value="25-50"> 25–50%</div>
+      <div class="check-row"><input type="checkbox" class="filter-travel" value="over50"> 50%+</div>
+    </div>
+    <div class="filter-group">
+      <label>Source</label>
+      <div class="check-row"><input type="checkbox" id="showRecruiterFilter" checked> Show recruiter-posted jobs</div>
+      <div class="check-row"><input type="checkbox" id="remoteOnlyFilter"> Remote only</div>
+    </div>
+    <a href="#" class="clear-link" onclick="clearAllFilters(); return false;">Clear all filters</a>
+  </aside>
+
+  <main>
+    <div class="results-head">
+      <div class="results-count"><b id="resultsCount">23</b> opportunities match your profile</div>
+      <div class="sort-row">
+        Sort by
+        <select id="sortSelect">
+          <option value="match">Best Match</option>
+          <option value="newest">Newest</option>
+          <option value="comp">Highest Compensation</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="jobListLoading" style="text-align:center; padding:60px 20px; color:#5B6B85; font-size:14px;">Loading matching jobs…</div>
+
+    <div class="job-list" id="jobList" data-demo="true" style="display:none;">
+      <div class="job-row">
+        <div class="score-ring" style="--pct:96;"><span>96%</span></div>
+        <div class="job-info">
+          <h4>Territory Sales Manager</h4>
+          <div class="company">IDEXX — Orlando / Tampa, FL · $110K–$150K OTE</div>
+          <div class="tag-row"><span class="jtag">Veterinary Diagnostics</span><span class="jtag">Full-time</span><span class="jtag">50% Travel</span></div>
+          <div class="job-meta-line">Posted 1 day ago · Sourced via employer career page · <span style="color:#00806E; font-weight:600;"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="3" style="vertical-align:-1px;"><path d="M5 13l4 4L19 7"/></svg> Verified 2 hours ago</span></div>
+        </div>
+        <div class="job-actions">
+          <span class="match-level ml-excellent">Excellent Match</span>
+          <a href="rook-job-analysis.html" class="btn btn-primary btn-sm">View Analysis</a>
+        </div>
+      </div>
+
+      <div class="job-row">
+        <div class="score-ring" style="--pct:94;"><span>94%</span></div>
+        <div class="job-info">
+          <h4>Diagnostic Account Executive</h4>
+          <div class="company">Example Diagnostics — Orlando, FL · $95K–$120K + Commission</div>
+          <div class="tag-row"><span class="jtag">Diagnostics</span><span class="jtag">Full-time</span><span class="jtag">Territory Sales</span></div>
+          <div class="job-meta-line">Posted 2 days ago · Sourced via employer career page · <span style="color:#00806E; font-weight:600;"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="3" style="vertical-align:-1px;"><path d="M5 13l4 4L19 7"/></svg> Verified 3 hours ago</span></div>
+        </div>
+        <div class="job-actions">
+          <span class="match-level ml-excellent">Excellent Match</span>
+          <a href="rook-job-analysis.html" class="btn btn-primary btn-sm">View Analysis</a>
+        </div>
+      </div>
+
+      <div class="job-row">
+        <div class="score-ring" style="--pct:91;"><span>91%</span></div>
+        <div class="job-info">
+          <h4>Veterinary Territory Manager</h4>
+          <div class="company">Covetrus — Jacksonville, FL · $100K–$130K OTE</div>
+          <div class="tag-row"><span class="jtag">Veterinary / Animal Health</span><span class="jtag">Full-time</span></div>
+          <div class="job-meta-line">Posted 4 days ago · Sourced via job feed · <span style="color:#00806E; font-weight:600;"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="3" style="vertical-align:-1px;"><path d="M5 13l4 4L19 7"/></svg> Verified 6 hours ago</span></div>
+        </div>
+        <div class="job-actions">
+          <span class="match-level ml-excellent">Excellent Match</span>
+          <a href="rook-job-analysis.html" class="btn btn-primary btn-sm">View Analysis</a>
+        </div>
+      </div>
+
+      <div class="job-row">
+        <div class="score-ring" style="--pct:82;"><span>82%</span></div>
+        <div class="job-info">
+          <h4>Capital Equipment Specialist</h4>
+          <div class="company">Midmark — Tampa, FL · $90K–$115K + Commission</div>
+          <div class="tag-row"><span class="jtag">Capital Equipment</span><span class="jtag">Full-time</span></div>
+          <div class="job-meta-line">Posted 6 days ago · Sourced via employer career page · <span style="color:#00806E; font-weight:600;"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="3" style="vertical-align:-1px;"><path d="M5 13l4 4L19 7"/></svg> Verified 5 hours ago</span></div>
+        </div>
+        <div class="job-actions">
+          <span class="match-level ml-strong">Strong Match</span>
+          <a href="rook-job-analysis.html" class="btn btn-outline btn-sm">View Analysis</a>
+        </div>
+      </div>
+
+      <div class="job-row">
+        <div class="score-ring" style="--pct:76;"><span>76%</span></div>
+        <div class="job-info">
+          <h4>Regional Account Manager</h4>
+          <div class="company">Antech Diagnostics — Ocala, FL · $95K–$125K OTE</div>
+          <div class="tag-row"><span class="jtag">Diagnostics</span><span class="jtag">Full-time</span><span class="jtag">Remote</span></div>
+          <div class="job-meta-line">Posted 1 week ago · Sourced via job feed · <span style="color:#00806E; font-weight:600;"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="3" style="vertical-align:-1px;"><path d="M5 13l4 4L19 7"/></svg> Verified 1 day ago</span></div>
+        </div>
+        <div class="job-actions">
+          <span class="match-level ml-strong">Strong Match</span>
+          <a href="rook-job-analysis.html" class="btn btn-outline btn-sm">View Analysis</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="pagination">
+      <a href="#" class="active">1</a>
+      <a href="#">2</a>
+      <a href="#">3</a>
+      <a href="#">→</a>
+    </div>
+  </main>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="rook-config.js"></script>
+<script src="rook-auth.js"></script>
+<script>
+  // Same live-data pattern as rook-dashboard.html: try to replace the demo
+  // rows with real, scored jobs; leave demo data in place (with a banner
+  // explaining why) if there's no session, no data yet, or a fetch error.
+  //
+  // Filtering happens entirely client-side against the full fetched list.
+  // This isn't a stylistic choice — jobs.industry, jobs.state, and
+  // jobs.city are never populated by any adapter (only free-text
+  // location_raw), so there's no real database column to filter on for
+  // industry or location. Text/regex matching against location_raw,
+  // title_original, and description_text is the only option that
+  // actually works with the data that exists.
+  let allJobs = [];
+  let nearLocationCoords = null; // { lat, lng } once a "show jobs near" search is active
+
+  function distanceMilesClient(lat1, lng1, lat2, lng2) {
+    if (lat1 == null || lng1 == null || lat2 == null || lng2 == null) return Infinity;
+    const R = 3958.8;
+    const toRad = (deg) => (deg * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLng = toRad(lng2 - lng1);
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  async function searchNearLocation() {
+    const query = document.getElementById('nearLocationInput').value.trim();
+    const status = document.getElementById('nearLocationStatus');
+    if (!query) {
+      // Empty input + Go pressed = clear the active "near" search and
+      // go back to normal sorting.
+      nearLocationCoords = null;
+      status.textContent = '';
+      applyFiltersAndRender();
+      return;
+    }
+
+    status.textContent = 'Looking up "' + query + '"...';
+    try {
+      const res = await rookApiFetch('/geocode?q=' + encodeURIComponent(query));
+      const data = await res.json();
+      if (!res.ok) {
+        nearLocationCoords = null;
+        status.textContent = data.error || 'Could not find that location.';
+        applyFiltersAndRender();
+        return;
+      }
+      nearLocationCoords = data;
+      status.innerHTML = `Showing jobs closest to "${escapeHtml(query)}" first. <a href="#" onclick="clearNearLocation(); return false;" style="color:var(--royal); font-weight:600;">Clear</a>`;
+      applyFiltersAndRender();
+    } catch (err) {
+      nearLocationCoords = null;
+      status.textContent = 'Could not reach the location lookup: ' + err.message;
+      applyFiltersAndRender();
+    }
+  }
+
+  function clearNearLocation() {
+    nearLocationCoords = null;
+    document.getElementById('nearLocationInput').value = '';
+    document.getElementById('nearLocationStatus').textContent = '';
+    applyFiltersAndRender();
+  }
+
+  (async () => {
+    const token = await rookRequireAuth();
+    if (!token) return;
+
+    const jobList = document.getElementById('jobList');
+    const loading = document.getElementById('jobListLoading');
+    function revealDemo() {
+      loading.style.display = 'none';
+      jobList.style.display = '';
+    }
+
+    // Polls GET /scoring-status every few seconds until a brand-new
+    // candidate's first-ever scoring pass finishes in the background,
+    // then reloads the real job list. Same fix as the Dashboard — this
+    // page hits the identical /jobs endpoint, so a candidate landing
+    // here first (before ever visiting the Dashboard) needs the same
+    // non-blocking handling, not just one of the two pages that can
+    // trigger it.
+    async function pollScoringStatus() {
+      showBanner('Building your matches — this runs once for a brand-new profile and usually takes under a minute.', 'info');
+      document.getElementById('jobList').innerHTML = '<div style="text-align:center; padding:60px 20px; color:#5B6B85; font-size:14px;">Building your matches…</div>';
+      revealDemo();
+      const poll = async () => {
+        try {
+          const res = await rookApiFetch('/scoring-status');
+          const data = await res.json();
+          if (data.ready) {
+            loadJobs();
+          } else {
+            setTimeout(poll, 4000);
+          }
+        } catch {
+          setTimeout(poll, 4000);
+        }
+      };
+      setTimeout(poll, 4000);
+    }
+
+    async function loadJobs() {
+    try {
+      const [jobsRes, profileRes] = await Promise.all([
+        rookApiFetch('/jobs?limit=300'),
+        rookApiFetch('/profile').catch(() => null),
+      ]);
+      if (!jobsRes.ok) throw new Error('API returned ' + jobsRes.status);
+      const jobsData = await jobsRes.json();
+      const jobs = Array.isArray(jobsData) ? jobsData : (jobsData.jobs || []); // Array.isArray fallback covers any cached/older response shape
+
+      if (Array.isArray(jobsData) === false && jobsData.scoring_in_progress) {
+        pollScoringStatus();
+        return;
+      }
+
+      if (!Array.isArray(jobs) || jobs.length === 0) {
+        showBanner('No live jobs yet. Add employers and run <code>npm run ingest</code> — see ROOK-Setup-Guide.pdf. Showing example matches below in the meantime.');
+        revealDemo();
+        return;
+      }
+
+      allJobs = jobs;
+      document.getElementById('jobList').dataset.demo = 'false';
+      applyFiltersAndRender();
+      showBanner(`Showing ${jobs.length} live job(s), scored against your profile.`, 'info');
+      revealDemo();
+
+      // Prefill "Show jobs near" with the candidate's own saved home zip
+      // and run it automatically, rather than making them re-type the
+      // location they already gave us during onboarding every visit.
+      // Doesn't overwrite anything if they've already typed something.
+      try {
+        if (profileRes?.ok && !document.getElementById('nearLocationInput').value) {
+          const me = await profileRes.json();
+          if (me?.home_zip) {
+            document.getElementById('nearLocationInput').value = me.home_zip;
+            searchNearLocation();
+          }
+        }
+      } catch {}
+
+      // Wire up every filter control to re-filter on change.
+      document.getElementById('filterKeyword').addEventListener('input', applyFiltersAndRender);
+      document.getElementById('remoteOnlyFilter').addEventListener('change', applyFiltersAndRender);
+      document.querySelectorAll('.filter-industry').forEach((el) => el.addEventListener('change', applyFiltersAndRender));
+      document.querySelectorAll('.filter-travel').forEach((el) => el.addEventListener('change', applyFiltersAndRender));
+      document.getElementById('filterMatchScore').addEventListener('input', applyFiltersAndRender);
+      document.getElementById('filterComp').addEventListener('input', applyFiltersAndRender);
+      document.getElementById('sortSelect').addEventListener('change', applyFiltersAndRender);
+      document.getElementById('showRecruiterFilter').addEventListener('change', applyFiltersAndRender);
+    } catch (err) {
+      showBanner('Could not reach the ROOK API (' + err.message + '). Showing example matches below — see ROOK-Setup-Guide.pdf to get the backend running.');
+      revealDemo();
+    }
+    }
+
+    await loadJobs();
+  })();
+
+  function extractJobSalary(job) {
+    if (job.salary_max) return Number(job.salary_max);
+    if (job.salary_min) return Number(job.salary_min);
+    const text = job.compensation_text || '';
+    const matches = [...text.matchAll(/\$?([\d,]+(?:\.\d+)?)\s*(k|K)?/g)];
+    let best = null;
+    for (const m of matches) {
+      let val = parseFloat(m[1].replace(/,/g, ''));
+      if (!val) continue;
+      if (m[2]) val *= 1000;
+      if (val < 1000) continue;
+      if (best === null || val > best) best = val;
+    }
+    return best;
+  }
+
+  function extractJobTravel(job) {
+    const text = `${job.compensation_text || ''} ${job.description_text || ''}`;
+    const match = text.match(/(\d{1,3})\s*%\s*travel/i);
+    return match ? Number(match[1]) : null;
+  }
+
+  function applyFiltersAndRender() {
+    const keyword = document.getElementById('filterKeyword').value.trim().toLowerCase();
+    const remoteOnly = document.getElementById('remoteOnlyFilter').checked;
+    const selectedIndustries = Array.from(document.querySelectorAll('.filter-industry:checked')).map((el) => el.value.toLowerCase());
+    const selectedTravel = Array.from(document.querySelectorAll('.filter-travel:checked')).map((el) => el.value);
+    const minMatchScore = Number(document.getElementById('filterMatchScore').value);
+    const minComp = Number(document.getElementById('filterComp').value) * 1000;
+    const sortBy = document.getElementById('sortSelect').value;
+
+    document.getElementById('filterMatchScoreLabel').textContent = minMatchScore > 0 ? minMatchScore + '%+' : 'Any';
+    document.getElementById('filterCompLabel').textContent = minComp > 0 ? '$' + (minComp / 1000) + 'K+' : 'Any';
+
+    let filtered = allJobs.filter((job) => {
+      if (keyword) {
+        const haystack = `${job.title_original || ''} ${job.company_name || ''} ${job.description_text || ''}`.toLowerCase();
+        if (!haystack.includes(keyword)) return false;
+      }
+
+      if (remoteOnly) {
+        const loc = (job.location_raw || '').toLowerCase();
+        const isRemote = /remote/.test(loc) || job.remote_status === 'remote';
+        if (!isRemote) return false;
+      }
+
+      if (selectedIndustries.length > 0) {
+        const text = `${job.title_original || ''} ${job.description_text || ''}`.toLowerCase();
+        const matchesAny = selectedIndustries.some((ind) => text.includes(ind));
+        if (!matchesAny) return false;
+      }
+
+      if (minMatchScore > 0) {
+        const score = job.match?.overall_score;
+        if (score == null || score < minMatchScore) return false;
+      }
+
+      if (minComp > 0) {
+        const salary = extractJobSalary(job);
+        if (salary == null || salary < minComp) return false;
+      }
+
+      if (selectedTravel.length > 0) {
+        const travel = extractJobTravel(job);
+        if (travel == null) return false; // can't verify it matches, so exclude rather than guess
+        const matchesAny = selectedTravel.some((bucket) => {
+          if (bucket === 'under25') return travel < 25;
+          if (bucket === '25-50') return travel >= 25 && travel <= 50;
+          if (bucket === 'over50') return travel > 50;
+          return false;
+        });
+        if (!matchesAny) return false;
+      }
+
+      if (!document.getElementById('showRecruiterFilter').checked && job.source_type === 'recruiter_posted') {
+        return false;
+      }
+
+      if (nearLocationCoords && (job.job_lat == null || job.job_lng == null)) {
+        return false; // no way to gauge distance for this job, so it can't participate in a "near X" search
+      }
+
+      const radiusMiles = Number(document.getElementById('radiusSelect').value);
+      if (nearLocationCoords && radiusMiles > 0) {
+        const dist = distanceMilesClient(nearLocationCoords.lat, nearLocationCoords.lng, job.job_lat, job.job_lng);
+        if (dist > radiusMiles) return false;
+      }
+
+      return true;
+    });
+
+    filtered.sort((a, b) => {
+      if (nearLocationCoords) {
+        // "Show jobs near" is active — this takes priority over the
+        // normal sort dropdown while it's active, since the whole point
+        // is proximity to that specific place, not the general sort
+        // criteria. Jobs without coordinates were already filtered out
+        // above them being sorted, since there's no way to gauge their
+        // distance at all.
+        const distA = distanceMilesClient(nearLocationCoords.lat, nearLocationCoords.lng, a.job_lat, a.job_lng);
+        const distB = distanceMilesClient(nearLocationCoords.lat, nearLocationCoords.lng, b.job_lat, b.job_lng);
+        return distA - distB;
+      }
+      if (sortBy === 'newest') {
+        return new Date(b.last_seen_at || b.date_posted || 0) - new Date(a.last_seen_at || a.date_posted || 0);
+      }
+      if (sortBy === 'comp') {
+        return (extractJobSalary(b) ?? -1) - (extractJobSalary(a) ?? -1);
+      }
+      // Best Match, default. Distance is a tiebreaker only — never
+      // changes the score, just decides display order when two jobs
+      // tie on overall_score (common since the 90-mile rule: jobs at,
+      // say, 36 and 65 miles now score identically on distance).
+      const scoreDiff = (b.match?.overall_score ?? -1) - (a.match?.overall_score ?? -1);
+      if (scoreDiff !== 0) return scoreDiff;
+      const isRemoteA = /remote/i.test(a.location_raw || '') || a.remote_status === 'remote';
+      const isRemoteB = /remote/i.test(b.location_raw || '') || b.remote_status === 'remote';
+      const distA = isRemoteA ? null : a.distance_miles;
+      const distB = isRemoteB ? null : b.distance_miles;
+      if (distA == null && distB == null) return 0;
+      if (distA == null) return 1;
+      if (distB == null) return -1;
+      return distA - distB;
+    });
+
+    document.getElementById('jobList').innerHTML = filtered.length > 0
+      ? filtered.map(renderRealJobRow).join('')
+      : '<div style="text-align:center; padding:60px 20px; color:#5B6B85; font-size:14px;">No jobs match these filters. Try clearing some.</div>';
+    document.getElementById('resultsCount').textContent = filtered.length;
+  }
+
+  function clearAllFilters() {
+    document.getElementById('filterKeyword').value = '';
+    document.getElementById('remoteOnlyFilter').checked = false;
+    document.getElementById('radiusSelect').value = '0';
+    document.querySelectorAll('.filter-industry, .filter-travel').forEach((el) => (el.checked = false));
+    document.getElementById('filterMatchScore').value = 0;
+    document.getElementById('filterComp').value = 0;
+    document.getElementById('sortSelect').value = 'match';
+    applyFiltersAndRender();
+  }
+
+  function matchLevelInfo(score) {
+    if (score == null) return { label: 'Unscored', cls: 'ml-strong' };
+    if (score >= 90) return { label: 'Excellent Match', cls: 'ml-excellent' };
+    if (score >= 75) return { label: 'Strong Match', cls: 'ml-strong' };
+    return { label: 'Possible Match', cls: 'ml-possible' };
+  }
+
+  function renderRealJobRow(job) {
+    const comp = job.compensation_text || (job.salary_min ? `$${job.salary_min}${job.salary_max ? '–$' + job.salary_max : '+'}` : '');
+    const match = job.match;
+    const score = match?.overall_score;
+    const scoreDisplay = score != null ? `${score}%` : '—';
+    const level = matchLevelInfo(score);
+    const tags = (match?.reasons || []).slice(0, 3).map((r) => `<span class="jtag">${escapeHtml(r)}</span>`).join('');
+    const nearDistance = nearLocationCoords
+      ? `<div style="font-size:12px; color:var(--royal); font-weight:600; margin-top:4px;">${Math.round(distanceMilesClient(nearLocationCoords.lat, nearLocationCoords.lng, job.job_lat, job.job_lng))} miles from your search location</div>`
+      : '';
+
+    // Same treatment as the dashboard: recruiter-posted jobs get a
+    // visibly distinct card (purple accent, badge) rather than blending
+    // in with employer-verified listings, and non-subscribed candidates
+    // see their real match score/reasons but not the employer identity
+    // or apply link — see redactForNonSubscriber in backend/routes/jobs.js.
+    const isRecruiterPosted = job.source_type === 'recruiter_posted';
+    const rowStyle = isRecruiterPosted ? 'border-left:4px solid #7C3AED; background:#FAF8FF;' : '';
+    const recruiterBadge = isRecruiterPosted
+      ? `<span style="font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:99px; background:#7C3AED18; color:#7C3AED; text-transform:uppercase; letter-spacing:0.02em; margin-left:8px;">Posted by Recruiter</span>`
+      : '';
+    const companyLine = job.subscription_required
+      ? `<span style="color:#7C3AED; font-weight:600;">🔒 Subscribe to see who's hiring</span> — ${escapeHtml(job.location_raw || '')} ${comp ? '&nbsp;·&nbsp; ' + escapeHtml(comp) : ''}`
+      : `${escapeHtml(job.company_name || (isRecruiterPosted ? 'Confidential search' : ''))} — ${escapeHtml(job.location_raw || '')} ${comp ? '&nbsp;·&nbsp; ' + escapeHtml(comp) : ''}`;
+    const primaryActionBtn = job.subscription_required
+      ? `<a href="rook-pricing.html" class="btn btn-primary btn-sm">Subscribe to Unlock</a>`
+      : `<a href="${job.source_url || '#'}" target="_blank" class="btn btn-outline btn-sm">View Original</a>`;
+
+    return `
+      <div class="job-row" style="${rowStyle}">
+        <div class="score-ring" style="--pct:${score ?? 0};"><span>${scoreDisplay}</span></div>
+        <div class="job-info">
+          <h4>${escapeHtml(job.title_original || job.title_normalized || 'Untitled role')}${recruiterBadge}</h4>
+          <div class="company">${companyLine}</div>
+          ${nearDistance}
+          ${tags ? `<div class="tag-row">${tags}</div>` : ''}
+          <div class="job-meta-line">${job.date_posted ? 'Posted ' + escapeHtml(job.date_posted) : ''} · Sourced via ${escapeHtml(job.source_type || 'unknown')}</div>
+        </div>
+        <div class="job-actions">
+          <span class="match-level ${level.cls}">${level.label}</span>
+          <a href="rook-job-analysis.html?job=${escapeHtml(job.id)}" class="btn btn-outline btn-sm">View Analysis</a>
+          ${primaryActionBtn}
+        </div>
+      </div>`;
+  }
+
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function showBanner(html, level) {
+    const banner = document.createElement('div');
+    banner.style.cssText = `background:${level === 'info' ? '#EAF7F4' : '#FFF7E6'}; border-left:3px solid ${level === 'info' ? '#00806E' : '#B98900'}; border-radius:8px; padding:12px 16px; margin-bottom:20px; font-size:13px; color:#3D4A63; line-height:1.5;`;
+    banner.innerHTML = html;
+    document.querySelector('.results-head').insertAdjacentElement('afterend', banner);
+  }
+</script>
+
+</body>
+</html>
