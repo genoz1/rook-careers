@@ -207,16 +207,24 @@ function escapeHtml(str) {
 function renderSavedCard(job) {
   const score = job.match?.overall_score;
   const comp = job.compensation_text || (job.salary_min ? `$${job.salary_min}${job.salary_max ? '–$' + job.salary_max : '+'}` : '');
+  // Recruiter-posted jobs have no source_url — same dead-link issue
+  // found and fixed on the Dashboard/Job Analysis pages earlier, missed
+  // here since this is a separate page. Routes to the in-site Apply
+  // flow for those instead of a dead "#" link.
+  const isRecruiterPosted = job.source_type === 'recruiter_posted';
+  const primaryBtn = isRecruiterPosted
+    ? `<a href="rook-apply.html?job=${escapeHtml(job.id)}" class="btn btn-primary btn-sm">Apply Now</a>`
+    : `<a href="${job.source_url || '#'}" target="_blank" class="btn btn-primary btn-sm">View Original</a>`;
   return `
     <div class="job-card" data-job-id="${escapeHtml(job.id)}">
       ${score != null ? `<span class="match-pill">${score}% Match</span>` : ''}
       <h4>${escapeHtml(job.title_original || job.title_normalized || 'Untitled role')}</h4>
-      <div class="company">${escapeHtml(job.company_name || '')} — ${escapeHtml(job.location_raw || '')}</div>
+      <div class="company">${escapeHtml(job.company_name || (isRecruiterPosted ? 'Confidential search' : ''))} — ${escapeHtml(job.location_raw || '')}</div>
       <div class="job-meta">
         ${comp ? `<span>${escapeHtml(comp)}</span>` : ''}
       </div>
       <div class="job-actions">
-        <a href="${job.source_url || '#'}" target="_blank" class="btn btn-primary btn-sm">View Original</a>
+        ${primaryBtn}
         <button type="button" class="btn btn-outline btn-sm" onclick="removeSaved('${escapeHtml(job.id)}', this)">Remove</button>
       </div>
     </div>`;
