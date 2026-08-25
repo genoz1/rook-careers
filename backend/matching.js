@@ -307,21 +307,26 @@ function scoreJob(job, profile) {
   }
   if (acceptedStateAbbrs.size > 0) dataPointsAvailable++;
 
-  // A location string is only treated as genuinely remote-friendly if it
-  // doesn't also name a specific state/country — see
-  // mentionsADifferentState's comment for why ("California... - Remote"
-  // almost always means remote-within-California, not nationwide).
-  // Remote is checked first and short-circuits distance entirely, since
-  // a genuinely remote role has no meaningful commute distance.
-  const mentionsOtherState = mentionsADifferentState(job.location_raw, acceptedStateAbbrs);
+  // Remote no longer bypasses distance scoring. Direct correction from
+  // industry experience: in field/outside sales, "remote" means "no
+  // office to report to," not "location doesn't matter" — a "Remote —
+  // North Carolina" posting is still tied to a real NC territory. The
+  // previous version gave every remote-labeled job a flat 28/35 points
+  // regardless of actual distance, which is exactly why unrelated jobs
+  // in NC, Michigan, and CA were all scoring similarly high for a
+  // Florida candidate — the real distance was never being considered at
+  // all. Now every job with real coordinates goes through the same
+  // distance-primary scoring below, remote or not; "remote" is kept as
+  // a purely informational callout, not a score input.
+  const isRemoteLabeled = /remote/i.test(job.location_raw || "") || job.remote_status === "remote";
   const mentionsForeignCountry = mentionsNonUsCountry(job.location_raw);
-  const remoteFriendly = (/remote/i.test(job.location_raw || "") || job.remote_status === "remote") && !mentionsOtherState && !mentionsForeignCountry;
 
   const hasRealCoordinates = profile.home_lat != null && profile.home_lng != null && job.job_lat != null && job.job_lng != null;
 
-  if (remoteFriendly) {
-    prefScore += 28;
-    reasons.push("Remote-friendly role");
+  if (mentionsForeignCountry) {
+    concerns.push(`Location (${job.location_raw}) appears to be outside the United States`);
+    hardDisqualifier = true;
+    prefCap = Math.min(prefCap, 65);
   } else if (hasRealCoordinates) {
     // --- Distance-primary path ---
     dataPointsAvailable++; // this data point (real coordinates) was actually available
@@ -387,6 +392,14 @@ function scoreJob(job, profile) {
     concerns.push(`Location (${job.location_raw}) may be outside your preferred states`);
     hardDisqualifier = true;
     prefCap = Math.min(prefCap, 65);
+  }
+
+  // Purely informational — does not add or remove points. Being able to
+  // work from home has real value to a candidate, it's just not the
+  // same thing as "distance doesn't matter," which is what this used to
+  // mean before the fix above.
+  if (isRemoteLabeled && !mentionsForeignCountry) {
+    reasons.push("Remote-friendly role");
   }
 
   cat.location_prefs.max += 35;
