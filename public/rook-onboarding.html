@@ -413,6 +413,20 @@
     document.getElementById('uploadedFileStatus').textContent = 'Uploading...';
     document.getElementById('uploadedFileStatus').style.color = '';
 
+    // Disable Continue for the whole upload+AI-analysis round trip, not
+    // just while the network request is in flight. Reported bug: hitting
+    // Continue right after upload (before analysis finished) moved on to
+    // Career Experience before there was anything to populate it with —
+    // going back afterward showed the real data because it had finished
+    // by then. The button staying clickable was the actual problem, not
+    // the analysis being slow.
+    const nextBtn = document.getElementById('nextBtn');
+    const originalBtnText = nextBtn.textContent;
+    nextBtn.disabled = true;
+    nextBtn.style.opacity = '0.5';
+    nextBtn.style.pointerEvents = 'none';
+    nextBtn.textContent = 'Analyzing résumé...';
+
     const formData = new FormData();
     formData.append('resume', file);
 
@@ -438,6 +452,11 @@
     } catch (err) {
       document.getElementById('uploadedFileStatus').textContent = 'Upload failed: ' + err.message;
       document.getElementById('uploadedFileStatus').style.color = '#C23B3B';
+    } finally {
+      nextBtn.disabled = false;
+      nextBtn.style.opacity = '';
+      nextBtn.style.pointerEvents = '';
+      nextBtn.textContent = originalBtnText;
     }
   }
 
