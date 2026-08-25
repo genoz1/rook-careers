@@ -418,11 +418,17 @@ router.get("/recruiter-jobs", requireConfig, optionalAuth, async (req, res) => {
 
 // GET /api/guarantee-status — powers the "We've found N of your 5
 // guaranteed Excellent Matches, X days remaining" dashboard banner.
-// Excellent Match is computed and stored per-job in
-// candidate_job_matches.excellent_match by backend/matching.js — this
-// just counts and adds the day-remaining math against
-// subscription_started_at (set once, on first successful Stripe
-// checkout — see backend/routes/stripe.js).
+// Counts from excellent_match_log — a permanent, insert-only record of
+// every job that has EVER qualified as Excellent for this candidate —
+// rather than the live candidate_job_matches.excellent_match flag.
+// That flag reflects only the CURRENT score and can flip if a job gets
+// rescored later (job data changes, or the matching logic itself gets
+// tuned), which would otherwise make a candidate's guarantee count
+// silently drop over time even though they genuinely were shown 5
+// Excellent Matches earlier — an unresolvable "I saw 5, you show 3"
+// dispute. Only entries logged within the 30-day guarantee window
+// count toward the target; the log itself keeps every entry forever
+// regardless, for general record-keeping.
 router.get("/guarantee-status", requireConfig, requireAuth, loadCandidateId, async (req, res) => {
   const { data: profile } = await supabaseAdmin
     .from("candidate_profiles")
@@ -437,15 +443,16 @@ router.get("/guarantee-status", requireConfig, requireAuth, loadCandidateId, asy
   const GUARANTEE_TARGET = 5;
   const GUARANTEE_WINDOW_DAYS = 30;
   const startedAt = new Date(profile.subscription_started_at);
+  const windowEnd = new Date(startedAt.getTime() + GUARANTEE_WINDOW_DAYS * 24 * 60 * 60 * 1000);
   const daysElapsed = (Date.now() - startedAt.getTime()) / (1000 * 60 * 60 * 24);
   const daysRemaining = Math.max(0, Math.ceil(GUARANTEE_WINDOW_DAYS - daysElapsed));
   const windowOpen = daysElapsed <= GUARANTEE_WINDOW_DAYS;
 
   const { count } = await supabaseAdmin
-    .from("candidate_job_matches")
+    .from("excellent_match_log")
     .select("id", { count: "exact", head: true })
     .eq("candidate_id", req.candidateId)
-    .eq("excellent_match", true);
+    .lte("first_qualified_at", windowEnd.toISOString());
 
   const excellentCount = count || 0;
 
