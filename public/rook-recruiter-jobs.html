@@ -96,6 +96,17 @@
       <p>Roles submitted directly by recruiters, reviewed before appearing here. These are also blended into your main Dashboard — this page is just a focused, all-in-one-place view of recruiter listings specifically.</p>
     </div>
 
+    <div style="display:flex; justify-content:flex-end; margin-bottom:14px;">
+      <label style="display:flex; align-items:center; gap:7px; font-size:12.5px; color:#5B6B85; font-weight:600; margin:0;">
+        Sort by
+        <select id="sortSelect" onchange="renderList()" style="border:1px solid #E2E7F0; border-radius:8px; padding:5px 9px; font-size:12.5px; color:#3D4A63; font-weight:600; background:#fff;">
+          <option value="best_match">Best Match</option>
+          <option value="closest">Closest to You</option>
+          <option value="newest">Newest</option>
+        </select>
+      </label>
+    </div>
+
     <div id="loading">Loading…</div>
     <div id="empty" style="display:none;">No recruiter-posted jobs are live right now — check back soon.</div>
     <div class="job-list" id="jobList" style="display:none;"></div>
@@ -108,6 +119,38 @@
 <script>
 function escapeHtml(str) {
   return String(str || '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+let allRecruiterJobs = [];
+
+function isRemoteJob(j) {
+  return j.remote_status === 'remote' || /remote/i.test(j.location_raw || '');
+}
+
+// Same idea as Job Search / Dashboard: Best Match is the API's default
+// order (by overall_score); Closest to You and Newest are independent
+// sorts pulled out of the score, using the real distance_miles the
+// /recruiter-jobs endpoint already attaches to every job. Remote jobs
+// are excluded from distance sort/display — see the Dashboard fix for
+// why (identical, meaningless distances for geocoded "Remote" listings).
+function renderList() {
+  const sortBy = document.getElementById('sortSelect').value;
+  let visible = [...allRecruiterJobs];
+  if (sortBy === 'closest') {
+    visible.sort((a, b) => {
+      const aDist = isRemoteJob(a) ? null : a.distance_miles;
+      const bDist = isRemoteJob(b) ? null : b.distance_miles;
+      if (aDist == null && bDist == null) return 0;
+      if (aDist == null) return 1;
+      if (bDist == null) return -1;
+      return aDist - bDist;
+    });
+  } else if (sortBy === 'newest') {
+    visible.sort((a, b) => new Date(b.first_seen_at || 0) - new Date(a.first_seen_at || 0));
+  } else {
+    visible.sort((a, b) => (b.match?.overall_score ?? -1) - (a.match?.overall_score ?? -1));
+  }
+  document.getElementById('jobList').innerHTML = visible.map(renderRow).join('');
 }
 
 (async () => {
@@ -140,16 +183,16 @@ function escapeHtml(str) {
     const res = await rookApiFetch('/recruiter-jobs');
     if (!res.ok) throw new Error('API returned ' + res.status);
     const jobs = await res.json();
-    const recruiterJobs = Array.isArray(jobs) ? jobs : [];
+    allRecruiterJobs = Array.isArray(jobs) ? jobs : [];
 
     loading.style.display = 'none';
 
-    if (recruiterJobs.length === 0) {
+    if (allRecruiterJobs.length === 0) {
       empty.style.display = 'block';
       return;
     }
 
-    jobList.innerHTML = recruiterJobs.map(renderRow).join('');
+    renderList();
     jobList.style.display = 'block';
   } catch (err) {
     loading.textContent = 'Could not load recruiter jobs: ' + err.message;
@@ -172,12 +215,14 @@ function renderRow(job) {
     : `<span class="match-badge" style="background:#7C3AED18; color:#7C3AED;">Posted by Recruiter</span>`;
   const actionHref = `rook-job-analysis.html?job=${encodeURIComponent(job.id)}`;
   const actionLabel = job.subscription_required ? 'Subscribe to Unlock' : 'View Job';
+  const distanceLine = (!isRemoteJob(job) && job.distance_miles != null) ? `<div class="job-meta">${job.distance_miles} mi away</div>` : '';
 
   return `
     <div class="job-row">
       <div class="job-main">
         <a href="${actionHref}" class="job-title">${escapeHtml(job.title_original || 'Untitled role')}</a>
         <div class="job-meta">${companyLine}${comp ? ' · ' + escapeHtml(comp) : ''}</div>
+        ${distanceLine}
       </div>
       ${sourceTag}
       ${matchBadge}
