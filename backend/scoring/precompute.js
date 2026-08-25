@@ -108,6 +108,28 @@ async function scoreAndStoreForCandidate(supabase, profile, activeJobs = null) {
     if (upsertError) throw new Error(`Could not store scores (batch starting at ${i}): ${upsertError.message}`);
   }
 
+  // Permanent record of every job that has EVER qualified as an
+  // Excellent Match for this candidate — separate from the live
+  // candidate_job_matches.excellent_match flag above, which reflects
+  // only the CURRENT score and can flip if a job gets rescored later
+  // (job data changes, or the matching logic itself gets tuned, which
+  // happened many times over the course of one evening building this).
+  // Without this, the guarantee count a candidate sees could silently
+  // go down over time even though they genuinely were shown 5 Excellent
+  // Matches earlier — exactly the kind of thing that turns into an
+  // unresolvable "I saw 5, your system says 3" dispute. Insert-only,
+  // never updated or deleted once a job first qualifies.
+  const newlyExcellent = rows.filter((r) => r.excellent_match).map((r) => ({
+    candidate_id: r.candidate_id,
+    job_id: r.job_id,
+  }));
+  if (newlyExcellent.length > 0) {
+    const { error: logError } = await supabase
+      .from("excellent_match_log")
+      .upsert(newlyExcellent, { onConflict: "candidate_id,job_id", ignoreDuplicates: true });
+    if (logError) console.error(`Could not update excellent_match_log for candidate ${profile.id}: ${logError.message}`);
+  }
+
   // Marks when this candidate was last fully scored, so a time-boxed
   // precompute run (see precomputeScores.js) can order candidates
   // oldest-scored-first and always make real progress on whoever's most
