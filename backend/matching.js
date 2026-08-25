@@ -143,15 +143,51 @@ function extractJobTravelPercentage(job) {
 // with no clear reason why. This does NOT lower the bar for what counts
 // as a match; it only recognizes the same match when phrased slightly
 // differently, which exact-string matching was structurally unable to do.
+// Reduces a label to its significant word roots for fuzzy comparison:
+// lowercase, strip punctuation, crudely depluralize (trailing 's'), and
+// drop short filler words. "Physicians" and "Physician Offices" both
+// reduce to a set containing "physician" — this is what actually lets
+// them match; plain substring containment does NOT catch this pair
+// (neither string contains the other once there's a trailing "s" or an
+// extra qualifying word in the way), which is exactly the concrete case
+// that surfaced this: a candidate's real past title of "Physician
+// Account Executive" at Quest Diagnostics, evaluated against a live
+// Quest Diagnostics "Physician Account Executive" posting, still only
+// scored Customer & Specialty as "Partial" rather than "Strong".
+function significantWords(str) {
+  return new Set(
+    String(str)
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .split(/\s+/)
+      .map((w) => (w.endsWith("s") && w.length > 4 ? w.slice(0, -1) : w)) // crude depluralize, only for words long enough that stripping "s" won't mangle them
+      .filter((w) => w.length > 3)
+  );
+}
+
 function findOverlap(listA, listB) {
   if (!Array.isArray(listA) || !Array.isArray(listB)) return null;
   const bStrings = listB.map((s) => String(s).toLowerCase().trim());
   const exact = listA.find((a) => bStrings.includes(String(a).toLowerCase().trim()));
   if (exact) return exact;
-  return listA.find((a) => {
+
+  // Substring fallback — catches cases like "Animal Health" contained
+  // within "Veterinary/Animal Health" that word-splitting could miss if
+  // one side collapses to very few significant words.
+  const substringMatch = listA.find((a) => {
     const aLower = String(a).toLowerCase().trim();
-    if (aLower.length <= 3) return false; // too short for substring containment to be meaningful (avoids e.g. "OR" matching everything)
+    if (aLower.length <= 3) return false;
     return bStrings.some((b) => b.length > 3 && (b.includes(aLower) || aLower.includes(b)));
+  });
+  if (substringMatch) return substringMatch;
+
+  // Word-root fallback — catches cases substring containment can't,
+  // like "Physicians" vs "Physician Offices" (see comment above).
+  const bWordSets = bStrings.map(significantWords);
+  return listA.find((a) => {
+    const aWords = significantWords(a);
+    if (aWords.size === 0) return false;
+    return bWordSets.some((bWords) => [...aWords].some((w) => bWords.has(w)));
   }) || null;
 }
 
