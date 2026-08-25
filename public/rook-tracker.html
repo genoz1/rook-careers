@@ -49,6 +49,19 @@
   .kcard .kmeta{display:flex; align-items:center; justify-content:space-between; font-size:11.5px; color:#8B96AB;}
   .kscore{font-weight:700; color:#00806E;}
   .kcard .next{font-size:11.5px; color:var(--royal); font-weight:600; margin-top:8px; padding-top:8px; border-top:1px solid var(--border);}
+  .main-scroll{padding:20px 0;}
+
+  .shell{display:grid; grid-template-columns:236px 1fr; min-height:100vh;}
+  .sidebar{background:var(--navy); color:#fff; padding:26px 20px; display:flex; flex-direction:column;}
+  .side-nav{display:flex; flex-direction:column; gap:2px; flex:1;}
+  .side-nav a{display:flex; align-items:center; gap:12px; padding:11px 12px; border-radius:9px; font-size:14px; font-weight:500; color:#AEB9CF;}
+  .side-nav a svg{width:17px; height:17px;}
+  .side-nav a.active{background:rgba(255,255,255,0.08); color:#fff;}
+  .side-nav a:hover{color:#fff;}
+  .side-foot{border-top:1px solid rgba(255,255,255,0.1); padding-top:16px; display:flex; align-items:center; gap:10px;}
+  .side-foot .avatar{width:32px; height:32px; border-radius:50%; background:linear-gradient(135deg,var(--royal),var(--teal)); display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:#fff; flex-shrink:0;}
+  .side-foot .n{font-size:13.5px; font-weight:600;}
+  .side-foot .r{font-size:11.5px; color:#8B96AB;}
 
   @media(max-width:1000px){
     .board{grid-template-columns:1fr 1fr 1fr;}
@@ -57,15 +70,31 @@
 </head>
 <body>
 
-<div class="topbar">
-  <div class="topbar-inner">
+<div class="shell">
+  <aside class="sidebar">
     <div class="logo" style="gap:8px;">
-      <img src="assets/rook-icon-192.png" alt="ROOK" style="height:43px; width:auto; display:block;"><span style="font-family:var(--font-display); font-weight:700; font-size:36px; letter-spacing:-0.02em; color:var(--navy); line-height:1;">ROOK</span>
+      <img src="assets/rook-icon-192.png" alt="ROOK" style="height:43px; width:auto; display:block; filter:brightness(2.1) contrast(1.15) saturate(1.5) drop-shadow(0 0 2px rgba(255,255,255,0.4));"><span style="font-family:var(--font-display); font-weight:700; font-size:36px; letter-spacing:-0.02em; color:#EDF3FF; line-height:1;">ROOK</span>
     </div>
-    <a href="rook-dashboard.html" class="back-link">← Back to Dashboard</a>
-    <a href="#" onclick="rookSignOut(); return false;" style="font-size:12.5px; font-weight:600; color:#8B96AB; margin-left:14px;">Log Out</a>
-  </div>
-</div>
+    <nav class="side-nav">
+      <a href="rook-dashboard.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l9-9 9 9M5 10v10h14V10"/></svg>Dashboard</a>
+      <a href="rook-search.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>Job Search</a>
+      <a href="rook-recruiter-jobs.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>Recruiter Jobs</a>
+      <a href="rook-tracker.html" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>Applications</a>
+      <a href="rook-saved.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-4-7 4V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>Saved Jobs</a>
+      <a href="rook-intelligence.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>Career Intelligence</a>
+      <a href="rook-onboarding.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>My Résumés</a>
+      <a href="rook-settings.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09A1.65 1.65 0 0015 4.6a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>Settings</a>
+    </nav>
+    <div class="side-foot">
+      <div class="avatar">GZ</div>
+      <div><div class="n">Gene Zentko</div><div class="r">Professional Plan</div></div>
+    </div>
+    <a href="#" onclick="rookSignOut(); return false;" style="display:block; text-align:center; font-size:12.5px; font-weight:600; color:#8B96AB; padding:12px 0 4px;">Log Out</a>
+  </aside>
+
+  <div class="main-scroll">
+    <div style="max-width:1200px; margin:0 auto; padding:0 24px 12px;"></div>
+
 
 <div class="container">
   <div class="page-head">
@@ -146,6 +175,8 @@
         <div class="kmeta"><span>Not selected</span><span>Aug 2</span></div>
       </div>
     </div>
+  </div>
+</div>
   </div>
 </div>
 
