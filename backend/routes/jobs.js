@@ -234,27 +234,33 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
   let { data: rows, error } = await fetchScoredRows();
   if (error) return res.status(500).json({ error: error.message });
 
-  // Fallback for a brand-new candidate whose scores haven't been
-  // computed yet — the fire-and-forget rescore in profile.js normally
-  // covers this within a few seconds of onboarding, but if a request
-  // lands before that finishes (or before this candidate's very first
-  // scheduled precompute run), do one synchronous scoring pass now
-  // rather than showing an empty dashboard with no explanation. This
-  // only ever runs once per candidate — after it succeeds, rows exist
-  // and every future request hits the fast path above.
+  // Non-blocking fallback for a brand-new candidate whose scores haven't
+  // been computed yet. This USED to run scoreAndStoreForCandidate
+  // synchronously, inline, inside this request — meaning a new
+  // candidate's very first dashboard load was waiting on the exact same
+  // full scoring pass (now ~2,500 jobs and growing) that was just
+  // timing out even in a 30-minute background script with no time
+  // pressure at all. A live web request has nowhere near that much
+  // tolerance — a slow first load risked showing a brand-new paying
+  // candidate a broken dashboard on their very first visit.
+  //
+  // Now: kick off scoring in the background (don't await it) and return
+  // immediately with scoring_in_progress: true so the frontend can show
+  // a "Building your matches" state and poll GET /scoring-status instead
+  // of blocking the page load on it. This only ever fires once per
+  // candidate — once rows exist, every future request hits the fast
+  // path above and this block never runs again.
+  let scoringInProgress = false;
   if ((!rows || rows.length === 0)) {
     const { count } = await supabaseAdmin
       .from("candidate_job_matches")
       .select("id", { count: "exact", head: true })
       .eq("candidate_id", profile.id);
     if (!count || count === 0) {
-      try {
-        await scoreAndStoreForCandidate(supabaseAdmin, profile);
-        ({ data: rows, error } = await fetchScoredRows());
-        if (error) return res.status(500).json({ error: error.message });
-      } catch (err) {
-        console.error(`Fallback synchronous scoring failed for candidate ${profile.id}: ${err.message}`);
-      }
+      scoringInProgress = true;
+      scoreAndStoreForCandidate(supabaseAdmin, profile).catch((err) => {
+        console.error(`Background first-time scoring failed for candidate ${profile.id}: ${err.message}`);
+      });
     }
   }
 
@@ -268,7 +274,23 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     employer_note: noteFor(row.jobs),
   }));
 
-  res.json(isSubscribed(profile) ? results : results.map(redactForNonSubscriber));
+  res.json({
+    jobs: isSubscribed(profile) ? results : results.map(redactForNonSubscriber),
+    scoring_in_progress: scoringInProgress,
+  });
+});
+
+// GET /api/scoring-status — lightweight poll target for a candidate
+// whose first-ever /jobs request returned scoring_in_progress: true.
+// Just a count comparison, not a re-run of anything, so it's cheap to
+// poll every few seconds while the frontend shows a "Building your
+// matches" state.
+router.get("/scoring-status", requireConfig, requireAuth, loadCandidateId, async (req, res) => {
+  const { count } = await supabaseAdmin
+    .from("candidate_job_matches")
+    .select("id", { count: "exact", head: true })
+    .eq("candidate_id", req.candidateId);
+  res.json({ ready: Boolean(count && count > 0) });
 });
 
 // GET /api/recruiter-jobs — every live recruiter-posted job, independent
