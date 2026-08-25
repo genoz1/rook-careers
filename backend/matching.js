@@ -271,6 +271,7 @@ function scoreJob(job, profile) {
     requirements: { score: 0, max: 0 },
   };
   const catGap = new Set(); // categories forced to "Gap" by a hard disqualifier
+  let locationForcedStrong = false; // set when the job is within 90 miles — see the distance block below
 
   // ============================================================
   // PREFERENCE FIT — would the candidate want this job
@@ -336,16 +337,16 @@ function scoreJob(job, profile) {
     const inAcceptedRegion = acceptedStateAbbrs.size === 0 || [...acceptedStateAbbrs].some((abbr) => locationMentionsState(job.location_raw, abbr));
 
     if (miles <= 90) {
-      // Explicit business rule: anything within 90 miles of the
-      // candidate is a real, comfortable commute/territory distance for
-      // field sales and should score as a full match on distance itself
-      // — not a partial credit tier. Note this only controls the
-      // distance sub-factor; Location & Preferences as a whole still
-      // blends in compensation, travel %, and industry-interest match,
-      // so a close job with a real gap in one of those can still land
-      // below "Strong" overall. That's a real, separate design question
-      // (should distance alone ever override the blended category
-      // label?) worth a direct answer rather than silently deciding it.
+      // Explicit, direct business rule (confirmed twice): within 90
+      // miles is a real, comfortable commute/territory distance for
+      // field sales and gets full distance credit AND forces the
+      // Location & Preferences category label itself to "Strong" —
+      // not just a high number feeding into a blended ratio that
+      // compensation or travel-% mismatches could still drag down
+      // below the "Strong" threshold. Distance is being treated as the
+      // dominant, overriding signal for this category's label, by
+      // direct instruction, not as one blended input among several.
+      locationForcedStrong = true;
       prefScore += 35;
       reasons.push(`About ${Math.round(miles)} miles from you`);
     } else if (miles <= 150) {
@@ -778,6 +779,16 @@ function scoreJob(job, profile) {
       rating = ratio >= 0.85 ? "Strong" : ratio >= 0.6 ? "Good" : ratio >= 0.35 ? "Partial" : "Gap";
     }
     categories[key] = { label, rating };
+  }
+
+  // Direct override, not a blended-ratio outcome: within 90 miles forces
+  // Location & Preferences to "Strong" outright, even if compensation,
+  // travel %, or industry-interest scored lower and would otherwise have
+  // pulled the blended ratio down to "Good". A real Gap (far away and
+  // outside accepted regions) still isn't overridden by this — this only
+  // ever raises the rating, never masks an actual disqualifying mismatch.
+  if (locationForcedStrong && categories.location_prefs.rating !== "Gap") {
+    categories.location_prefs.rating = "Strong";
   }
 
   // A "Gap" in any candidate-side category (Experience, Industry &
