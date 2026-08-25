@@ -288,10 +288,45 @@
       jobList.style.display = '';
     }
 
+    // Polls GET /scoring-status every few seconds until a brand-new
+    // candidate's first-ever scoring pass finishes in the background,
+    // then reloads the real job list. Replaces what used to be a
+    // synchronous scoring call the page just sat blocked on — a new
+    // candidate's very first dashboard load was waiting on the exact
+    // same full ~2,500-job scoring pass that was timing out even in a
+    // 30-minute background script with no time pressure. A live page
+    // load has nowhere near that tolerance.
+    async function pollScoringStatus() {
+      showBanner('Building your matches — this runs once for a brand-new profile and usually takes under a minute.', 'info');
+      jobList.innerHTML = '<div style="text-align:center; padding:60px 20px; color:#5B6B85; font-size:14px;">Building your matches…</div>';
+      revealDemo();
+      const poll = async () => {
+        try {
+          const res = await rookApiFetch('/scoring-status');
+          const data = await res.json();
+          if (data.ready) {
+            loadJobs();
+          } else {
+            setTimeout(poll, 4000);
+          }
+        } catch {
+          setTimeout(poll, 4000);
+        }
+      };
+      setTimeout(poll, 4000);
+    }
+
+    async function loadJobs() {
     try {
       const res = await rookApiFetch('/jobs?limit=20');
       if (!res.ok) throw new Error('API returned ' + res.status);
-      const jobs = await res.json();
+      const data = await res.json();
+      const jobs = Array.isArray(data) ? data : (data.jobs || []); // Array.isArray fallback covers any cached/older response shape
+
+      if (Array.isArray(data) === false && data.scoring_in_progress) {
+        pollScoringStatus();
+        return;
+      }
 
       if (!Array.isArray(jobs) || jobs.length === 0) {
         showBanner('No live jobs yet. Add employers and run <code>npm run ingest</code> — see ROOK-Setup-Guide.pdf. Showing example matches below in the meantime.');
@@ -332,6 +367,9 @@
       showBanner('Could not reach the ROOK API (' + err.message + '). Showing example matches below — see ROOK-Setup-Guide.pdf to get the backend running.');
       revealDemo();
     }
+    }
+
+    await loadJobs();
 
     // Guarantee tracker banner — "We've found N of your 5 guaranteed
     // Excellent Matches, X days remaining." Silently does nothing for a
