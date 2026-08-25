@@ -297,7 +297,8 @@ router.get("/recruiter-jobs", requireConfig, optionalAuth, async (req, res) => {
     .in("source_type", ["recruiter_posted", "agency_aggregated"])
     .eq("status", "active")
     .eq("moderation_status", "approved")
-    .order("first_seen_at", { ascending: false });
+    .order("first_seen_at", { ascending: false })
+    .limit(2000); // same latent 1000-row default-cap risk as the scoring query — this stays well ahead of realistic near-term volume, but isn't infinite; revisit if agency-aggregated volume ever approaches it
   if (error) return res.status(500).json({ error: error.message });
 
   let profile = null;
