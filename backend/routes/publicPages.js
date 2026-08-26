@@ -81,7 +81,7 @@ router.get("/jobs/:id", async (req, res, next) => {
 
   const { data: job, error } = await supabaseAnon
     .from("jobs")
-    .select("id, title_original, title_normalized, location_raw, compensation_text, salary_min, salary_max, description_text, date_posted, status")
+    .select("id, title_original, title_normalized, location_raw, compensation_text, salary_min, salary_max, description_text, date_posted, status, company_name, ai_analysis, remote_status, travel_percentage")
     .eq("id", req.params.id)
     .eq("status", "active")
     .maybeSingle();
@@ -90,7 +90,33 @@ router.get("/jobs/:id", async (req, res, next) => {
 
   const title = job.title_original || job.title_normalized || "Open role";
   const comp = job.compensation_text || (job.salary_min ? `$${job.salary_min}${job.salary_max ? "–$" + job.salary_max : "+"}` : "");
-  const preview = (job.description_text || "").slice(0, 400);
+
+  // Structured teaser built from the AI-extracted job attributes
+  // instead of a raw description excerpt. Real bug this replaces:
+  // job postings almost always name the employer in their own opening
+  // sentence ("Abbott is a global healthcare leader...") — scrubbing
+  // that string out of free text is inherently fragile (misses
+  // nicknames, abbreviations, slightly different phrasing), so instead
+  // of trying to sanitize prose, this shows only categorical data that
+  // can never leak identity in the first place: industry, product
+  // focus, seniority level, travel expectation. This also sidesteps a
+  // second real bug — raw un-decoded HTML entities (literal "&nbsp;"
+  // text) sometimes present in ingested description_text, which were
+  // showing up as visibly broken text on the page.
+  const ai = job.ai_analysis || {};
+  const teaserFacts = [];
+  if (Array.isArray(ai.required_industries) && ai.required_industries.length) teaserFacts.push(`Industry: ${ai.required_industries[0]}`);
+  else if (Array.isArray(ai.preferred_industries) && ai.preferred_industries.length) teaserFacts.push(`Industry: ${ai.preferred_industries[0]}`);
+  if (Array.isArray(ai.product_categories) && ai.product_categories.length) teaserFacts.push(`Focus: ${ai.product_categories[0]}`);
+  if (ai.seniority_level) teaserFacts.push(`Level: ${ai.seniority_level}`);
+  const travelPct = job.travel_percentage ?? ai.travel_percentage;
+  if (travelPct != null) teaserFacts.push(`Travel: ${travelPct}%`);
+  if (job.remote_status) teaserFacts.push(job.remote_status === "remote" ? "Remote-friendly" : "Field-based");
+
+  const preview = teaserFacts.length > 0
+    ? teaserFacts.join(" · ")
+    : "Full role details — including responsibilities, requirements, and who's hiring — are visible after you sign up.";
+
   const canonicalUrl = `${APP_BASE_URL}/jobs/${job.id}`;
   const metaDescription = `${title} — ${job.location_raw || ""}${comp ? " — " + comp : ""}. See the employer and apply on ROOK.`.slice(0, 300);
 
@@ -100,12 +126,16 @@ router.get("/jobs/:id", async (req, res, next) => {
   // worth knowing that omitting the real employer name may mean this
   // doesn't qualify for the full Google Jobs rich-result treatment,
   // which is a real tradeoff of the gating strategy, not a bug. Basic
-  // organic indexing isn't affected by that either way.
+  // organic indexing isn't affected by that either way. The
+  // "description" field here uses the same safe structured teaser as
+  // the visible page, not the raw description_text — that field was
+  // leaking the real employer name into structured data even though it
+  // was never rendered visibly on the page itself.
   const jsonLd = {
     "@context": "https://schema.org/",
     "@type": "JobPosting",
     title,
-    description: escapeHtml(job.description_text || title),
+    description: escapeHtml(preview),
     datePosted: job.date_posted || undefined,
     hiringOrganization: { "@type": "Organization", name: "Confidential — join ROOK to reveal" },
     jobLocation: job.location_raw ? { "@type": "Place", address: job.location_raw } : undefined,
@@ -117,13 +147,13 @@ router.get("/jobs/:id", async (req, res, next) => {
     <h1 style="font-size:28px; margin-bottom:10px;">${escapeHtml(title)}</h1>
     <div style="font-size:14.5px; color:var(--muted); margin-bottom:24px;">${escapeHtml(job.location_raw || "")}${comp ? " · " + escapeHtml(comp) : ""}${job.date_posted ? " · Posted " + escapeHtml(job.date_posted) : ""}</div>
     <div style="background:#fff; border:1px solid var(--border); border-radius:var(--radius); padding:24px; margin-bottom:24px; font-size:14.5px; line-height:1.7; color:var(--navy);">
-      ${escapeHtml(preview)}${preview.length >= 400 ? "…" : ""}
-      <div style="margin-top:16px; padding-top:16px; border-top:1px dashed var(--border); color:var(--muted); font-style:italic;">The rest of this posting — including who's hiring and how to apply — is visible after you sign up free.</div>
+      ${escapeHtml(preview)}
+      <div style="margin-top:16px; padding-top:16px; border-top:1px dashed var(--border); color:var(--muted); font-style:italic;">The rest of this posting — including who's hiring and how to apply — is visible after you sign up.</div>
     </div>
     <div style="background:var(--navy); border-radius:var(--radius); padding:28px 24px; text-align:center;">
       <h3 style="color:#fff; font-size:19px; margin-bottom:8px;">Ready to see who's hiring?</h3>
-      <p style="color:#B9C4DB; font-size:13.5px; margin-bottom:18px;">Free to join. See the employer, apply directly, and get this job (and every other one) scored against your real background.</p>
-      <a href="/rook-login.html" class="btn btn-primary">Get Started Free</a>
+      <p style="color:#B9C4DB; font-size:13.5px; margin-bottom:18px;">See the employer, apply directly, and get this job (and every other one) scored against your real background — backed by our 30-day guarantee.</p>
+      <a href="/rook-login.html" class="btn btn-primary">Get Started</a>
     </div>
     <div style="text-align:center; margin-top:20px;"><a href="/rook-browse.html" style="color:var(--royal); font-size:13px; font-weight:600;">← Back to all open roles</a></div>
   `;
