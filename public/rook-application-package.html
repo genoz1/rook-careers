@@ -90,6 +90,12 @@
      as PDF" as the destination) produces one complete document rather
      than whichever single tab happened to be open. */
   .cache-banner{font-size:12.5px; color:#5B6B85; margin-bottom:16px; display:flex; align-items:center; gap:10px;}
+  .pkg-spinner{
+    width:36px; height:36px; margin:0 auto;
+    border:3px solid #E3E8F0; border-top-color:var(--royal, #1463FF);
+    border-radius:50%; animation:pkg-spin 0.8s linear infinite;
+  }
+  @keyframes pkg-spin{to{transform:rotate(360deg);}}
   @media print {
     .topbar, .tabs, .rule-banner, .cache-banner, .final-actions, .match-note{display:none !important;}
     .tab-panel{display:block !important; page-break-after:always;}
@@ -123,8 +129,9 @@
     ROOK only reorganizes and emphasizes experience already in your résumé — it never invents jobs, titles, dates, or accomplishments.
   </div>
 
-  <div id="pkgLoading" style="text-align:center; padding:60px 20px; color:#5B6B85; font-size:14px;">
-    Generating your tailored package — this calls the AI fresh each time, so it can take a few seconds…
+  <div id="pkgLoading" style="text-align:center; padding:60px 20px;">
+    <div class="pkg-spinner"></div>
+    <div id="pkgLoadingText" style="color:#5B6B85; font-size:14px; margin-top:18px;">Generating your tailored package — this calls the AI fresh each time, so it can take a few seconds…</div>
   </div>
 
   <div id="pkgContent" style="display:none;">
@@ -224,15 +231,51 @@ function showTab(name, el) {
 })();
 
 let currentJobId = null;
+let statusInterval = null;
+
+// Honest framing: this is one atomic AI call on the backend, not a
+// multi-step process we can report real progress on — there's no
+// actual "40% done" to show. Rotating through the real conceptual
+// stages of what the AI is doing gives an honestly slow process (up to
+// 30-40+ seconds for a full résumé + cover letter + recruiter message +
+// interview prep) a sense of forward motion instead of one static line
+// that makes a working request look identical to a stuck one.
+const STATUS_MESSAGES = [
+  'Reading your résumé…',
+  'Comparing your experience to this role…',
+  'Tailoring your résumé summary and bullets…',
+  'Writing your cover letter…',
+  'Drafting your recruiter outreach message…',
+  'Preparing interview prep notes…',
+  'Almost done…',
+];
+
+function startStatusRotation(regenerate) {
+  let i = 0;
+  const textEl = document.getElementById('pkgLoadingText');
+  const messages = regenerate
+    ? ['Regenerating your tailored package — this calls the AI fresh…', ...STATUS_MESSAGES.slice(1)]
+    : STATUS_MESSAGES;
+  textEl.textContent = messages[0];
+  statusInterval = setInterval(() => {
+    i = Math.min(i + 1, messages.length - 1);
+    textEl.textContent = messages[i];
+  }, 4000);
+}
+
+function stopStatusRotation() {
+  if (statusInterval) {
+    clearInterval(statusInterval);
+    statusInterval = null;
+  }
+}
 
 async function loadPackage(jobId, regenerate) {
   currentJobId = jobId;
   document.getElementById('pkgLoading').style.display = 'block';
   document.getElementById('pkgContent').style.display = 'none';
   document.getElementById('pkgError').style.display = 'none';
-  document.getElementById('pkgLoading').textContent = regenerate
-    ? 'Regenerating your tailored package — this calls the AI fresh, so it can take a few seconds…'
-    : 'Loading your tailored package…';
+  startStatusRotation(regenerate);
 
   try {
     const url = `/application-package/${jobId}${regenerate ? '?regenerate=true' : ''}`;
@@ -245,10 +288,13 @@ async function loadPackage(jobId, regenerate) {
     renderPackage(pkg);
   } catch (err) {
     showError('Could not reach the ROOK API: ' + err.message);
+  } finally {
+    stopStatusRotation();
   }
 }
 
 function showError(message) {
+  stopStatusRotation();
   document.getElementById('pkgLoading').style.display = 'none';
   const errEl = document.getElementById('pkgError');
   errEl.style.display = 'block';
