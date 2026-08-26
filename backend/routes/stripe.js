@@ -143,12 +143,12 @@ router.post("/stripe/webhook", requireConfig, async (req, res) => {
       // want to track this in the same table.
       // subscription_started_at is only ever set here, the first time a
       // given candidate goes active — NOT overwritten on later renewal
-      // events, since it anchors the 30-day/5-Excellent-Match guarantee
-      // window to when they first paid, not to unrelated later webhook
-      // activity. checkout.session.completed only fires on that initial
-      // purchase, so a plain update on every hit here is already safe,
-      // but the guard below makes that explicit instead of relying on
-      // Stripe's event semantics alone.
+      // events. Records their real subscription start date rather than
+      // whatever later webhook activity happens to fire.
+      // checkout.session.completed only fires on that initial purchase,
+      // so a plain update on every hit here is already safe, but the
+      // guard below makes that explicit instead of relying on Stripe's
+      // event semantics alone.
       const { data: existing } = await supabaseAdmin
         .from("candidate_profiles")
         .select("subscription_started_at")
