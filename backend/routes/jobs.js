@@ -122,13 +122,44 @@ function isSubscribed(profile) {
   return profile?.subscription_status === "active";
 }
 
+// Escapes regex special characters in a company name before using it in
+// a pattern — company names can contain characters like "." or "+"
+// (e.g. "3M", "C.R. Bard") that would otherwise be interpreted as regex
+// syntax instead of literal text.
+function escapeRegex(str) {
+  return String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// Replaces every occurrence of the employer's name in a block of text
+// with a neutral placeholder. Real bug this fixes: company_name was
+// being stripped from the job OBJECT for non-subscribers, but the raw
+// description_text almost always names the employer in its own opening
+// sentence ("Medtronic is a global leader in...") — completely
+// defeating the redaction, since the name was sitting in plain sight a
+// few lines below the "Employer hidden" badge. This catches the base
+// name regardless of legal-suffix variations ("Medtronic Inc.",
+// "Medtronic Corporation") since those still contain the base name as
+// a substring.
+function scrubCompanyNameFromText(text, companyName) {
+  if (!text || !companyName) return text;
+  const pattern = new RegExp(escapeRegex(companyName), "gi");
+  return text.replace(pattern, "this employer");
+}
+
 function redactForNonSubscriber(job) {
   const {
     company_name, source_url, application_url,
     recruiter_name, recruiter_email, recruiter_company, recruiter_contact_method, // same gate applies to recruiter postings
+    description_text, description_preview,
     ...rest
   } = job;
-  return { ...rest, subscription_required: true };
+  const scrubbedFullText = scrubCompanyNameFromText(description_text, company_name);
+  return {
+    ...rest,
+    description_text: scrubbedFullText,
+    description_preview: scrubCompanyNameFromText(description_preview, company_name) ?? (scrubbedFullText ? scrubbedFullText.slice(0, 300) : undefined),
+    subscription_required: true,
+  };
 }
 
 // Builds the employer_note map (spec factor #43, employer-history
@@ -244,7 +275,13 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
       salary_min: job.salary_min,
       salary_max: job.salary_max,
       date_posted: job.date_posted,
-      description_preview: (job.description_text || "").slice(0, 160),
+      // Scrubbed against the real company_name BEFORE that field gets
+      // left off this teaser object — same bug fix as
+      // redactForNonSubscriber above, applies here too since this is a
+      // separate code path (anonymous browsing has no candidate profile
+      // to check a subscription against, so it never reaches that
+      // function at all).
+      description_preview: scrubCompanyNameFromText((job.description_text || "").slice(0, 160), job.company_name),
       gated: true,
     }));
     return res.json({ jobs: teaser, total_count: totalCount || 0, sorted_by_location: Boolean(visitorCoords) });
@@ -596,7 +633,7 @@ router.get("/jobs/:id", requireConfig, optionalAuth, async (req, res) => {
       salary_min: data.salary_min,
       salary_max: data.salary_max,
       date_posted: data.date_posted,
-      description_preview: (data.description_text || "").slice(0, 300),
+      description_preview: scrubCompanyNameFromText((data.description_text || "").slice(0, 300), data.company_name),
       gated: true,
     });
   }
