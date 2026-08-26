@@ -359,6 +359,19 @@
     .nav-cta{gap:6px;}
     .nav-cta .btn-ghost{padding:9px 12px; font-size:12.5px;}
     .nav-cta .btn-primary{padding:9px 14px; font-size:12.5px;}
+    /* Real bug this fixes: .benefits, .preview-strip, section.pad, and
+       .split all used the same large desktop vertical padding (64-96px
+       top AND bottom, so 128-192px total per section) with no mobile
+       reduction at all. On a narrow phone that's a huge proportion of
+       the viewport, so every single section transition left an
+       oversized, disconnected-feeling gap before the next section's
+       content appeared — visible repeatedly across nearly every
+       section boundary on the page. */
+    .benefits{padding:40px 0;}
+    .preview-strip{padding:44px 0;}
+    section.pad{padding:44px 0;}
+    .split{padding:44px 0;}
+    footer{padding:40px 0 24px;}
   }
 </style>
 </head>
