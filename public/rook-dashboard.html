@@ -151,6 +151,16 @@
        Qualifications/Preferences summary line already carry the
        job here. */
     .category-grid-wrap{display:none;}
+    /* Real bug this fixes: .overflow-menu is position:absolute with
+       right:0, meaning it expands LEFTWARD from wherever the "⋯"
+       trigger sits — correct on desktop, where job-actions right-aligns
+       that button near the right edge of the row. But the mobile
+       job-actions fix wraps buttons onto their own full-width row,
+       often leaving the "⋯" near the LEFT side of a narrow screen, so a
+       150px-wide menu expanding further left ran straight off the
+       visible viewport. Expanding rightward instead on mobile keeps it
+       on-screen regardless of where the button lands. */
+    .overflow-menu{left:0; right:auto;}
   }
 .job-actions-overflow { position:relative; display:inline-block; }
 .btn-icon { border:1px solid #E2E7F0; background:#fff; border-radius:8px; width:32px; height:32px; font-size:16px; color:#5B6B85; cursor:pointer; line-height:1; }
