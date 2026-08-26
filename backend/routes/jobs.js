@@ -636,27 +636,39 @@ router.post("/jobs/:id/apply", requireConfig, requireAuth, loadCandidateId, asyn
 
   // Record the application for the candidate's own Application History —
   // no unique constraint on (candidate_id, job_id) in the schema, so
-  // check-then-write rather than upsert.
-  const { data: existing } = await supabaseAdmin
-    .from("applications")
-    .select("id")
-    .eq("candidate_id", req.candidateId)
-    .eq("job_id", job.id)
-    .maybeSingle();
+  // check-then-write rather than upsert. Wrapped in try/catch, unlike
+  // before — this was the one remaining step in the whole endpoint
+  // with zero error handling. The email to the recruiter has already
+  // been sent successfully by this point, so if this history-recording
+  // step fails, the application itself genuinely went through — the
+  // person shouldn't see a bare, unhelpful crash message here that
+  // makes it look like nothing happened.
+  try {
+    const { data: existing } = await supabaseAdmin
+      .from("applications")
+      .select("id")
+      .eq("candidate_id", req.candidateId)
+      .eq("job_id", job.id)
+      .maybeSingle();
 
-  const appRow = {
-    candidate_id: req.candidateId,
-    job_id: job.id,
-    status: "applied",
-    applied_at: new Date().toISOString(),
-    notes: coverLetter, // reusing the free-text notes column to keep a record of what was actually sent — no dedicated cover-letter column on this table yet
-    contact_name: job.recruiter_name || null,
-    contact_email: job.recruiter_email || null,
-  };
-  if (existing) {
-    await supabaseAdmin.from("applications").update(appRow).eq("id", existing.id);
-  } else {
-    await supabaseAdmin.from("applications").insert(appRow);
+    const appRow = {
+      candidate_id: req.candidateId,
+      job_id: job.id,
+      status: "applied",
+      applied_at: new Date().toISOString(),
+      notes: coverLetter, // reusing the free-text notes column to keep a record of what was actually sent — no dedicated cover-letter column on this table yet
+      contact_name: job.recruiter_name || null,
+      contact_email: job.recruiter_email || null,
+    };
+    if (existing) {
+      await supabaseAdmin.from("applications").update(appRow).eq("id", existing.id);
+    } else {
+      await supabaseAdmin.from("applications").insert(appRow);
+    }
+  } catch (err) {
+    console.error(`Application email sent successfully, but recording it to history failed for candidate ${req.candidateId}, job ${job.id}: ${err.message}`);
+    // Still a success response — the recruiter has the real
+    // application in their inbox, which is what actually matters.
   }
 
   res.json({ ok: true });
