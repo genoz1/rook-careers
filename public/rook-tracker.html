@@ -144,75 +144,7 @@
   </div>
 
   <div class="board" id="board">
-    <div class="col">
-      <div class="col-head"><h4>Interested</h4><span class="col-count">3</span></div>
-      <div class="kcard">
-        <div class="company">Stryker</div>
-        <h5>Surgical Device Rep</h5>
-        <div class="kmeta"><span class="kscore">64% match</span><span>Tampa, FL</span></div>
-      </div>
-      <div class="kcard">
-        <div class="company">Zoetis</div>
-        <h5>Key Account Manager</h5>
-        <div class="kmeta"><span class="kscore">78% match</span><span>Remote</span></div>
-      </div>
-      <div class="kcard">
-        <div class="company">Antech Diagnostics</div>
-        <h5>Regional Sales Manager</h5>
-        <div class="kmeta"><span class="kscore">86% match</span><span>Ocala, FL</span></div>
-      </div>
-    </div>
-
-    <div class="col">
-      <div class="col-head"><h4>Applied</h4><span class="col-count">4</span></div>
-      <div class="kcard">
-        <div class="company">Example Diagnostics</div>
-        <h5>Diagnostic Account Executive</h5>
-        <div class="kmeta"><span class="kscore">94% match</span><span>Applied Aug 16</span></div>
-      </div>
-      <div class="kcard">
-        <div class="company">IDEXX</div>
-        <h5>Territory Sales Manager</h5>
-        <div class="kmeta"><span class="kscore">89% match</span><span>Applied Aug 14</span></div>
-      </div>
-      <div class="kcard">
-        <div class="company">Elanco</div>
-        <h5>Account Executive</h5>
-        <div class="kmeta"><span class="kscore">85% match</span><span>Applied Aug 12</span></div>
-      </div>
-      <div class="kcard">
-        <div class="company">Labcorp</div>
-        <h5>Diagnostic Sales Rep</h5>
-        <div class="kmeta"><span class="kscore">90% match</span><span>Applied Aug 10</span></div>
-      </div>
-    </div>
-
-    <div class="col">
-      <div class="col-head"><h4>Screening</h4><span class="col-count">0</span></div>
-    </div>
-
-    <div class="col">
-      <div class="col-head"><h4>Interview</h4><span class="col-count">1</span></div>
-      <div class="kcard">
-        <div class="company">Invictos</div>
-        <h5>Territory Sales Manager</h5>
-        <div class="kmeta"><span class="kscore">92% match</span><span>Applied Aug 4</span></div>
-        <div class="next">Follow up Aug 18</div>
-      </div>
-    </div>
-
-    <div class="col">
-      <div class="col-head"><h4>Offer</h4><span class="col-count">0</span></div>
-    </div>
-
-    <div class="col">
-      <div class="col-head"><h4>Closed</h4><span class="col-count">2</span></div>
-      <div class="kcard" style="opacity:0.6;">
-        <div class="company">Quest Diagnostics</div>
-        <h5>Drug Monitoring AE</h5>
-        <div class="kmeta"><span>Not selected</span><span>Aug 2</span></div>
-      </div>
-    </div>
+    <div style="grid-column:1/-1; text-align:center; padding:60px 20px; color:#5B6B85; font-size:14px;">Loading your applications…</div>
   </div>
 </div>
   </div>
@@ -260,7 +192,7 @@
 
       board.innerHTML = COLUMNS.map((col) => renderColumn(col, apps)).join('');
     } catch (err) {
-      board.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:60px 20px; color:#5B6B85; font-size:14px;">Could not load applications (${escapeHtml(err.message)}). Showing example board below — see ROOK-Setup-Guide.pdf.</div>`;
+      board.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:60px 20px; color:#5B6B85; font-size:14px;">We're having trouble loading your applications right now. Please try refreshing the page.</div>`;
     }
   })();
 
