@@ -152,6 +152,28 @@
     .match-card{left:20px; bottom:24px; width:200px;}
   }
 
+  @media(max-width:480px){
+    /* Real bug this fixes: at narrow phone widths the card above only
+       shrank slightly (220px to 200px) while staying anchored to the
+       same spot, so on an actual phone screen it ended up covering a
+       large portion of the hero photo, including the man's face.
+       Scaled down roughly by half here — width, padding, and every
+       font size inside it — and moved tighter into the corner so it
+       reads as a small supporting detail rather than the dominant
+       element sitting on top of him. */
+    .match-card{width:108px; padding:9px; left:14px; bottom:14px; border-radius:9px;}
+    .match-card .score-row{margin-bottom:5px; gap:3px;}
+    .match-card .score-num{font-size:14px;}
+    .match-card .score-label{font-size:8px;}
+    .match-card .score-check{width:13px; height:13px;}
+    .match-card .score-check svg{width:7px; height:7px;}
+    .match-card h4{font-size:9px; margin-bottom:2px;}
+    .match-card .role-meta{font-size:7.5px; margin-bottom:0;}
+    .match-card .comp{font-size:8px; margin:5px 0 7px;}
+    .match-card .view-btn{padding:5px; font-size:7.5px; border-radius:5px;}
+    .hero-photo-wrap{min-height:260px;}
+  }
+
   /* ===== Trust / benefits ===== */
   .benefits{background:var(--navy); padding:64px 0; color:#fff;}
   .benefits h2{font-size:26px; font-weight:600; text-align:center; margin-bottom:10px;}
