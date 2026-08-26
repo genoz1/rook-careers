@@ -225,6 +225,7 @@
         Sort by
         <select id="sortSelect">
           <option value="match">Best Match</option>
+          <option value="closest">Closest to You</option>
           <option value="newest">Newest</option>
           <option value="comp">Highest Compensation</option>
         </select>
@@ -571,15 +572,26 @@
     });
 
     filtered.sort((a, b) => {
-      if (nearLocationCoords) {
-        // "Show jobs near" is active — this takes priority over the
-        // normal sort dropdown while it's active, since the whole point
-        // is proximity to that specific place, not the general sort
-        // criteria. Jobs without coordinates were already filtered out
-        // above them being sorted, since there's no way to gauge their
-        // distance at all.
-        const distA = distanceMilesClient(nearLocationCoords.lat, nearLocationCoords.lng, a.job_lat, a.job_lng);
-        const distB = distanceMilesClient(nearLocationCoords.lat, nearLocationCoords.lng, b.job_lat, b.job_lng);
+      if (sortBy === 'closest') {
+        // Explicit choice now, not a silent override — this used to run
+        // unconditionally whenever nearLocationCoords was set, which
+        // happens by default for every candidate on page load (the
+        // "Show jobs near" field auto-fills and auto-runs with their
+        // saved home zip). That meant the Sort dropdown was silently
+        // ignored for essentially everyone, all the time, regardless of
+        // what they selected — reported as "the sort feature doesn't
+        // work." Falls back to each job's own pre-computed
+        // distance_miles if no explicit "near" search is active, same
+        // as the Dashboard's Closest to You sort.
+        const distA = nearLocationCoords
+          ? distanceMilesClient(nearLocationCoords.lat, nearLocationCoords.lng, a.job_lat, a.job_lng)
+          : a.distance_miles;
+        const distB = nearLocationCoords
+          ? distanceMilesClient(nearLocationCoords.lat, nearLocationCoords.lng, b.job_lat, b.job_lng)
+          : b.distance_miles;
+        if (distA == null && distB == null) return 0;
+        if (distA == null) return 1;
+        if (distB == null) return -1;
         return distA - distB;
       }
       if (sortBy === 'newest') {
