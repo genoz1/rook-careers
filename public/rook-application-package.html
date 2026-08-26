@@ -321,18 +321,27 @@ function renderPackage(pkg) {
   // generated and cached before this fix, so a previously-generated
   // package doesn't break or show nothing.
   const workHistoryEl = document.getElementById('workHistory');
-  if (Array.isArray(pkg.work_history) && pkg.work_history.length > 0) {
-    workHistoryEl.innerHTML = pkg.work_history.map((job) => `
+  // Second layer of defense beyond the backend validation in
+  // ai/applicationPackage.js — filters out empty bullets and any job
+  // entry that has neither a real employer/title nor any real bullets,
+  // so a single thin entry among several good ones never renders as a
+  // bare, empty bullet marker with nothing in it.
+  const cleanedWorkHistory = (Array.isArray(pkg.work_history) ? pkg.work_history : [])
+    .map((job) => ({ ...job, bullets: (job.bullets || []).filter((b) => b && b.trim().length > 0) }))
+    .filter((job) => (job.employer && job.employer.trim()) || (job.title && job.title.trim()) || job.bullets.length > 0);
+
+  if (cleanedWorkHistory.length > 0) {
+    workHistoryEl.innerHTML = cleanedWorkHistory.map((job) => `
       <div style="margin-bottom:18px;">
         <div style="font-weight:700; color:var(--navy);">${escapeHtml(job.title || '')}${job.employer ? ' · ' + escapeHtml(job.employer) : ''}</div>
         ${job.dates ? `<div style="font-size:12.5px; color:#8B96AB; margin-bottom:6px;">${escapeHtml(job.dates)}</div>` : ''}
-        <ul>${(job.bullets || []).map((b) => `<li>${escapeHtml(b)}</li>`).join('')}</ul>
+        ${job.bullets.length > 0 ? `<ul>${job.bullets.map((b) => `<li>${escapeHtml(b)}</li>`).join('')}</ul>` : ''}
       </div>`).join('');
-  } else if (Array.isArray(pkg.tailored_bullets)) {
+  } else if (Array.isArray(pkg.tailored_bullets) && pkg.tailored_bullets.some((b) => b && b.trim())) {
     // Legacy shape from a package generated before this fix.
-    workHistoryEl.innerHTML = `<ul>${pkg.tailored_bullets.map((b) => `<li>${escapeHtml(b)}</li>`).join('')}</ul>`;
+    workHistoryEl.innerHTML = `<ul>${pkg.tailored_bullets.filter((b) => b && b.trim()).map((b) => `<li>${escapeHtml(b)}</li>`).join('')}</ul>`;
   } else {
-    workHistoryEl.innerHTML = '';
+    workHistoryEl.innerHTML = '<p style="color:#8B96AB; font-style:italic;">We couldn\'t generate a complete work history for this role — try Regenerate above, or refer to your original résumé on the left.</p>';
   }
 
   document.getElementById('atsKeywords').textContent = (pkg.ats_keywords || []).join(', ');
