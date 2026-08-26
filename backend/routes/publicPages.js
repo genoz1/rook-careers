@@ -152,7 +152,7 @@ router.get("/jobs/:id", async (req, res, next) => {
     </div>
     <div style="background:var(--navy); border-radius:var(--radius); padding:28px 24px; text-align:center;">
       <h3 style="color:#fff; font-size:19px; margin-bottom:8px;">Ready to see who's hiring?</h3>
-      <p style="color:#B9C4DB; font-size:13.5px; margin-bottom:18px;">See the employer, apply directly, and get this job (and every other one) scored against your real background — backed by our 30-day guarantee.</p>
+      <p style="color:#B9C4DB; font-size:13.5px; margin-bottom:18px;">See the employer, apply directly, and get this job (and every other one) scored against your real background.</p>
       <a href="/rook-login.html" class="btn btn-primary">Get Started</a>
     </div>
     <div style="text-align:center; margin-top:20px;"><a href="/rook-browse.html" style="color:var(--royal); font-size:13px; font-weight:600;">← Back to all open roles</a></div>
