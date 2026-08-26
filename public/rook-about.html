@@ -34,7 +34,7 @@
   .nav-cta{display:flex; gap:14px;}
 
   .eyebrow{display:inline-flex; font-size:12.5px; font-weight:700; color:var(--royal); background:rgba(20,99,255,0.08); padding:6px 14px; border-radius:99px; margin-bottom:20px;}
-  .eyebrow-dark{display:inline-flex; font-size:12.5px; font-weight:700; color:var(--teal); background:rgba(18,184,166,0.12); padding:6px 14px; border-radius:99px; margin-bottom:20px;}
+  .eyebrow-dark{font-size:12.5px; font-weight:700; color:var(--teal); letter-spacing:0.06em; text-transform:uppercase; margin-bottom:20px; display:block;}
 
   .hero{padding:88px 0 68px; text-align:center; background:var(--navy);}
   .hero .eyebrow-dark{margin-bottom:22px;}
@@ -43,9 +43,11 @@
 
   section.pad{padding:76px 0;}
 
-  .founder-story{max-width:720px; text-align:center;}
-  .founder-story h2{font-size:30px; font-weight:700; margin-bottom:20px; line-height:1.2;}
-  .founder-story p{font-size:15.5px; color:var(--muted); margin-bottom:14px; text-align:left;}
+  .two-col{display:grid; grid-template-columns:1fr 1.15fr; gap:56px; align-items:center;}
+  .founder-photo{aspect-ratio:4/5; border-radius:20px; overflow:hidden; background:var(--gray); border:1px solid var(--border);}
+  .founder-photo img{width:100%; height:100%; object-fit:cover; object-position:center 20%;}
+  .two-col h2{font-size:30px; font-weight:700; margin-bottom:20px; line-height:1.2;}
+  .two-col p{font-size:15.5px; color:var(--muted); margin-bottom:14px;}
 
   .problem-section{background:var(--gray);}
   .problem-section .wrap{max-width:820px; text-align:center;}
@@ -77,7 +79,7 @@
   .founder-quote{background:var(--gray); border-radius:24px; padding:64px 56px; text-align:center;}
   .founder-quote h2{font-size:28px; font-weight:700; margin-bottom:32px;}
   .founder-quote blockquote{font-size:20px; line-height:1.6; color:var(--navy); font-weight:500; max-width:720px; margin:0 auto 28px; font-style:italic;}
-  .founder-avatar{width:128px; height:128px; border-radius:50%; overflow:hidden; margin:0 auto 12px; border:2px solid var(--border);}
+  .founder-avatar{width:64px; height:64px; border-radius:50%; overflow:hidden; margin:0 auto 12px; border:2px solid var(--border);}
   .founder-avatar img{width:100%; height:100%; object-fit:cover; object-position:center 20%;}
   .founder-quote .name{font-weight:700; font-size:15.5px;}
   .founder-quote .title{color:var(--muted); font-size:13.5px;}
@@ -90,6 +92,7 @@
   footer{background:var(--navy); color:#AEB9CF; padding:36px 0; text-align:center; font-size:13px; border-top:1px solid rgba(255,255,255,0.08);}
 
   @media(max-width:820px){
+    .two-col{grid-template-columns:1fr;}
     .question-compare{grid-template-columns:1fr;}
     .industry-grid{grid-template-columns:1fr 1fr;}
     .hero h1{font-size:30px;}
@@ -120,14 +123,17 @@
 </section>
 
 <section class="pad">
-  <div class="wrap founder-story" style="margin-left:auto; margin-right:auto;">
-    <h2>Built by someone who knows the job search from the inside.</h2>
-    <p>ROOK started with a simple frustration: finding a great medical or animal health sales job shouldn't be this difficult.</p>
-    <p>After years working in medical diagnostics, healthcare sales, and animal health sales, ROOK's founder unexpectedly found himself back in the job market.</p>
-    <p>What he discovered was frustrating.</p>
-    <p>Major job boards had become overwhelming. The same positions appeared repeatedly. Some listings were outdated or no longer accepting applications. Legitimate opportunities could attract enormous applicant pools almost immediately.</p>
-    <p>For professionals with specialized experience, spending hours searching through thousands of unrelated positions wasn't just frustrating. It was inefficient.</p>
-    <p>There had to be a smarter way. That's why ROOK was created.</p>
+  <div class="wrap two-col">
+    <div class="founder-photo"><img src="assets/gene-zentko-founder.jpg" alt="Gene Zentko, Founder of ROOK"></div>
+    <div>
+      <h2>Built by someone who knows the job search from the inside.</h2>
+      <p>ROOK started with a simple frustration: finding a great medical or animal health sales job shouldn't be this difficult.</p>
+      <p>After years working in medical diagnostics, healthcare sales, and animal health sales, ROOK's founder unexpectedly found himself back in the job market.</p>
+      <p>What he discovered was frustrating.</p>
+      <p>Major job boards had become overwhelming. The same positions appeared repeatedly. Some listings were outdated or no longer accepting applications. Legitimate opportunities could attract enormous applicant pools almost immediately.</p>
+      <p>For professionals with specialized experience, spending hours searching through thousands of unrelated positions wasn't just frustrating. It was inefficient.</p>
+      <p>There had to be a smarter way. That's why ROOK was created.</p>
+    </div>
   </div>
 </section>
 
