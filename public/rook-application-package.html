@@ -156,8 +156,8 @@
           <div class="resume-body">
             <h5>Summary</h5>
             <p id="tailoredSummary"></p>
-            <h5>Highlighted Achievements</h5>
-            <ul id="tailoredBullets"></ul>
+            <h5>Experience</h5>
+            <div id="workHistory"></div>
             <h5>ATS Keywords Emphasized</h5>
             <p id="atsKeywords" style="color:#5B6B85;"></p>
           </div>
@@ -308,8 +308,31 @@ function renderPackage(pkg) {
 
   document.getElementById('originalResumeBody').textContent = pkg.resume_text || '(no résumé text available)';
   document.getElementById('tailoredSummary').textContent = pkg.tailored_summary || '';
-  document.getElementById('tailoredBullets').innerHTML = (pkg.tailored_bullets || [])
-    .map((b) => `<li>${escapeHtml(b)}</li>`).join('');
+
+  // Real bug this fixes: the tailored résumé only ever showed a flat,
+  // undifferentiated list of achievement bullets with no employer,
+  // title, or date attached to any of them — reported directly as "no
+  // jobs" appearing at all. Renders the actual structured work history
+  // now: one block per real job, in résumé order, each with its own
+  // employer/title/dates and the bullets specific to that role.
+  // Falls back gracefully to the old flat-bullet shape for any package
+  // generated and cached before this fix, so a previously-generated
+  // package doesn't break or show nothing.
+  const workHistoryEl = document.getElementById('workHistory');
+  if (Array.isArray(pkg.work_history) && pkg.work_history.length > 0) {
+    workHistoryEl.innerHTML = pkg.work_history.map((job) => `
+      <div style="margin-bottom:18px;">
+        <div style="font-weight:700; color:var(--navy);">${escapeHtml(job.title || '')}${job.employer ? ' · ' + escapeHtml(job.employer) : ''}</div>
+        ${job.dates ? `<div style="font-size:12.5px; color:#8B96AB; margin-bottom:6px;">${escapeHtml(job.dates)}</div>` : ''}
+        <ul>${(job.bullets || []).map((b) => `<li>${escapeHtml(b)}</li>`).join('')}</ul>
+      </div>`).join('');
+  } else if (Array.isArray(pkg.tailored_bullets)) {
+    // Legacy shape from a package generated before this fix.
+    workHistoryEl.innerHTML = `<ul>${pkg.tailored_bullets.map((b) => `<li>${escapeHtml(b)}</li>`).join('')}</ul>`;
+  } else {
+    workHistoryEl.innerHTML = '';
+  }
+
   document.getElementById('atsKeywords').textContent = (pkg.ats_keywords || []).join(', ');
   document.getElementById('atsCount').textContent = (pkg.ats_keywords || []).length + ' keywords';
 
