@@ -77,24 +77,45 @@ router.post("/stripe/create-checkout-session", requireConfig, requireAuth, async
 // the webhook handler below) — someone who's never subscribed has
 // nothing to manage yet.
 router.post("/stripe/create-portal-session", requireConfig, requireAuth, async (req, res) => {
-  const { data: profile } = await supabaseAdmin
-    .from("candidate_profiles")
-    .select("stripe_customer_id")
-    .eq("user_id", req.user.id)
-    .maybeSingle();
-
-  if (!profile?.stripe_customer_id) {
-    return res.status(400).json({ error: "No billing account on file yet — subscribe first from the Pricing page." });
-  }
-
+  // Whole handler wrapped in one try/catch now, not just the Stripe
+  // call — a failure in the database lookup itself, or the response
+  // never reaching res.json() for any other reason, was producing a
+  // genuinely empty response body. The frontend's res.json() call then
+  // threw its own confusing "Unexpected end of JSON input" instead of
+  // ever showing the real problem. Every path out of this handler now
+  // guarantees a real JSON body, even in a failure this code didn't
+  // anticipate.
   try {
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from("candidate_profiles")
+      .select("stripe_customer_id")
+      .eq("user_id", req.user.id)
+      .maybeSingle();
+
+    if (profileError) throw profileError;
+    if (!profile?.stripe_customer_id) {
+      return res.status(400).json({ error: "No billing account on file yet — subscribe first from the Pricing page." });
+    }
+
     const session = await stripe.billingPortal.sessions.create({
       customer: profile.stripe_customer_id,
-      return_url: `${process.env.PUBLIC_APP_URL}/rook-settings.html`,
+      return_url: `${process.env.PUBLIC_APP_URL || ""}/rook-settings.html`,
     });
     res.json({ url: session.url });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    // Stripe throws a specific "resource_missing" error for a customer
+    // ID that doesn't exist in the current mode — the exact situation
+    // where an account's billing was set up in test mode before the
+    // switch to live keys, and its stored customer ID no longer refers
+    // to anything real. Detected specifically so the person sees an
+    // actionable message instead of a generic one.
+    if (err.code === "resource_missing" && err.param === "customer") {
+      return res.status(409).json({
+        error: "Your billing account needs to be reconnected. Please contact support to fix this — your subscription itself is fine, this is just a technical mismatch on the payment-management link.",
+      });
+    }
+    console.error(`create-portal-session failed for user ${req.user?.id}: ${err.message}`);
+    res.status(500).json({ error: "Could not open billing portal right now. Please try again shortly, or contact support if this keeps happening." });
   }
 });
 
