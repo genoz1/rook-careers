@@ -143,17 +143,19 @@ router.get("/jobs/:id", async (req, res, next) => {
   };
 
   const bodyHtml = `
-    <div style="background:rgba(20,99,255,0.08); color:var(--royal); display:inline-flex; align-items:center; gap:6px; font-size:12.5px; font-weight:600; padding:6px 12px; border-radius:999px; margin-bottom:16px;">🔒 Employer hidden — sign up to reveal</div>
+    <div style="background:rgba(20,99,255,0.08); color:var(--royal); display:inline-flex; align-items:center; gap:6px; font-size:12.5px; font-weight:600; padding:6px 12px; border-radius:999px; margin-bottom:16px;">🔒 Employer revealed with ROOK membership</div>
     <h1 style="font-size:28px; margin-bottom:10px;">${escapeHtml(title)}</h1>
     <div style="font-size:14.5px; color:var(--muted); margin-bottom:24px;">${escapeHtml(job.location_raw || "")}${comp ? " · " + escapeHtml(comp) : ""}${job.date_posted ? " · Posted " + escapeHtml(job.date_posted) : ""}</div>
     <div style="background:#fff; border:1px solid var(--border); border-radius:var(--radius); padding:24px; margin-bottom:24px; font-size:14.5px; line-height:1.7; color:var(--navy);">
       ${escapeHtml(preview)}
-      <div style="margin-top:16px; padding-top:16px; border-top:1px dashed var(--border); color:var(--muted); font-style:italic;">The rest of this posting — including who's hiring and how to apply — is visible after you sign up.</div>
+      <div style="margin-top:16px; padding-top:16px; border-top:1px dashed var(--border); color:var(--muted); font-style:italic;">ROOK members see the employer, full opportunity details, direct application link, and personalized match score.</div>
     </div>
     <div style="background:var(--navy); border-radius:var(--radius); padding:28px 24px; text-align:center;">
       <h3 style="color:#fff; font-size:19px; margin-bottom:8px;">Ready to see who's hiring?</h3>
-      <p style="color:#B9C4DB; font-size:13.5px; margin-bottom:18px;">See the employer, apply directly, and get this job (and every other one) scored against your real background.</p>
+      <p style="color:#B9C4DB; font-size:13.5px; margin-bottom:14px;">See the employer, apply directly, and get this job — and every other opportunity — scored against your experience.</p>
+      <div style="color:#fff; font-size:15px; font-weight:700; margin-bottom:18px;">$29/month · Cancel anytime</div>
       <a href="/rook-login.html" class="btn btn-primary">Get Started</a>
+      <div style="color:#8B96AB; font-size:12px; margin-top:10px;">One membership. Full ROOK access.</div>
     </div>
     <div style="text-align:center; margin-top:20px;"><a href="/rook-browse.html" style="color:var(--royal); font-size:13px; font-weight:600;">← Back to all open roles</a></div>
   `;
