@@ -218,7 +218,12 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
 
     let query = supabaseAnon
       .from("jobs")
-      .select("*")
+      // Trimmed to only what this page actually renders or needs for
+      // sorting — was previously select("*"), which pulled every
+      // column including full ai_analysis JSON and job_embedding
+      // vectors for up to 200 rows on every single anonymous page
+      // load. Those are large and completely unused here.
+      .select("id, title_original, title_normalized, location_raw, compensation_text, salary_min, salary_max, date_posted, description_text, company_name, job_lat, job_lng, remote_status")
       .eq("status", "active")
       .eq("moderation_status", "approved")
       .order("date_posted", { ascending: false })
@@ -238,19 +243,31 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     // (ipwho.is, free, no API key, no permission prompt needed unlike
     // the browser Geolocation API) as a reasonable approximation of
     // where the visitor actually is.
+    //
+    // Wrapped with a hard 1.5s timeout — this is a best-effort nicety,
+    // not something worth ever blocking the page on. Without a
+    // timeout, a slow or unreachable external geolocation service could
+    // stall this entire response indefinitely; a plain try/catch alone
+    // doesn't protect against a hang, only against an outright error.
     let visitorCoords = null;
     try {
       const forwardedFor = req.headers["x-forwarded-for"];
       const ip = (forwardedFor ? forwardedFor.split(",")[0].trim() : null) || req.socket.remoteAddress;
       if (ip && ip !== "::1" && ip !== "127.0.0.1") {
-        const geoRes = await fetch(`https://ipwho.is/${ip}`);
-        const geo = await geoRes.json();
-        if (geo?.success && geo.latitude != null && geo.longitude != null) {
-          visitorCoords = { lat: geo.latitude, lng: geo.longitude };
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 1500);
+        try {
+          const geoRes = await fetch(`https://ipwho.is/${ip}`, { signal: controller.signal });
+          const geo = await geoRes.json();
+          if (geo?.success && geo.latitude != null && geo.longitude != null) {
+            visitorCoords = { lat: geo.latitude, lng: geo.longitude };
+          }
+        } finally {
+          clearTimeout(timeoutId);
         }
       }
     } catch (err) {
-      console.error(`IP geolocation failed for anonymous browse request: ${err.message}`);
+      console.error(`IP geolocation failed or timed out for anonymous browse request: ${err.message}`);
     }
 
     let sorted = data;
