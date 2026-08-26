@@ -1,6 +1,7 @@
-// AI-based application package generation — the tailored résumé summary,
-// cover letter, recruiter outreach message, and interview prep notes
-// shown on rook-application-package.html.
+// AI-based application package generation — the tailored résumé
+// (structured work history, not just a flat bullet list), cover
+// letter, recruiter outreach message, and interview prep notes shown
+// on rook-application-package.html.
 //
 // This is meaningfully different from résumé/job analysis (which only
 // EXTRACT structured data): this GENERATES new text that could be sent
@@ -8,14 +9,10 @@
 // is explicit and repeated: never invent employers, titles, dates, or
 // achievements not present in the actual résumé text.
 //
-// Unlike résumé/job analysis (cached — run once, ever, per job/résumé),
-// this is NOT cached or persisted anywhere. It regenerates on every page
-// visit, which means a real API call (and real cost) each time someone
-// opens the Application Package page for a given job. That's a
-// deliberate scope simplification for this first pass, not an oversight
-// — caching would need a new table or column to store the generated
-// package per candidate+job, which didn't seem worth the schema
-// migration until this feature has seen real use.
+// Cached per candidate+job in candidate_job_matches.generated_package
+// (see backend/routes/applicationPackage.js) — a real AI call happens
+// once per candidate+job, not once per page visit, unless the caller
+// explicitly passes ?regenerate=true.
 
 const { callClaudeForJSON } = require("./client");
 
@@ -26,7 +23,7 @@ CRITICAL RULE: Never invent employers, job titles, dates, achievements, numbers,
 Return ONLY a JSON object with this exact shape, no other text:
 {
   "tailored_summary": string,
-  "tailored_bullets": [string],
+  "work_history": [{"employer": string, "title": string, "dates": string, "bullets": [string]}],
   "ats_keywords": [string],
   "cover_letter": string,
   "recruiter_message": string,
@@ -35,7 +32,7 @@ Return ONLY a JSON object with this exact shape, no other text:
 
 Guidance for each field:
 - tailored_summary: 2-3 sentences, reworded from the résumé to emphasize what matches this specific job.
-- tailored_bullets: 3-6 achievement bullets pulled from the résumé, reworded/reordered to lead with what's most relevant to this job. Do not add bullets for things not in the résumé.
+- work_history: EVERY employer/role actually listed in the résumé, in the same order as the résumé (most recent first), with the employer name, job title, and dates exactly as stated in the résumé — never invented or altered. For each role, include 2-5 achievement bullets pulled from that specific job's real content in the résumé, reworded/reordered to lead with what's most relevant to this posting. This is the actual work-history section of the tailored résumé — every real job the candidate has held must appear here with its own bullets grouped underneath it, not as one undifferentiated list of achievements with no employer or date context.
 - ats_keywords: keywords from the job posting that the candidate's real experience genuinely supports — not every keyword in the posting, only ones truthfully backed by their background.
 - cover_letter: 3-4 short paragraphs, specific to this exact role and company, grounded in real résumé content.
 - recruiter_message: 3-5 sentences, a brief LinkedIn/email outreach note.
@@ -56,7 +53,12 @@ async function generateApplicationPackage(resumeText, jobTitle, companyName, job
   const truncatedResume = resumeText.slice(0, 12000);
   const truncatedJob = (jobDescription || "").slice(0, 8000);
   const userPrompt = `Candidate's résumé:\n\n${truncatedResume}\n\n---\n\nJob posting:\nTitle: ${jobTitle || "Unknown"}\nCompany: ${companyName || "Unknown"}\nDescription: ${truncatedJob}`;
-  return callClaudeForJSON(SYSTEM_PROMPT, userPrompt, 3500);
+  // Bumped from 3500 — asking for full structured work history (every
+  // real job, each with its own bullets) is meaningfully more content
+  // than the old flat 3-6 bullet list, and a candidate with several
+  // jobs plus a cover letter, recruiter message, and interview prep
+  // notes could otherwise get cut off mid-response.
+  return callClaudeForJSON(SYSTEM_PROMPT, userPrompt, 5000);
 }
 
 module.exports = { generateApplicationPackage };
