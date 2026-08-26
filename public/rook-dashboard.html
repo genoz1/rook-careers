@@ -473,9 +473,29 @@
     const excellent = jobs.filter((j) => (j.match?.overall_score ?? -1) >= 90).length;
     const strong = jobs.filter((j) => (j.match?.overall_score ?? -1) >= 75 && j.match.overall_score < 90).length;
 
-    document.getElementById('statNewMatches').textContent = jobs.length;
     document.getElementById('statExcellent').textContent = excellent;
     document.getElementById('statStrong').textContent = strong;
+
+    // Real bug this fixes: "New Matches Today" was set to jobs.length —
+    // the total count of jobs the dashboard's main list happened to
+    // fetch, which is capped at a small limit for display purposes.
+    // With thousands of active jobs on the platform, that limit was
+    // essentially always hit regardless of what was actually posted
+    // today, so this always read the same number — reported directly
+    // as "it always says 20." Uses a dedicated backend count instead,
+    // covering every active match for this candidate, not just the
+    // capped subset shown on screen.
+    try {
+      const newTodayRes = await rookApiFetch('/new-matches-today-count');
+      if (newTodayRes.ok) {
+        const { new_today } = await newTodayRes.json();
+        document.getElementById('statNewMatches').textContent = new_today;
+      } else {
+        document.getElementById('statNewMatches').textContent = '—';
+      }
+    } catch {
+      document.getElementById('statNewMatches').textContent = '—';
+    }
 
     // Applications In Progress — now backed by the real applications
     // table (backend/routes/applications.js). "In progress" here means
