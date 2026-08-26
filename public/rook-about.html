@@ -44,7 +44,8 @@
   section.pad{padding:76px 0;}
 
   .two-col{display:grid; grid-template-columns:1fr 1.15fr; gap:56px; align-items:center;}
-  .founder-photo{aspect-ratio:4/5; border-radius:20px; background:var(--gray); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:13.5px;}
+  .founder-photo{aspect-ratio:4/5; border-radius:20px; overflow:hidden; background:var(--gray); border:1px solid var(--border);}
+  .founder-photo img{width:100%; height:100%; object-fit:cover; object-position:center 20%;}
   .two-col h2{font-size:30px; font-weight:700; margin-bottom:20px; line-height:1.2;}
   .two-col p{font-size:15.5px; color:var(--muted); margin-bottom:14px;}
 
@@ -78,7 +79,8 @@
   .founder-quote{background:var(--gray); border-radius:24px; padding:64px 56px; text-align:center;}
   .founder-quote h2{font-size:28px; font-weight:700; margin-bottom:32px;}
   .founder-quote blockquote{font-size:20px; line-height:1.6; color:var(--navy); font-weight:500; max-width:720px; margin:0 auto 28px; font-style:italic;}
-  .founder-avatar{width:56px; height:56px; border-radius:50%; background:linear-gradient(135deg,var(--royal),var(--teal)); display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; font-size:16px; margin:0 auto 12px;}
+  .founder-avatar{width:64px; height:64px; border-radius:50%; overflow:hidden; margin:0 auto 12px; border:2px solid var(--border);}
+  .founder-avatar img{width:100%; height:100%; object-fit:cover; object-position:center 20%;}
   .founder-quote .name{font-weight:700; font-size:15.5px;}
   .founder-quote .title{color:var(--muted); font-size:13.5px;}
 
@@ -122,7 +124,7 @@
 
 <section class="pad">
   <div class="wrap two-col">
-    <div class="founder-photo">Founder photo</div>
+    <div class="founder-photo"><img src="assets/gene-zentko-founder.jpg" alt="Gene Zentko, Founder of ROOK"></div>
     <div>
       <h2>Built by someone who knows the job search from the inside.</h2>
       <p>ROOK started with a simple frustration: finding a great medical or animal health sales job shouldn't be this difficult.</p>
@@ -205,7 +207,7 @@
   <div class="wrap">
     <div class="founder-quote">
       <h2>Built from experience.</h2>
-      <div class="founder-avatar">GZ</div>
+      <div class="founder-avatar"><img src="assets/gene-zentko-founder.jpg" alt="Gene Zentko"></div>
       <blockquote>"I built ROOK because I wanted the career-search tool I couldn't find when I needed it myself. Experienced professionals shouldn't have to spend hours sorting through irrelevant or outdated listings just to find the opportunities that actually fit their background."</blockquote>
       <div class="name">Gene Zentko</div>
       <div class="title">Founder, ROOK</div>
