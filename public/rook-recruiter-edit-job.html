@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="assets/favicon.ico" sizes="any">
+  <meta name="theme-color" content="#071E41">
+  <title>Edit Posting — ROOK for Recruiters</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --navy:#071E41; --royal:#1463FF; --teal:#12B8A6; --gray:#F5F7FA; --white:#FFFFFF;
+      --muted:#5B6B85; --border:#E3E8F0; --radius:14px;
+      --font-display:'Space Grotesk', sans-serif; --font-body:'Inter', sans-serif;
+    }
+    *{box-sizing:border-box; margin:0; padding:0;}
+    body{font-family:var(--font-body); color:var(--navy); background:var(--gray); -webkit-font-smoothing:antialiased;}
+    h1,h2,h3{font-family:var(--font-display); letter-spacing:-0.01em;}
+    a{color:inherit; text-decoration:none;}
+    .btn{display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:12px 24px; border-radius:999px; font-size:14px; font-weight:600; cursor:pointer; border:none;}
+    .btn-primary{background:var(--royal); color:#fff;}
+    .btn-primary:disabled{background:#B9C6DE; cursor:not-allowed;}
+    .btn-outline{background:#fff; color:var(--navy); border:1px solid var(--border);}
+    .btn-danger{background:#fff; color:#C23B3B; border:1px solid #F0C4C4;}
+    .btn-teal{background:var(--teal); color:#03261F;}
+
+    .topbar{background:var(--navy); padding:16px 32px; display:flex; align-items:center; justify-content:space-between;}
+    .topbar .logo{font-family:var(--font-display); font-weight:700; font-size:18px; color:#fff; display:flex; align-items:center; gap:8px;}
+
+    .hero{max-width:680px; margin:0 auto; padding:48px 24px 8px; text-align:center;}
+    .hero h1{font-size:28px; margin-bottom:8px;}
+    .hero p{color:var(--muted); font-size:14.5px; line-height:1.6;}
+
+    .container{max-width:640px; margin:0 auto; padding:24px 24px 60px;}
+    .card{background:#fff; border:1px solid var(--border); border-radius:var(--radius); padding:32px;}
+    .field-row{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;}
+    .field{display:flex; flex-direction:column; gap:6px;}
+    .field.full{grid-column:1/-1;}
+    .field label{font-size:12.5px; font-weight:600; color:var(--muted);}
+    .field label .req{color:#C23B3B;}
+    .field input, .field textarea{padding:11px 13px; border-radius:9px; border:1px solid var(--border); font-size:14px; font-family:var(--font-body);}
+    .field textarea{resize:vertical; min-height:120px;}
+    .section-label{font-size:13px; font-weight:700; color:var(--navy); margin:24px 0 12px; text-transform:uppercase; letter-spacing:0.02em;}
+    .msg{font-size:13px; margin-top:14px; line-height:1.5;}
+    .msg.error{color:#C23B3B;}
+    .msg.success{color:#00806E;}
+    .note{font-size:12px; color:#8B96AB; margin-top:16px; line-height:1.5;}
+    .status-row{display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; padding-bottom:20px; border-bottom:1px solid var(--border);}
+    .status-badge{font-size:11px; font-weight:700; padding:4px 10px; border-radius:99px; text-transform:uppercase; letter-spacing:0.02em;}
+    .status-pending{background:rgba(185,137,0,0.1); color:#B98900;}
+    .status-approved{background:rgba(0,128,110,0.1); color:#00806E;}
+    .status-rejected{background:rgba(194,59,59,0.1); color:#C23B3B;}
+    .status-closed{background:rgba(139,150,171,0.15); color:#5B6B85;}
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="index.html" class="logo">
+    <img src="assets/rook-icon-192.png" alt="ROOK" style="height:26px; width:auto; display:block;">
+    ROOK
+  </a>
+  <a href="rook-recruiter-dashboard.html" class="btn btn-outline">← My Postings</a>
+</div>
+
+<div class="hero">
+  <h1 id="pageTitle">Edit Posting</h1>
+  <p>Changes go back through review before they're live again — same as a new submission.</p>
+</div>
+
+<div class="container">
+  <div id="loading" style="text-align:center; padding:60px 20px; color:#5B6B85; font-size:14px;">Loading…</div>
+
+  <div class="card" id="formCard" style="display:none;">
+    <div class="status-row">
+      <span>Current status: <span class="status-badge" id="statusBadge"></span></span>
+      <button type="button" class="btn btn-danger" id="closeBtn" onclick="closePosting()" style="padding:8px 16px; font-size:12.5px;">Close This Posting</button>
+      <button type="button" class="btn btn-teal" id="reactivateBtn" onclick="reactivatePosting()" style="padding:8px 16px; font-size:12.5px; display:none;">Reactivate Posting</button>
+    </div>
+
+    <div class="section-label">Job Details</div>
+    <div class="field-row">
+      <div class="field full"><label>Job Title <span class="req">*</span></label><input type="text" id="jobTitle"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Location</label><input type="text" id="location"></div>
+      <div class="field"><label>Compensation</label><input type="text" id="compensation"></div>
+    </div>
+    <div class="field-row">
+      <div class="field full"><label>Hiring Company <span style="font-weight:400;">(optional — leave blank for a confidential search)</span></label><input type="text" id="companyName"></div>
+    </div>
+    <div class="field-row">
+      <div class="field full"><label>Job Description <span class="req">*</span></label><textarea id="description"></textarea></div>
+    </div>
+    <div class="field-row">
+      <div class="field full"><label>How should candidates reach you? <span style="font-weight:400;">(optional — defaults to your account email)</span></label><input type="text" id="contactMethod"></div>
+    </div>
+
+    <a href="#" class="btn btn-primary" id="submitBtn" onclick="saveChanges(); return false;" style="width:100%; margin-top:8px;">Save Changes</a>
+    <div class="msg" id="formMsg"></div>
+    <div class="note">Editing a posting also refreshes the contact information a candidate's application gets sent to, using your current account details — useful if your account email was ever wrong or has since changed.</div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="rook-config.js"></script>
+<script src="rook-auth.js"></script>
+<script>
+const jobId = new URLSearchParams(window.location.search).get('id');
+let currentStatus = null;
+
+(async () => {
+  const token = await rookRequireAuth('rook-recruiter-login.html');
+  if (!token) return;
+
+  if (!jobId) {
+    document.getElementById('loading').textContent = 'No posting specified.';
+    return;
+  }
+
+  try {
+    const res = await rookApiFetch(`/recruiter-postings/${jobId}`);
+    const job = await res.json();
+    if (!res.ok) throw new Error(job.error || 'Could not load this posting.');
+
+    document.getElementById('jobTitle').value = job.title_original || '';
+    document.getElementById('location').value = job.location_raw || '';
+    document.getElementById('compensation').value = job.compensation_text || '';
+    document.getElementById('companyName').value = job.company_name || '';
+    document.getElementById('description').value = job.description_text || '';
+    document.getElementById('contactMethod').value = job.recruiter_contact_method || '';
+
+    currentStatus = job.status;
+    const statusLabel = job.status === 'closed' ? 'closed' : (job.moderation_status || 'pending');
+    const statusClass = { pending: 'status-pending', approved: 'status-approved', rejected: 'status-rejected' }[statusLabel] || 'status-closed';
+    document.getElementById('statusBadge').textContent = statusLabel;
+    document.getElementById('statusBadge').className = 'status-badge ' + statusClass;
+
+    if (job.status === 'closed') {
+      document.getElementById('closeBtn').style.display = 'none';
+      document.getElementById('reactivateBtn').style.display = 'inline-flex';
+    }
+
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('formCard').style.display = 'block';
+  } catch (err) {
+    document.getElementById('loading').textContent = err.message;
+  }
+})();
+
+async function saveChanges() {
+  const msg = document.getElementById('formMsg');
+  const btn = document.getElementById('submitBtn');
+
+  const payload = {
+    job_title: document.getElementById('jobTitle').value.trim(),
+    location_raw: document.getElementById('location').value.trim(),
+    compensation_text: document.getElementById('compensation').value.trim(),
+    company_name: document.getElementById('companyName').value.trim() || null,
+    description_text: document.getElementById('description').value.trim(),
+    recruiter_contact_method: document.getElementById('contactMethod').value.trim() || null,
+  };
+
+  if (!payload.job_title || !payload.description_text) {
+    msg.className = 'msg error';
+    msg.textContent = 'Please fill in job title and description — those are required.';
+    return;
+  }
+
+  btn.textContent = 'Saving...';
+  btn.style.pointerEvents = 'none';
+  try {
+    const res = await rookApiFetch(`/recruiter-postings/${jobId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Something went wrong.');
+
+    msg.className = 'msg success';
+    msg.textContent = data.message || 'Saved.';
+  } catch (err) {
+    msg.className = 'msg error';
+    msg.textContent = err.message;
+  } finally {
+    btn.textContent = 'Save Changes';
+    btn.style.pointerEvents = '';
+  }
+}
+
+async function closePosting() {
+  if (!confirm('Close this posting? Candidates will no longer see it, but you can reactivate it later.')) return;
+  try {
+    const res = await rookApiFetch(`/recruiter-postings/${jobId}/close`, { method: 'POST' });
+    if (!res.ok) throw new Error('Could not close this posting.');
+    window.location.href = 'rook-recruiter-dashboard.html';
+  } catch (err) {
+    document.getElementById('formMsg').className = 'msg error';
+    document.getElementById('formMsg').textContent = err.message;
+  }
+}
+
+async function reactivatePosting() {
+  try {
+    const res = await rookApiFetch(`/recruiter-postings/${jobId}/reactivate`, { method: 'POST' });
+    if (!res.ok) throw new Error('Could not reactivate this posting.');
+    window.location.href = 'rook-recruiter-dashboard.html';
+  } catch (err) {
+    document.getElementById('formMsg').className = 'msg error';
+    document.getElementById('formMsg').textContent = err.message;
+  }
+}
+</script>
+
+</body>
+</html>
