@@ -666,7 +666,14 @@
       : `${escapeHtml(job.company_name || (isRecruiterPosted ? 'Confidential search' : ''))} — ${escapeHtml(job.location_raw || '')} ${comp ? '&nbsp;·&nbsp; ' + escapeHtml(comp) : ''}`;
     const primaryActionBtn = job.subscription_required
       ? `<a href="rook-pricing.html" class="btn btn-primary btn-sm">Subscribe to Unlock</a>`
-      : `<a href="${job.source_url || '#'}" target="_blank" class="btn btn-outline btn-sm">View Original</a>`;
+      : isRecruiterPosted
+        // Real bug this fixes: isRecruiterPosted was computed but never
+        // actually used here, so a recruiter-posted job (which has no
+        // source_url at all — there's no external posting, ROOK is the
+        // only place to apply) fell through to "View Original" linking
+        // to job.source_url || '#', a dead link that goes nowhere real.
+        ? `<a href="rook-apply.html?job=${escapeHtml(job.id)}" class="btn btn-primary btn-sm">Apply Now</a>`
+        : `<a href="${job.source_url || '#'}" target="_blank" class="btn btn-outline btn-sm">View Original</a>`;
 
     return `
       <div class="job-row" style="${rowStyle}">
