@@ -318,7 +318,14 @@
     .footer-grid{grid-template-columns:1fr 1fr;}
     nav.links{display:none;}
     h1.hero-h{font-size:38px;}
+    .mobile-menu-btn{display:flex;}
+    .mobile-menu{display:none; flex-direction:column; background:var(--navy); border-top:1px solid rgba(255,255,255,0.1); padding:8px 24px 20px;}
+    .mobile-menu.open{display:flex;}
+    .mobile-menu a{color:#fff; opacity:0.85; font-size:15px; font-weight:500; padding:13px 0; border-bottom:1px solid rgba(255,255,255,0.08);}
+    .mobile-menu a:last-child{border-bottom:none;}
   }
+  .mobile-menu-btn{display:none; background:none; border:none; width:34px; height:34px; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0;}
+  .mobile-menu-btn svg{width:24px; height:24px; color:#fff;}
 </style>
 </head>
 <body>
@@ -338,8 +345,25 @@
     <div class="nav-cta">
       <a href="rook-login.html" class="btn btn-ghost">Log In</a>
       <a href="rook-login.html" class="btn btn-primary">Get Started</a>
+      <!-- Real bug this fixes: nav.links (Find Jobs, For Job Seekers,
+           For Employers, Post a Job, About) was hidden below 960px with
+           no replacement at all — a mobile visitor's only way to reach
+           any of those pages was scrolling all the way to the footer.
+           This hamburger button only shows below 960px (see media
+           query above) and reveals the exact same links in a stacked
+           panel. -->
+      <button type="button" class="mobile-menu-btn" onclick="document.getElementById('mobileMenu').classList.toggle('open')" aria-label="Menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
     </div>
   </div>
+  <nav class="mobile-menu" id="mobileMenu">
+    <a href="rook-browse.html">Find Jobs</a>
+    <a href="#seekers">For Job Seekers</a>
+    <a href="#employers">For Employers</a>
+    <a href="rook-recruiter-login.html">Post a Job (Free)</a>
+    <a href="rook-about.html">About</a>
+  </nav>
 </header>
 
 <section class="hero">
@@ -647,14 +671,14 @@
         <ul>
           <li><a href="rook-recruiter-login.html">Post a Job</a></li>
           <li><a href="#">Find Talent</a></li>
-          <li><a href="#">Pricing</a></li>
+          <li><a href="rook-pricing.html">Pricing</a></li>
           <li><a href="#">Resources</a></li>
         </ul>
       </div>
       <div>
         <h5>Company</h5>
         <ul>
-          <li><a href="#">About Us</a></li>
+          <li><a href="rook-about.html">About Us</a></li>
           <li><a href="#">Careers</a></li>
           <li><a href="#">Contact Us</a></li>
           <li><a href="#">Press</a></li>
