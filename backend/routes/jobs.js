@@ -538,6 +538,30 @@ router.get("/guarantee-status", requireConfig, requireAuth, loadCandidateId, asy
   });
 });
 
+// GET /api/new-matches-today-count — a real, platform-wide count of
+// this candidate's active matches posted today, independent of
+// whatever subset of jobs the dashboard's main list happens to have
+// fetched (which is capped at a small limit for display purposes).
+// Real bug this replaces: the dashboard's "New Matches Today" stat was
+// counting jobs.length from that capped, best-match-sorted list —
+// mathematically almost always exactly the limit value (20) regardless
+// of what was actually posted today, since there are thousands of
+// active jobs and the top 20 by score are shown regardless of date.
+router.get("/new-matches-today-count", requireConfig, requireAuth, loadCandidateId, async (req, res) => {
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
+  const { count, error } = await supabaseAdmin
+    .from("candidate_job_matches")
+    .select("id, jobs!inner(date_posted, status)", { count: "exact", head: true })
+    .eq("candidate_id", req.candidateId)
+    .eq("jobs.status", "active")
+    .gte("jobs.date_posted", todayStart.toISOString());
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ new_today: count || 0 });
+});
+
 // POST /api/jobs/:id/apply — in-site application for a recruiter-posted
 // job (real ATS-sourced jobs still send candidates to source_url, same
 // as before; this only applies to source_type='recruiter_posted', which
