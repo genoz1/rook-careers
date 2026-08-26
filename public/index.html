@@ -52,6 +52,7 @@
     padding:18px 32px; max-width:1200px; margin:0 auto;
   }
   .logo{display:flex; align-items:center; gap:12px; font-family:var(--font-display); font-weight:700; font-size:20px; color:#fff;}
+  .logo-text{font-size:36px;}
   .logo svg{width:26px; height:26px;}
   nav.links{display:flex; gap:32px; font-size:14px; font-weight:500; color:#fff;}
   nav.links a{opacity:0.78; transition:opacity .15s;}
@@ -347,6 +348,17 @@
     .mobile-menu.open{display:flex;}
     .mobile-menu a{color:#fff; opacity:0.85; font-size:15px; font-weight:500; padding:13px 0; border-bottom:1px solid rgba(255,255,255,0.08);}
     .mobile-menu a:last-child{border-bottom:none;}
+    /* Real bug this fixes: the "ROOK" wordmark kept its full 36px
+       desktop size with no responsive override at all, and now that
+       the header also has to fit Log In, Get Started, and the new
+       hamburger button on the same line, it visually overlapped the
+       Log In button on phone widths. */
+    .logo-text{font-size:22px;}
+    .nav-inner{padding:14px 16px; gap:8px;}
+    .logo{gap:6px;}
+    .nav-cta{gap:6px;}
+    .nav-cta .btn-ghost{padding:9px 12px; font-size:12.5px;}
+    .nav-cta .btn-primary{padding:9px 14px; font-size:12.5px;}
   }
 </style>
 </head>
@@ -355,7 +367,7 @@
 <header class="nav">
   <div class="nav-inner">
     <div class="logo" style="gap:8px;">
-      <img src="assets/rook-icon-192.png" alt="ROOK" style="height:43px; width:auto; display:block;"><span style="font-family:var(--font-display); font-weight:700; font-size:36px; letter-spacing:-0.02em; color:#EDF3FF; line-height:1;">ROOK</span>
+      <img src="assets/rook-icon-192.png" alt="ROOK" style="height:43px; width:auto; display:block;"><span class="logo-text" style="font-family:var(--font-display); font-weight:700; letter-spacing:-0.02em; color:#EDF3FF; line-height:1;">ROOK</span>
     </div>
     <nav class="links">
       <a href="rook-browse.html">Find Jobs</a>
