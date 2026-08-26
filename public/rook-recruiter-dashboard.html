@@ -34,7 +34,8 @@
   .field label{font-size:12.5px; font-weight:600; color:var(--muted);}
   .field input{padding:11px 13px; border-radius:9px; border:1px solid var(--border); font-size:14px; font-family:var(--font-body);}
 
-  .posting-row{display:flex; align-items:center; gap:16px; padding:20px 24px; border-bottom:1px solid var(--border);}
+  .posting-row{display:flex; align-items:center; gap:16px; padding:20px 24px; border-bottom:1px solid var(--border); transition:background 0.15s ease;}
+  .posting-row:hover{background:var(--gray);}
   .posting-row:last-child{border-bottom:none;}
   .posting-main{flex:1; min-width:0;}
   .posting-title{font-size:15px; font-weight:700;}
@@ -43,6 +44,7 @@
   .status-pending{background:rgba(185,137,0,0.1); color:#B98900;}
   .status-approved{background:rgba(0,128,110,0.1); color:#00806E;}
   .status-rejected{background:rgba(194,59,59,0.1); color:#C23B3B;}
+  .status-closed{background:rgba(139,150,171,0.15); color:#5B6B85;}
 
   .msg{font-size:13px; margin-top:14px; line-height:1.5;}
   .msg.error{color:#C23B3B;}
@@ -55,10 +57,13 @@
 <div class="topbar">
   <div class="topbar-inner">
     <a href="index.html" class="logo">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+      <img src="assets/rook-icon-192.png" alt="ROOK" style="height:24px; width:auto; display:block;">
       ROOK Recruiter
     </a>
-    <a href="#" onclick="rookSignOut('rook-recruiter-login.html'); return false;" style="font-size:12.5px; font-weight:600; color:#AEB9CF;">Log Out</a>
+    <div style="display:flex; align-items:center; gap:18px;">
+      <a href="rook-recruiter-settings.html" style="font-size:12.5px; font-weight:600; color:#AEB9CF;">Account Settings</a>
+      <a href="#" onclick="rookSignOut('rook-recruiter-login.html'); return false;" style="font-size:12.5px; font-weight:600; color:#AEB9CF;">Log Out</a>
+    </div>
   </div>
 </div>
 
@@ -176,15 +181,23 @@ async function loadPostings() {
 }
 
 function renderPosting(job) {
-  const statusClass = { pending: 'status-pending', approved: 'status-approved', rejected: 'status-rejected' }[job.moderation_status] || 'status-pending';
+  // Real bug this fixes: the badge only ever reflected moderation_status
+  // (pending/approved/rejected), never whether the recruiter had
+  // actually closed the posting — so a closed job could still show
+  // "APPROVED", which is misleading about whether it's actually live.
+  // Also makes the whole row clickable through to the edit page —
+  // previously there was no way to view, edit, or close a posting at
+  // all once submitted.
+  const label = job.status === 'closed' ? 'closed' : (job.moderation_status || 'pending');
+  const statusClass = { pending: 'status-pending', approved: 'status-approved', rejected: 'status-rejected' }[label] || 'status-closed';
   return `
-    <div class="posting-row">
+    <a href="rook-recruiter-edit-job.html?id=${encodeURIComponent(job.id)}" class="posting-row" style="cursor:pointer;">
       <div class="posting-main">
         <div class="posting-title">${escapeHtml(job.title_original)}</div>
         <div class="posting-meta">${escapeHtml(job.location_raw || 'No location given')}${job.compensation_text ? ' · ' + escapeHtml(job.compensation_text) : ''}</div>
       </div>
-      <span class="status-badge ${statusClass}">${escapeHtml(job.moderation_status)}</span>
-    </div>`;
+      <span class="status-badge ${statusClass}">${escapeHtml(label)}</span>
+    </a>`;
 }
 </script>
 
