@@ -269,7 +269,18 @@ async function openBillingPortal() {
   msg.style.color = '';
   try {
     const res = await rookApiFetch('/stripe/create-portal-session', { method: 'POST' });
-    const data = await res.json();
+    // Guard against a genuinely empty or non-JSON response body — this
+    // is exactly what produced the confusing raw "Unexpected end of
+    // JSON input" browser error instead of a real message. The backend
+    // is now hardened to always return real JSON, but this stays as a
+    // second layer of defense against any failure mode neither of us
+    // has anticipated yet.
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      throw new Error('Something went wrong opening the billing portal. Please try again, or contact support if this keeps happening.');
+    }
     if (!res.ok) throw new Error(data.error || 'Could not open billing portal');
     window.location.href = data.url;
   } catch (err) {
