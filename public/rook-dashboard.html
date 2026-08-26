@@ -126,12 +126,13 @@
   .ml-possible{background:var(--possible-bg); color:var(--possible);}
 
   .category-grid{display:grid; grid-template-columns:1fr 1fr; gap:4px 16px; margin-top:8px;}
+  .rec-badge{font-size:11px; padding:3px 9px;}
 
   @media(max-width:900px){
     .stat-grid{grid-template-columns:1fr 1fr;}
-    .job-row{grid-template-columns:1fr; text-align:left; padding:16px 18px;}
+    .job-row{grid-template-columns:auto 1fr; text-align:left; padding:16px 18px; row-gap:12px;}
     .score-ring{width:46px; height:46px; font-size:13px;}
-    .job-actions{align-items:flex-start; flex-direction:row;}
+    .job-actions{grid-column:1 / -1; align-items:flex-start; flex-direction:row; flex-wrap:wrap;}
     /* Real bug this fixes: the category breakdown (Experience,
        Industry & Product, Customer & Specialty, Location &
        Preferences, Requirements) forced a 2-column grid at every
@@ -141,6 +142,15 @@
        taller than necessary. Single column here gives every row the
        full card width, so nothing wraps mid-label. */
     .category-grid{grid-template-columns:1fr;}
+    .rec-badge{font-size:9.5px; padding:2px 7px;}
+    /* Confirmed direction: full category breakdown moves to View
+       Analysis only on mobile — a compact list card's job is helping
+       someone decide which jobs are worth a closer look; the
+       category-by-category detail is genuinely detail-page content,
+       not scanning-list content. The score, title, badge, and
+       Qualifications/Preferences summary line already carry the
+       job here. */
+    .category-grid-wrap{display:none;}
   }
 .job-actions-overflow { position:relative; display:inline-block; }
 .btn-icon { border:1px solid #E2E7F0; background:#fff; border-radius:8px; width:32px; height:32px; font-size:16px; color:#5B6B85; cursor:pointer; line-height:1; }
@@ -603,7 +613,7 @@
     const recColor = match?.excellent_match ? '#7C3AED' : (REC_COLORS[match?.recommendation] || '#8B96AB');
     const recLabel = match?.excellent_match ? 'Excellent Match' : match?.recommendation;
     const recBadge = recLabel
-      ? `<span style="font-size:11px; font-weight:700; padding:3px 9px; border-radius:99px; background:${recColor}18; color:${recColor}; text-transform:uppercase; letter-spacing:0.02em;">${escapeHtml(recLabel)}</span>`
+      ? `<span class="rec-badge" style="font-weight:700; border-radius:99px; background:${recColor}18; color:${recColor}; text-transform:uppercase; letter-spacing:0.02em;">${escapeHtml(recLabel)}</span>`
       : '';
     const subScores = (match?.candidate_fit != null || match?.preference_fit != null)
       ? `<div style="font-size:11px; color:#8B96AB; margin-top:2px;">
@@ -669,7 +679,7 @@
           </div>
           <div class="company">${companyLine}</div>
           ${subScores}
-          ${renderCategoryRows(match?.categories)}
+          <div class="category-grid-wrap">${renderCategoryRows(match?.categories)}</div>
           ${summarySentence}
           ${employerNote}
           ${isApplied ? `<div style="font-size:11.5px; color:#00806E; font-weight:600; margin-top:4px;">✓ Application status: ${escapeHtml(job.application_status)}</div>` : ''}
