@@ -446,27 +446,6 @@
     }
 
     await loadJobs();
-
-    // Guarantee tracker banner — "We've found N of your 5 guaranteed
-    // Excellent Matches, X days remaining." Silently does nothing for a
-    // candidate with no subscription_started_at yet (not subscribed, or
-    // subscribed before this column existed).
-    try {
-      const gRes = await rookApiFetch('/guarantee-status');
-      if (gRes.ok) {
-        const g = await gRes.json();
-        if (g.applicable) {
-          const guaranteeBanner = document.createElement('div');
-          guaranteeBanner.style.cssText = 'background:#F5F0FF; border:1px solid #7C3AED30; border-radius:10px; padding:14px 18px; margin-bottom:20px; font-size:13.5px; color:#3D4A63;';
-          guaranteeBanner.innerHTML = g.met
-            ? `<b style="color:#7C3AED;">✓ Guarantee met</b> — we've found ${g.excellent_count} of your 5 guaranteed Excellent Matches.`
-            : g.window_open
-              ? `<b style="color:#7C3AED;">We've found ${g.excellent_count} of your 5 guaranteed Excellent Matches.</b> ${g.days_remaining} day${g.days_remaining === 1 ? '' : 's'} remaining in your first 30 days.`
-              : `We found ${g.excellent_count} of 5 guaranteed Excellent Matches in your first 30 days. ${g.eligible_for_refund ? 'You\'re eligible for a first-month refund — contact support.' : ''}`;
-          document.querySelector('.panel-head')?.insertAdjacentElement('afterend', guaranteeBanner);
-        }
-      }
-    } catch {}
   })();
 
   async function updateStats(jobs) {
@@ -637,8 +616,7 @@
     // EXCELLENT MATCH is a distinct tier above the normal recommendation
     // ladder — see backend/matching.js's excellent_match determination
     // (stricter than overall_score >= 90 alone; it also requires every
-    // category to clear its bar) and this ties directly to the 30-day/
-    // 5-match guarantee shown in the dashboard banner.
+    // category to clear its bar).
     const REC_COLORS = { 'Strong Apply': '#00806E', 'Apply': '#1463FF', 'Stretch Apply': '#B98900', 'Skip': '#8B96AB' };
     const recColor = match?.excellent_match ? '#7C3AED' : (REC_COLORS[match?.recommendation] || '#8B96AB');
     const recLabel = match?.excellent_match ? 'Excellent Match' : match?.recommendation;
