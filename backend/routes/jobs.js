@@ -193,6 +193,23 @@ async function loadEmployerHistory(candidateId) {
   return { appStatusByJob, noteFor };
 }
 
+// GET /api/public-job-count — a single fast count, no job rows, no
+// geolocation, no sorting. Built specifically so the homepage (and any
+// other marketing page) can show the real "X opportunities currently
+// tracked" number as a credibility signal without paying the cost of
+// the full /jobs anonymous-browse query, which always fetches up to
+// 200 real job rows plus does an IP geolocation lookup even when a
+// caller only wants the headline number.
+router.get("/public-job-count", requireConfig, async (req, res) => {
+  const { count, error } = await supabaseAnon
+    .from("jobs")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "active")
+    .eq("moderation_status", "approved");
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ total_count: count || 0 });
+});
+
 // GET /api/jobs?industry=Veterinary&state=FL&limit=20
 router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
   const { industry, state, limit = 20 } = req.query;
