@@ -32,7 +32,7 @@ Return ONLY a JSON object with this exact shape, no other text:
 
 Guidance for each field:
 - tailored_summary: 2-3 sentences, reworded from the résumé to emphasize what matches this specific job.
-- work_history: EVERY employer/role actually listed in the résumé, in the same order as the résumé (most recent first), with the employer name, job title, and dates exactly as stated in the résumé — never invented or altered. For each role, include 2-5 achievement bullets pulled from that specific job's real content in the résumé, reworded/reordered to lead with what's most relevant to this posting. This is the actual work-history section of the tailored résumé — every real job the candidate has held must appear here with its own bullets grouped underneath it, not as one undifferentiated list of achievements with no employer or date context.
+- work_history: EVERY employer/role actually listed in the résumé, in the same order as the résumé (most recent first), with the employer name, job title, and dates exactly as stated in the résumé — never invented or altered. For each role, include 2-5 achievement bullets pulled from that specific job's real content in the résumé, reworded/reordered to lead with what's most relevant to this posting. This is the actual work-history section of the tailored résumé — every real job the candidate has held must appear here with its own bullets grouped underneath it, not as one undifferentiated list of achievements with no employer or date context. NEVER return an entry with an empty employer, empty title, or an empty/blank bullet — if you cannot identify at least 2 real, substantive bullets for a role from the résumé text, still include the role with whatever genuine content the résumé actually provides for it (responsibilities, scope, one real accomplishment), rather than leaving bullets blank or omitting the role.
 - ats_keywords: keywords from the job posting that the candidate's real experience genuinely supports — not every keyword in the posting, only ones truthfully backed by their background.
 - cover_letter: 3-4 short paragraphs, specific to this exact role and company, grounded in real résumé content.
 - recruiter_message: 3-5 sentences, a brief LinkedIn/email outreach note.
@@ -58,7 +58,28 @@ async function generateApplicationPackage(resumeText, jobTitle, companyName, job
   // than the old flat 3-6 bullet list, and a candidate with several
   // jobs plus a cover letter, recruiter message, and interview prep
   // notes could otherwise get cut off mid-response.
-  return callClaudeForJSON(SYSTEM_PROMPT, userPrompt, 5000);
+  const pkg = await callClaudeForJSON(SYSTEM_PROMPT, userPrompt, 5000);
+
+  // Real bug this catches: the model can return technically-valid JSON
+  // where work_history exists but every entry is hollow (empty
+  // employer/title, or bullets that are blank strings) — reported
+  // directly as "Highlighted Achievements" followed by an empty
+  // bullet with nothing in it. Without this check, that hollow result
+  // gets cached as if it were a real success, and a plain page reload
+  // would keep showing the same broken content forever until someone
+  // happened to know to hit Regenerate again. Failing loudly here
+  // instead means the route's error handling takes over and nothing
+  // broken gets cached.
+  const hasRealWorkHistory = Array.isArray(pkg.work_history) && pkg.work_history.some((job) => {
+    const hasIdentity = (job.employer && job.employer.trim()) || (job.title && job.title.trim());
+    const hasRealBullet = Array.isArray(job.bullets) && job.bullets.some((b) => b && b.trim().length > 0);
+    return hasIdentity && hasRealBullet;
+  });
+  if (!hasRealWorkHistory) {
+    throw new Error("The AI response didn't include a usable work history — please try regenerating.");
+  }
+
+  return pkg;
 }
 
 module.exports = { generateApplicationPackage };
