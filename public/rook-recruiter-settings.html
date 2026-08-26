@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="assets/favicon.ico" sizes="any">
+  <meta name="theme-color" content="#071E41">
+  <title>Account Settings — ROOK for Recruiters</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --navy:#071E41; --royal:#1463FF; --teal:#12B8A6; --gray:#F5F7FA; --white:#FFFFFF;
+      --muted:#5B6B85; --border:#E3E8F0; --radius:14px;
+      --font-display:'Space Grotesk', sans-serif; --font-body:'Inter', sans-serif;
+    }
+    *{box-sizing:border-box; margin:0; padding:0;}
+    body{font-family:var(--font-body); color:var(--navy); background:var(--gray); -webkit-font-smoothing:antialiased;}
+    h1,h2{font-family:var(--font-display); letter-spacing:-0.01em;}
+    a{color:inherit; text-decoration:none;}
+    .btn{display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:12px 24px; border-radius:999px; font-size:14px; font-weight:600; cursor:pointer; border:none;}
+    .btn-primary{background:var(--royal); color:#fff;}
+    .btn-outline{background:#fff; color:var(--navy); border:1px solid var(--border);}
+
+    .topbar{background:var(--navy); padding:16px 32px; display:flex; align-items:center; justify-content:space-between;}
+    .topbar .logo{font-family:var(--font-display); font-weight:700; font-size:18px; color:#fff; display:flex; align-items:center; gap:8px;}
+
+    .container{max-width:560px; margin:0 auto; padding:48px 24px 60px;}
+    h1{font-size:26px; margin-bottom:6px;}
+    .container > p{color:var(--muted); font-size:14px; margin-bottom:28px;}
+    .card{background:#fff; border:1px solid var(--border); border-radius:var(--radius); padding:32px;}
+    .field-row{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;}
+    .field{display:flex; flex-direction:column; gap:6px;}
+    .field.full{grid-column:1/-1;}
+    .field label{font-size:12.5px; font-weight:600; color:var(--muted);}
+    .field input{padding:11px 13px; border-radius:9px; border:1px solid var(--border); font-size:14px; font-family:var(--font-body);}
+    .msg{font-size:13px; margin-top:14px; line-height:1.5;}
+    .msg.error{color:#C23B3B;}
+    .msg.success{color:#00806E;}
+    .note{font-size:12px; color:#8B96AB; margin-top:16px; line-height:1.5;}
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="index.html" class="logo">
+    <img src="assets/rook-icon-192.png" alt="ROOK" style="height:26px; width:auto; display:block;">
+    ROOK
+  </a>
+  <a href="rook-recruiter-dashboard.html" class="btn btn-outline">← My Postings</a>
+</div>
+
+<div class="container">
+  <h1>Account Settings</h1>
+  <p>This is the contact information used on every job you post — including where a candidate's application actually gets sent.</p>
+
+  <div id="loading" style="text-align:center; padding:40px 20px; color:#5B6B85; font-size:14px;">Loading…</div>
+
+  <div class="card" id="formCard" style="display:none;">
+    <div class="field-row">
+      <div class="field"><label>Your Name</label><input type="text" id="fieldName"></div>
+      <div class="field"><label>Email</label><input type="email" id="fieldEmail"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Agency / Company</label><input type="text" id="fieldCompany"></div>
+      <div class="field"><label>Phone</label><input type="text" id="fieldPhone"></div>
+    </div>
+
+    <a href="#" class="btn btn-primary" id="saveBtn" onclick="saveSettings(); return false;" style="width:100%; margin-top:8px;">Save Changes</a>
+    <div class="msg" id="formMsg"></div>
+    <div class="note">If you change your email here, it only updates where new applications and future postings' contact info point — it does not change the email you log in with. Existing postings keep the contact details they were created with until you edit and re-save each one.</div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="rook-config.js"></script>
+<script src="rook-auth.js"></script>
+<script>
+(async () => {
+  const token = await rookRequireAuth('rook-recruiter-login.html');
+  if (!token) return;
+
+  try {
+    const res = await rookApiFetch('/recruiter-profile');
+    const profile = await res.json();
+    if (!res.ok) throw new Error(profile.error || 'Could not load your account.');
+
+    document.getElementById('fieldName').value = profile?.name || '';
+    document.getElementById('fieldEmail').value = profile?.email || '';
+    document.getElementById('fieldCompany').value = profile?.company_name || '';
+    document.getElementById('fieldPhone').value = profile?.phone || '';
+
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('formCard').style.display = 'block';
+  } catch (err) {
+    document.getElementById('loading').textContent = err.message;
+  }
+})();
+
+async function saveSettings() {
+  const msg = document.getElementById('formMsg');
+  const btn = document.getElementById('saveBtn');
+
+  const payload = {
+    name: document.getElementById('fieldName').value.trim(),
+    email: document.getElementById('fieldEmail').value.trim(),
+    company_name: document.getElementById('fieldCompany').value.trim(),
+    phone: document.getElementById('fieldPhone').value.trim(),
+  };
+
+  if (!payload.name || !payload.email) {
+    msg.className = 'msg error';
+    msg.textContent = 'Name and email are required.';
+    return;
+  }
+
+  btn.textContent = 'Saving...';
+  btn.style.pointerEvents = 'none';
+  try {
+    const res = await rookApiFetch('/recruiter-profile', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error('Could not save your account settings.');
+    msg.className = 'msg success';
+    msg.textContent = 'Saved.';
+  } catch (err) {
+    msg.className = 'msg error';
+    msg.textContent = err.message;
+  } finally {
+    btn.textContent = 'Save Changes';
+    btn.style.pointerEvents = '';
+  }
+}
+</script>
+
+</body>
+</html>
