@@ -40,8 +40,16 @@
     .hero p{color:#B9C4DB; font-size:15.5px; line-height:1.6; max-width:520px; margin:0 auto;}
 
     .container{max-width:840px; margin:-38px auto 0; padding:0 24px 60px; position:relative;}
-    .results-bar{background:#fff; border:1px solid var(--border); border-radius:999px; padding:14px 22px; display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; font-size:13.5px; color:var(--muted); box-shadow:0 8px 24px rgba(7,30,65,0.06);}
-    .results-bar b{color:var(--navy);}
+
+    /* Results bar — count is now the visually dominant element (large
+       number, small label underneath) rather than being one inline
+       clause among several. Reflow to a column on narrow widths so it
+       doesn't feel crowded, per the brief's mobile guidance. */
+    .results-bar{background:#fff; border:1px solid var(--border); border-radius:20px; padding:20px 24px; display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; box-shadow:0 8px 24px rgba(7,30,65,0.06); gap:12px; flex-wrap:wrap;}
+    .results-bar .count-block{display:flex; align-items:baseline; gap:10px;}
+    .results-bar .count-num{font-family:var(--font-display); font-size:32px; font-weight:700; color:var(--navy); line-height:1;}
+    .results-bar .count-label{font-size:13.5px; color:var(--muted); font-weight:500;}
+    .results-bar .updated{font-size:12.5px; color:var(--muted); font-weight:600;}
 
     .job-list{display:flex; flex-direction:column; gap:14px;}
     .job-row{background:#fff; border:1px solid var(--border); border-radius:var(--radius); padding:22px; display:flex; align-items:center; gap:20px; flex-wrap:wrap; transition:box-shadow 0.15s ease, border-color 0.15s ease;}
@@ -52,14 +60,43 @@
     .job-preview{font-size:13px; color:var(--muted); line-height:1.55;}
     .gate-badge{display:inline-flex; align-items:center; gap:5px; background:rgba(20,99,255,0.08); color:var(--royal); font-size:11.5px; font-weight:700; padding:5px 11px; border-radius:999px; margin-bottom:10px; letter-spacing:0.01em;}
     .gate-cta{display:flex; flex-direction:column; align-items:flex-end; gap:6px;}
-    .gate-cta .hint{font-size:11.5px; color:var(--muted); text-align:right; max-width:150px; line-height:1.4;}
+    .gate-cta .hint{font-size:11.5px; color:var(--navy); font-weight:600; text-align:right; max-width:170px; line-height:1.4;}
+
+    /* Show/hide the long vs. short "employer revealed" wording based on
+       available width — same badge, two phrasings, per the brief. */
+    .gate-badge .long{display:inline;}
+    .gate-badge .short{display:none;}
+
+    /* Skeleton loading cards — same footprint as a real job-row so the
+       page never jumps/reflows once real results replace them, and
+       never implies zero jobs exist while the request is in flight. */
+    .skeleton-row{background:#fff; border:1px solid var(--border); border-radius:var(--radius); padding:22px; display:flex; flex-direction:column; gap:10px;}
+    .skeleton-bar{border-radius:6px; background:linear-gradient(90deg, #EEF1F6 25%, #E4E9F1 37%, #EEF1F6 63%); background-size:400% 100%; animation:shimmer 1.4s ease infinite;}
+    @keyframes shimmer{0%{background-position:100% 50%;} 100%{background-position:0 50%;}}
 
     .signup-band{max-width:840px; margin:36px auto 0; padding:0 24px 60px; text-align:center;}
     .signup-band .card{background:var(--navy); color:#fff; border-radius:var(--radius); padding:44px 28px; background-image:radial-gradient(circle at 85% 20%, rgba(20,99,255,0.25), transparent 55%);}
     .signup-band h3{font-size:23px; margin-bottom:10px;}
     .signup-band p{color:#B9C4DB; font-size:14px; margin-bottom:22px; max-width:400px; margin-left:auto; margin-right:auto;}
 
-    #loading, #empty{text-align:center; padding:60px 20px; color:var(--muted); font-size:14px;}
+    #empty{text-align:center; padding:60px 20px; color:var(--muted); font-size:14px; display:none;}
+    #errorState{text-align:center; padding:50px 20px; color:var(--muted); font-size:14px; display:none;}
+    #errorState p{margin-bottom:16px; max-width:340px; margin-left:auto; margin-right:auto;}
+
+    @media(max-width:480px){
+      .hero{padding:36px 20px 48px;}
+      .hero h1{font-size:30px; line-height:1.12; margin-bottom:12px;}
+      .hero p{font-size:14px;}
+      .hero-eyebrow{margin-bottom:10px;}
+      .container{margin-top:-28px; padding:0 16px 44px;}
+      .results-bar{padding:16px 18px;}
+      .results-bar .count-num{font-size:26px;}
+      .job-row{padding:16px;}
+      .gate-cta{align-items:stretch; width:100%;}
+      .gate-cta .hint{text-align:left; max-width:none;}
+      .gate-badge .long{display:none;}
+      .gate-badge .short{display:inline;}
+    }
   </style>
 </head>
 <body>
@@ -84,13 +121,47 @@
 </div>
 
 <div class="container">
-  <div class="results-bar" id="resultsBar" style="display:none;">
-    <span><b id="resultsCount">0</b> open roles right now</span>
-    <span>Updated continuously</span>
+  <div class="results-bar" id="resultsBar">
+    <div class="count-block">
+      <span class="count-num" id="resultsCount">—</span>
+      <span class="count-label" id="resultsLabel">Loading current opportunities…</span>
+    </div>
+    <span class="updated" id="updatedLabel" style="display:none;">Updated continuously</span>
   </div>
-  <div id="loading">Loading open roles…</div>
-  <div id="empty" style="display:none;">No open roles right now — check back soon.</div>
-  <div class="job-list" id="jobList"></div>
+
+  <!-- Skeleton state: shown immediately, before the request resolves.
+       Never replaced by a "0 jobs" or empty message until we know the
+       real outcome — that's the core bug this whole page was rebuilt
+       to fix. -->
+  <div class="job-list" id="skeletonList">
+    <div class="skeleton-row">
+      <div class="skeleton-bar" style="width:70px; height:18px; border-radius:999px;"></div>
+      <div class="skeleton-bar" style="width:60%; height:20px;"></div>
+      <div class="skeleton-bar" style="width:40%; height:14px;"></div>
+      <div class="skeleton-bar" style="width:90%; height:14px;"></div>
+    </div>
+    <div class="skeleton-row">
+      <div class="skeleton-bar" style="width:70px; height:18px; border-radius:999px;"></div>
+      <div class="skeleton-bar" style="width:55%; height:20px;"></div>
+      <div class="skeleton-bar" style="width:35%; height:14px;"></div>
+      <div class="skeleton-bar" style="width:85%; height:14px;"></div>
+    </div>
+    <div class="skeleton-row">
+      <div class="skeleton-bar" style="width:70px; height:18px; border-radius:999px;"></div>
+      <div class="skeleton-bar" style="width:65%; height:20px;"></div>
+      <div class="skeleton-bar" style="width:45%; height:14px;"></div>
+      <div class="skeleton-bar" style="width:80%; height:14px;"></div>
+    </div>
+  </div>
+
+  <div id="empty">No open roles right now — check back soon.</div>
+
+  <div id="errorState">
+    <p>We're having trouble loading current opportunities. Please try again in a moment.</p>
+    <button type="button" class="btn btn-outline" style="color:var(--navy); border-color:var(--border);" onclick="loadJobs()">Try Again</button>
+  </div>
+
+  <div class="job-list" id="jobList" style="display:none;"></div>
 </div>
 
 <div class="signup-band">
@@ -106,38 +177,75 @@ function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-(async () => {
+// Explicit state machine, one function per state, so there is never a
+// moment where the count area or job list implies zero jobs exist
+// while a request is genuinely still in flight or has simply failed.
+function showLoadingState() {
+  document.getElementById('resultsCount').textContent = '—';
+  document.getElementById('resultsLabel').textContent = 'Loading current opportunities…';
+  document.getElementById('updatedLabel').style.display = 'none';
+  document.getElementById('skeletonList').style.display = 'flex';
+  document.getElementById('jobList').style.display = 'none';
+  document.getElementById('empty').style.display = 'none';
+  document.getElementById('errorState').style.display = 'none';
+}
+
+function showSuccessState(jobs, totalCount) {
+  document.getElementById('skeletonList').style.display = 'none';
+  document.getElementById('errorState').style.display = 'none';
+
+  if (jobs.length === 0) {
+    document.getElementById('resultsCount').textContent = '0';
+    document.getElementById('resultsLabel').textContent = 'open roles right now';
+    document.getElementById('updatedLabel').style.display = 'none';
+    document.getElementById('empty').style.display = 'block';
+    document.getElementById('jobList').style.display = 'none';
+    return;
+  }
+
+  document.getElementById('resultsCount').textContent = totalCount.toLocaleString();
+  document.getElementById('resultsLabel').textContent = 'open roles right now';
+  document.getElementById('updatedLabel').style.display = 'inline';
+  document.getElementById('empty').style.display = 'none';
+  document.getElementById('jobList').style.display = 'flex';
+  document.getElementById('jobList').innerHTML = jobs.map(renderTeaserCard).join('');
+}
+
+function showErrorState() {
+  document.getElementById('skeletonList').style.display = 'none';
+  document.getElementById('jobList').style.display = 'none';
+  document.getElementById('empty').style.display = 'none';
+  document.getElementById('resultsLabel').textContent = 'Loading current opportunities…';
+  document.getElementById('resultsCount').textContent = '—';
+  document.getElementById('updatedLabel').style.display = 'none';
+  document.getElementById('errorState').style.display = 'block';
+}
+
+async function loadJobs() {
+  showLoadingState();
   try {
     // Deliberately no auth header — the backend automatically returns a
     // redacted "teaser" shape (no company name, no apply link) for any
     // request with no valid session, regardless of how it arrived. It
     // also sorts these by the visitor's real IP-based location and
     // returns the true platform-wide count (total_count) separately
-    // from however many jobs this particular request displays —
-    // previously this page showed the literal ?limit=30 value as "30
-    // open roles right now," which understated the real ~2,500-job
-    // database by two orders of magnitude, right on the page meant to
-    // convince someone to pay.
+    // from however many jobs this particular request displays.
     const res = await fetch('/api/jobs?limit=30');
     if (!res.ok) throw new Error('API returned ' + res.status);
     const data = await res.json();
     const jobs = Array.isArray(data) ? data : (data.jobs || []); // Array.isArray fallback covers any cached/older response shape
     const totalCount = Array.isArray(data) ? jobs.length : (data.total_count || jobs.length);
-
-    document.getElementById('loading').style.display = 'none';
-
-    if (jobs.length === 0) {
-      document.getElementById('empty').style.display = 'block';
-      return;
-    }
-
-    document.getElementById('resultsBar').style.display = 'flex';
-    document.getElementById('resultsCount').textContent = totalCount.toLocaleString();
-    document.getElementById('jobList').innerHTML = jobs.map(renderTeaserCard).join('');
+    showSuccessState(jobs, totalCount);
   } catch (err) {
-    document.getElementById('loading').textContent = 'Could not load jobs right now (' + err.message + ').';
+    // Never expose the raw error message to the visitor — this used to
+    // show "Could not load jobs (API returned 500)" directly on the
+    // page. Logged to the console for debugging, not shown as page copy.
+    console.error('Failed to load browse jobs:', err);
+    showErrorState();
   }
-})();
+}
+
+loadJobs();
 
 function renderTeaserCard(job) {
   const comp = job.compensation_text || (job.salary_min ? `$${job.salary_min}${job.salary_max ? '–$' + job.salary_max : '+'}` : '');
@@ -149,14 +257,14 @@ function renderTeaserCard(job) {
   return `
     <a href="/jobs/${escapeHtml(job.id)}" class="job-row">
       <div class="job-info">
-        <div class="gate-badge">🔒 Employer hidden</div>
+        <div class="gate-badge">🔒 <span class="long">Employer revealed with ROOK</span><span class="short">Unlock employer</span></div>
         <h4>${escapeHtml(job.title_original || job.title_normalized || 'Untitled role')}</h4>
         <div class="job-meta">${escapeHtml(job.location_raw || '')}${comp ? ' · ' + escapeHtml(comp) : ''}${job.date_posted ? ' · Posted ' + escapeHtml(job.date_posted) : ''}</div>
         <div class="job-preview">${escapeHtml(job.description_preview || '')}${job.description_preview && job.description_preview.length >= 160 ? '…' : ''}</div>
       </div>
       <div class="gate-cta">
         <span class="btn btn-primary btn-sm">View Role</span>
-        <span class="hint">Sign up to unlock</span>
+        <span class="hint">Unlock employer + your match score with ROOK</span>
       </div>
     </a>`;
 }
