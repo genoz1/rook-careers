@@ -34,7 +34,8 @@
 
     .container{max-width:640px; margin:0 auto; padding:24px 24px 60px;}
     .card{background:#fff; border:1px solid var(--border); border-radius:var(--radius); padding:32px;}
-    .field-row{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;}
+    .field-row{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:16px; margin-bottom:16px;}
+    .field input, .field textarea{width:100%;}
     .field{display:flex; flex-direction:column; gap:6px;}
     .field.full{grid-column:1/-1;}
     .field label{font-size:12.5px; font-weight:600; color:var(--muted);}
@@ -52,6 +53,11 @@
     .status-approved{background:rgba(0,128,110,0.1); color:#00806E;}
     .status-rejected{background:rgba(194,59,59,0.1); color:#C23B3B;}
     .status-closed{background:rgba(139,150,171,0.15); color:#5B6B85;}
+  @media(max-width:520px){
+    .field-row{grid-template-columns:1fr;}
+    .container{padding-left:16px; padding-right:16px;}
+    .card{padding:22px;}
+  }
   </style>
 </head>
 <body>
