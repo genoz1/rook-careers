@@ -38,6 +38,23 @@ async function requireAuth(req, res, next) {
   next();
 }
 
+// Real bug this fixes: the /admin/employers routes below only ever
+// checked requireAuth — meaning any signed-in account, not just an
+// actual admin, could add or list managed employers. Same fix as the
+// identical gap found in recruiterPostings.js's admin routes.
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "")
+  .split(",")
+  .map((e) => e.trim().toLowerCase())
+  .filter(Boolean);
+
+async function requireAdmin(req, res, next) {
+  const email = (req.user?.email || "").toLowerCase();
+  if (!email || !ADMIN_EMAILS.includes(email)) {
+    return res.status(403).json({ error: "Not authorized." });
+  }
+  next();
+}
+
 // Detects the ATS type and extracts the identifier from a careers URL.
 // Returns { ats_type, ats_identifier } or null if the URL doesn't match
 // any supported pattern.
@@ -76,7 +93,7 @@ function detectAts(url) {
 // ats_type_override: "talentbrew" or "clinchtalent" and careers_url as
 // the employer's careers-site URL (e.g. https://careers.questdiagnostics.com
 // or https://careers.foundationmedicine.com).
-router.post("/admin/employers", requireConfig, requireAuth, async (req, res) => {
+router.post("/admin/employers", requireConfig, requireAuth, requireAdmin, async (req, res) => {
   const { company_name, careers_url, priority, ats_type_override } = req.body || {};
   if (!company_name || !careers_url) {
     return res.status(400).json({ error: "company_name and careers_url are required" });
@@ -154,7 +171,7 @@ router.post("/admin/employers", requireConfig, requireAuth, async (req, res) => 
 });
 
 // GET /api/admin/employers — list existing employers (for the admin page)
-router.get("/admin/employers", requireConfig, requireAuth, async (req, res) => {
+router.get("/admin/employers", requireConfig, requireAuth, requireAdmin, async (req, res) => {
   const { data, error } = await supabaseAdmin
     .from("employers")
     .select("*")
