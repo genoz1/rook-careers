@@ -116,6 +116,7 @@
 </div>
 
 <script src="rook-config.js"></script>
+<script src="rook-auth.js"></script>
 <script>
   const configured = window.ROOK_CONFIG.SUPABASE_URL !== "YOUR_SUPABASE_PROJECT_URL";
   if (!configured) document.getElementById('configWarning').style.display = 'block';
@@ -200,32 +201,8 @@
     el.className = 'msg' + (type ? ' ' + type : '');
   }
 
-  // After a successful login, check whether this candidate has actually
-  // completed onboarding yet — GET /api/profile returns null until Step 7
-  // of onboarding has been submitted. Routing straight to the dashboard
-  // regardless of this was the root cause of new users landing on an
-  // empty, unscored dashboard with no path back into profile setup.
-  async function routeAfterLogin() {
-    try {
-      const { data: sessionData } = await client.auth.getSession();
-      const token = sessionData?.session?.access_token;
-      const res = await fetch('/api/profile', {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      const profile = res.ok ? await res.json() : null;
-      window.location.href = profile ? 'rook-dashboard.html' : 'rook-onboarding.html';
-    } catch {
-      // Fall back to onboarding, not the dashboard, when the check itself
-      // fails (network blip, backend not configured, etc.). This used to
-      // fall back to the dashboard — meaning any transient failure in this
-      // one fetch silently skipped onboarding entirely, the exact bug this
-      // function was written to prevent. Onboarding is the safe default:
-      // a returning candidate who already finished it just has to get
-      // through the profile check again next time; a brand-new candidate
-      // never ends up on an empty, unscored dashboard with no way back.
-      window.location.href = 'rook-onboarding.html';
-    }
-  }
+  // Sign-in and password reset both route through the shared
+  // rookRouteAfterLogin() in rook-auth.js — see that file for why.
 
   function togglePasswordVisibility(id, btn) {
     const input = document.getElementById(id);
@@ -260,7 +237,7 @@
       return setMsg(result.error.message, 'error');
     }
     setMsg('Checking your profile...');
-    await routeAfterLogin();
+    await rookRouteAfterLogin();
   }
 
   async function handleSignUp() {
