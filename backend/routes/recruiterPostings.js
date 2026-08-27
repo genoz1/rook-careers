@@ -42,6 +42,27 @@ async function requireAuth(req, res, next) {
   next();
 }
 
+// Real bug this fixes: the three /admin/recruiter-postings routes below
+// (list pending/approved/rejected, approve, reject) only ever checked
+// requireAuth — meaning ANY signed-in account, candidate or recruiter,
+// not just an actual admin, could call these and approve or reject job
+// postings. There was no admin-specific check anywhere. This compares
+// the caller's own verified email (from their Supabase Auth token,
+// not anything client-supplied) against a comma-separated allowlist in
+// the ADMIN_EMAILS environment variable.
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "")
+  .split(",")
+  .map((e) => e.trim().toLowerCase())
+  .filter(Boolean);
+
+async function requireAdmin(req, res, next) {
+  const email = (req.user?.email || "").toLowerCase();
+  if (!email || !ADMIN_EMAILS.includes(email)) {
+    return res.status(403).json({ error: "Not authorized." });
+  }
+  next();
+}
+
 // Every route below needs the caller's recruiter_profiles.id, not their
 // auth user id.
 async function loadRecruiterId(req, res, next) {
@@ -287,7 +308,7 @@ router.get("/recruiter-postings/:id", requireConfig, requireAuth, loadRecruiterI
 });
 
 // GET /api/admin/recruiter-postings?status=pending — review queue
-router.get("/admin/recruiter-postings", requireConfig, requireAuth, async (req, res) => {
+router.get("/admin/recruiter-postings", requireConfig, requireAuth, requireAdmin, async (req, res) => {
   const status = req.query.status || "pending";
   const { data, error } = await supabaseAdmin
     .from("jobs")
@@ -299,13 +320,13 @@ router.get("/admin/recruiter-postings", requireConfig, requireAuth, async (req, 
   res.json(data);
 });
 
-router.post("/admin/recruiter-postings/:id/approve", requireConfig, requireAuth, async (req, res) => {
+router.post("/admin/recruiter-postings/:id/approve", requireConfig, requireAuth, requireAdmin, async (req, res) => {
   const { error } = await supabaseAdmin.from("jobs").update({ moderation_status: "approved" }).eq("id", req.params.id);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ ok: true });
 });
 
-router.post("/admin/recruiter-postings/:id/reject", requireConfig, requireAuth, async (req, res) => {
+router.post("/admin/recruiter-postings/:id/reject", requireConfig, requireAuth, requireAdmin, async (req, res) => {
   const { error } = await supabaseAdmin.from("jobs").update({ moderation_status: "rejected" }).eq("id", req.params.id);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ ok: true });
