@@ -597,30 +597,42 @@ router.get("/new-matches-today-count", requireConfig, requireAuth, loadCandidate
 // manually-posted job), but the candidate never sees that — they get a
 // real in-product application experience with a real "Applied" record.
 router.post("/jobs/:id/apply", requireConfig, requireAuth, loadCandidateId, async (req, res) => {
-  const { data: job, error: jobError } = await supabaseAdmin
-    .from("jobs")
-    .select("*")
-    .eq("id", req.params.id)
-    .maybeSingle();
-  if (jobError) return res.status(500).json({ error: jobError.message });
-  if (!job) return res.status(404).json({ error: "Job not found" });
-  if (job.source_type !== "recruiter_posted") {
-    return res.status(400).json({ error: "This job isn't recruiter-posted — use its original posting link to apply." });
-  }
-  if (!job.recruiter_email) {
-    return res.status(400).json({ error: "No recruiter contact is on file for this posting." });
-  }
+  // Everything below is wrapped in one top-level try/catch. Two Supabase
+  // calls in this route (the job lookup and the profile lookup) were
+  // previously unprotected — unlike every other step here, which already
+  // had its own try/catch. On Node 18+ (what this app runs on), an
+  // unhandled promise rejection doesn't just fail the one request, it
+  // crashes the ENTIRE process by default. So a single network blip
+  // talking to Supabase on either of those two calls could take the
+  // whole server down mid-request, which looked to the candidate like a
+  // gateway timeout / HTML error page instead of a normal JSON error.
+  // This outer catch guarantees any unexpected failure anywhere in this
+  // handler ends in a JSON response, never a crash.
+  try {
+    const { data: job, error: jobError } = await supabaseAdmin
+      .from("jobs")
+      .select("*")
+      .eq("id", req.params.id)
+      .maybeSingle();
+    if (jobError) return res.status(500).json({ error: jobError.message });
+    if (!job) return res.status(404).json({ error: "Job not found" });
+    if (job.source_type !== "recruiter_posted") {
+      return res.status(400).json({ error: "This job isn't recruiter-posted — use its original posting link to apply." });
+    }
+    if (!job.recruiter_email) {
+      return res.status(400).json({ error: "No recruiter contact is on file for this posting." });
+    }
 
-  const coverLetter = String(req.body?.cover_letter || "").trim();
-  if (!coverLetter) return res.status(400).json({ error: "Cover letter is required." });
+    const coverLetter = String(req.body?.cover_letter || "").trim();
+    if (!coverLetter) return res.status(400).json({ error: "Cover letter is required." });
 
-  const { data: profile } = await supabaseAdmin
-    .from("candidate_profiles")
-    .select("*")
-    .eq("id", req.candidateId)
-    .maybeSingle();
+    const { data: profile } = await supabaseAdmin
+      .from("candidate_profiles")
+      .select("*")
+      .eq("id", req.candidateId)
+      .maybeSingle();
 
-  let resumeUrl = null;
+    let resumeUrl = null;
   if (profile?.resume_file_path) {
     // Wrapped in try/catch, unlike before — this was the one step in
     // the whole endpoint with no error handling at all. If it threw
@@ -690,13 +702,19 @@ router.post("/jobs/:id/apply", requireConfig, requireAuth, loadCandidateId, asyn
     } else {
       await supabaseAdmin.from("applications").insert(appRow);
     }
-  } catch (err) {
-    console.error(`Application email sent successfully, but recording it to history failed for candidate ${req.candidateId}, job ${job.id}: ${err.message}`);
-    // Still a success response — the recruiter has the real
-    // application in their inbox, which is what actually matters.
-  }
+    } catch (err) {
+      console.error(`Application email sent successfully, but recording it to history failed for candidate ${req.candidateId}, job ${job.id}: ${err.message}`);
+      // Still a success response — the recruiter has the real
+      // application in their inbox, which is what actually matters.
+    }
 
-  res.json({ ok: true });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(`Unexpected error in POST /jobs/:id/apply for candidate ${req.candidateId}: ${err.message}`);
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Something went wrong submitting your application. Please try again." });
+    }
+  }
 });
 
 // GET /api/jobs/:id

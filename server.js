@@ -5,6 +5,18 @@ const path = require("path");
 const app = express();
 const PORT = process.env.PORT || 8080;
 
+// Safety net: on Node 18+, an unhandled promise rejection ANYWHERE in the
+// app crashes the entire process by default — not just the one request
+// that caused it. That's what took the server down when a single
+// unprotected Supabase call failed in the /apply route (see jobs.js).
+// That specific spot is now fixed, but this catch-all means the same
+// class of mistake anywhere else in the codebase logs an error instead
+// of killing the whole site for every candidate/recruiter using it at
+// that moment.
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled promise rejection (server stayed up):", reason);
+});
+
 // Stripe webhooks need the RAW body to verify the signature, so this
 // route is wired BEFORE express.json() and given raw() explicitly.
 const stripeRoutes = require("./backend/routes/stripe");
