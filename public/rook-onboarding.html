@@ -343,6 +343,7 @@
   }
 
   let lastResumeStructured = null; // set from the real POST /resume response, not a placeholder
+  let resumeUploaded = false; // true once a résumé has actually been saved server-side — gates leaving Step 1, same pattern as the ZIP gate on Step 2. Independent of lastResumeStructured, which can legitimately stay empty (AI found no distinct employers) even on a successful upload.
 
   function escapeAttr(str) {
     return String(str || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
@@ -434,6 +435,7 @@
       const res = await rookApiFetch('/resume', { method: 'POST', body: formData });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Upload failed');
+      resumeUploaded = true;
       document.getElementById('uploadedFileStatus').textContent = 'Uploaded successfully';
       lastResumeStructured = data.resume_structured || null;
       if (lastResumeStructured?.employers?.length) {
@@ -543,6 +545,16 @@
     if(current === total && dir === 1){
       saveProfileAndFinish();
       return;
+    }
+    // A résumé is required before leaving step 1 — without it, candidates
+    // reached the dashboard with no data to score against, saw every job
+    // stuck at 0%/"not enough information," and had no clue why, since
+    // nothing on the dashboard itself points back to the missing résumé.
+    if (current === 1 && dir === 1) {
+      if (!resumeUploaded) {
+        alert('Please upload your résumé before continuing — ROOK needs it to actually match and score jobs for you.');
+        return;
+      }
     }
     // ZIP is required before leaving step 2 — proximity scoring (real
     // distance to a job, not just "somewhere in your state") has no way
