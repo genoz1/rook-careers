@@ -168,7 +168,13 @@ router.get("/jobs/:id", async (req, res, next) => {
 // request rather than cached as a static file, since the job list
 // changes continuously via the scheduled ingestion job.
 router.get("/sitemap.xml", async (req, res) => {
-  const staticUrls = [`${APP_BASE_URL}/`, `${APP_BASE_URL}/rook-browse.html`];
+  const staticUrls = [
+    `${APP_BASE_URL}/`,
+    `${APP_BASE_URL}/rook-browse.html`,
+    `${APP_BASE_URL}/rook-about.html`,
+    `${APP_BASE_URL}/rook-pricing.html`,
+    `${APP_BASE_URL}/rook-employers.html`,
+  ];
 
   let jobUrls = [];
   if (isConfigured) {
