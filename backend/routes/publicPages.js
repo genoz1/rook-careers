@@ -62,7 +62,7 @@ function pageShell({ title, description, canonicalUrl, ogImage, bodyHtml, jsonLd
 </head>
 <body>
   <div class="topbar">
-    <a href="/" class="logo"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>ROOK</a>
+    <a href="/" class="logo"><img src="/assets/rook-icon-192.png" alt="ROOK" style="height:22px; width:auto;">ROOK</a>
     <a href="/rook-login.html" class="btn btn-outline">Log In</a>
   </div>
   <div class="container">
@@ -163,6 +163,88 @@ router.get("/jobs/:id", async (req, res, next) => {
   res.send(pageShell({ title: `${title} — ROOK`, description: metaDescription, canonicalUrl, bodyHtml, jsonLd }));
 });
 
+// Real, curated set of job categories for server-rendered landing
+// pages — the actual SEO purpose of this whole route. Each one targets
+// a specific, meaningfully-searched phrase with its own genuinely
+// unique title, meta description, and real filtered job content —
+// deliberately NOT the same shared page with a query-string filter,
+// since a client-rendered page whose title/meta never change per
+// filter would likely be seen by search engines as one page, not many,
+// defeating the point. searchTerms are matched against title and
+// description text (case-insensitive, OR'd together) to decide which
+// real jobs appear on each category page.
+const CATEGORIES = {
+  "medical-sales-jobs": { label: "Medical Sales Jobs", searchTerms: ["medical sales", "medical device sales", "healthcare sales"] },
+  "pharmaceutical-sales-jobs": { label: "Pharmaceutical Sales Jobs", searchTerms: ["pharmaceutical", "pharma sales"] },
+  "medical-device-sales-jobs": { label: "Medical Device Sales Jobs", searchTerms: ["medical device", "device sales", "surgical device"] },
+  "diagnostics-sales-jobs": { label: "Diagnostics & Laboratory Sales Jobs", searchTerms: ["diagnostic", "laboratory sales", "lab sales"] },
+  "veterinary-sales-jobs": { label: "Veterinary Sales Jobs", searchTerms: ["veterinary", "vet sales"] },
+  "animal-health-sales-jobs": { label: "Animal Health Sales Jobs", searchTerms: ["animal health"] },
+  "territory-sales-manager-jobs": { label: "Territory Sales Manager Jobs", searchTerms: ["territory manager", "territory sales", "territory representative"] },
+  "key-account-manager-jobs": { label: "Key Account Manager Jobs", searchTerms: ["key account manager", "key account executive"] },
+  "capital-equipment-sales-jobs": { label: "Capital Equipment Sales Jobs", searchTerms: ["capital equipment"] },
+};
+
+// GET /jobs/category/:slug — a real, server-rendered landing page per
+// category, listing genuinely matching real jobs (title, location,
+// compensation only — no description snippet here at all, since
+// scrubbing a company name out of raw description text has already
+// proven to miss abbreviated/shortened forms of a company's name once
+// already; a plain list of real title/location/comp carries zero of
+// that risk while still being genuinely useful).
+router.get("/jobs/category/:slug", async (req, res, next) => {
+  const category = CATEGORIES[req.params.slug];
+  if (!category || !isConfigured) return next();
+
+  const orFilter = category.searchTerms
+    .flatMap((term) => [`title_original.ilike.%${term}%`, `description_text.ilike.%${term}%`])
+    .join(",");
+
+  const { data: jobs } = await supabaseAnon
+    .from("jobs")
+    .select("id, title_original, location_raw, compensation_text, salary_min, salary_max, date_posted")
+    .eq("status", "active")
+    .eq("moderation_status", "approved")
+    .or(orFilter)
+    .order("date_posted", { ascending: false })
+    .limit(40);
+
+  const jobRows = jobs || [];
+  const canonicalUrl = `${APP_BASE_URL}/jobs/category/${req.params.slug}`;
+  const metaDescription = `Browse ${jobRows.length} real, currently open ${category.label.toLowerCase()} on ROOK — sourced directly from employer career sites. Sign up to see the employer and apply.`.slice(0, 300);
+
+  const otherCategories = Object.entries(CATEGORIES).filter(([slug]) => slug !== req.params.slug);
+
+  const bodyHtml = `
+    <h1 style="font-size:28px; margin-bottom:10px;">${escapeHtml(category.label)}</h1>
+    <p style="color:var(--muted); font-size:14.5px; margin-bottom:28px;">${jobRows.length} real, currently open role${jobRows.length === 1 ? "" : "s"} — pulled directly from employer career sites, not a stale aggregator.</p>
+    ${jobRows.length === 0 ? `<div style="color:var(--muted); font-size:14.5px; padding:40px 0; text-align:center;">No open roles in this category right now — check back soon, or <a href="/rook-browse.html" style="color:var(--royal); font-weight:600;">browse all open roles</a>.</div>` : ""}
+    ${jobRows.map((job) => {
+      const comp = job.compensation_text || (job.salary_min ? `$${job.salary_min}${job.salary_max ? "–$" + job.salary_max : "+"}` : "");
+      return `
+      <a href="/jobs/${escapeHtml(job.id)}" style="display:block; background:#fff; border:1px solid var(--border); border-radius:var(--radius); padding:18px 20px; margin-bottom:12px;">
+        <div style="font-weight:700; font-size:15px; margin-bottom:4px;">${escapeHtml(job.title_original || "Untitled role")}</div>
+        <div style="color:var(--muted); font-size:13px;">${escapeHtml(job.location_raw || "")}${comp ? " · " + escapeHtml(comp) : ""}</div>
+      </a>`;
+    }).join("")}
+    <div style="background:var(--navy); border-radius:var(--radius); padding:28px 24px; text-align:center; margin-top:32px;">
+      <h3 style="color:#fff; font-size:19px; margin-bottom:8px;">Ready to see who's hiring?</h3>
+      <p style="color:#B9C4DB; font-size:13.5px; margin-bottom:14px;">See the employer, apply directly, and get every role scored against your experience.</p>
+      <div style="color:#fff; font-size:15px; font-weight:700; margin-bottom:18px;">$29/month · Cancel anytime</div>
+      <a href="/rook-login.html" class="btn btn-primary">Get Started</a>
+      <div style="color:#8B96AB; font-size:12px; margin-top:10px;">One membership. Full ROOK access.</div>
+    </div>
+    <div style="margin-top:36px;">
+      <div style="font-size:12.5px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.02em; margin-bottom:12px;">Browse other categories</div>
+      <div style="display:flex; flex-wrap:wrap; gap:8px;">
+        ${otherCategories.map(([slug, c]) => `<a href="/jobs/category/${slug}" style="font-size:13px; color:var(--royal); background:rgba(20,99,255,0.08); padding:7px 14px; border-radius:99px; font-weight:600;">${escapeHtml(c.label)}</a>`).join("")}
+      </div>
+    </div>
+  `;
+
+  res.send(pageShell({ title: `${category.label} — ROOK`, description: metaDescription, canonicalUrl, bodyHtml }));
+});
+
 // GET /sitemap.xml — lists the homepage, the public browse page, and
 // every currently-active job's real crawlable URL. Regenerated on every
 // request rather than cached as a static file, since the job list
@@ -174,6 +256,7 @@ router.get("/sitemap.xml", async (req, res) => {
     `${APP_BASE_URL}/rook-about.html`,
     `${APP_BASE_URL}/rook-pricing.html`,
     `${APP_BASE_URL}/rook-employers.html`,
+    ...Object.keys(CATEGORIES).map((slug) => `${APP_BASE_URL}/jobs/category/${slug}`),
   ];
 
   let jobUrls = [];
