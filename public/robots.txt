@@ -16,5 +16,7 @@ Disallow: /rook-recruiter-edit-job.html
 Disallow: /rook-recruiter-settings.html
 Disallow: /rook-recruiter-post.html
 Disallow: /api/
+Allow: /api/jobs
+Allow: /api/public-job-count
 
 Sitemap: https://rookcareers.com/sitemap.xml
