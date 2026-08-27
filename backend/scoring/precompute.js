@@ -52,7 +52,16 @@ async function fetchActiveJobs(supabase) {
   // timeout" from Supabase. Smaller, narrower pages cost more round
   // trips but each one is far lighter, which is the right trade here —
   // this only runs on a schedule, not on a user-facing request path.
-  const PAGE_SIZE = 300;
+  // Page size dropped from 300 to 150 after a real "canceling statement
+  // due to statement timeout" in production — later pages of a plain
+  // OFFSET-based .range() scan past a growing number of rows before
+  // Postgres can start returning results, and each row here is heavy
+  // (description_text, ai_analysis JSON, job_embedding vectors). This
+  // alone is a mitigation, not the real fix: the actual fix is a
+  // composite index on (status, moderation_status, id) so Postgres can
+  // seek straight to the right rows instead of scanning past others to
+  // find them — see ROOK-Setup-Guide.pdf / ask Claude for the exact SQL.
+  const PAGE_SIZE = 150;
   const JOB_COLUMNS = "id, title_original, description_text, location_raw, job_lat, job_lng, compensation_text, salary_min, salary_max, ai_analysis, job_embedding, remote_status, travel_percentage, date_posted, last_seen_at";
   let activeJobs = [];
   for (let from = 0; ; from += PAGE_SIZE) {
