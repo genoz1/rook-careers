@@ -215,9 +215,15 @@
       const profile = res.ok ? await res.json() : null;
       window.location.href = profile ? 'rook-dashboard.html' : 'rook-onboarding.html';
     } catch {
-      // If the check itself fails (e.g. backend not configured), fall back
-      // to the dashboard rather than blocking login entirely.
-      window.location.href = 'rook-dashboard.html';
+      // Fall back to onboarding, not the dashboard, when the check itself
+      // fails (network blip, backend not configured, etc.). This used to
+      // fall back to the dashboard — meaning any transient failure in this
+      // one fetch silently skipped onboarding entirely, the exact bug this
+      // function was written to prevent. Onboarding is the safe default:
+      // a returning candidate who already finished it just has to get
+      // through the profile check again next time; a brand-new candidate
+      // never ends up on an empty, unscored dashboard with no way back.
+      window.location.href = 'rook-onboarding.html';
     }
   }
 
