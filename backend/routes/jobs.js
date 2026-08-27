@@ -140,10 +140,35 @@ function escapeRegex(str) {
 // name regardless of legal-suffix variations ("Medtronic Inc.",
 // "Medtronic Corporation") since those still contain the base name as
 // a substring.
+// Common legal-entity suffixes that are never worth scrubbing on their
+// own — "Inc" or "LLC" alone doesn't identify who the employer is, and
+// treating them as significant words would create a lot of pointless
+// replacements throughout ordinary text.
+const COMPANY_SUFFIX_WORDS = new Set([
+  "inc", "inc.", "llc", "llc.", "corp", "corp.", "corporation", "co", "co.",
+  "company", "ltd", "ltd.", "limited", "group", "holdings", "the", "of",
+]);
+
 function scrubCompanyNameFromText(text, companyName) {
   if (!text || !companyName) return text;
-  const pattern = new RegExp(escapeRegex(companyName), "gi");
-  return text.replace(pattern, "this employer");
+  let result = text.replace(new RegExp(escapeRegex(companyName), "gi"), "this employer");
+
+  // Real gap this closes: matching only the exact full stored
+  // company_name misses the very common case where a job posting's own
+  // description text refers to the employer by a shorter form of its
+  // name than what's stored in the database — e.g. company_name is
+  // "Caris Life Sciences" but the posting's own text says "At Caris,
+  // we understand..." Reported directly: the listing page still showed
+  // "At Caris" in a preview even after the exact-match scrub was
+  // working correctly on the job detail page. Scrubbing each
+  // significant standalone word from the company name too (skipping
+  // short/common legal-suffix words) catches this without needing to
+  // guess every possible abbreviated form in advance.
+  const words = companyName.split(/\s+/).filter((w) => w.replace(/[^a-zA-Z]/g, "").length > 3 && !COMPANY_SUFFIX_WORDS.has(w.toLowerCase()));
+  for (const word of words) {
+    result = result.replace(new RegExp(`\\b${escapeRegex(word)}\\b`, "gi"), "this employer");
+  }
+  return result;
 }
 
 function redactForNonSubscriber(job) {
