@@ -597,23 +597,23 @@ router.get("/new-matches-today-count", requireConfig, requireAuth, loadCandidate
 // manually-posted job), but the candidate never sees that — they get a
 // real in-product application experience with a real "Applied" record.
 router.post("/jobs/:id/apply", requireConfig, requireAuth, loadCandidateId, async (req, res) => {
-  // Everything below is wrapped in one top-level try/catch. Two Supabase
-  // calls in this route (the job lookup and the profile lookup) were
-  // previously unprotected — unlike every other step here, which already
-  // had its own try/catch. On Node 18+ (what this app runs on), an
-  // unhandled promise rejection doesn't just fail the one request, it
-  // crashes the ENTIRE process by default. So a single network blip
-  // talking to Supabase on either of those two calls could take the
-  // whole server down mid-request, which looked to the candidate like a
-  // gateway timeout / HTML error page instead of a normal JSON error.
-  // This outer catch guarantees any unexpected failure anywhere in this
-  // handler ends in a JSON response, never a crash.
+  // TEMPORARY DIAGNOSTIC LOGGING — this route has been failing with no
+  // trace at all in Runtime Logs (raw DO URL, Cloudflare bypassed, no
+  // console output, no crash recorded). That pattern points to a step
+  // hanging on an outbound network call rather than throwing. Every
+  // await below now has a log immediately before and after it, so
+  // whichever pair fails to both print pinpoints exactly where this
+  // sticks. Safe to remove once the real cause is confirmed and fixed.
+  const tag = `[apply ${req.params.id} candidate=${req.candidateId}]`;
+  console.log(`${tag} start`);
   try {
+    console.log(`${tag} fetching job...`);
     const { data: job, error: jobError } = await supabaseAdmin
       .from("jobs")
       .select("*")
       .eq("id", req.params.id)
       .maybeSingle();
+    console.log(`${tag} job fetch done (error=${jobError?.message || "none"}, found=${!!job})`);
     if (jobError) return res.status(500).json({ error: jobError.message });
     if (!job) return res.status(404).json({ error: "Job not found" });
     if (job.source_type !== "recruiter_posted") {
@@ -626,91 +626,110 @@ router.post("/jobs/:id/apply", requireConfig, requireAuth, loadCandidateId, asyn
     const coverLetter = String(req.body?.cover_letter || "").trim();
     if (!coverLetter) return res.status(400).json({ error: "Cover letter is required." });
 
+    console.log(`${tag} fetching candidate profile...`);
     const { data: profile } = await supabaseAdmin
       .from("candidate_profiles")
       .select("*")
       .eq("id", req.candidateId)
       .maybeSingle();
+    console.log(`${tag} profile fetch done (found=${!!profile})`);
 
     let resumeUrl = null;
-  if (profile?.resume_file_path) {
-    // Wrapped in try/catch, unlike before — this was the one step in
-    // the whole endpoint with no error handling at all. If it threw
-    // (a malformed/unexpected stored path, for instance), the entire
-    // request crashed unhandled with a raw, unhelpful message ("The
-    // string did not match the expected pattern") instead of the
-    // graceful degradation every other step in this route has. A
-    // missing or broken résumé link shouldn't block the whole
-    // application from being submitted — the recruiter still gets the
-    // cover letter and a note that no résumé is attached.
+    if (profile?.resume_file_path) {
+      // Wrapped in try/catch, unlike before — this was the one step in
+      // the whole endpoint with no error handling at all. If it threw
+      // (a malformed/unexpected stored path, for instance), the entire
+      // request crashed unhandled with a raw, unhelpful message ("The
+      // string did not match the expected pattern") instead of the
+      // graceful degradation every other step in this route has. A
+      // missing or broken résumé link shouldn't block the whole
+      // application from being submitted — the recruiter still gets the
+      // cover letter and a note that no résumé is attached.
+      //
+      // Also given an explicit timeout: this Supabase Storage call had
+      // no timeout at all, unlike the email send below (which times out
+      // at 20s). If Storage ever stalls instead of erroring, this used
+      // to hang forever with no trace — exactly the symptom seen live.
+      try {
+        console.log(`${tag} signing résumé URL (path: ${profile.resume_file_path})...`);
+        const signPromise = supabaseAdmin.storage
+          .from("resumes")
+          .createSignedUrl(profile.resume_file_path, 60 * 60 * 24 * 14); // 14-day link, same pattern as any Storage-backed download elsewhere in the app
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Résumé signed URL request timed out after 15s")), 15_000)
+        );
+        const { data: signed, error: signError } = await Promise.race([signPromise, timeoutPromise]);
+        if (signError) throw signError;
+        resumeUrl = signed?.signedUrl || null;
+        console.log(`${tag} résumé URL signed successfully`);
+      } catch (err) {
+        console.error(`${tag} could not generate résumé link (path: ${profile.resume_file_path}): ${err.message}`);
+      }
+    }
+
+    const html = `
+      <p><strong>${escapeHtmlServer(profile?.name || "A ROOK candidate")}</strong> applied to your posting on ROOK: <strong>${escapeHtmlServer(job.title_original || "this role")}</strong>.</p>
+      ${coverLetter.split("\n").filter(Boolean).map((p) => `<p>${escapeHtmlServer(p)}</p>`).join("")}
+      ${resumeUrl ? `<p><a href="${resumeUrl}">Download résumé</a> (link active 14 days)</p>` : "<p>No résumé is on file for this candidate.</p>"}
+      <p style="color:#5B6B85; font-size:13px;">Reply directly to this email to reach the candidate${profile?.email ? ` at ${escapeHtmlServer(profile.email)}` : ""}${profile?.phone ? ` or ${escapeHtmlServer(profile.phone)}` : ""}.</p>
+    `;
+
     try {
-      const { data: signed, error: signError } = await supabaseAdmin.storage
-        .from("resumes")
-        .createSignedUrl(profile.resume_file_path, 60 * 60 * 24 * 14); // 14-day link, same pattern as any Storage-backed download elsewhere in the app
-      if (signError) throw signError;
-      resumeUrl = signed?.signedUrl || null;
+      console.log(`${tag} sending recruiter email to ${job.recruiter_email}...`);
+      await sendEmail({
+        to: job.recruiter_email,
+        subject: `New ROOK application: ${job.title_original || "your posting"}`,
+        html,
+      });
+      console.log(`${tag} recruiter email sent successfully`);
     } catch (err) {
-      console.error(`Could not generate résumé link for candidate ${profile.id} (path: ${profile.resume_file_path}): ${err.message}`);
+      console.error(`${tag} email send failed: ${err.message}`);
+      return res.status(502).json({ error: `Could not deliver the application email: ${err.message}. Nothing was recorded — try again.` });
     }
-  }
 
-  const html = `
-    <p><strong>${escapeHtmlServer(profile?.name || "A ROOK candidate")}</strong> applied to your posting on ROOK: <strong>${escapeHtmlServer(job.title_original || "this role")}</strong>.</p>
-    ${coverLetter.split("\n").filter(Boolean).map((p) => `<p>${escapeHtmlServer(p)}</p>`).join("")}
-    ${resumeUrl ? `<p><a href="${resumeUrl}">Download résumé</a> (link active 14 days)</p>` : "<p>No résumé is on file for this candidate.</p>"}
-    <p style="color:#5B6B85; font-size:13px;">Reply directly to this email to reach the candidate${profile?.email ? ` at ${escapeHtmlServer(profile.email)}` : ""}${profile?.phone ? ` or ${escapeHtmlServer(profile.phone)}` : ""}.</p>
-  `;
+    // Record the application for the candidate's own Application History —
+    // no unique constraint on (candidate_id, job_id) in the schema, so
+    // check-then-write rather than upsert. Wrapped in try/catch, unlike
+    // before — this was the one remaining step in the whole endpoint
+    // with zero error handling. The email to the recruiter has already
+    // been sent successfully by this point, so if this history-recording
+    // step fails, the application itself genuinely went through — the
+    // person shouldn't see a bare, unhelpful crash message here that
+    // makes it look like nothing happened.
+    try {
+      console.log(`${tag} recording application history...`);
+      const { data: existing } = await supabaseAdmin
+        .from("applications")
+        .select("id")
+        .eq("candidate_id", req.candidateId)
+        .eq("job_id", job.id)
+        .maybeSingle();
 
-  try {
-    await sendEmail({
-      to: job.recruiter_email,
-      subject: `New ROOK application: ${job.title_original || "your posting"}`,
-      html,
-    });
-  } catch (err) {
-    return res.status(502).json({ error: `Could not deliver the application email: ${err.message}. Nothing was recorded — try again.` });
-  }
-
-  // Record the application for the candidate's own Application History —
-  // no unique constraint on (candidate_id, job_id) in the schema, so
-  // check-then-write rather than upsert. Wrapped in try/catch, unlike
-  // before — this was the one remaining step in the whole endpoint
-  // with zero error handling. The email to the recruiter has already
-  // been sent successfully by this point, so if this history-recording
-  // step fails, the application itself genuinely went through — the
-  // person shouldn't see a bare, unhelpful crash message here that
-  // makes it look like nothing happened.
-  try {
-    const { data: existing } = await supabaseAdmin
-      .from("applications")
-      .select("id")
-      .eq("candidate_id", req.candidateId)
-      .eq("job_id", job.id)
-      .maybeSingle();
-
-    const appRow = {
-      candidate_id: req.candidateId,
-      job_id: job.id,
-      status: "applied",
-      applied_at: new Date().toISOString(),
-      notes: coverLetter, // reusing the free-text notes column to keep a record of what was actually sent — no dedicated cover-letter column on this table yet
-      contact_name: job.recruiter_name || null,
-      contact_email: job.recruiter_email || null,
-    };
-    if (existing) {
-      await supabaseAdmin.from("applications").update(appRow).eq("id", existing.id);
-    } else {
-      await supabaseAdmin.from("applications").insert(appRow);
-    }
+      const appRow = {
+        candidate_id: req.candidateId,
+        job_id: job.id,
+        status: "applied",
+        applied_at: new Date().toISOString(),
+        notes: coverLetter, // reusing the free-text notes column to keep a record of what was actually sent — no dedicated cover-letter column on this table yet
+        contact_name: job.recruiter_name || null,
+        contact_email: job.recruiter_email || null,
+      };
+      if (existing) {
+        await supabaseAdmin.from("applications").update(appRow).eq("id", existing.id);
+      } else {
+        await supabaseAdmin.from("applications").insert(appRow);
+      }
+      console.log(`${tag} application history recorded`);
     } catch (err) {
-      console.error(`Application email sent successfully, but recording it to history failed for candidate ${req.candidateId}, job ${job.id}: ${err.message}`);
+      console.error(`${tag} email sent successfully, but recording history failed: ${err.message}`);
       // Still a success response — the recruiter has the real
       // application in their inbox, which is what actually matters.
     }
 
+    console.log(`${tag} done, responding 200`);
     res.json({ ok: true });
   } catch (err) {
-    console.error(`Unexpected error in POST /jobs/:id/apply for candidate ${req.candidateId}: ${err.message}`);
+    console.error(`${tag} unexpected error: ${err.message}`);
     if (!res.headersSent) {
       res.status(500).json({ error: "Something went wrong submitting your application. Please try again." });
     }
