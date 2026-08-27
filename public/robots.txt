@@ -8,6 +8,13 @@ Disallow: /rook-intelligence.html
 Disallow: /rook-application-package.html
 Disallow: /rook-job-analysis.html
 Disallow: /rook-admin-employers.html
+Disallow: /rook-admin-recruiters.html
+Disallow: /rook-onboarding.html
+Disallow: /rook-apply.html
+Disallow: /rook-recruiter-dashboard.html
+Disallow: /rook-recruiter-edit-job.html
+Disallow: /rook-recruiter-settings.html
+Disallow: /rook-recruiter-post.html
 Disallow: /api/
 
-Sitemap: https://seashell-app-hbjuo.ondigitalocean.app/sitemap.xml
+Sitemap: https://rookcareers.com/sitemap.xml
