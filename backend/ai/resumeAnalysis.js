@@ -47,7 +47,16 @@ async function analyzeResume(resumeText) {
   // Truncate extremely long résumés to keep the request reasonable —
   // most résumés are 1-3 pages; this generously allows for longer ones.
   const truncated = resumeText.slice(0, 15000);
-  return callClaudeForJSON(SYSTEM_PROMPT, `Résumé text:\n\n${truncated}`);
+  // 4000 tokens, not the default 2500 — a résumé with several employers
+  // (each with title, dates, and a handful of achievement bullets) plus
+  // all the other structured fields in this shape routinely runs past
+  // 2500 tokens of JSON output. At 2500, Claude's response was getting
+  // cut off mid-string on exactly this kind of résumé, producing
+  // truncated JSON that failed to parse — logged as "Resume AI analysis
+  // failed" and shown to the candidate as "we couldn't automatically
+  // read your work history," even though extraction and analysis were
+  // both actually working right up until the token limit cut them off.
+  return callClaudeForJSON(SYSTEM_PROMPT, `Résumé text:\n\n${truncated}`, 4000);
 }
 
 module.exports = { analyzeResume };
