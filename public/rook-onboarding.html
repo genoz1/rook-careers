@@ -114,8 +114,8 @@
 
   <div class="step-panel active" data-step="1">
     <div class="step-eyebrow">Build Your Career Profile</div>
-    <h1 class="step-h">Upload your résumé</h1>
-    <p class="step-sub">We'll read your work history, employers, and skills automatically. You'll confirm everything before it's saved.</p>
+    <h1 class="step-h">Let's start with your résumé</h1>
+    <p class="step-sub">This is how we find your matches — we'll pull your work history automatically, so you're not retyping anything.</p>
     <div class="dropzone" id="dropzone" onclick="document.getElementById('resumeFileInput').click()">
       <div class="dropzone-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 16V4M12 4l-4 4M12 4l4 4M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg></div>
       <h3>Drag &amp; drop your résumé here</h3>
@@ -132,8 +132,23 @@
 
   <div class="step-panel" data-step="2">
     <div class="step-eyebrow">Build Your Career Profile</div>
-    <h1 class="step-h">Basic information</h1>
-    <p class="step-sub">Confirm your contact details.</p>
+    <h1 class="step-h">Where are you based?</h1>
+    <p class="step-sub">So we can rank jobs by how close they actually are to you — not just which state they're in.</p>
+    <div class="card">
+      <div class="field-row">
+        <div class="field">
+          <label>ZIP Code <span style="color:#C23B3B;">*</span></label>
+          <input type="text" id="fieldZip" placeholder="33602" maxlength="5">
+        </div>
+        <div class="field"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="step-panel" data-step="3">
+    <div class="step-eyebrow">Build Your Career Profile</div>
+    <h1 class="step-h">Just the basics</h1>
+    <p class="step-sub">So we know how to reach you when something's a fit.</p>
     <div class="card">
       <div class="field-row">
         <div class="field"><label>Full Name</label><input type="text" id="fieldName" placeholder="Your full name"></div>
@@ -147,29 +162,21 @@
         <div class="field"><label>City</label><input type="text" id="fieldCity" placeholder="Your city"></div>
         <div class="field"><label>State</label><input type="text" id="fieldState" placeholder="Your state"></div>
       </div>
-      <div class="field-row">
-        <div class="field">
-          <label>ZIP Code <span style="color:#C23B3B;">*</span></label>
-          <input type="text" id="fieldZip" placeholder="33602" maxlength="5">
-          <div style="font-size:11.5px; color:#8B96AB; margin-top:4px;">Required — this is how ROOK ranks jobs by how close they actually are to you, not just which state they're in.</div>
-        </div>
-        <div class="field"></div>
-      </div>
     </div>
-  </div>
-
-  <div class="step-panel" data-step="3">
-    <div class="step-eyebrow">Build Your Career Profile</div>
-    <h1 class="step-h">Career experience</h1>
-    <p class="step-sub">Confirm the roles we found — add or edit anything that's missing.</p>
-    <div id="expEntriesContainer"></div>
-    <a href="#" class="add-entry" onclick="addExperienceEntry(); return false;">+ Add another position</a>
   </div>
 
   <div class="step-panel" data-step="4">
     <div class="step-eyebrow">Build Your Career Profile</div>
-    <h1 class="step-h">Skills &amp; selling experience</h1>
-    <p class="step-sub">Select everything that applies — this powers your match scoring.</p>
+    <h1 class="step-h">Your career, at a glance</h1>
+    <p class="step-sub">We pulled this from your résumé — just confirm it's right, or fix anything we missed.</p>
+    <div id="expEntriesContainer"></div>
+    <a href="#" class="add-entry" onclick="addExperienceEntry(); return false;">+ Add another position</a>
+  </div>
+
+  <div class="step-panel" data-step="5">
+    <div class="step-eyebrow">Build Your Career Profile</div>
+    <h1 class="step-h">What you're actually good at</h1>
+    <p class="step-sub">This is what drives your match score — the more specific, the sharper your matches.</p>
     <div class="card">
       <div class="field full" style="margin-bottom:20px;">
         <label style="margin-bottom:10px;">Customer types</label>
@@ -199,10 +206,10 @@
     </div>
   </div>
 
-  <div class="step-panel" data-step="5">
+  <div class="step-panel" data-step="6">
     <div class="step-eyebrow">Build Your Career Profile</div>
-    <h1 class="step-h">Career preferences</h1>
-    <p class="step-sub">What you're looking for next.</p>
+    <h1 class="step-h">What you're looking for next</h1>
+    <p class="step-sub">Comp, travel, setup — your non-negotiables.</p>
     <div class="card">
       <div class="field-row">
         <div class="field"><label>Minimum Base Salary</label><input type="text" id="fieldMinSalary" placeholder="$90,000"></div>
@@ -229,10 +236,10 @@
     </div>
   </div>
 
-  <div class="step-panel" data-step="6">
+  <div class="step-panel" data-step="7">
     <div class="step-eyebrow">Build Your Career Profile</div>
-    <h1 class="step-h">Exclusions</h1>
-    <p class="step-sub">Anything ROOK should never show you.</p>
+    <h1 class="step-h">Anywhere you'd rather not go?</h1>
+    <p class="step-sub">Companies or industries to skip. No explanation needed.</p>
     <div class="card">
       <div class="field full" style="margin-bottom:16px;">
         <label>Companies you do not want to work for</label>
@@ -253,10 +260,10 @@
     </div>
   </div>
 
-  <div class="step-panel" data-step="7">
+  <div class="step-panel" data-step="8">
     <div class="step-eyebrow">Build Your Career Profile</div>
-    <h1 class="step-h">Review your profile</h1>
-    <p class="step-sub">This is what ROOK will use to find and rank opportunities for you.</p>
+    <h1 class="step-h">Almost done</h1>
+    <p class="step-sub">This is exactly what we'll use to find and rank opportunities for you. One last look before we get started.</p>
     <div class="card">
       <div class="review-section">
         <h4>Basic Info</h4>
@@ -289,9 +296,9 @@
 <script src="rook-config.js"></script>
 <script src="rook-auth.js"></script>
 <script>
-  const total = 7;
+  const total = 8;
   let current = 1;
-  const stepLabels = ["Resume","Basic Info","Career Experience","Skills & Selling","Preferences","Exclusions","Review"];
+  const stepLabels = ["Resume","ZIP Code","Basic Info","Career Experience","Skills & Selling","Preferences","Exclusions","Review"];
 
   const segWrap = document.getElementById('progressSteps');
   for(let i=1;i<=total;i++){
