@@ -286,14 +286,24 @@ function escapeHtml(str) {
 
 function showLinkedInPopover(company, title) {
   const searchUrl = (keywords) => `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(keywords)}`;
+  // LinkedIn's Boolean search gives OR the LOWEST precedence, with
+  // unquoted words joined by an implicit AND. Without parentheses,
+  // `${company} recruiter OR "talent acquisition"` actually parses as
+  // (company AND recruiter) OR "talent acquisition" — the second half
+  // of that OR drops the company filter entirely, matching anyone on
+  // LinkedIn with "talent acquisition" in their profile, worldwide.
+  // Every query below wraps the company in quotes and AND, with the OR
+  // terms grouped in their own parentheses, so the company always
+  // applies on both sides.
+  const companyPhrase = `"${company}"`;
   const items = [
-    { label: 'Recruiters & Talent Acquisition', desc: `People sourcing for roles at ${company}`, url: searchUrl(`${company} recruiter OR "talent acquisition"`) },
-    { label: 'Sales Leadership', desc: `Managers and directors at ${company}`, url: searchUrl(`${company} sales manager OR sales director`) },
+    { label: 'Recruiters & Talent Acquisition', desc: `People sourcing for roles at ${company}`, url: searchUrl(`${companyPhrase} AND (recruiter OR "talent acquisition")`) },
+    { label: 'Sales Leadership', desc: `Managers and directors at ${company}`, url: searchUrl(`${companyPhrase} AND ("sales manager" OR "sales director")`) },
   ];
   if (title) {
-    items.push({ label: 'People in a Similar Role', desc: `Others currently in "${title}" at ${company}`, url: searchUrl(`${company} ${title}`) });
+    items.push({ label: 'People in a Similar Role', desc: `Others currently in "${title}" at ${company}`, url: searchUrl(`${companyPhrase} AND "${title}"`) });
   }
-  items.push({ label: 'Everyone at This Company', desc: `Full LinkedIn results for ${company}`, url: searchUrl(company) });
+  items.push({ label: 'Everyone at This Company', desc: `Full LinkedIn results for ${company}`, url: searchUrl(companyPhrase) });
 
   document.getElementById('linkedinPopoverTitle').textContent = `Find contacts at ${company}`;
   document.getElementById('linkedinPopoverList').innerHTML = items.map((item) => `
