@@ -39,6 +39,43 @@ async function rookSignOut(loginPage = "rook-login.html") {
   window.location.href = loginPage;
 }
 
+// Fills in the sidebar's name/avatar/plan card (the ".side-foot" block
+// present on every logged-in page) from a real candidate profile object.
+// This used to be literal hardcoded text ("Gene Zentko", "Professional
+// Plan") baked directly into 8 separate page templates — the plan name
+// itself is accurate (ROOK's one paid tier is genuinely branded
+// "Professional" on rook-pricing.html), but it was shown unconditionally
+// to every candidate regardless of their real subscription_status, and
+// the name was always Gene's own. Split out from rookPopulateSidebar()
+// below so a page that already has the profile object for another
+// reason (the dashboard, for its greeting) can apply it directly
+// instead of fetching it a second time.
+function rookApplySidebarProfile(profile) {
+  if (!profile?.name) return;
+  const parts = profile.name.trim().split(/\s+/);
+  const initials = parts.map((p) => p[0]).slice(0, 2).join('').toUpperCase();
+  const statusLabel = profile.subscription_status === 'active' ? 'Professional Plan' : 'No Active Subscription';
+  document.querySelectorAll('.side-foot .avatar').forEach((el) => { el.textContent = initials; });
+  document.querySelectorAll('.side-foot .n').forEach((el) => { el.textContent = profile.name; });
+  document.querySelectorAll('.side-foot .r').forEach((el) => { el.textContent = statusLabel; });
+}
+
+// Fetches the candidate's profile and applies it to the sidebar card.
+// Use on any page that isn't already fetching /profile for something
+// else (the dashboard fetches it anyway for its greeting/profile-gate
+// check, so it calls rookApplySidebarProfile directly with that same
+// result instead of calling this and fetching twice).
+async function rookPopulateSidebar() {
+  try {
+    const res = await rookApiFetch('/profile');
+    if (!res.ok) return;
+    rookApplySidebarProfile(await res.json());
+  } catch {
+    // Best-effort — leave the sidebar's neutral fallback markup in
+    // place rather than get stuck if this fails.
+  }
+}
+
 // Sends a just-authenticated candidate to onboarding or the dashboard,
 // depending on whether they've actually completed a profile yet (GET
 // /api/profile returns null until Step 7 of onboarding has been
