@@ -103,6 +103,12 @@
     .container{grid-template-columns:1fr;}
     .field-row{grid-template-columns:1fr;}
   }
+.chip-grid{display:flex; flex-wrap:wrap; gap:10px;}
+.chip{padding:9px 16px; border-radius:99px; border:1px solid var(--border); background:#fff; font-size:13px; font-weight:600; color:var(--muted); cursor:pointer; transition:.15s;}
+.chip.selected{background:var(--royal); color:#fff; border-color:var(--royal);}
+.exp-entry{border:1px solid var(--border); border-radius:12px; padding:18px; margin-bottom:14px; position:relative;}
+.exp-entry .remove{position:absolute; top:14px; right:16px; font-size:12px; color:var(--muted); font-weight:600; cursor:pointer;}
+.add-entry{display:inline-block; font-size:13px; font-weight:600; color:var(--royal); cursor:pointer; margin-bottom:16px;}
 </style>
 </head>
 <body>
@@ -149,6 +155,8 @@
   <nav class="settings-nav">
     <a data-panel="profile" class="active" onclick="showPanel('profile', this)">Profile</a>
     <a data-panel="preferences" onclick="showPanel('preferences', this)">Job Preferences</a>
+    <a data-panel="experience" onclick="showPanel('experience', this)">Skills & Experience</a>
+    <a data-panel="exclusions" onclick="showPanel('exclusions', this)">Exclusions</a>
     <a data-panel="notifications" onclick="showPanel('notifications', this)">Notifications</a>
     <a data-panel="privacy" onclick="showPanel('privacy', this)">Privacy</a>
     <a data-panel="subscription" onclick="showPanel('subscription', this)">Subscription</a>
@@ -217,10 +225,89 @@
             </select>
           </div>
         </div>
+        <div class="field-row">
+          <div class="field"><label>Overnight Travel</label>
+            <select id="fieldOvernightTravel">
+              <option value="">Select...</option>
+              <option>Occasionally</option>
+              <option>Frequently</option>
+              <option>Rarely / Never</option>
+            </select>
+          </div>
+          <div class="field"></div>
+        </div>
+        <div class="field full" style="margin-top:4px;">
+          <label style="margin-bottom:10px;">Desired Industries</label>
+          <div class="chip-grid" data-group="settingsDesiredIndustries">
+            <div class="chip">Diagnostics</div>
+            <div class="chip">Veterinary / Animal Health</div>
+            <div class="chip">Medical Device</div>
+            <div class="chip">Capital Equipment</div>
+            <div class="chip">Pharmaceutical</div>
+          </div>
+        </div>
         <a href="#" class="btn btn-primary" onclick="saveProfilePanel('preferences', this); return false;">Save Changes</a>
         <span id="preferencesSaveStatus" style="font-size:12.5px; color:#00806E; margin-left:10px; display:none;">Saved ✓</span>
       </div>
     </div>
+
+    <div class="panel" id="panel-experience">
+      <div class="card">
+        <h3>Skills & Selling Experience</h3>
+        <p style="font-size:13px; color:var(--muted); margin:-6px 0 16px;">This is what powers your match score — the more specific, the sharper your matches.</p>
+        <div class="field full" style="margin-bottom:20px;">
+          <label style="margin-bottom:10px;">Customer types</label>
+          <div class="chip-grid" data-group="settingsCustomerTypes">
+            <div class="chip">Veterinary Clinics</div>
+            <div class="chip">Hospitals</div>
+            <div class="chip">Physicians</div>
+            <div class="chip">Specialty Hospitals</div>
+            <div class="chip">Corporate Veterinary Groups</div>
+            <div class="chip">Distributors</div>
+            <div class="chip">IDNs</div>
+            <div class="chip">Reference Laboratories</div>
+          </div>
+        </div>
+        <div class="field full">
+          <label style="margin-bottom:10px;">Sales type</label>
+          <div class="chip-grid" data-group="settingsSalesType">
+            <div class="chip">Hunter</div>
+            <div class="chip">Account Management</div>
+            <div class="chip">Territory Management</div>
+            <div class="chip">Capital Equipment</div>
+            <div class="chip">Consumables</div>
+            <div class="chip">Recurring Revenue</div>
+            <div class="chip">Contract Negotiation</div>
+          </div>
+        </div>
+        <a href="#" class="btn btn-primary" style="margin-top:16px;" onclick="saveProfilePanel('experience', this); return false;">Save Changes</a>
+        <span id="experienceSaveStatus" style="font-size:12.5px; color:#00806E; margin-left:10px; display:none;">Saved ✓</span>
+      </div>
+
+      <div class="card">
+        <h3>Career Experience</h3>
+        <p style="font-size:13px; color:var(--muted); margin:-6px 0 16px;">Your work history, as used for matching. Add, edit, or remove roles below.</p>
+        <div id="settingsExpEntriesContainer"></div>
+        <a href="#" class="add-entry" onclick="addSettingsExperienceEntry(); return false;">+ Add another position</a>
+        <div><a href="#" class="btn btn-primary" onclick="saveProfilePanel('careerHistory', this); return false;">Save Changes</a>
+        <span id="careerHistorySaveStatus" style="font-size:12.5px; color:#00806E; margin-left:10px; display:none;">Saved ✓</span></div>
+      </div>
+    </div>
+
+    <div class="panel" id="panel-exclusions">
+      <div class="card">
+        <h3>Industries to Avoid</h3>
+        <p style="font-size:13px; color:var(--muted); margin:-6px 0 16px;">We'll filter these out of your matches. No explanation needed.</p>
+        <div class="chip-grid" data-group="settingsIndustriesToAvoid">
+          <div class="chip">Pharmaceutical</div>
+          <div class="chip">Healthcare SaaS</div>
+          <div class="chip">Dental</div>
+        </div>
+        <a href="#" class="btn btn-primary" style="margin-top:16px;" onclick="saveProfilePanel('exclusions', this); return false;">Save Changes</a>
+        <span id="exclusionsSaveStatus" style="font-size:12.5px; color:#00806E; margin-left:10px; display:none;">Saved ✓</span>
+      </div>
+    </div>
+
 
     <div class="panel" id="panel-notifications">
       <div class="card">
@@ -434,10 +521,104 @@ function addRegion(region) {
       const box = document.querySelector(`.state-check[value="${abbr}"]`);
       if (box) box.checked = true;
     });
+
+    if (currentProfile.overnight_travel_preference) {
+      setVal('fieldOvernightTravel', currentProfile.overnight_travel_preference);
+    }
+    selectChips('settingsDesiredIndustries', currentProfile.desired_industries);
+    selectChips('settingsIndustriesToAvoid', currentProfile.industries_to_avoid);
+    selectChips('settingsCustomerTypes', currentProfile.sales_experience?.customer_types);
+    selectChips('settingsSalesType', currentProfile.sales_experience?.sales_types);
+    renderSettingsExperienceEntries(currentProfile.resume_structured?.employers);
   } catch (err) {
     console.error('Could not load profile:', err);
   }
 })();
+
+// Marks chips as selected based on the candidate's already-saved values —
+// onboarding never needed this (chips always start blank for a new
+// candidate), but Settings is editing an existing profile, so whatever
+// was chosen before has to render back as selected, not reset to blank
+// every time this page loads.
+function selectChips(group, savedValues) {
+  if (!Array.isArray(savedValues) || savedValues.length === 0) return;
+  const grid = document.querySelector(`.chip-grid[data-group="${group}"]`);
+  if (!grid) return;
+  grid.querySelectorAll('.chip').forEach((chip) => {
+    if (savedValues.includes(chip.textContent.trim())) chip.classList.add('selected');
+  });
+}
+
+function selectedChips(group) {
+  const grid = document.querySelector(`.chip-grid[data-group="${group}"]`);
+  if (!grid) return [];
+  return Array.from(grid.querySelectorAll('.chip.selected')).map((c) => c.textContent.trim());
+}
+
+document.querySelectorAll('.chip').forEach((chip) => {
+  chip.addEventListener('click', () => chip.classList.toggle('selected'));
+});
+
+// Same escaping used for the Career Experience entry template below —
+// safe for both HTML attribute values (value="...") and the plain text
+// content placed inside <textarea>...</textarea>.
+function escapeAttr(str) {
+  return String(str || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
+// Mirrors onboarding.html's Career Experience step exactly (same fields,
+// same behavior) so editing work history after onboarding doesn't
+// require redoing the whole wizard just to fix one job's dates or add a
+// role gained since signing up.
+function settingsExperienceEntryHtml(emp) {
+  const company = escapeAttr(emp?.company);
+  const title = escapeAttr(emp?.title);
+  const dates = escapeAttr([emp?.start, emp?.end].filter(Boolean).join(' – '));
+  return `<div class="exp-entry">
+    <span class="remove" onclick="this.closest('.exp-entry').remove()">Remove</span>
+    <div class="field-row">
+      <div class="field"><label>Company</label><input type="text" class="exp-company" value="${company}"></div>
+      <div class="field"><label>Job Title</label><input type="text" class="exp-title" value="${title}"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Industry</label>
+        <select class="exp-industry">
+          <option ${!emp?.industry ? 'selected' : ''}></option>
+          <option ${emp?.industry === 'Diagnostics' ? 'selected' : ''}>Diagnostics</option>
+          <option ${emp?.industry === 'Veterinary' ? 'selected' : ''}>Veterinary</option>
+          <option ${emp?.industry === 'Pharmaceutical' ? 'selected' : ''}>Pharmaceutical</option>
+          <option ${emp?.industry === 'Medical Device' ? 'selected' : ''}>Medical Device</option>
+        </select>
+      </div>
+      <div class="field"><label>Dates</label><input type="text" class="exp-dates" value="${dates}"></div>
+    </div>
+    <div class="field full"><label>Achievements</label><textarea class="exp-achievements">${escapeAttr(emp?.achievements)}</textarea></div>
+  </div>`;
+}
+
+function renderSettingsExperienceEntries(employers) {
+  const container = document.getElementById('settingsExpEntriesContainer');
+  const list = Array.isArray(employers) && employers.length > 0 ? employers : [{}];
+  container.innerHTML = list.map(settingsExperienceEntryHtml).join('');
+}
+
+function addSettingsExperienceEntry() {
+  document.getElementById('settingsExpEntriesContainer').insertAdjacentHTML('beforeend', settingsExperienceEntryHtml({}));
+}
+
+function collectSettingsExperienceEntries() {
+  return Array.from(document.querySelectorAll('#settingsExpEntriesContainer .exp-entry')).map((el) => {
+    const dates = el.querySelector('.exp-dates').value.split('–').map((s) => s.trim());
+    return {
+      company: el.querySelector('.exp-company').value.trim(),
+      title: el.querySelector('.exp-title').value.trim(),
+      industry: el.querySelector('.exp-industry').value.trim() || null,
+      start: dates[0] || null,
+      end: dates[1] || null,
+      achievements: el.querySelector('.exp-achievements').value.trim() || null,
+    };
+  }).filter((e) => e.company || e.title);
+}
 
 function setVal(id, value) {
   const el = document.getElementById(id);
@@ -471,6 +652,31 @@ async function saveProfilePanel(panel, btn) {
       work_style: document.getElementById('fieldWorkStyle').value,
       willing_to_relocate: document.getElementById('fieldRelocation').value === 'true',
       preferred_states: preferredStates,
+      overnight_travel_preference: document.getElementById('fieldOvernightTravel').value || null,
+      desired_industries: selectedChips('settingsDesiredIndustries'),
+    };
+  } else if (panel === 'experience') {
+    payload = {
+      // customer_types/sales_types don't have their own schema columns —
+      // stored together in sales_experience, same as onboarding. Spread
+      // the existing object first so this save doesn't clobber any other
+      // key that might live there.
+      sales_experience: {
+        ...(currentProfile?.sales_experience || {}),
+        customer_types: selectedChips('settingsCustomerTypes'),
+        sales_types: selectedChips('settingsSalesType'),
+      },
+    };
+  } else if (panel === 'careerHistory') {
+    payload = {
+      resume_structured: {
+        ...(currentProfile?.resume_structured || {}),
+        employers: collectSettingsExperienceEntries(),
+      },
+    };
+  } else if (panel === 'exclusions') {
+    payload = {
+      industries_to_avoid: selectedChips('settingsIndustriesToAvoid'),
     };
   }
 

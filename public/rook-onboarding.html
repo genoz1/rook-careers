@@ -378,7 +378,7 @@
         </div>
         <div class="field"><label>Dates</label><input type="text" class="exp-dates" value="${dates}"></div>
       </div>
-      <div class="field full"><label>Achievements</label><textarea class="exp-achievements"></textarea></div>
+      <div class="field full"><label>Achievements</label><textarea class="exp-achievements">${escapeAttr(emp?.achievements)}</textarea></div>
     </div>`;
   }
 
