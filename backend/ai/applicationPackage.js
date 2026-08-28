@@ -58,7 +58,12 @@ async function generateApplicationPackage(resumeText, jobTitle, companyName, job
   // than the old flat 3-6 bullet list, and a candidate with several
   // jobs plus a cover letter, recruiter message, and interview prep
   // notes could otherwise get cut off mid-response.
-  const pkg = await callClaudeForJSON(SYSTEM_PROMPT, userPrompt, 5000);
+  // 90s, not the shared 45s default — this is the heaviest call in the
+  // app (5000-token output: a full tailored résumé plus cover letter),
+  // and it's a high-value, paid-tier action worth waiting longer for
+  // rather than failing fast. 45s was cutting this off mid-generation
+  // in production ("Claude API request timed out after 45s").
+  const pkg = await callClaudeForJSON(SYSTEM_PROMPT, userPrompt, 5000, 90_000);
 
   // Real bug this catches: the model can return technically-valid JSON
   // where work_history exists but every entry is hollow (empty

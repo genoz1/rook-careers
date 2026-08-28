@@ -13,13 +13,13 @@ const REQUEST_TIMEOUT_MS = 45_000; // fetch() has no default timeout — an
   // actually caused a "the ingest just stopped" symptom the first time
   // this ran at real volume (65 employers, thousands of postings).
 
-async function callClaudeForJSON(systemPrompt, userPrompt, maxTokens = 2500) {
+async function callClaudeForJSON(systemPrompt, userPrompt, maxTokens = 2500, timeoutMs = REQUEST_TIMEOUT_MS) {
   if (!process.env.ANTHROPIC_API_KEY) {
     throw new Error("ANTHROPIC_API_KEY is not configured");
   }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   let res;
   try {
@@ -40,7 +40,7 @@ async function callClaudeForJSON(systemPrompt, userPrompt, maxTokens = 2500) {
     });
   } catch (err) {
     if (err.name === "AbortError") {
-      throw new Error(`Claude API request timed out after ${REQUEST_TIMEOUT_MS / 1000}s`);
+      throw new Error(`Claude API request timed out after ${timeoutMs / 1000}s`);
     }
     throw err;
   } finally {
