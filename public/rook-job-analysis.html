@@ -29,6 +29,27 @@
   .btn-outline{background:#fff; color:var(--navy); border:1px solid var(--border);}
   .btn-outline:hover{border-color:var(--royal); color:var(--royal);}
   .linkedin-btn:hover{border-color:#0A66C2; color:#0A66C2;}
+  .linkedin-popover-overlay{
+    display:none; position:fixed; inset:0; background:rgba(7,30,65,0.45);
+    z-index:600; align-items:center; justify-content:center; padding:20px;
+  }
+  .linkedin-popover-overlay.active{display:flex;}
+  .linkedin-popover-card{
+    background:#fff; border-radius:var(--radius); max-width:440px; width:100%;
+    box-shadow:0 20px 60px rgba(7,30,65,0.3); overflow:hidden;
+  }
+  .linkedin-popover-head{padding:20px 22px 16px; border-bottom:1px solid var(--border); display:flex; gap:14px; align-items:flex-start;}
+  .linkedin-popover-head .icon{width:38px; height:38px; border-radius:10px; background:#0A66C218; color:#0A66C2; display:flex; align-items:center; justify-content:center; flex-shrink:0;}
+  .linkedin-popover-head h3{font-size:16px; margin:0 0 4px;}
+  .linkedin-popover-head p{font-size:13px; color:var(--muted); margin:0; line-height:1.4;}
+  .linkedin-popover-close{margin-left:auto; background:none; border:none; cursor:pointer; color:var(--muted); font-size:18px; line-height:1; padding:2px;}
+  .linkedin-popover-list{padding:8px;}
+  .linkedin-popover-item{display:flex; align-items:center; gap:14px; padding:12px 14px; border-radius:10px; text-decoration:none; color:inherit;}
+  .linkedin-popover-item:hover{background:#F5F7FA;}
+  .linkedin-popover-item .label{font-size:13.5px; font-weight:600; color:var(--navy); margin-bottom:2px;}
+  .linkedin-popover-item .desc{font-size:12px; color:var(--muted);}
+  .linkedin-popover-item .go{margin-left:auto; font-size:12px; font-weight:600; color:#0A66C2; white-space:nowrap;}
+  .linkedin-popover-foot{padding:12px 22px 18px; font-size:11.5px; color:var(--muted); text-align:center;}
   .btn-teal{background:var(--teal); color:#03261F;}
   .btn-block{width:100%;}
 
@@ -136,6 +157,21 @@
 </head>
 <body>
 
+<div class="linkedin-popover-overlay" id="linkedinPopoverOverlay" onclick="if(event.target === this) this.classList.remove('active')">
+  <div class="linkedin-popover-card">
+    <div class="linkedin-popover-head">
+      <div class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.446-2.136 2.94v5.666H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 11.001-4.124 2.062 2.062 0 010 4.124zM7.114 20.452H3.559V9h3.555v11.452z"/></svg></div>
+      <div>
+        <h3 id="linkedinPopoverTitle">Find contacts</h3>
+        <p>Opens LinkedIn's own search, using your account — ROOK doesn't store or show any contact data itself.</p>
+      </div>
+      <button type="button" class="linkedin-popover-close" onclick="document.getElementById('linkedinPopoverOverlay').classList.remove('active')" aria-label="Close">✕</button>
+    </div>
+    <div class="linkedin-popover-list" id="linkedinPopoverList"></div>
+    <div class="linkedin-popover-foot">Results come straight from LinkedIn, filtered to this company.</div>
+  </div>
+</div>
+
 <div class="mobile-app-bar">
   <div class="logo" style="gap:8px;">
     <img src="assets/rook-icon-192.png" alt="ROOK"><span style="font-family:var(--font-display); font-weight:700; letter-spacing:-0.02em; color:#EDF3FF; line-height:1;">ROOK</span>
@@ -227,7 +263,7 @@
       <h4>Take Action</h4>
       <div class="action-stack">
         <a href="#" id="viewOriginalLink" target="_blank" class="btn btn-outline btn-block">Open Original Posting</a>
-        <a href="#" id="linkedinContactsLink" target="_blank" rel="noopener" class="btn btn-outline btn-block linkedin-btn" style="display:none;">
+        <a href="#" id="linkedinContactsLink" class="btn btn-outline btn-block linkedin-btn" style="display:none;" onclick="return false;">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0;"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.446-2.136 2.94v5.666H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 11.001-4.124 2.062 2.062 0 010 4.124zM7.114 20.452H3.559V9h3.555v11.452z"/></svg>
           Find Contacts on LinkedIn
         </a>
@@ -246,6 +282,30 @@
 <script>
 function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function showLinkedInPopover(company, title) {
+  const searchUrl = (keywords) => `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(keywords)}`;
+  const items = [
+    { label: 'Recruiters & Talent Acquisition', desc: `People sourcing for roles at ${company}`, url: searchUrl(`${company} recruiter OR "talent acquisition"`) },
+    { label: 'Sales Leadership', desc: `Managers and directors at ${company}`, url: searchUrl(`${company} sales manager OR sales director`) },
+  ];
+  if (title) {
+    items.push({ label: 'People in a Similar Role', desc: `Others currently in "${title}" at ${company}`, url: searchUrl(`${company} ${title}`) });
+  }
+  items.push({ label: 'Everyone at This Company', desc: `Full LinkedIn results for ${company}`, url: searchUrl(company) });
+
+  document.getElementById('linkedinPopoverTitle').textContent = `Find contacts at ${company}`;
+  document.getElementById('linkedinPopoverList').innerHTML = items.map((item) => `
+    <a class="linkedin-popover-item" href="${item.url}" target="_blank" rel="noopener">
+      <div>
+        <div class="label">${escapeHtml(item.label)}</div>
+        <div class="desc">${escapeHtml(item.desc)}</div>
+      </div>
+      <span class="go">Search →</span>
+    </a>
+  `).join('');
+  document.getElementById('linkedinPopoverOverlay').classList.add('active');
 }
 
 (async () => {
@@ -324,17 +384,22 @@ function renderJob(job) {
     viewOriginal.style.display = 'none';
   }
 
-  // Constructs a LinkedIn people-search URL filtered to this company —
-  // no contact data is fetched, stored, or shown by ROOK itself, this
-  // just opens LinkedIn's own live search results (using the candidate's
-  // own LinkedIn login), the same as typing the company into LinkedIn's
-  // search bar directly. Only shown when a real company name is known —
-  // absent for subscription-gated jobs and confidential recruiter
-  // searches, where there's nothing real to search for.
+  // Constructs a small set of pre-filtered LinkedIn people-search links for
+  // this company — no data provider, no cost, no staleness or licensing
+  // question. ROOK never fetches, stores, or shows a single name or title
+  // itself; every link just opens LinkedIn's own live search results
+  // (using the candidate's own LinkedIn login), the same as typing those
+  // same keywords into LinkedIn's search bar directly. Only shown when a
+  // real company name is known — absent for subscription-gated jobs and
+  // confidential recruiter searches, where there's nothing real to
+  // search for.
   if (!job.subscription_required && job.company_name) {
     const linkedinLink = document.getElementById('linkedinContactsLink');
-    linkedinLink.href = `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(job.company_name)}`;
     linkedinLink.style.display = '';
+    linkedinLink.onclick = () => {
+      showLinkedInPopover(job.company_name, job.title_original || job.title_normalized || '');
+      return false;
+    };
   }
 
   document.getElementById('createPackageLink').href = `rook-application-package.html?job=${encodeURIComponent(job.id)}`;
