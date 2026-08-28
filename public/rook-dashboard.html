@@ -170,9 +170,30 @@
 .overflow-menu button { display:block; width:100%; text-align:left; padding:9px 14px; background:none; border:none; font-size:12.5px; color:#3D4A63; cursor:pointer; }
 .overflow-menu button:hover { background:#F5F7FA; }
 .overflow-menu button:disabled { color:#B7C0D1; cursor:default; }
+  .profile-gate-overlay{
+    display:none; position:fixed; inset:0; background:rgba(7,30,65,0.55);
+    z-index:500; align-items:center; justify-content:center; padding:20px;
+  }
+  .profile-gate-overlay.active{display:flex;}
+  .profile-gate-card{
+    background:#fff; border-radius:var(--radius); padding:32px; max-width:420px; width:100%;
+    box-shadow:0 20px 60px rgba(7,30,65,0.3); text-align:center;
+  }
+  .profile-gate-card h2{font-size:21px; margin-bottom:10px;}
+  .profile-gate-card p{font-size:14.5px; color:var(--muted); line-height:1.5; margin-bottom:22px;}
+  .profile-gate-card .btn-primary{display:inline-block; padding:12px 24px; border-radius:99px; font-weight:600; font-size:14.5px; text-decoration:none;}
+  .profile-gate-card .dismiss{display:block; margin-top:14px; font-size:13px; color:var(--muted); text-decoration:underline; cursor:pointer; background:none; border:none;}
 </style>
 </head>
 <body>
+<div class="profile-gate-overlay" id="profileGateOverlay">
+  <div class="profile-gate-card">
+    <h2 id="profileGateTitle">Finish setting up your profile</h2>
+    <p id="profileGateBody">We can't score jobs against your background yet — a couple of things are still missing.</p>
+    <a class="btn-primary" href="rook-onboarding.html" style="background:var(--royal); color:#fff;">Complete My Profile →</a>
+    <button type="button" class="dismiss" onclick="document.getElementById('profileGateOverlay').classList.remove('active')">I'll do this later</button>
+  </div>
+</div>
 <div class="mobile-app-bar">
   <div class="logo" style="gap:8px;">
     <img src="assets/rook-icon-192.png" alt="ROOK"><span style="font-family:var(--font-display); font-weight:700; letter-spacing:-0.02em; color:#EDF3FF; line-height:1;">ROOK</span>
@@ -355,6 +376,42 @@
   (async () => {
     const token = await rookRequireAuth();
     if (!token) return; // rookRequireAuth already redirected to login
+
+    // Checks whether this candidate's profile actually has a résumé and a
+    // ZIP on file — both required by onboarding going forward, but an
+    // account created before that gate existed (or edited afterward) can
+    // still be missing one or both. Without this, someone lands on a
+    // dashboard where every job is stuck at a low or "not enough info"
+    // score with no clear explanation why, and no obvious next step.
+    // Doesn't block the rest of the page — jobs still load underneath —
+    // it's just a clear nudge back to the exact place to fix it.
+    (async () => {
+      try {
+        const res = await rookApiFetch('/profile');
+        if (!res.ok) return;
+        const profile = await res.json();
+        if (!profile) return; // no profile row at all — rookRequireAuth's routing already sends these candidates to onboarding, not here
+        const missingResume = !profile.resume_file_path;
+        const missingZip = !profile.home_zip;
+        if (!missingResume && !missingZip) return;
+        const title = document.getElementById('profileGateTitle');
+        const body = document.getElementById('profileGateBody');
+        if (missingResume && missingZip) {
+          title.textContent = "You're missing a résumé and a ZIP code";
+          body.textContent = "Without these, we can't actually score jobs against your background or rank them by real distance — that's why everything looks flat right now.";
+        } else if (missingResume) {
+          title.textContent = "You're missing a résumé";
+          body.textContent = "Without it, we can't score jobs against your actual background — that's why everything looks flat right now.";
+        } else {
+          title.textContent = "You're missing a ZIP code";
+          body.textContent = "Without it, we can't rank jobs by real distance from you — just which state they're in.";
+        }
+        document.getElementById('profileGateOverlay').classList.add('active');
+      } catch {
+        // Best-effort — if this check itself fails, the dashboard should
+        // still work normally rather than get stuck on a silent gate.
+      }
+    })();
 
     const jobList = document.getElementById('jobList');
     const loading = document.getElementById('jobListLoading');
