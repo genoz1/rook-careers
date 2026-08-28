@@ -111,6 +111,10 @@ async function sendDigestForCandidate(supabase, profile, appBaseUrl) {
     to: profile.email,
     subject: `${scored.length} new match${scored.length === 1 ? "" : "es"} on ROOK`,
     html,
+    // No real inbox behind DIGEST_FROM_EMAIL (Resend sends mail, it
+    // doesn't host mailboxes) - route any candidate reply to a real,
+    // monitored address instead of it going nowhere.
+    replyTo: "eugenezentko@gmail.com",
   });
 
   return { sent: true, jobCount: scored.length };
