@@ -53,17 +53,14 @@ async function generateApplicationPackage(resumeText, jobTitle, companyName, job
   const truncatedResume = resumeText.slice(0, 12000);
   const truncatedJob = (jobDescription || "").slice(0, 8000);
   const userPrompt = `Candidate's résumé:\n\n${truncatedResume}\n\n---\n\nJob posting:\nTitle: ${jobTitle || "Unknown"}\nCompany: ${companyName || "Unknown"}\nDescription: ${truncatedJob}`;
-  // Bumped from 3500 — asking for full structured work history (every
-  // real job, each with its own bullets) is meaningfully more content
-  // than the old flat 3-6 bullet list, and a candidate with several
-  // jobs plus a cover letter, recruiter message, and interview prep
-  // notes could otherwise get cut off mid-response.
-  // 90s, not the shared 45s default — this is the heaviest call in the
-  // app (5000-token output: a full tailored résumé plus cover letter),
-  // and it's a high-value, paid-tier action worth waiting longer for
-  // rather than failing fast. 45s was cutting this off mid-generation
-  // in production ("Claude API request timed out after 45s").
-  const pkg = await callClaudeForJSON(SYSTEM_PROMPT, userPrompt, 5000, 90_000);
+  // Bumped to 8000 (previously 5000, before that 3500) after a second
+  // real production truncation on a résumé with 6 employers - full
+  // structured work history (every job, its own bullets) plus a cover
+  // letter, recruiter message, and 4-6 interview prep Q&As adds up fast,
+  // and this is the single largest JSON output requested anywhere in
+  // the app. Sized generously rather than nudging up again the next
+  // time someone with a longer career history hits the same wall.
+  const pkg = await callClaudeForJSON(SYSTEM_PROMPT, userPrompt, 8000, 90_000);
 
   // Real bug this catches: the model can return technically-valid JSON
   // where work_history exists but every entry is hollow (empty
