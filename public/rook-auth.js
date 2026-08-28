@@ -51,12 +51,22 @@ async function rookSignOut(loginPage = "rook-login.html") {
 // reason (the dashboard, for its greeting) can apply it directly
 // instead of fetching it a second time.
 function rookApplySidebarProfile(profile) {
-  if (!profile?.name) return;
-  const parts = profile.name.trim().split(/\s+/);
-  const initials = parts.map((p) => p[0]).slice(0, 2).join('').toUpperCase();
+  if (!profile) return; // fetch failed or no profile row at all — leave the neutral fallback markup in place
+  // Name and plan status are independent of each other — a candidate
+  // whose profile has no name filled in yet should still see their
+  // real plan status, not have the whole card stuck on the neutral
+  // placeholder just because one of the two fields is empty. That
+  // coupling was itself a bug: reported directly as "the name AND plan
+  // no longer show up" together on an account with no name on file.
+  const displayName = profile.name?.trim() || profile.email || null;
+  if (displayName) {
+    const initials = /\s/.test(displayName)
+      ? displayName.trim().split(/\s+/).map((p) => p[0]).slice(0, 2).join('').toUpperCase()
+      : displayName.slice(0, 2).toUpperCase();
+    document.querySelectorAll('.side-foot .avatar').forEach((el) => { el.textContent = initials; });
+    document.querySelectorAll('.side-foot .n').forEach((el) => { el.textContent = displayName; });
+  }
   const statusLabel = profile.subscription_status === 'active' ? 'Professional Plan' : 'No Active Subscription';
-  document.querySelectorAll('.side-foot .avatar').forEach((el) => { el.textContent = initials; });
-  document.querySelectorAll('.side-foot .n').forEach((el) => { el.textContent = profile.name; });
   document.querySelectorAll('.side-foot .r').forEach((el) => { el.textContent = statusLabel; });
 }
 
