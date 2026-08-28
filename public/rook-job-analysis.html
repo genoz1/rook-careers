@@ -28,6 +28,7 @@
   .btn-primary{background:var(--royal); color:#fff;}
   .btn-outline{background:#fff; color:var(--navy); border:1px solid var(--border);}
   .btn-outline:hover{border-color:var(--royal); color:var(--royal);}
+  .linkedin-btn:hover{border-color:#0A66C2; color:#0A66C2;}
   .btn-teal{background:var(--teal); color:#03261F;}
   .btn-block{width:100%;}
 
@@ -226,6 +227,10 @@
       <h4>Take Action</h4>
       <div class="action-stack">
         <a href="#" id="viewOriginalLink" target="_blank" class="btn btn-outline btn-block">Open Original Posting</a>
+        <a href="#" id="linkedinContactsLink" target="_blank" rel="noopener" class="btn btn-outline btn-block linkedin-btn" style="display:none;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0;"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.446-2.136 2.94v5.666H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 11.001-4.124 2.062 2.062 0 010 4.124zM7.114 20.452H3.559V9h3.555v11.452z"/></svg>
+          Find Contacts on LinkedIn
+        </a>
         <a href="#" id="saveJobLink" class="btn btn-outline btn-block" onclick="return false;">Save Job</a>
         <a href="#" id="dismissJobLink" class="btn btn-outline btn-block" style="color:var(--muted);" onclick="return false;">Not Interested</a>
       </div>
@@ -317,6 +322,19 @@ function renderJob(job) {
     viewOriginal.textContent = 'Apply Now';
   } else {
     viewOriginal.style.display = 'none';
+  }
+
+  // Constructs a LinkedIn people-search URL filtered to this company —
+  // no contact data is fetched, stored, or shown by ROOK itself, this
+  // just opens LinkedIn's own live search results (using the candidate's
+  // own LinkedIn login), the same as typing the company into LinkedIn's
+  // search bar directly. Only shown when a real company name is known —
+  // absent for subscription-gated jobs and confidential recruiter
+  // searches, where there's nothing real to search for.
+  if (!job.subscription_required && job.company_name) {
+    const linkedinLink = document.getElementById('linkedinContactsLink');
+    linkedinLink.href = `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(job.company_name)}`;
+    linkedinLink.style.display = '';
   }
 
   document.getElementById('createPackageLink').href = `rook-application-package.html?job=${encodeURIComponent(job.id)}`;
