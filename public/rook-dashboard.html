@@ -269,8 +269,8 @@
   <main class="main">
     <div class="topline">
       <div class="greeting">
-        <h1>Good afternoon, Gene</h1>
-        <p id="greetingSubtitle">We found 17 new opportunities matching your career profile today.</p>
+        <h1 id="greetingName">Good day</h1>
+        <p id="greetingSubtitle">Finding opportunities matching your career profile...</p>
       </div>
       <div class="top-actions">
         <a href="rook-onboarding.html" class="btn btn-outline">Edit Preferences</a>
@@ -279,10 +279,10 @@
     </div>
 
     <div class="stat-grid">
-      <div class="stat-card"><div class="num" id="statNewMatches">17</div><div class="lbl">New Matches Today</div></div>
-      <div class="stat-card accent"><div class="num" id="statExcellent">4</div><div class="lbl">Excellent Matches (90%+)</div></div>
-      <div class="stat-card"><div class="num" id="statStrong">9</div><div class="lbl">Strong Matches (75–89%)</div></div>
-      <div class="stat-card"><div class="num" id="statApplications">6</div><div class="lbl">Applications In Progress</div></div>
+      <div class="stat-card"><div class="num" id="statNewMatches">—</div><div class="lbl">New Matches Today</div></div>
+      <div class="stat-card accent"><div class="num" id="statExcellent">—</div><div class="lbl">Excellent Matches (90%+)</div></div>
+      <div class="stat-card"><div class="num" id="statStrong">—</div><div class="lbl">Strong Matches (75–89%)</div></div>
+      <div class="stat-card"><div class="num" id="statApplications">—</div><div class="lbl">Applications In Progress</div></div>
     </div>
 
     <div class="panel-head">
@@ -428,6 +428,13 @@
         const res = await rookApiFetch('/profile');
         if (!res.ok) return;
         const profile = await res.json();
+        if (profile?.name) {
+          // First name only — matches how the rest of the app addresses
+          // the candidate (e.g. application emails), not a full-name
+          // greeting that reads more formal than intended.
+          const firstName = profile.name.trim().split(/\s+/)[0];
+          document.getElementById('greetingName').textContent = `${greetingWord()}, ${firstName}`;
+        }
         if (!profile) return; // no profile row at all — rookRequireAuth's routing already sends these candidates to onboarding, not here
         const missingResume = !profile.resume_file_path;
         const missingZip = !profile.home_zip;
@@ -880,6 +887,19 @@
   function escapeHtml(str) {
     return String(str).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
+
+  // Real time-of-day, not a hardcoded "afternoon" that was wrong
+  // whenever anyone loaded the dashboard outside that window.
+  function greetingWord() {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 18) return 'Good afternoon';
+    return 'Good evening';
+  }
+  // Set immediately, synchronously — don't wait on the profile fetch
+  // just to get the time-of-day right. The name is filled in separately
+  // below once the profile actually loads.
+  document.getElementById('greetingName').textContent = greetingWord();
 
   // Builds a small set of pre-filtered LinkedIn people-search links for a
   // company — no contact data provider, no cost, no data staleness or
