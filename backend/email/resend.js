@@ -17,7 +17,7 @@
 
 const REQUEST_TIMEOUT_MS = 20_000;
 
-async function sendEmail({ to, subject, html }) {
+async function sendEmail({ to, subject, html, replyTo }) {
   if (!process.env.RESEND_API_KEY) {
     throw new Error("RESEND_API_KEY is not configured");
   }
@@ -41,6 +41,14 @@ async function sendEmail({ to, subject, html }) {
         to: [to],
         subject,
         html,
+        // Optional — lets a caller route replies somewhere other than
+        // DIGEST_FROM_EMAIL, which has no real inbox behind it (Resend
+        // only sends mail, it doesn't host mailboxes). The recruiter
+        // application email in jobs.js explicitly tells recruiters to
+        // "reply directly to this email to reach the candidate" - that
+        // promise is only real if replyTo is actually set to the
+        // candidate's address on that specific send.
+        ...(replyTo ? { reply_to: replyTo } : {}),
       }),
       signal: controller.signal,
     });

@@ -680,6 +680,11 @@ router.post("/jobs/:id/apply", requireConfig, requireAuth, loadCandidateId, asyn
         to: job.recruiter_email,
         subject: `New ROOK application: ${job.title_original || "your posting"}`,
         html,
+        // Makes the "Reply directly to this email to reach the candidate"
+        // line above actually true. Without this, a recruiter's reply
+        // went to DIGEST_FROM_EMAIL, which has no real inbox behind it -
+        // the reply would just be undeliverable or vanish silently.
+        replyTo: profile?.email || undefined,
       });
       console.log(`${tag} recruiter email sent successfully`);
     } catch (err) {
