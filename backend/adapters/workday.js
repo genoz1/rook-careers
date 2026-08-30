@@ -147,6 +147,15 @@ const SHARED_TENANT_BRANDS = {
     "Beckman Coulter", "Cepheid", "Leica Biosystems", "Leica Microsystems",
     "SCIEX", "Pall Corporation", "Molecular Devices", "Radiometer", "Cytiva",
   ],
+  jj: [
+    "DePuy Synthes", "Johnson & Johnson Innovative Medicine", "Johnson & Johnson MedTech",
+  ],
+  envista: [
+    "DEXIS", "Kerr", "Nobel Biocare", "Ormco",
+  ],
+  owensminor: [
+    "Apria", "Byram Healthcare",
+  ],
 };
 
 function extractChildBrand(tenant, text) {
