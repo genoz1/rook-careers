@@ -119,7 +119,18 @@ async function ingestEmployer(employer) {
   // it (see the `if (!upsertedRow.ai_analysis)` check below), the next
   // run picks up exactly where this one left off — no progress is lost,
   // it just spreads a big employer's backfill across a few runs.
-  const AI_ANALYSIS_CAP_PER_EMPLOYER = 40;
+  //
+  // Lowered from 40 to 10 this session: the employer list roughly
+  // doubled (100 -> 206) in one sitting, mostly brand-new employers
+  // that have never been synced at all. With the higher cap, a single
+  // large employer's AI analysis (a real Claude API call per job) ate
+  // most of a run's time budget, so only 1-2 employers got touched per
+  // run - a very slow way to catch up on ~110 never-synced employers.
+  // At 10, more employers get through the listing/saving phase per
+  // run even if their own AI scoring lags a run or two behind; revisit
+  // raising this back up once the backlog of never-synced employers is
+  // cleared.
+  const AI_ANALYSIS_CAP_PER_EMPLOYER = 10;
 
   for (const raw of rawJobs) {
     const job = normalize(raw, employer);
