@@ -287,11 +287,12 @@
 
     <div class="panel-head">
       <h2>Today's Matches</h2>
-      <div class="filter-row">
-        <span class="chip active">All</span>
-        <span class="chip">Excellent</span>
-        <span class="chip">Strong</span>
-        <span class="chip">Saved</span>
+      <div class="filter-row" id="tierFilters">
+        <span class="chip active" onclick="setTierFilter('all', this)">All</span>
+        <span class="chip" onclick="setTierFilter('new', this)">New</span>
+        <span class="chip" onclick="setTierFilter('excellent', this)">Excellent</span>
+        <span class="chip" onclick="setTierFilter('strong', this)">Strong</span>
+        <span class="chip" onclick="setTierFilter('saved', this)">Saved</span>
       </div>
     </div>
 
@@ -607,10 +608,41 @@
     return j.remote_status === 'remote' || /remote/i.test(j.location_raw || '');
   }
 
+  // Shared by both the "New" badge on each card and the "New" filter tab
+  // below, so they always agree on what counts as new rather than two
+  // separately-maintained definitions drifting apart over time.
+  function isNewJob(job) {
+    const postedDate = new Date(job.date_posted || job.first_seen_at || 0);
+    const daysSincePosted = (Date.now() - postedDate.getTime()) / (1000 * 60 * 60 * 24);
+    return daysSincePosted >= 0 && daysSincePosted <= 5;
+  }
+
+  // Reported directly: the All/Excellent/Strong/Saved/New chips above the
+  // job list had zero click handlers at all - clicking any of them never
+  // did anything, ever. Mirrors the score bands already used for the
+  // dashboard stat cards (Excellent 90%+, Strong 75-89%).
+  let currentTierFilter = 'all';
+  function setTierFilter(tier, el) {
+    currentTierFilter = tier;
+    document.querySelectorAll('#tierFilters .chip').forEach((c) => c.classList.remove('active'));
+    el.classList.add('active');
+    applyRecruiterToggle();
+  }
+
   function applyRecruiterToggle() {
     const showRecruiters = document.getElementById('showRecruiterToggle').checked;
     const sortBy = document.getElementById('sortSelect').value;
     let visible = showRecruiters ? currentJobs : currentJobs.filter((j) => j.source_type !== 'recruiter_posted' && j.source_type !== 'agency_aggregated');
+
+    if (currentTierFilter === 'excellent') {
+      visible = visible.filter((j) => j.match?.excellent_match);
+    } else if (currentTierFilter === 'strong') {
+      visible = visible.filter((j) => !j.match?.excellent_match && (j.match?.overall_score ?? -1) >= 75 && (j.match?.overall_score ?? -1) < 90);
+    } else if (currentTierFilter === 'saved') {
+      visible = visible.filter((j) => j.saved);
+    } else if (currentTierFilter === 'new') {
+      visible = visible.filter(isNewJob);
+    }
 
     // "Best Match" is the default order the API already returns (sorted
     // by overall_score). "Closest to You" and "Newest" are pulled out
@@ -726,6 +758,18 @@
     const recBadge = recLabel
       ? `<span class="rec-badge" style="font-weight:700; border-radius:99px; background:${recColor}18; color:${recColor}; text-transform:uppercase; letter-spacing:0.02em;">${escapeHtml(recLabel)}</span>`
       : '';
+    // "NEW" badge — shown regardless of sort order or which tab is active,
+    // so a genuinely new job doesn't quietly get buried under
+    // higher-scored older postings with nothing marking it as unseen.
+    // Reported directly: two Abbott roles posted yesterday and 4 days ago
+    // never stood out on the default Best Match view even though scoring
+    // was working correctly (84% - Strong, not Excellent) - nothing told
+    // the candidate they were new. Same date fallback already used for
+    // the "Newest" sort option, so "new" here means the same thing it
+    // means there.
+    const newBadge = isNewJob(job)
+      ? `<span class="rec-badge" style="font-weight:700; border-radius:99px; background:#E8F0FE; color:#1463FF; text-transform:uppercase; letter-spacing:0.02em;">New</span>`
+      : '';
     const subScores = (match?.candidate_fit != null || match?.preference_fit != null)
       ? `<div style="font-size:11px; color:#8B96AB; margin-top:2px;">
           Qualifications ${match.candidate_fit ?? '—'}% · Preferences ${match.preference_fit ?? '—'}%
@@ -801,6 +845,7 @@
         <div class="job-info">
           <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
             <h4 style="margin:0;">${escapeHtml(job.title_original || job.title_normalized || 'Untitled role')}</h4>
+            ${newBadge}
             ${recBadge}
             ${recruiterBadge}
           </div>

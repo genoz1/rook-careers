@@ -641,6 +641,18 @@
     return { label: 'Possible Match', cls: 'ml-possible' };
   }
 
+  // Shared definition of "new" so the badge here always agrees with any
+  // other "new" indicator elsewhere in the app (dashboard uses the same
+  // logic). Reported directly: jobs posted within the last several days
+  // (Abbott postings from yesterday and 4 days ago) never stood out on
+  // this page even though they were genuinely new and correctly scored -
+  // nothing marked them as unseen.
+  function isNewJob(job) {
+    const postedDate = new Date(job.date_posted || job.first_seen_at || 0);
+    const daysSincePosted = (Date.now() - postedDate.getTime()) / (1000 * 60 * 60 * 24);
+    return daysSincePosted >= 0 && daysSincePosted <= 5;
+  }
+
   function renderRealJobRow(job) {
     const comp = job.compensation_text || (job.salary_min ? `$${job.salary_min}${job.salary_max ? '–$' + job.salary_max : '+'}` : '');
     const match = job.match;
@@ -662,6 +674,9 @@
     const recruiterBadge = isRecruiterPosted
       ? `<span style="font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:99px; background:#7C3AED18; color:#7C3AED; text-transform:uppercase; letter-spacing:0.02em; margin-left:8px;">Posted by Recruiter</span>`
       : '';
+    const newBadge = isNewJob(job)
+      ? `<span style="font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:99px; background:#E8F0FE; color:#1463FF; text-transform:uppercase; letter-spacing:0.02em; margin-left:8px;">New</span>`
+      : '';
     const companyLine = job.subscription_required
       ? `<span style="color:#7C3AED; font-weight:600;">🔒 Subscribe to see who's hiring</span> — ${escapeHtml(job.location_raw || '')} ${comp ? '&nbsp;·&nbsp; ' + escapeHtml(comp) : ''}`
       : `${escapeHtml(job.company_name || (isRecruiterPosted ? 'Confidential search' : ''))} — ${escapeHtml(job.location_raw || '')} ${comp ? '&nbsp;·&nbsp; ' + escapeHtml(comp) : ''}`;
@@ -680,7 +695,7 @@
       <div class="job-row" style="${rowStyle}">
         <div class="score-ring" style="--pct:${score ?? 0};"><span>${scoreDisplay}</span></div>
         <div class="job-info">
-          <h4>${escapeHtml(job.title_original || job.title_normalized || 'Untitled role')}${recruiterBadge}</h4>
+          <h4>${escapeHtml(job.title_original || job.title_normalized || 'Untitled role')}${newBadge}${recruiterBadge}</h4>
           <div class="company">${companyLine}</div>
           ${nearDistance}
           ${tags ? `<div class="tag-row">${tags}</div>` : ''}
