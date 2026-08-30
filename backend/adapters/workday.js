@@ -133,11 +133,38 @@ async function fetchWorkdayJobs(identifier) {
  * Convert one raw Workday job (list entry + detail merged) into ROOK's
  * canonical job shape.
  */
+// Some Workday tenants are shared across many operating companies under
+// one parent (Danaher, Johnson & Johnson, Envista, Owens & Minor are all
+// like this in ROOK's employer list) - a single tenant's postings can
+// belong to any of several real, separately-recognizable brands. Rather
+// than attributing every job to the generic parent name, this checks the
+// job's own description for a known child-brand mention and uses that
+// instead when found, since candidates care which actual company they'd
+// be working for. Falls back to the employer's stored name for the large
+// majority of employers, which aren't shared tenants at all.
+const SHARED_TENANT_BRANDS = {
+  danaher: [
+    "Beckman Coulter", "Cepheid", "Leica Biosystems", "Leica Microsystems",
+    "SCIEX", "Pall Corporation", "Molecular Devices", "Radiometer", "Cytiva",
+  ],
+};
+
+function extractChildBrand(tenant, text) {
+  const brands = SHARED_TENANT_BRANDS[tenant.toLowerCase()];
+  if (!brands || !text) return null;
+  for (const brand of brands) {
+    if (text.includes(brand)) return brand;
+  }
+  return null;
+}
+
 function normalizeWorkdayJob(raw, employer) {
   const { tenant, wdNumber, site } = parseWorkdayIdentifier(employer.ats_identifier);
   const baseUrl = `https://${tenant}.${wdNumber}.myworkdayjobs.com/${site}`;
   const jobUrl = `${baseUrl}${raw.externalPath}`;
   const info = raw.detail?.jobPostingInfo || {};
+  const description = info.jobDescription || "";
+  const childBrand = extractChildBrand(tenant, description);
 
   return {
     source_job_id: info.jobReqId || raw.bulletFields?.[0] || raw.externalPath,
@@ -146,9 +173,9 @@ function normalizeWorkdayJob(raw, employer) {
     source_url: jobUrl,
     application_url: jobUrl,
     title_original: raw.title,
-    company_name: employer.company_name,
+    company_name: childBrand || employer.company_name,
     description_html: info.jobDescription || null,
-    description_text: stripHtml(info.jobDescription || ""),
+    description_text: stripHtml(description),
     location_raw: raw.locationsText || "",
     // Workday's list view only gives relative text ("Posted 3 Days Ago"),
     // not a real date — leaving this null rather than guessing.
