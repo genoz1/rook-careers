@@ -22,6 +22,7 @@ const { fetchPhenomJobs, normalizePhenomJob } = require("./adapters/phenom");
 const { fetchJobviteJobs, normalizeJobviteJob } = require("./adapters/jobvite");
 const { fetchApplicantProJobs, normalizeApplicantProJob } = require("./adapters/applicantpro");
 const { fetchIcimsJobs, normalizeIcimsJob } = require("./adapters/icims");
+const { fetchDrupalCareersJobs, normalizeDrupalCareersJob } = require("./adapters/drupalcareers");
 const { analyzeJob } = require("./ai/jobAnalysis");
 const { generateEmbedding } = require("./ai/embeddings");
 const { geocodeLocation } = require("./geocoding");
@@ -79,6 +80,9 @@ async function ingestEmployer(employer) {
     } else if (employer.ats_type === "icims") {
       rawJobs = await fetchIcimsJobs(employer.ats_identifier);
       normalize = normalizeIcimsJob;
+    } else if (employer.ats_type === "drupalcareers") {
+      rawJobs = await fetchDrupalCareersJobs(employer.ats_identifier);
+      normalize = normalizeDrupalCareersJob;
     } else {
       console.log(`  Skipping — no adapter for ats_type "${employer.ats_type}"`);
       return;
