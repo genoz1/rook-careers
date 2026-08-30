@@ -9,22 +9,33 @@
 // this adapter calls — the same request the career site's own search box
 // makes, not the credentialed developer API.
 //
-// This is meaningfully more fragile than Greenhouse/Lever/Ashby, for two
-// reasons:
+// The request payload and response shape below (including the
+// data.refineSearch.data.jobs path and the ddoKey field) were confirmed
+// against a working third-party example calling a different real
+// Phenom-hosted employer (GE Aerospace's careers.geaerospace.com), not
+// just documentation — meaningfully more confidence than a pure
+// reverse-engineering write-up, though still not tested against a live
+// response from this sandbox (no network access to arbitrary external
+// domains here).
+//
+// Known real limitation carried over from that same source: the widgets
+// endpoint only returns a short descriptionTeaser, not the full job
+// description — getting the complete description requires a second,
+// per-job fetch of that job's own detail page, which this adapter does
+// not yet do (it uses the teaser as the description). Worth adding if
+// full descriptions turn out to matter for matching quality once this
+// is live.
+//
+// This is still meaningfully more fragile than Greenhouse/Lever/Ashby,
+// for two reasons:
 //   1. Each Phenom site has its own "refNum" code that has to be scraped
 //      out of the search-results page's HTML first — there's no way to
 //      guess it from the company name, and if Phenom changes how they
 //      embed it, this breaks.
-//   2. This was built from third-party reverse-engineering write-ups of
-//      Phenom's widgets endpoint, not Phenom's own documentation (they
-//      don't document this endpoint at all, since it's not meant for
-//      external use) — it has NOT been verified against a real live
-//      response from this sandbox (no network access to arbitrary
-//      external domains here). Treat the first real ingestion run
-//      against each new Phenom employer as the actual test, and expect
-//      this adapter specifically to need adjustment sooner than the
-//      others if Phenom's widget response shape differs from what's
-//      assumed below.
+//   2. Some company configurations additionally require a CSRF token
+//      (fetched via an initial GET before the POST) that this adapter
+//      does not yet handle — if a given employer's widgets endpoint
+//      starts returning 401/403, this is the likely reason.
 //
 // You only need the employer's Phenom-hosted careers hostname, e.g.:
 //   ats_identifier = "jobs.danaher.com"
@@ -90,7 +101,7 @@ async function fetchPhenomJobs(domain) {
       size,
       from,
       jobs: true,
-      counts: false,
+      counts: true,
       all_fields: ["category", "country", "city", "type"],
       clearAll: false,
       jdsource: "facets",
@@ -99,7 +110,11 @@ async function fetchPhenomJobs(domain) {
       siteType: "external",
       keywords: "",
       global: true,
+      selected_fields: {},
+      sort: { order: "desc", field: "postedDate" },
+      locationData: {},
       refNum,
+      ddoKey: "refineSearch",
     };
     let res;
     try {
@@ -113,7 +128,11 @@ async function fetchPhenomJobs(domain) {
     }
     if (!res.ok) break;
     const data = await res.json();
-    const pageJobs = data?.jobs?.data || data?.jobs || [];
+    // Confirmed real response shape (found via a working third-party
+    // example against a different Phenom-hosted employer): the actual
+    // job array lives at data.refineSearch.data.jobs, not data.jobs.data
+    // as originally guessed here.
+    const pageJobs = data?.refineSearch?.data?.jobs || [];
     if (!Array.isArray(pageJobs) || pageJobs.length === 0) break;
 
     rawJobs.push(...pageJobs);
