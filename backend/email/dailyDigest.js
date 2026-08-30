@@ -101,6 +101,20 @@ async function sendDigestForCandidate(supabase, profile, appBaseUrl) {
   const scored = (candidateJobs || [])
     .map((job) => ({ ...job, match: scoreJob(job, profile) }))
     .filter((job) => (job.match.overall_score ?? -1) >= MIN_SCORE_TO_INCLUDE)
+    // A location_prefs rating of "Gap" means scoreJob() already hard-
+    // disqualified this job on location — either it's outside the US
+    // (mentionsForeignCountry) or it's far away and not somewhere the
+    // candidate said they're open to (accepted state or willing to
+    // relocate). That disqualification caps overall_score at 65, not
+    // below MIN_SCORE_TO_INCLUDE (60) - so a disqualified job could
+    // still clear the filter above and land in the "curated" daily
+    // email. Reported directly: a Florida candidate's top-10 digest
+    // included California/Oregon/Pennsylvania postings at 74-80%,
+    // exactly this gap. An unsolicited "here are your matches today"
+    // email deserves a stricter bar than the general browse-everything
+    // dashboard, where a candidate voluntarily looking at a wider net
+    // is a different, better context for the same result to appear in.
+    .filter((job) => job.match.categories?.location_prefs?.rating !== "Gap")
     .sort((a, b) => (b.match.overall_score ?? -1) - (a.match.overall_score ?? -1))
     .slice(0, MAX_JOBS_PER_EMAIL);
 
