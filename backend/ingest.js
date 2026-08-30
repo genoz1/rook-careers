@@ -306,6 +306,29 @@ async function run() {
 
   console.log(`Found ${employers.length} active employer(s) to sync.\n`);
 
+  // Reported directly as a real need: with the employer list roughly
+  // doubling in one session (mostly never-synced employers), the ingest
+  // schedule was temporarily tightened to run every 30 minutes instead
+  // of every 6 hours to burn through that backlog faster. This makes
+  // "is the backlog actually cleared yet" visible in Runtime Logs
+  // directly, rather than something that has to be checked manually via
+  // a SQL query — once every employer has synced at least once, this
+  // logs a clear, hard-to-miss signal that it's safe to dial the
+  // schedule back down to its normal cadence.
+  const neverSyncedCount = employers.filter((e) => !e.last_checked_at).length;
+  if (neverSyncedCount > 0) {
+    console.log(`BACKLOG: ${neverSyncedCount} employer(s) have never been synced yet.\n`);
+  } else {
+    console.log(
+      "\n=========================================================\n" +
+      "BACKLOG CLEARED — every active employer has synced at least\n" +
+      "once. Safe to change the Job Trigger schedule back to its\n" +
+      "normal cadence (e.g. 0 */6 * * *) instead of running every\n" +
+      "30 minutes.\n" +
+      "=========================================================\n"
+    );
+  }
+
   let processedCount = 0;
   for (const employer of employers) {
     const elapsed = Date.now() - startedAt;
