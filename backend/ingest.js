@@ -18,6 +18,7 @@ const { fetchWorkableJobs, normalizeWorkableJob } = require("./adapters/workable
 const { fetchSmartRecruitersJobs, normalizeSmartRecruitersJob } = require("./adapters/smartrecruiters");
 const { fetchClinchTalentJobs, normalizeClinchTalentJob } = require("./adapters/clinchtalent");
 const { fetchOracleHcmJobs, normalizeOracleHcmJob } = require("./adapters/oraclehcm");
+const { fetchPhenomJobs, normalizePhenomJob } = require("./adapters/phenom");
 const { analyzeJob } = require("./ai/jobAnalysis");
 const { generateEmbedding } = require("./ai/embeddings");
 const { geocodeLocation } = require("./geocoding");
@@ -63,6 +64,9 @@ async function ingestEmployer(employer) {
     } else if (employer.ats_type === "oraclehcm") {
       rawJobs = await fetchOracleHcmJobs(employer.ats_identifier);
       normalize = normalizeOracleHcmJob;
+    } else if (employer.ats_type === "phenom") {
+      rawJobs = await fetchPhenomJobs(employer.ats_identifier);
+      normalize = normalizePhenomJob;
     } else {
       console.log(`  Skipping — no adapter for ats_type "${employer.ats_type}"`);
       return;
