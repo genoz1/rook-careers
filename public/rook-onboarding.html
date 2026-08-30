@@ -231,6 +231,12 @@
         <div class="field"><label>Remote / Hybrid / On-site</label><select id="fieldWorkStyle"><option value="">Select...</option><option>Field / Territory-based</option><option>Hybrid</option><option>Remote</option></select></div>
         <div class="field"><label>Relocation</label><select id="fieldRelocation"><option value="">Select...</option><option>Not willing to relocate</option><option>Open to relocation</option></select></div>
       </div>
+      <div class="field full" style="margin-top:4px;">
+        <label>States You Want To See Jobs From</label>
+        <div style="font-size:12.5px; color:#8B96AB; margin:-2px 0 10px;">Your home state is always included. Add more states individually, or use a region shortcut below.</div>
+        <div id="regionShortcuts" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px;"></div>
+        <div id="stateGrid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(72px, 1fr)); gap:6px; max-height:220px; overflow-y:auto; padding:12px; border:1px solid var(--border); border-radius:10px;"></div>
+      </div>
       <div class="field full">
         <label style="margin-bottom:10px;">Desired industries</label>
         <div class="chip-grid" data-group="desiredIndustries">
@@ -477,6 +483,53 @@
     }
   }
 
+  // Same states/regions implementation as Settings' "States You Want To
+  // See Jobs From" section, so a candidate sees this exactly once here
+  // during onboarding rather than discovering it for the first time
+  // later in Settings.
+  const ALL_STATES = {
+    AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California",
+    CO: "Colorado", CT: "Connecticut", DE: "Delaware", FL: "Florida", GA: "Georgia",
+    HI: "Hawaii", ID: "Idaho", IL: "Illinois", IN: "Indiana", IA: "Iowa",
+    KS: "Kansas", KY: "Kentucky", LA: "Louisiana", ME: "Maine", MD: "Maryland",
+    MA: "Massachusetts", MI: "Michigan", MN: "Minnesota", MS: "Mississippi", MO: "Missouri",
+    MT: "Montana", NE: "Nebraska", NV: "Nevada", NH: "New Hampshire", NJ: "New Jersey",
+    NM: "New Mexico", NY: "New York", NC: "North Carolina", ND: "North Dakota", OH: "Ohio",
+    OK: "Oklahoma", OR: "Oregon", PA: "Pennsylvania", RI: "Rhode Island", SC: "South Carolina",
+    SD: "South Dakota", TN: "Tennessee", TX: "Texas", UT: "Utah", VT: "Vermont",
+    VA: "Virginia", WA: "Washington", WV: "West Virginia", WI: "Wisconsin", WY: "Wyoming",
+  };
+  const REGIONS = {
+    Southeast: ["FL", "GA", "AL", "SC", "NC", "TN", "MS", "LA", "KY", "AR", "VA", "WV"],
+    Northeast: ["NY", "NJ", "PA", "CT", "MA", "RI", "VT", "NH", "ME", "MD", "DE"],
+    Midwest: ["OH", "IN", "IL", "MI", "WI", "MN", "IA", "MO", "ND", "SD", "NE", "KS"],
+    Southwest: ["TX", "OK", "NM", "AZ"],
+    West: ["CA", "OR", "WA", "NV", "ID", "MT", "WY", "UT", "CO", "AK", "HI"],
+  };
+
+  function buildStateGrid() {
+    const grid = document.getElementById('stateGrid');
+    grid.innerHTML = Object.entries(ALL_STATES)
+      .map(([abbr, name]) => `
+        <label style="display:flex; align-items:center; gap:5px; font-size:12px; cursor:pointer;" title="${name}">
+          <input type="checkbox" class="state-check" value="${abbr}" style="margin:0;">${abbr}
+        </label>`)
+      .join('');
+
+    const shortcuts = document.getElementById('regionShortcuts');
+    shortcuts.innerHTML = Object.keys(REGIONS)
+      .map((region) => `<a href="#" onclick="addRegion('${region}'); return false;" class="btn btn-outline" style="padding:6px 12px; font-size:12px;">+ ${region}</a>`)
+      .join('');
+  }
+
+  function addRegion(region) {
+    const abbrs = REGIONS[region] || [];
+    abbrs.forEach((abbr) => {
+      const box = document.querySelector(`.state-check[value="${abbr}"]`);
+      if (box) box.checked = true;
+    });
+  }
+
   // Collects whatever's filled in on the form fields into a plain object
   // matching the candidate_profiles columns. This is a straightforward,
   // best-effort mapping — it does not yet cover every field in the schema
@@ -514,6 +567,7 @@
       overnight_travel_preference: val('fieldOvernightTravel'),
       work_style: val('fieldWorkStyle'),
       willing_to_relocate: val('fieldRelocation') === 'Open to relocation',
+      preferred_states: Array.from(document.querySelectorAll('.state-check:checked')).map((el) => el.value),
       desired_industries: selectedChips('desiredIndustries'),
       industries_to_avoid: selectedChips('industriesToAvoid'),
       // Customer types and sales type don't map to their own schema columns
@@ -630,6 +684,7 @@
       // uploading a résumé, it just won't show what's there already.
     }
 
+    buildStateGrid();
     render();
   })();
 </script>
