@@ -231,4 +231,38 @@ router.post("/resume", requireConfig, requireAuth, upload.single("resume"), asyn
   });
 });
 
+// GET /api/resume-url — a signed download link plus display info (real
+// filename, upload date) for the caller's current résumé. "My Résumés"
+// in the sidebar used to link straight into onboarding's upload step
+// with zero indication of what was actually on file already — reported
+// directly as "shouldn't it actually show my résumés?" resume_file_path
+// itself is the only thing stored (no separate filename/timestamp
+// columns), but the upload route names each file
+// `{timestamp}-{originalFilename}`, so both are recoverable straight
+// from the path without a schema change.
+router.get("/resume-url", requireConfig, requireAuth, async (req, res) => {
+  const { data: profile, error } = await supabaseAdmin
+    .from("candidate_profiles")
+    .select("resume_file_path")
+    .eq("user_id", req.user.id)
+    .maybeSingle();
+  if (error) return res.status(500).json({ error: error.message });
+  if (!profile?.resume_file_path) return res.json(null);
+
+  const rawName = profile.resume_file_path.split("/").pop() || "";
+  const match = rawName.match(/^(\d+)-(.+)$/);
+  const uploadedAt = match ? new Date(Number(match[1])).toISOString() : null;
+  const filename = match ? match[2] : rawName;
+
+  try {
+    const { data: signed, error: signError } = await supabaseAdmin.storage
+      .from("resumes")
+      .createSignedUrl(profile.resume_file_path, 60 * 60); // 1 hour — just for viewing/downloading right now, not a link meant to be saved anywhere
+    if (signError) throw signError;
+    res.json({ url: signed?.signedUrl || null, filename, uploaded_at: uploadedAt });
+  } catch (err) {
+    res.status(500).json({ error: `Could not generate a link to your résumé: ${err.message}` });
+  }
+});
+
 module.exports = router;

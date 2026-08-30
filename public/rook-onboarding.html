@@ -116,9 +116,17 @@
     <div class="step-eyebrow">Build Your Career Profile</div>
     <h1 class="step-h">Let's start with your résumé</h1>
     <p class="step-sub">This is how we find your matches — we'll pull your work history automatically, so you're not retyping anything.</p>
+    <div class="uploaded-file" id="currentResumeCard" style="display:none; margin-bottom:16px;">
+      <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg></div>
+      <div>
+        <div class="name" id="currentResumeName"></div>
+        <div class="status" id="currentResumeMeta" style="color:#5B6B85;"></div>
+      </div>
+      <a href="#" id="currentResumeLink" target="_blank" rel="noopener" class="btn btn-outline btn-sm" style="margin-left:auto;">View / Download</a>
+    </div>
     <div class="dropzone" id="dropzone" onclick="document.getElementById('resumeFileInput').click()">
       <div class="dropzone-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 16V4M12 4l-4 4M12 4l4 4M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg></div>
-      <h3>Drag &amp; drop your résumé here</h3>
+      <h3 id="dropzoneTitle">Drag &amp; drop your résumé here</h3>
       <p>or click to browse your files</p>
       <a class="btn btn-outline">Choose File</a>
       <div class="filetypes">Supports PDF, DOC, DOCX — up to 10MB</div>
@@ -595,6 +603,33 @@
       const { data: { user } } = await rookSupabase.auth.getUser();
       if (user?.email) document.getElementById('fieldEmail').value = user.email;
     } catch {}
+
+    // "My Résumés" in the sidebar links straight here with zero
+    // indication of what's actually on file already — reported directly
+    // as "shouldn't it actually show my résumés?" Shows the real current
+    // file (name, upload date, a working view/download link) above the
+    // dropzone when one exists, and switches the dropzone's own wording
+    // to "replace" framing so it's clear this uploads a new one rather
+    // than starting from nothing.
+    try {
+      const res = await rookApiFetch('/resume-url');
+      if (res.ok) {
+        const current = await res.json();
+        if (current?.url) {
+          document.getElementById('currentResumeName').textContent = current.filename;
+          document.getElementById('currentResumeMeta').textContent = current.uploaded_at
+            ? `Uploaded ${new Date(current.uploaded_at).toLocaleDateString()}`
+            : 'Currently on file';
+          document.getElementById('currentResumeLink').href = current.url;
+          document.getElementById('currentResumeCard').style.display = 'flex';
+          document.getElementById('dropzoneTitle').textContent = 'Drag & drop a new résumé to replace this one';
+        }
+      }
+    } catch {
+      // Best-effort — if this fails, the page still works fine for
+      // uploading a résumé, it just won't show what's there already.
+    }
+
     render();
   })();
 </script>
