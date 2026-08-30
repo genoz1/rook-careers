@@ -9,6 +9,7 @@
 
 require("dotenv").config();
 const { createClient } = require("@supabase/supabase-js");
+const { mentionsNonUsCountry } = require("./matching");
 const { fetchGreenhouseJobs, normalizeGreenhouseJob } = require("./adapters/greenhouse");
 const { fetchLeverJobs, normalizeLeverJob } = require("./adapters/lever");
 const { fetchAshbyJobs, normalizeAshbyJob } = require("./adapters/ashby");
@@ -106,6 +107,7 @@ async function ingestEmployer(employer) {
 
   const seenSourceIds = new Set();
   let savedCount = 0;
+  let nonUsSkippedCount = 0;
   let aiAnalyzedThisRun = 0;
 
   // Cap how many NEW AI analyses (job analysis + embedding) happen per
@@ -132,6 +134,22 @@ async function ingestEmployer(employer) {
     // the primary filter for Greenhouse/Lever/Ashby, which return every
     // raw posting unfiltered.
     if (!looksRelevant(job.title_original)) continue;
+
+    // Hard filter, not just a scoring-time penalty: ROOK is a US-focused
+    // platform, and several employers added this session are large
+    // multinationals (Danaher, UCB, Straumann, etc.) whose ATS boards
+    // include worldwide postings. Reported directly as a concern once
+    // the employer list started growing to include these. Reuses the
+    // exact same detection matching.js already applies at scoring time
+    // (checked against location_raw specifically, not the full
+    // description, to keep false-positive risk low) so a foreign
+    // posting is never stored at all, rather than relying on every
+    // downstream reader (dashboard, digest, search) to correctly
+    // demote it after the fact.
+    if (mentionsNonUsCountry(job.location_raw)) {
+      nonUsSkippedCount++;
+      continue;
+    }
 
     const { data: upsertedRow, error } = await supabase
       .from("jobs")
@@ -224,7 +242,7 @@ async function ingestEmployer(employer) {
     .eq("id", employer.id);
 
   console.log(
-    `  Done — ${savedCount} relevant job(s) saved (${rawJobs.length} total posting(s) examined), ${closedIds.length} closed.`
+    `  Done — ${savedCount} relevant job(s) saved (${rawJobs.length} total posting(s) examined), ${closedIds.length} closed, ${nonUsSkippedCount} non-US posting(s) skipped.`
   );
 }
 

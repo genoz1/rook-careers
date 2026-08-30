@@ -879,4 +879,4 @@ function scoreJob(job, profile) {
   };
 }
 
-module.exports = { scoreJob, stateAbbrFromName, extractSalaryFigure, extractJobTravelPercentage };
+module.exports = { scoreJob, stateAbbrFromName, extractSalaryFigure, extractJobTravelPercentage, mentionsNonUsCountry };
