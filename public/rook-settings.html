@@ -155,6 +155,7 @@
   <nav class="settings-nav">
     <a data-panel="profile" class="active" onclick="showPanel('profile', this)">Profile</a>
     <a data-panel="preferences" onclick="showPanel('preferences', this)">Job Preferences</a>
+    <a data-panel="career" onclick="showPanel('career', this)">Career Experience</a>
     <a data-panel="experience" onclick="showPanel('experience', this)">Skills & Experience</a>
     <a data-panel="exclusions" onclick="showPanel('exclusions', this)">Exclusions</a>
     <a data-panel="notifications" onclick="showPanel('notifications', this)">Notifications</a>
@@ -251,6 +252,17 @@
       </div>
     </div>
 
+    <div class="panel" id="panel-career">
+      <div class="card">
+        <h3>Career Experience</h3>
+        <p style="font-size:13px; color:var(--muted); margin:-6px 0 16px;">Your work history, as used for matching. Add, edit, or remove roles below.</p>
+        <div id="settingsExpEntriesContainer"></div>
+        <a href="#" class="add-entry" onclick="addSettingsExperienceEntry(); return false;">+ Add another position</a>
+        <div><a href="#" class="btn btn-primary" onclick="saveProfilePanel('careerHistory', this); return false;">Save Changes</a>
+        <span id="careerHistorySaveStatus" style="font-size:12.5px; color:#00806E; margin-left:10px; display:none;">Saved ✓</span></div>
+      </div>
+    </div>
+
     <div class="panel" id="panel-experience">
       <div class="card">
         <h3>Skills & Selling Experience</h3>
@@ -282,15 +294,6 @@
         </div>
         <a href="#" class="btn btn-primary" style="margin-top:16px;" onclick="saveProfilePanel('experience', this); return false;">Save Changes</a>
         <span id="experienceSaveStatus" style="font-size:12.5px; color:#00806E; margin-left:10px; display:none;">Saved ✓</span>
-      </div>
-
-      <div class="card">
-        <h3>Career Experience</h3>
-        <p style="font-size:13px; color:var(--muted); margin:-6px 0 16px;">Your work history, as used for matching. Add, edit, or remove roles below.</p>
-        <div id="settingsExpEntriesContainer"></div>
-        <a href="#" class="add-entry" onclick="addSettingsExperienceEntry(); return false;">+ Add another position</a>
-        <div><a href="#" class="btn btn-primary" onclick="saveProfilePanel('careerHistory', this); return false;">Save Changes</a>
-        <span id="careerHistorySaveStatus" style="font-size:12.5px; color:#00806E; margin-left:10px; display:none;">Saved ✓</span></div>
       </div>
     </div>
 
