@@ -7,6 +7,7 @@
     "start": "node server.js",
     "ingest": "node backend/ingest.js",
     "ingest-adzuna": "node backend/ingestAdzuna.js",
+    "discover-employers": "node backend/discoverEmployers.js",
     "send-digest": "node backend/sendDigest.js",
     "precompute-scores": "node backend/precomputeScores.js",
     "archive-old-jobs": "node backend/archiveOldJobs.js"
