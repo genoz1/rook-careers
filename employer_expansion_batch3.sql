@@ -4,6 +4,11 @@
 -- public by Pinpoint themselves, higher confidence than most other new
 -- adapters this session.
 
+-- MUST run first: allows the new 'teamtailor' and 'pinpoint' ats_types.
+alter table employers drop constraint if exists employers_ats_type_check;
+alter table employers add constraint employers_ats_type_check
+  check (ats_type in ('greenhouse','lever','ashby','workday','talentbrew','workable','smartrecruiters','clinchtalent','oraclehcm','phenom','jobvite','applicantpro','icims','drupalcareers','teamtailor','pinpoint','custom','manual'));
+
 insert into employers (company_name, company_slug, ats_type, ats_identifier, industry, priority)
 values
   ('3Shape', '3shape', 'teamtailor', 'careers.3shape.com', 'dental', 'normal'),
