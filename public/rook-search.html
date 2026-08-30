@@ -559,12 +559,22 @@
         return false;
       }
 
-      if (nearLocationCoords && (job.job_lat == null || job.job_lng == null)) {
-        return false; // no way to gauge distance for this job, so it can't participate in a "near X" search
-      }
-
+      // Deliberately does NOT exclude a job just because it has no
+      // coordinates whenever a "near me" search is merely active — that
+      // search auto-fills with the candidate's saved ZIP by default on
+      // every page load, so the old blanket check silently hid every
+      // job with ungeocodable location text ("Field Based - Southeast",
+      // "Multiple US Locations") from every candidate by default, all
+      // the time — not just during a temporary geocoding backlog.
+      // Common phrasing for exactly the field/territory sales roles
+      // ROOK is built around. Only exclude for missing coordinates when
+      // the candidate has actively chosen a specific mile radius (not
+      // "Any distance") — in that narrower case, we genuinely can't
+      // verify the job is in range, so excluding it is the candidate's
+      // own explicit intent, not a silent default.
       const radiusMiles = Number(document.getElementById('radiusSelect').value);
       if (nearLocationCoords && radiusMiles > 0) {
+        if (job.job_lat == null || job.job_lng == null) return false;
         const dist = distanceMilesClient(nearLocationCoords.lat, nearLocationCoords.lng, job.job_lat, job.job_lng);
         if (dist > radiusMiles) return false;
       }
