@@ -611,12 +611,25 @@
       if (sortBy === 'comp') {
         return (extractJobSalary(b) ?? -1) - (extractJobSalary(a) ?? -1);
       }
-      // Best Match, default. Distance is a tiebreaker only — never
-      // changes the score, just decides display order when two jobs
-      // tie on overall_score (common since the 90-mile rule: jobs at,
-      // say, 36 and 65 miles now score identically on distance).
-      const scoreDiff = (b.match?.overall_score ?? -1) - (a.match?.overall_score ?? -1);
-      if (scoreDiff !== 0) return scoreDiff;
+      // Best Match, default.
+      //
+      // Reported directly: a legitimately-scoring far-away job (e.g. 81%
+      // in Dallas, 915 miles out but within a region the candidate said
+      // they're open to) was outranking a closer, only-slightly-lower
+      // job (78% in Orlando) - correct by the old logic (distance was
+      // ONLY a tiebreaker on an exact score tie), but not what a
+      // candidate browsing for local opportunities actually wants: a
+      // small score gap shouldn't override a huge distance gap. Bucket
+      // scores into bands of 8 points for sorting purposes only (this
+      // does not change the displayed score anywhere) - within the same
+      // band, distance decides; a genuinely much better match in a
+      // higher band still wins on merit regardless of distance.
+      const SCORE_BAND_WIDTH = 8;
+      const scoreA = a.match?.overall_score ?? -1;
+      const scoreB = b.match?.overall_score ?? -1;
+      const bandA = Math.floor(scoreA / SCORE_BAND_WIDTH);
+      const bandB = Math.floor(scoreB / SCORE_BAND_WIDTH);
+      if (bandA !== bandB) return bandB - bandA;
       const isRemoteA = /remote/i.test(a.location_raw || '') || a.remote_status === 'remote';
       const isRemoteB = /remote/i.test(b.location_raw || '') || b.remote_status === 'remote';
       const distA = isRemoteA ? null : a.distance_miles;
