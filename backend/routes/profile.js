@@ -100,9 +100,13 @@ router.put("/profile", requireConfig, requireAuth, async (req, res) => {
   // couple of seconds, and there's no reason to make the save itself
   // feel slow for that — a page loaded a few seconds later will already
   // see fresh scores either way.
-  scoreAndStoreForCandidate(supabaseAdmin, data).catch((err) => {
-    console.error(`Rescore after profile update failed for candidate ${data.id}: ${err.message}`);
-  });
+  scoreAndStoreForCandidate(supabaseAdmin, data)
+    .then(({ scoredCount }) => {
+      console.log(`Rescore after profile update succeeded for candidate ${data.id}: ${scoredCount} job(s) scored.`);
+    })
+    .catch((err) => {
+      console.error(`Rescore after profile update failed for candidate ${data.id}: ${err.message}`);
+    });
 });
 
 // POST /api/resume — upload a résumé, extract its text, and run AI
@@ -226,9 +230,13 @@ router.post("/resume", requireConfig, requireAuth, upload.single("resume"), asyn
   // precompute run. Same not-awaited reasoning as the PUT /profile
   // rescore trigger — the upload response shouldn't wait on scoring
   // potentially thousands of jobs.
-  scoreAndStoreForCandidate(supabaseAdmin, updatedProfile).catch((err) => {
-    console.error(`Rescore after resume upload failed for candidate ${updatedProfile.id}: ${err.message}`);
-  });
+  scoreAndStoreForCandidate(supabaseAdmin, updatedProfile)
+    .then(({ scoredCount }) => {
+      console.log(`Rescore after resume upload succeeded for candidate ${updatedProfile.id}: ${scoredCount} job(s) scored.`);
+    })
+    .catch((err) => {
+      console.error(`Rescore after resume upload failed for candidate ${updatedProfile.id}: ${err.message}`);
+    });
 });
 
 // GET /api/resume-url — a signed download link plus display info (real
