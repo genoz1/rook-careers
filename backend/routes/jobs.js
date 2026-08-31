@@ -85,6 +85,20 @@ async function loadCandidateId(req, res, next) {
 // Preferences was doing double duty as both a geographic-acceptability
 // gate and a fine-grained proximity signal — pulling raw distance out
 // into its own field, sortable independently, resolves that).
+// Reported directly as slow job loading (~5 seconds even after the
+// candidate_job_matches index fix). Every job-listing query below used
+// to pull every column via jobs(*) / jobs!inner(*) - including
+// job_embedding, a 1536-dimension vector that's only ever WRITTEN
+// (during ingestion/recruiter posting) and never read back anywhere in
+// any API response or the frontend. With the job pool having roughly
+// doubled tonight and list views routinely requesting up to 300 rows
+// at once, that's real, unnecessary data being fetched from Postgres
+// and serialized on every single load for a field nothing ever uses.
+// This explicit column list is every real column on jobs EXCEPT
+// job_embedding, kept as one shared constant so every listing query
+// gets the fix, not just the one that happened to get reported.
+const JOB_LIST_COLUMNS = "id, source_job_id, employer_id, source_type, source_url, application_url, title_original, title_normalized, company_name, description_html, description_text, ai_analysis, location_raw, job_lat, job_lng, city, state, region, territory, remote_status, employment_type, category, subcategory, industry, product_type, sales_type, experience_min_years, experience_max_years, salary_min, salary_max, compensation_text, travel_percentage, overnight_travel, required_skills, preferred_skills, required_experience, preferred_experience, degree_required, certifications, date_posted, first_seen_at, last_seen_at, status, source_verified, moderation_status, recruiter_name, recruiter_email, recruiter_company, recruiter_contact_method, recruiter_id, created_at, updated_at";
+
 function attachDistance(job, profile) {
   const hasCoords = profile?.home_lat != null && profile?.home_lng != null && job.job_lat != null && job.job_lng != null;
   return {
@@ -355,7 +369,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
   if (!profile) {
     // No profile yet at all (onboarding not completed) — nothing to
     // score against. Same as before: fall back to the plain job list.
-    let query = supabaseAnon.from("jobs").select("*").eq("status", "active").eq("moderation_status", "approved").order("date_posted", { ascending: false }).limit(Number(limit));
+    let query = supabaseAnon.from("jobs").select(JOB_LIST_COLUMNS).eq("status", "active").eq("moderation_status", "approved").order("date_posted", { ascending: false }).limit(Number(limit));
     if (industry) query = query.eq("industry", industry);
     if (state) query = query.eq("state", state);
     const { data } = await query;
@@ -404,7 +418,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
 
     const { data: boxJobs, error: boxError } = await supabaseAdmin
       .from("jobs")
-      .select("*")
+      .select(JOB_LIST_COLUMNS)
       .eq("status", "active")
       .eq("moderation_status", "approved")
       .gte("job_lat", nearLat - latDelta)
@@ -461,7 +475,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
   async function fetchScoredRows() {
     let query = supabaseAdmin
       .from("candidate_job_matches")
-      .select("*, jobs!inner(*)")
+      .select(`*, jobs!inner(${JOB_LIST_COLUMNS})`)
       .eq("candidate_id", profile.id)
       .eq("dismissed", false)
       .eq("jobs.status", "active")
@@ -969,7 +983,7 @@ router.post("/jobs/:id/dismiss", requireConfig, requireAuth, loadCandidateId, as
 router.get("/saved-jobs", requireConfig, requireAuth, loadCandidateId, async (req, res) => {
   const { data: rows, error } = await supabaseAdmin
     .from("candidate_job_matches")
-    .select("*, jobs(*)")
+    .select(`*, jobs(${JOB_LIST_COLUMNS})`)
     .eq("candidate_id", req.candidateId)
     .eq("saved", true);
 
