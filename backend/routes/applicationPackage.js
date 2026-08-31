@@ -42,7 +42,7 @@ async function requireAuth(req, res, next) {
 router.get("/application-package/:jobId", requireConfig, requireAuth, async (req, res) => {
   const { data: profile } = await supabaseAdmin
     .from("candidate_profiles")
-    .select("id, resume_text")
+    .select("id, resume_text, name, email, phone")
     .eq("user_id", req.user.id)
     .maybeSingle();
 
@@ -75,6 +75,9 @@ router.get("/application-package/:jobId", requireConfig, requireAuth, async (req
         job_title: job.title_original,
         company_name: job.company_name,
         resume_text: profile.resume_text,
+        candidate_name: profile.name,
+        candidate_email: profile.email,
+        candidate_phone: profile.phone,
         cached: true,
         generated_at: cached.generated_package_at,
       });
@@ -103,6 +106,9 @@ router.get("/application-package/:jobId", requireConfig, requireAuth, async (req
       job_title: job.title_original,
       company_name: job.company_name,
       resume_text: profile.resume_text,
+      candidate_name: profile.name,
+      candidate_email: profile.email,
+      candidate_phone: profile.phone,
       cached: false,
     });
   } catch (err) {

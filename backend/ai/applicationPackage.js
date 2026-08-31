@@ -24,6 +24,8 @@ Return ONLY a JSON object with this exact shape, no other text:
 {
   "tailored_summary": string,
   "work_history": [{"employer": string, "title": string, "dates": string, "bullets": [string]}],
+  "core_skills": [string],
+  "education": [{"degree": string, "institution": string, "date": string}],
   "ats_keywords": [string],
   "cover_letter": string,
   "recruiter_message": string,
@@ -33,6 +35,8 @@ Return ONLY a JSON object with this exact shape, no other text:
 Guidance for each field:
 - tailored_summary: 2-3 sentences, reworded from the résumé to emphasize what matches this specific job.
 - work_history: EVERY employer/role actually listed in the résumé, in the same order as the résumé (most recent first), with the employer name, job title, and dates exactly as stated in the résumé — never invented or altered. For each role, include 2-5 achievement bullets pulled from that specific job's real content in the résumé, reworded/reordered to lead with what's most relevant to this posting. This is the actual work-history section of the tailored résumé — every real job the candidate has held must appear here with its own bullets grouped underneath it, not as one undifferentiated list of achievements with no employer or date context. NEVER return an entry with an empty employer, empty title, or an empty/blank bullet — if you cannot identify at least 2 real, substantive bullets for a role from the résumé text, still include the role with whatever genuine content the résumé actually provides for it (responsibilities, scope, one real accomplishment), rather than leaving bullets blank or omitting the role.
+- core_skills: a skills/core-expertise list, pulled only from skills, tools, or areas of expertise the résumé actually states or clearly demonstrates (e.g. a named CRM the candidate used, a sales methodology, an industry specialty) — reordered to lead with what's most relevant to this posting. Return an empty array if the résumé genuinely doesn't support a distinct skills list.
+- education: every degree/credential actually listed in the résumé, exactly as stated (degree name, institution, date) — never invented. Return an empty array if the résumé lists no education.
 - ats_keywords: keywords from the job posting that the candidate's real experience genuinely supports — not every keyword in the posting, only ones truthfully backed by their background.
 - cover_letter: 3-4 short paragraphs, specific to this exact role and company, grounded in real résumé content.
 - recruiter_message: 3-5 sentences, a brief LinkedIn/email outreach note.

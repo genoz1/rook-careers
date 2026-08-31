@@ -111,9 +111,15 @@
        column specifically for print: Original prints completely, then
        Tailored prints completely below it, each with a clean page break
        instead of trying to keep two columns aligned across pages. */
+    /* Reported directly: the candidate already has their own original
+       résumé (they uploaded it) - there's no reason to hand it back to
+       them in the actual downloadable package. The side-by-side
+       Original/Tailored comparison stays for on-screen review (useful
+       for seeing what changed before deciding to apply), but the
+       exported PDF should contain only the polished Tailored résumé
+       meant for actual submission. */
+    .resume-card-original{display:none !important;}
     .compare-grid{display:block !important;}
-    .compare-grid .resume-card{page-break-after:always;}
-    .compare-grid .resume-card:last-child{page-break-after:auto;}
   }
 </style>
 </head>
@@ -158,7 +164,7 @@
 
     <div class="tab-panel" data-panel="resume">
       <div class="compare-grid">
-        <div class="resume-card">
+        <div class="resume-card resume-card-original">
           <div class="rc-head"><h4>Master Résumé</h4><span class="rc-tag original">Original</span></div>
           <div class="resume-body" id="originalResumeBody" style="white-space:pre-wrap;"></div>
           <div class="match-note">Unchanged — this is exactly what you uploaded.</div>
@@ -166,10 +172,19 @@
         <div class="resume-card">
           <div class="rc-head"><h4>Tailored for This Role</h4><span class="rc-tag tailored" id="atsCount">Tailored</span></div>
           <div class="resume-body">
+            <div id="tailoredHeader" style="margin-bottom:16px;"></div>
             <h5>Summary</h5>
             <p id="tailoredSummary"></p>
             <h5>Experience</h5>
             <div id="workHistory"></div>
+            <div id="coreSkillsSection" style="display:none;">
+              <h5>Core Expertise</h5>
+              <p id="coreSkills" style="color:#3D4A63;"></p>
+            </div>
+            <div id="educationSection" style="display:none;">
+              <h5>Education</h5>
+              <div id="educationList"></div>
+            </div>
             <h5>ATS Keywords Emphasized</h5>
             <p id="atsKeywords" style="color:#5B6B85;"></p>
           </div>
@@ -321,7 +336,38 @@ function renderPackage(pkg) {
     [pkg.job_title, pkg.company_name].filter(Boolean).join(' — ');
 
   document.getElementById('originalResumeBody').textContent = pkg.resume_text || '(no résumé text available)';
+
+  // Reported directly: the tailored résumé had no name/contact header at
+  // all, unlike the Original (which has one because it's the raw
+  // uploaded text) - it just started mid-document with "Summary". Pulls
+  // the candidate's real name/email/phone from their profile, not
+  // anything AI-generated, so this is exactly as trustworthy as the
+  // rest of the tailored résumé's grounding-in-real-data principle.
+  const headerParts = [pkg.candidate_email, pkg.candidate_phone].filter(Boolean);
+  document.getElementById('tailoredHeader').innerHTML = pkg.candidate_name
+    ? `<div style="font-size:19px; font-weight:700; color:var(--navy);">${escapeHtml(pkg.candidate_name)}</div>${headerParts.length ? `<div style="font-size:12.5px; color:#5B6B85; margin-top:2px;">${headerParts.map(escapeHtml).join(' · ')}</div>` : ''}`
+    : '';
+
   document.getElementById('tailoredSummary').textContent = pkg.tailored_summary || '';
+
+  // Core Expertise and Education - new fields on the tailored résumé;
+  // gracefully absent (sections stay hidden) for any package generated
+  // and cached before this fix, rather than showing an empty header.
+  const coreSkills = Array.isArray(pkg.core_skills) ? pkg.core_skills.filter((s) => s && s.trim()) : [];
+  if (coreSkills.length > 0) {
+    document.getElementById('coreSkillsSection').style.display = '';
+    document.getElementById('coreSkills').textContent = coreSkills.join(' • ');
+  }
+
+  const education = Array.isArray(pkg.education) ? pkg.education.filter((e) => e && (e.degree || e.institution)) : [];
+  if (education.length > 0) {
+    document.getElementById('educationSection').style.display = '';
+    document.getElementById('educationList').innerHTML = education.map((e) => `
+      <div style="margin-bottom:8px;">
+        <div style="font-weight:600; color:var(--navy);">${escapeHtml(e.degree || '')}</div>
+        <div style="font-size:12.5px; color:#8B96AB;">${[e.institution, e.date].filter(Boolean).map(escapeHtml).join(' · ')}</div>
+      </div>`).join('');
+  }
 
   // Real bug this fixes: the tailored résumé only ever showed a flat,
   // undifferentiated list of achievement bullets with no employer,
