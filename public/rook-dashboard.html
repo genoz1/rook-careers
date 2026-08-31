@@ -634,6 +634,20 @@
     const sortBy = document.getElementById('sortSelect').value;
     let visible = showRecruiters ? currentJobs : currentJobs.filter((j) => j.source_type !== 'recruiter_posted' && j.source_type !== 'agency_aggregated');
 
+    // Direct instruction: the Dashboard should only ever show jobs
+    // within a real commuting/territory distance of home, not the
+    // full nationwide pool sorted by score - that broader "what's out
+    // there anywhere" browsing is what Job Search is for (see the
+    // earlier location-search work), while the Dashboard is meant to
+    // be the tight, personalized daily view. Remote jobs are exempt,
+    // matching the existing isRemoteJob distance-exemption used
+    // elsewhere on this page. A job with no confirmed distance (never
+    // geocoded) is excluded rather than assumed to qualify, since
+    // "150 miles or closer" is a real claim this view is making, not
+    // just a display convenience.
+    const DASHBOARD_MAX_MILES = 150;
+    visible = visible.filter((j) => isRemoteJob(j) || (j.distance_miles != null && j.distance_miles <= DASHBOARD_MAX_MILES));
+
     if (currentTierFilter === 'excellent') {
       visible = visible.filter((j) => j.match?.excellent_match);
     } else if (currentTierFilter === 'strong') {
