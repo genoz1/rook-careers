@@ -160,6 +160,9 @@ const SHARED_TENANT_BRANDS = {
     "Royal Canin", "Wisdom Panel", "Mars Veterinary Health", "Banfield Pet Hospital",
     "BluePearl", "AniCura", "Linnaeus", "Antech",
   ],
+  msd: [
+    "Merck Animal Health",
+  ],
 };
 
 function extractChildBrand(tenant, text) {
