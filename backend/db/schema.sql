@@ -265,6 +265,13 @@ create table if not exists candidate_job_matches (
 
 create index if not exists idx_matches_candidate on candidate_job_matches(candidate_id);
 create index if not exists idx_matches_score on candidate_job_matches(overall_score desc);
+-- Reported directly as slow job loading: the actual dashboard/search
+-- query filters by candidate_id AND sorts by overall_score together in
+-- one query - the two separate single-column indexes above can't be
+-- combined efficiently for that, so Postgres was doing more work than
+-- necessary as this table grew alongside tonight's employer expansion.
+-- This composite index matches the query's exact access pattern.
+create index if not exists idx_matches_candidate_score on candidate_job_matches(candidate_id, overall_score desc);
 
 -- ============================================================
 -- APPLICATIONS
