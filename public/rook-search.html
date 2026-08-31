@@ -316,12 +316,7 @@
       </div>
     </div>
 
-    <div class="pagination">
-      <a href="#" class="active">1</a>
-      <a href="#">2</a>
-      <a href="#">3</a>
-      <a href="#">→</a>
-    </div>
+    <div class="pagination"></div>
   </main>
   </div>
 </div>
@@ -560,7 +555,12 @@
     return match ? Number(match[1]) : null;
   }
 
+  let currentPage = 1;
+  let lastFilteredJobs = [];
+  const RESULTS_PER_PAGE = 20;
+
   function applyFiltersAndRender() {
+    currentPage = 1; // any filter/sort change starts back at page 1
     const keyword = document.getElementById('filterKeyword').value.trim().toLowerCase();
     const remoteOnly = document.getElementById('remoteOnlyFilter').checked;
     const selectedIndustries = Array.from(document.querySelectorAll('.filter-industry:checked')).map((el) => el.value.toLowerCase());
@@ -697,10 +697,48 @@
       return distA - distB;
     });
 
-    document.getElementById('jobList').innerHTML = filtered.length > 0
-      ? filtered.map(renderRealJobRow).join('')
+    lastFilteredJobs = filtered;
+    renderCurrentPage();
+  }
+
+  // Reported directly: the pagination bar (page 1/2/3 links) was
+  // completely static HTML, unconditionally shown regardless of how
+  // many results actually existed - a candidate with 12 total results,
+  // all fitting on one page, still saw "1 2 3 →" at the bottom, which
+  // is misleading since pages 2 and 3 didn't really exist. Now
+  // genuinely paginates the filtered/sorted list and only shows page
+  // controls when there's more than one real page.
+  function renderCurrentPage() {
+    const totalPages = Math.max(1, Math.ceil(lastFilteredJobs.length / RESULTS_PER_PAGE));
+    currentPage = Math.min(currentPage, totalPages);
+    const start = (currentPage - 1) * RESULTS_PER_PAGE;
+    const pageItems = lastFilteredJobs.slice(start, start + RESULTS_PER_PAGE);
+
+    document.getElementById('jobList').innerHTML = pageItems.length > 0
+      ? pageItems.map(renderRealJobRow).join('')
       : '<div style="text-align:center; padding:60px 20px; color:#5B6B85; font-size:14px;">No jobs match these filters. Try clearing some.</div>';
-    document.getElementById('resultsCount').textContent = filtered.length;
+    document.getElementById('resultsCount').textContent = lastFilteredJobs.length;
+
+    const paginationEl = document.querySelector('.pagination');
+    if (totalPages <= 1) {
+      paginationEl.style.display = 'none';
+    } else {
+      paginationEl.style.display = '';
+      let html = '';
+      for (let p = 1; p <= totalPages; p++) {
+        html += `<a href="#" class="${p === currentPage ? 'active' : ''}" onclick="goToSearchPage(${p}); return false;">${p}</a>`;
+      }
+      if (currentPage < totalPages) {
+        html += `<a href="#" onclick="goToSearchPage(${currentPage + 1}); return false;">→</a>`;
+      }
+      paginationEl.innerHTML = html;
+    }
+  }
+
+  function goToSearchPage(page) {
+    currentPage = page;
+    renderCurrentPage();
+    document.querySelector('.results-head').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   function clearAllFilters() {
