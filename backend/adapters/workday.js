@@ -163,6 +163,9 @@ const SHARED_TENANT_BRANDS = {
   msd: [
     "Merck Animal Health",
   ],
+  baxter: [
+    "Vantive",
+  ],
 };
 
 function extractChildBrand(tenant, text) {
