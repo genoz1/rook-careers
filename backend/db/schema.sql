@@ -120,6 +120,7 @@ create table if not exists jobs (
 create index if not exists idx_jobs_employer on jobs(employer_id);
 create index if not exists idx_jobs_status on jobs(status);
 create index if not exists idx_jobs_category on jobs(category);
+create index if not exists idx_jobs_coords on jobs(job_lat, job_lng);
 
 -- Required for backend/ingest.js's upsert (ON CONFLICT employer_id, source_job_id)
 -- to work — without this, every ingestion run fails with a Postgres error

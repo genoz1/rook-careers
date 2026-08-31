@@ -22,7 +22,7 @@
 const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
 const { scoreJob } = require("../matching");
-const { scoreAndStoreForCandidate, fetchActiveJobs } = require("../scoring/precompute");
+const { scoreAndStoreForCandidate } = require("../scoring/precompute");
 const { distanceMiles } = require("../geocoding");
 const { sendEmail } = require("../email/resend");
 
@@ -386,9 +386,34 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
   const nearLat = req.query.near_lat != null ? Number(req.query.near_lat) : null;
   const nearLng = req.query.near_lng != null ? Number(req.query.near_lng) : null;
   if (nearLat != null && nearLng != null && !Number.isNaN(nearLat) && !Number.isNaN(nearLng)) {
-    const allActive = await fetchActiveJobs(supabaseAdmin);
     const EXPLORE_RADIUS_MILES = 300;
-    const nearby = allActive.filter((job) => {
+    // Reported directly as genuinely slow: fetching ALL ~2,500+ active
+    // jobs via fetchActiveJobs (paginated, full columns) and THEN
+    // filtering by distance in JS meant paying the cost of the entire
+    // table on every single location search, when only a few hundred
+    // rows are ever geographically relevant. A simple lat/lng bounding
+    // box pushes that filtering down into the actual database query
+    // instead - approximate (a box isn't a true circle, so a handful of
+    // corner cases slightly outside the real radius can slip in; the
+    // exact per-job distanceMiles() filter below still trims those),
+    // but cuts the fetched row count dramatically for a real speed win.
+    // 1 degree latitude is ~69 miles everywhere; 1 degree longitude
+    // shrinks toward the poles, hence the cos(latitude) term.
+    const latDelta = EXPLORE_RADIUS_MILES / 69;
+    const lngDelta = EXPLORE_RADIUS_MILES / (69 * Math.max(0.1, Math.cos((nearLat * Math.PI) / 180)));
+
+    const { data: boxJobs, error: boxError } = await supabaseAdmin
+      .from("jobs")
+      .select("*")
+      .eq("status", "active")
+      .eq("moderation_status", "approved")
+      .gte("job_lat", nearLat - latDelta)
+      .lte("job_lat", nearLat + latDelta)
+      .gte("job_lng", nearLng - lngDelta)
+      .lte("job_lng", nearLng + lngDelta);
+    if (boxError) return res.status(500).json({ error: boxError.message });
+
+    const nearby = (boxJobs || []).filter((job) => {
       if (job.job_lat == null || job.job_lng == null) return false;
       return distanceMiles(nearLat, nearLng, job.job_lat, job.job_lng) <= EXPLORE_RADIUS_MILES;
     });

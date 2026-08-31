@@ -333,6 +333,14 @@
   // actually works with the data that exists.
   let allJobs = [];
   let nearLocationCoords = null; // { lat, lng } once a "show jobs near" search is active
+  // Guards against out-of-order responses: if the candidate searches
+  // several locations in quick succession (each a real network round
+  // trip to geocode + live-score), a slower earlier request finishing
+  // AFTER a faster later one would otherwise overwrite the newer,
+  // correct results with stale ones. Every call to searchNearLocation
+  // claims the next number; a response only gets applied if it's still
+  // the most recent request in flight when it completes.
+  let searchRequestSeq = 0;
 
   function distanceMilesClient(lat1, lng1, lat2, lng2) {
     if (lat1 == null || lng1 == null || lat2 == null || lng2 == null) return Infinity;
@@ -347,6 +355,7 @@
   async function searchNearLocation() {
     const query = document.getElementById('nearLocationInput').value.trim();
     const status = document.getElementById('nearLocationStatus');
+    const mySeq = ++searchRequestSeq;
     if (!query) {
       // Empty input + Go pressed = clear the active "near" search and
       // go back to the candidate's own precomputed top matches.
@@ -360,6 +369,7 @@
     try {
       const res = await rookApiFetch('/geocode?q=' + encodeURIComponent(query));
       const data = await res.json();
+      if (mySeq !== searchRequestSeq) return; // a newer search has since started — drop this one
       if (!res.ok) {
         nearLocationCoords = null;
         status.textContent = data.error || 'Could not find that location.';
@@ -382,6 +392,7 @@
       status.textContent = 'Searching near "' + query + '"...';
       const jobsRes = await rookApiFetch(`/jobs?limit=300&near_lat=${data.lat}&near_lng=${data.lng}`);
       const jobsData = await jobsRes.json();
+      if (mySeq !== searchRequestSeq) return; // a newer search has since started — drop this one
       const jobs = Array.isArray(jobsData) ? jobsData : (jobsData.jobs || []);
       allJobs = jobs;
       document.getElementById('jobList').dataset.demo = 'false';
@@ -390,6 +401,7 @@
       applyFiltersAndRender();
       showBanner(`Showing ${jobs.length} live job(s) near "${escapeHtml(query)}", scored for that location.`, 'info');
     } catch (err) {
+      if (mySeq !== searchRequestSeq) return;
       nearLocationCoords = null;
       status.textContent = 'Could not reach the location lookup: ' + err.message;
       applyFiltersAndRender();
@@ -757,10 +769,20 @@
   }
 
   function showBanner(html, level) {
-    const banner = document.createElement('div');
+    // Reported directly: this used to create a brand-new element on
+    // every call with no removal of the previous one, so every search
+    // (location lookups especially, which call this multiple times in
+    // quick succession) left all its old banners stacked up on the page
+    // forever. Now reuses one stable element, replacing its content
+    // each time instead of accumulating new ones.
+    let banner = document.getElementById('statusBanner');
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'statusBanner';
+      document.querySelector('.results-head').insertAdjacentElement('afterend', banner);
+    }
     banner.style.cssText = `background:${level === 'info' ? '#EAF7F4' : '#FFF7E6'}; border-left:3px solid ${level === 'info' ? '#00806E' : '#B98900'}; border-radius:8px; padding:12px 16px; margin-bottom:20px; font-size:13px; color:#3D4A63; line-height:1.5;`;
     banner.innerHTML = html;
-    document.querySelector('.results-head').insertAdjacentElement('afterend', banner);
   }
 </script>
 
