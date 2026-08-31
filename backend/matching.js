@@ -271,7 +271,7 @@ function scoreJob(job, profile) {
     requirements: { score: 0, max: 0 },
   };
   const catGap = new Set(); // categories forced to "Gap" by a hard disqualifier
-  let locationForcedStrong = false; // set when the job is within 90 miles — see the distance block below
+  let locationForcedStrong = false; // set when the job is within 60 miles — see the distance block below
 
   // ============================================================
   // PREFERENCE FIT — would the candidate want this job
@@ -336,30 +336,35 @@ function scoreJob(job, profile) {
       || Object.values(STATE_ABBR).find((abbr) => locationMentionsState(job.location_raw, abbr));
     const inAcceptedRegion = acceptedStateAbbrs.size === 0 || [...acceptedStateAbbrs].some((abbr) => locationMentionsState(job.location_raw, abbr));
 
-    if (miles <= 90) {
-      // Explicit, direct business rule (confirmed twice): within 90
-      // miles is a real, comfortable commute/territory distance for
-      // field sales and gets full distance credit AND forces the
-      // Location & Preferences category label itself to "Strong" —
-      // not just a high number feeding into a blended ratio that
-      // compensation or travel-% mismatches could still drag down
-      // below the "Strong" threshold. Distance is being treated as the
-      // dominant, overriding signal for this category's label, by
-      // direct instruction, not as one blended input among several.
+    if (miles <= 60) {
+      // Direct instruction: within 60 miles is the new "full credit"
+      // zone (tightened from the previous 90-mile threshold) — a
+      // genuinely comfortable commute/territory distance for field
+      // sales, and forces the Location & Preferences category label
+      // itself to "Strong" — not just a high number feeding into a
+      // blended ratio that compensation or travel-% mismatches could
+      // still drag down below the "Strong" threshold.
       locationForcedStrong = true;
       prefScore += 35;
       reasons.push(`About ${Math.round(miles)} miles from you`);
-    } else if (miles <= 150) {
+    } else if (miles <= 90) {
+      prefScore += 28;
+      reasons.push(`About ${Math.round(miles)} miles from you`);
+    } else if (miles <= 120) {
       prefScore += 22;
       reasons.push(`About ${Math.round(miles)} miles from you`);
+    } else if (miles <= 150) {
+      prefScore += 17;
+      reasons.push(`About ${Math.round(miles)} miles from you`);
     } else if (miles <= 300) {
-      prefScore += 14;
+      prefScore += 10;
       reasons.push(`About ${Math.round(miles)} miles from you`);
     } else if (inAcceptedRegion || profile.willing_to_relocate) {
       // Genuinely far, but somewhere the candidate said they're open to
       // (an accepted state/region) or willing to relocate for — real
-      // partial credit, not a hard disqualifier.
-      prefScore += 8;
+      // partial credit, not a hard disqualifier, but deliberately small
+      // now that the curve step-down is more gradual leading up to it.
+      prefScore += 5;
       reasons.push(
         profile.willing_to_relocate
           ? "Far from you, but you've indicated openness to relocation"
@@ -375,19 +380,18 @@ function scoreJob(job, profile) {
     // back to state-matching. Reasonable when a ZIP hasn't been set yet,
     // or a job's location text failed to geocode.
     //
-    // IMPORTANT: this deliberately does NOT award the full 35 points a
-    // confirmed close-distance match gets. It used to, which created a
-    // real, reported inconsistency — an ungeocoded same-state job (full
-    // credit, distance genuinely unknown) could outrank a geocoded job
-    // confirmed to be much closer (correctly earning less than full
-    // credit at real distances beyond ~25 miles). Matching within a
-    // state is real information, worth more than nothing, but it's
-    // never worth MORE than a distance that's actually been verified —
-    // 20 points sits deliberately between the confirmed 150-mile tier
-    // (22) and the confirmed 300-mile tier (14), reflecting genuine
-    // "somewhere in this state, exact distance unknown" uncertainty.
+    // IMPORTANT: this deliberately does NOT award full credit. It used
+    // to award the same as a confirmed close-distance match, which
+    // created a real, reported inconsistency — an ungeocoded same-state
+    // job (full credit, distance genuinely unknown) could outrank a
+    // geocoded job confirmed to be much closer. Matching within a state
+    // is real information, worth more than nothing, but never worth
+    // MORE than a distance that's actually been verified — 19 points
+    // sits deliberately between the confirmed 120-mile tier (22) and
+    // 150-mile tier (17), reflecting genuine "somewhere in this state,
+    // exact distance unknown" uncertainty.
     const matchedAbbr = [...acceptedStateAbbrs].find((abbr) => locationMentionsState(job.location_raw, abbr));
-    prefScore += 20;
+    prefScore += 19;
     reasons.push(
       matchedAbbr === homeStateAbbr
         ? "Location matches your home state (exact distance not yet available for this job)"
