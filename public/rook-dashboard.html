@@ -295,6 +295,7 @@
         <span class="chip" onclick="setTierFilter('saved', this)">Saved</span>
       </div>
     </div>
+    <div style="font-size:12.5px; color:#8B96AB; margin:-10px 0 16px;">Showing jobs within 150 miles of home (remote roles included regardless of distance). Looking farther out, or considering a different city? Try <a href="rook-search.html" style="color:var(--royal, #1463FF); font-weight:600;">Job Search</a>.</div>
 
     <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:14px;">
       <label style="display:flex; align-items:center; gap:7px; font-size:12.5px; color:#5B6B85; font-weight:600; cursor:pointer; margin:0;">
@@ -1020,10 +1021,17 @@
   }
 
   function showBanner(html, level) {
-    const banner = document.createElement('div');
+    // Same fix as rook-search.html: reuse one stable element instead of
+    // creating a new one every call, which left old banners stacked up
+    // on the page forever.
+    let banner = document.getElementById('statusBanner');
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'statusBanner';
+      document.querySelector('.panel-head').insertAdjacentElement('afterend', banner);
+    }
     banner.style.cssText = `background:${level === 'info' ? '#EAF7F4' : '#FFF7E6'}; border-left:3px solid ${level === 'info' ? '#00806E' : '#B98900'}; border-radius:8px; padding:12px 16px; margin-bottom:20px; font-size:13px; color:#3D4A63; line-height:1.5;`;
     banner.innerHTML = html;
-    document.querySelector('.panel-head').insertAdjacentElement('afterend', banner);
   }
 </script>
 
