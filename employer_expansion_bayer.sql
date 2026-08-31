@@ -12,7 +12,8 @@ alter table employers add constraint employers_ats_type_check
 
 insert into employers (company_name, company_slug, ats_type, ats_identifier, industry, priority)
 values
-  ('Bayer', 'bayer', 'eightfold', 'bayer|bayer.com', 'pharmaceutical', 'normal')
+  ('Bayer', 'bayer', 'eightfold', 'bayer.eightfold.ai|bayer.com', 'pharmaceutical', 'normal'),
+  ('Siemens Healthineers', 'siemens-healthineers', 'eightfold', 'jobs.siemens-healthineers.com|siemens.com', 'capital equipment', 'normal')
 on conflict (company_slug) do update set
   ats_type = excluded.ats_type,
   ats_identifier = excluded.ats_identifier,

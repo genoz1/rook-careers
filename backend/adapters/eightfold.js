@@ -21,10 +21,14 @@
 // it needs its own follow-up investigation into PCSX's URL structure,
 // not a guess bolted on without verification.
 //
-// You only need the employer's Eightfold subdomain and their own
-// corporate domain, joined with a pipe, e.g.:
-//   ats_identifier = "aexp|aexp.com"
-// (from https://aexp.eightfold.ai)
+// You need the employer's actual Eightfold-hosted career-site hostname
+// (which may be a *.eightfold.ai subdomain, or a fully custom domain
+// some employers use instead — confirmed both exist: Bayer uses
+// bayer.eightfold.ai directly, while Siemens Healthineers hosts the
+// same underlying platform at jobs.siemens-healthineers.com) plus the
+// "domain" parameter value their tenant expects, joined with a pipe:
+//   ats_identifier = "bayer.eightfold.ai|bayer.com"
+//   ats_identifier = "jobs.siemens-healthineers.com|siemens.com"
 
 const STRONG_TITLE_SIGNALS = [
   "sales", "account executive", "territory manager", "business development", "key account",
@@ -56,14 +60,14 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
 }
 
 function parseEightfoldIdentifier(identifier) {
-  const [subdomain, domain] = String(identifier).split("|");
-  if (!subdomain || !domain) throw new Error(`Malformed Eightfold identifier "${identifier}" — expected "subdomain|domain.com"`);
-  return { subdomain, domain };
+  const [hostname, domain] = String(identifier).split("|");
+  if (!hostname || !domain) throw new Error(`Malformed Eightfold identifier "${identifier}" — expected "hostname|domain.com"`);
+  return { hostname, domain };
 }
 
 async function fetchEightfoldJobs(identifier) {
-  const { subdomain, domain } = parseEightfoldIdentifier(identifier);
-  const baseUrl = `https://${subdomain}.eightfold.ai`;
+  const { hostname, domain } = parseEightfoldIdentifier(identifier);
+  const baseUrl = `https://${hostname}`;
   const pageSize = 50;
   let start = 0;
   const rawJobs = [];
@@ -103,9 +107,9 @@ async function fetchEightfoldJobs(identifier) {
  * job_description all verified directly, not guessed.
  */
 function normalizeEightfoldJob(raw, employer) {
-  const { subdomain } = parseEightfoldIdentifier(employer.ats_identifier);
+  const { hostname } = parseEightfoldIdentifier(employer.ats_identifier);
   const jobId = raw.id || raw.job_id;
-  const jobUrl = raw.canonicalPositionUrl || raw.apply_url || `https://${subdomain}.eightfold.ai/careers?pid=${jobId}`;
+  const jobUrl = raw.canonicalPositionUrl || raw.apply_url || `https://${hostname}/careers?pid=${jobId}`;
 
   return {
     source_job_id: String(jobId),
