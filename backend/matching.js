@@ -251,6 +251,15 @@ function scoreJob(job, profile) {
   let hardDisqualifier = false;
   let prefCap = 100;
   let candCap = 100;
+  // Distinct from prefCap/candCap on purpose: those only limit their own
+  // component BEFORE it gets averaged into overall_score, so a low
+  // prefCap can still be diluted by half when blended with a strong
+  // candidate_fit (a real bug found this way: prefCap capped at 50 for a
+  // >300-mile job still produced a 73% overall_score once averaged with
+  // a 96% candidate_fit). overallCap applies directly to the final
+  // overall_score, unconditionally, after the blend - a true ceiling
+  // that can't be diluted by a strong score somewhere else.
+  let overallCap = 100;
 
   // Five simplified categories for the job-card UI (spec: Experience,
   // Industry & Product, Customer & Specialty, Location & Preferences,
@@ -376,7 +385,7 @@ function scoreJob(job, profile) {
       // overall_score itself, the same mechanism already used for the
       // hard-disqualifier cases below, not just the location sub-score.
       prefScore += 5;
-      prefCap = Math.min(prefCap, 50);
+      overallCap = Math.min(overallCap, 50);
       reasons.push(
         profile.willing_to_relocate
           ? "Far from you, but you've indicated openness to relocation"
@@ -386,6 +395,12 @@ function scoreJob(job, profile) {
       concerns.push(`Location (${job.location_raw}, about ${Math.round(miles)} miles away) is far outside your area and not in a region you've said you're open to`);
       hardDisqualifier = true;
       prefCap = Math.min(prefCap, 65);
+      // Belt-and-suspenders with the overallCap mechanism above, rather
+      // than relying solely on the hardDisqualifier-gated cap further
+      // down - keeps both far-distance branches using the same,
+      // unconditional final-score ceiling instead of two different
+      // capping mechanisms that are easy to lose track of.
+      overallCap = Math.min(overallCap, 65);
     }
   } else if (acceptedStateAbbrs.size > 0 && [...acceptedStateAbbrs].some((abbr) => locationMentionsState(job.location_raw, abbr))) {
     // --- Fallback: no real coordinates on one or both sides, so fall
@@ -874,6 +889,9 @@ function scoreJob(job, profile) {
   }
   if (hardDisqualifier && overall_score != null) {
     overall_score = Math.min(overall_score, Math.min(prefCap, candCap));
+  }
+  if (overall_score != null) {
+    overall_score = Math.min(overall_score, overallCap);
   }
 
   const availabilityRatio = dataPointsPossible > 0 ? dataPointsAvailable / dataPointsPossible : 0;
