@@ -6,6 +6,12 @@
 // endpoint to render results: GET /api/apply/v2/jobs?domain={domain}.
 // That's what this adapter calls directly.
 //
+// Confirmed against a real raw response from a live Eightfold tenant
+// (Bayer) - field names (id, name, location, t_create,
+// canonicalPositionUrl, job_description) are verified, not guessed.
+// Meaningfully higher confidence than most other custom adapters built
+// this session as a result.
+//
 // Eightfold actually runs TWO different endpoint patterns depending on
 // which version a given employer's tenant is on — "SmartApply" (used
 // here) and a newer one called "PCSX." This adapter only implements
@@ -92,11 +98,9 @@ async function fetchEightfoldJobs(identifier) {
 /**
  * Convert one raw Eightfold position into ROOK's canonical job shape.
  *
- * NOTE: field names (name, id, location_name, jd_html, canonicalPositionUrl)
- * are a best-effort guess based on a third-party scraping guide's
- * documented example, not verified against a real live response from
- * this sandbox — the piece most likely to need adjustment on the first
- * real run against a live Eightfold employer.
+ * Field names confirmed against a real raw response (Bayer's Eightfold
+ * tenant): id, name, location, t_create, canonicalPositionUrl,
+ * job_description all verified directly, not guessed.
  */
 function normalizeEightfoldJob(raw, employer) {
   const { subdomain } = parseEightfoldIdentifier(employer.ats_identifier);
@@ -111,9 +115,9 @@ function normalizeEightfoldJob(raw, employer) {
     application_url: jobUrl,
     title_original: raw.name || raw.title || "",
     company_name: employer.company_name,
-    description_html: raw.jd_html || raw.description || null,
-    description_text: stripHtml(raw.jd_html || raw.description || raw.name || ""),
-    location_raw: raw.location_name || raw.location || "",
+    description_html: raw.job_description || null,
+    description_text: stripHtml(raw.job_description || raw.name || ""),
+    location_raw: raw.location || (Array.isArray(raw.locations) ? raw.locations.join(", ") : ""),
     date_posted: raw.t_create ? new Date(raw.t_create * 1000).toISOString() : null,
     status: "active",
     source_verified: true,
