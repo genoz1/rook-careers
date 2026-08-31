@@ -156,6 +156,10 @@ const SHARED_TENANT_BRANDS = {
   owensminor: [
     "Apria", "Byram Healthcare",
   ],
+  mars: [
+    "Royal Canin", "Wisdom Panel", "Mars Veterinary Health", "Banfield Pet Hospital",
+    "BluePearl", "AniCura", "Linnaeus", "Antech",
+  ],
 };
 
 function extractChildBrand(tenant, text) {
