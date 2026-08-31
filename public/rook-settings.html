@@ -52,6 +52,7 @@
   .toggle-row .t{font-size:14px; font-weight:600;}
   .toggle-row .d{font-size:12.5px; color:var(--muted); margin-top:2px;}
   .switch{width:40px; height:22px; border-radius:99px; background:var(--border); position:relative; flex-shrink:0; cursor:pointer;}
+  .switch.disabled{cursor:not-allowed; opacity:0.5;}
   .switch.on{background:var(--teal);}
   .switch::after{content:""; position:absolute; width:16px; height:16px; border-radius:50%; background:#fff; top:3px; left:3px; transition:left .15s;}
   .switch.on::after{left:21px;}
@@ -317,19 +318,19 @@
         <h3>Notifications</h3>
         <div class="toggle-row">
           <div><div class="t">Daily job digest</div><div class="d">A morning summary of new matches</div></div>
-          <div class="switch on" onclick="this.classList.toggle('on')"></div>
+          <div class="switch" id="digestEnabledSwitch" onclick="toggleDigestEnabled(this)"></div>
         </div>
         <div class="toggle-row">
-          <div><div class="t">Instant excellent-match alerts</div><div class="d">Notify me immediately for 90%+ matches</div></div>
-          <div class="switch on" onclick="this.classList.toggle('on')"></div>
+          <div><div class="t">Instant excellent-match alerts</div><div class="d">Notify me immediately for 90%+ matches (Coming soon)</div></div>
+          <div class="switch disabled" title="Not built yet"></div>
         </div>
         <div class="toggle-row">
-          <div><div class="t">Application follow-up reminders</div><div class="d">Remind me to follow up on active applications</div></div>
-          <div class="switch on" onclick="this.classList.toggle('on')"></div>
+          <div><div class="t">Application follow-up reminders</div><div class="d">Remind me to follow up on active applications (Coming soon)</div></div>
+          <div class="switch disabled" title="Not built yet"></div>
         </div>
         <div class="toggle-row">
-          <div><div class="t">Weekly career summary</div><div class="d">A weekly recap of your search activity</div></div>
-          <div class="switch" onclick="this.classList.toggle('on')"></div>
+          <div><div class="t">Weekly career summary</div><div class="d">A weekly recap of your search activity (Coming soon)</div></div>
+          <div class="switch disabled" title="Not built yet"></div>
         </div>
       </div>
     </div>
@@ -501,6 +502,16 @@ function addRegion(region) {
     rookApplySidebarProfile(currentProfile);
     if (!currentProfile) return; // no profile yet (onboarding not completed) — leave fields blank
 
+    // Reported directly: this toggle looked identical to a working
+    // setting (no "Coming soon" label, defaulted to visually "on") but
+    // had zero connection to digest_enabled - the real column
+    // backend/email/dailyDigest.js actually checks before sending.
+    // Flipping it saved nothing, so a candidate turning it off would
+    // keep getting digest emails indefinitely with no way to stop them
+    // from this page. digest_enabled defaults true server-side, so the
+    // switch does too when the field is genuinely unset.
+    document.getElementById('digestEnabledSwitch').classList.toggle('on', currentProfile.digest_enabled !== false);
+
     // The plan name itself is accurate (ROOK's one paid tier is
     // genuinely branded "Professional" on rook-pricing.html) - the bug
     // was showing it unconditionally to every candidate regardless of
@@ -626,6 +637,29 @@ function collectSettingsExperienceEntries() {
 function setVal(id, value) {
   const el = document.getElementById(id);
   if (el && value !== undefined && value !== null) el.value = value;
+}
+
+// Saves immediately on click, unlike the panel fields (which batch into
+// one save via the panel's own "Save Changes" button) - a notification
+// toggle reads as an instant on/off switch, not something you'd expect
+// to also need a separate save step for.
+async function toggleDigestEnabled(el) {
+  const newValue = !el.classList.contains('on');
+  el.classList.toggle('on', newValue);
+  try {
+    const res = await rookApiFetch('/profile', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ digest_enabled: newValue }),
+    });
+    if (res.ok) {
+      currentProfile = await res.json();
+    } else {
+      el.classList.toggle('on', !newValue); // revert on failure
+    }
+  } catch {
+    el.classList.toggle('on', !newValue); // revert on failure
+  }
 }
 
 async function saveProfilePanel(panel, btn) {
