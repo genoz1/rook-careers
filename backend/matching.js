@@ -364,7 +364,19 @@ function scoreJob(job, profile) {
       // (an accepted state/region) or willing to relocate for — real
       // partial credit, not a hard disqualifier, but deliberately small
       // now that the curve step-down is more gradual leading up to it.
+      //
+      // Direct instruction: a job this far out should score 50% AT
+      // BEST overall, regardless of how well it does on every other
+      // category — being in an "accepted region" earns it a real
+      // partial location score instead of an automatic disqualifying
+      // Gap, but it should never let a strong candidate/preference fit
+      // elsewhere pull the OVERALL score up past that ceiling the way
+      // the previous version allowed (a 746-mile job could still land
+      // at 76% overall on the strength of other categories). This caps
+      // overall_score itself, the same mechanism already used for the
+      // hard-disqualifier cases below, not just the location sub-score.
       prefScore += 5;
+      prefCap = Math.min(prefCap, 50);
       reasons.push(
         profile.willing_to_relocate
           ? "Far from you, but you've indicated openness to relocation"
