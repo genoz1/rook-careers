@@ -105,6 +105,19 @@ const AGENCY_DESCRIPTION_PHRASES = [
   "leading staffing", "recruiting firm", "search firm",
 ];
 
+// Strips the kind of cosmetic differences that let the exact same
+// agency listing look like two different job titles across mirrored
+// postings on different source boards - trailing pay-band suffixes
+// like "- 80" or "(80-120k)", punctuation, and casing.
+function normalizeAgencyTitle(title) {
+  return String(title || "")
+    .toLowerCase()
+    .replace(/[-–—]\s*\d+k?\s*$/i, "")
+    .replace(/\(\s*\$?\d+k?[\s-]*\$?\d*k?\s*\)/gi, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
 function looksLikeAgency(companyName, descriptionText) {
   const lowerCompany = (companyName || "").toLowerCase();
   const lowerDesc = (descriptionText || "").toLowerCase();
@@ -159,13 +172,36 @@ async function run() {
         .eq("source_job_id", job.source_job_id)
         .maybeSingle();
 
+      // Reported directly: the same real listing from one staffing
+      // agency routinely shows up under several different source_job_ids
+      // - Adzuna aggregates from many source boards (Indeed, ZipRecruiter,
+      // etc.), and the same agency posting mirrored across boards gets a
+      // distinct ID on each one, so the exact-ID check above can't catch
+      // it (confirmed directly: the same Rep-Lite posting appeared 7
+      // times within days). This second, fuzzy check catches that
+      // specific case - same company, same normalized title, recently
+      // seen - treating it as the same listing rather than a new one.
+      let fuzzyDuplicate = null;
+      if (!existing) {
+        const normalizedTitle = normalizeAgencyTitle(job.title_original);
+        const recentCutoff = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
+        const { data: candidates } = await supabase
+          .from("jobs")
+          .select("id, title_original")
+          .eq("source_type", "agency_aggregated")
+          .eq("company_name", companyName)
+          .gte("first_seen_at", recentCutoff);
+        fuzzyDuplicate = (candidates || []).find((c) => normalizeAgencyTitle(c.title_original) === normalizedTitle) || null;
+      }
+      const matchedRow = existing || fuzzyDuplicate;
+
       let upsertedRow;
       let error;
-      if (existing) {
+      if (matchedRow) {
         ({ data: upsertedRow, error } = await supabase
           .from("jobs")
           .update({ ...job, last_seen_at: new Date().toISOString() })
-          .eq("id", existing.id)
+          .eq("id", matchedRow.id)
           .select()
           .single());
       } else {
