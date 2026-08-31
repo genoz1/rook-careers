@@ -511,7 +511,18 @@ function scoreJob(job, profile) {
       reasons.push(`Matches your stated interest in ${matchedIndustry}`);
     }
     if (Array.isArray(profile.industries_to_avoid) && profile.industries_to_avoid.length > 0) {
-      const avoided = profile.industries_to_avoid.find((ind) => jobText.includes(String(ind).toLowerCase()));
+      // Same bug class as the desired-industries fix above, and
+      // arguably worse here: a compound avoided-industry value silently
+      // failing to match means the candidate never gets warned about
+      // something they explicitly asked to avoid, rather than just
+      // under-scoring a good match.
+      const avoided = profile.industries_to_avoid.find((ind) =>
+        String(ind)
+          .toLowerCase()
+          .split(/\s*[\/,&]\s*/)
+          .filter(Boolean)
+          .some((term) => jobText.includes(term))
+      );
       if (avoided) concerns.push(`Mentions ${avoided}, which you asked to avoid`);
     }
   }
