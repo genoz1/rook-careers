@@ -349,10 +349,10 @@
     const status = document.getElementById('nearLocationStatus');
     if (!query) {
       // Empty input + Go pressed = clear the active "near" search and
-      // go back to normal sorting.
+      // go back to the candidate's own precomputed top matches.
       nearLocationCoords = null;
       status.textContent = '';
-      applyFiltersAndRender();
+      await loadJobs();
       return;
     }
 
@@ -367,8 +367,28 @@
         return;
       }
       nearLocationCoords = data;
+
+      // Reported directly: this used to only re-filter the candidate's
+      // own top-300 PRECOMPUTED matches (scored relative to their real
+      // home) client-side, so searching a genuinely different city
+      // (e.g. considering a move) could show zero results even when
+      // real jobs exist there — those jobs never scored high enough
+      // against the candidate's REAL location to make that initial
+      // top-300 cut. Now does a fresh server-side fetch, live-scored
+      // relative to the explored location specifically (see GET /jobs's
+      // near_lat/near_lng handling), so "show jobs near X" means what
+      // it says for any X, not just near-variants of the candidate's
+      // own home.
+      status.textContent = 'Searching near "' + query + '"...';
+      const jobsRes = await rookApiFetch(`/jobs?limit=300&near_lat=${data.lat}&near_lng=${data.lng}`);
+      const jobsData = await jobsRes.json();
+      const jobs = Array.isArray(jobsData) ? jobsData : (jobsData.jobs || []);
+      allJobs = jobs;
+      document.getElementById('jobList').dataset.demo = 'false';
+
       status.innerHTML = `Showing jobs closest to "${escapeHtml(query)}" first. <a href="#" onclick="clearNearLocation(); return false;" style="color:var(--royal); font-weight:600;">Clear</a>`;
       applyFiltersAndRender();
+      showBanner(`Showing ${jobs.length} live job(s) near "${escapeHtml(query)}", scored for that location.`, 'info');
     } catch (err) {
       nearLocationCoords = null;
       status.textContent = 'Could not reach the location lookup: ' + err.message;
@@ -380,7 +400,7 @@
     nearLocationCoords = null;
     document.getElementById('nearLocationInput').value = '';
     document.getElementById('nearLocationStatus').textContent = '';
-    applyFiltersAndRender();
+    loadJobs();
   }
 
   (async () => {

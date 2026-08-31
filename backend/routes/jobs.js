@@ -22,7 +22,7 @@
 const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
 const { scoreJob } = require("../matching");
-const { scoreAndStoreForCandidate } = require("../scoring/precompute");
+const { scoreAndStoreForCandidate, fetchActiveJobs } = require("../scoring/precompute");
 const { distanceMiles } = require("../geocoding");
 const { sendEmail } = require("../email/resend");
 
@@ -360,6 +360,77 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     if (state) query = query.eq("state", state);
     const { data } = await query;
     return res.json(data);
+  }
+
+  // "Explore a different location" — Job Search's "Show jobs near"
+  // field, when it's been pointed somewhere other than the candidate's
+  // own saved home ZIP (e.g. considering a move to Chicago while
+  // actually living in Florida). Reported directly: this used to just
+  // re-filter the candidate's own top-300 PRECOMPUTED matches
+  // client-side, which are scored relative to their real home location
+  // - so a candidate whose own top matches are all nearby (increasingly
+  // true now that distance scoring is stricter) would see zero results
+  // near a genuinely different city, even though real jobs exist there,
+  // because those jobs never scored high enough against their REAL
+  // location to make the initial top-300 cut at all.
+  //
+  // candidate_job_matches is inherently tied to the candidate's actual
+  // home_lat/home_lng (that's what the scheduled precompute job scores
+  // against), so satisfying this properly means live-scoring here
+  // instead of reading that table - deliberately scoped to jobs
+  // roughly near the explored location first (cheap distance check
+  // before the real scoring pass), not the full active-jobs table,
+  // since scoring every job nationwide for a single search would be
+  // wasteful when only a few hundred are ever going to be geographically
+  // relevant to what was actually asked.
+  const nearLat = req.query.near_lat != null ? Number(req.query.near_lat) : null;
+  const nearLng = req.query.near_lng != null ? Number(req.query.near_lng) : null;
+  if (nearLat != null && nearLng != null && !Number.isNaN(nearLat) && !Number.isNaN(nearLng)) {
+    const allActive = await fetchActiveJobs(supabaseAdmin);
+    const EXPLORE_RADIUS_MILES = 300;
+    const nearby = allActive.filter((job) => {
+      if (job.job_lat == null || job.job_lng == null) return false;
+      return distanceMiles(nearLat, nearLng, job.job_lat, job.job_lng) <= EXPLORE_RADIUS_MILES;
+    });
+
+    // Scores against a location-shifted COPY of the real profile — every
+    // other preference (industry, comp, experience, exclusions) stays
+    // the candidate's own real, actual profile; only the point distance
+    // is measured from shifts to the explored location, which is the
+    // entire point of "what if I lived here instead."
+    const exploredProfile = { ...profile, home_lat: nearLat, home_lng: nearLng };
+    let scored = nearby
+      .map((job) => ({ ...job, match: scoreJob(job, exploredProfile) }))
+      .filter((job) => industry ? job.industry === industry : true)
+      .filter((job) => state ? job.state === state : true)
+      .sort((a, b) => (b.match?.overall_score ?? -1) - (a.match?.overall_score ?? -1))
+      .slice(0, Number(limit));
+
+    const { appStatusByJob, noteFor } = await loadEmployerHistory(profile.id);
+    // saved status lives on candidate_job_matches, which this live-scoring
+    // path doesn't read from (it's tied to the candidate's real home
+    // location, not the explored one) - a lightweight separate lookup
+    // for just the saved job_ids, rather than the full scored rows.
+    const { data: savedRows } = await supabaseAdmin
+      .from("candidate_job_matches")
+      .select("job_id")
+      .eq("candidate_id", profile.id)
+      .eq("saved", true);
+    const savedJobIds = new Set((savedRows || []).map((r) => r.job_id));
+
+    const results = scored.map((job) => ({
+      ...attachDistance(job, exploredProfile),
+      match: job.match,
+      saved: savedJobIds.has(job.id),
+      application_status: appStatusByJob.get(job.id) || null,
+      employer_note: noteFor(job),
+    }));
+
+    return res.json({
+      jobs: isSubscribed(profile) ? results : results.map(redactForNonSubscriber),
+      scoring_in_progress: false,
+      explored_location: true,
+    });
   }
 
   async function fetchScoredRows() {
