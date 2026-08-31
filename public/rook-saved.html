@@ -52,8 +52,27 @@
   .job-card{
     background:#fff; border-radius:var(--radius); padding:22px; box-shadow:0 2px 10px -4px rgba(11,29,58,0.08); position:relative;
   }
-  .job-card .compare-check{position:absolute; top:18px; right:18px;}
+  .job-card .compare-check{position:absolute; top:18px; right:18px; width:18px; height:18px; cursor:pointer;}
   .match-pill{font-size:12px; font-weight:700; padding:4px 10px; border-radius:99px; background:rgba(0,194,168,0.12); color:#00806E; display:inline-block; margin-bottom:12px;}
+
+  .compare-modal-overlay{
+    position:fixed; inset:0; background:rgba(11,29,58,0.5); z-index:100;
+    display:flex; align-items:center; justify-content:center; padding:24px;
+  }
+  .compare-modal{
+    background:#fff; border-radius:var(--radius); max-width:1000px; width:100%; max-height:85vh;
+    display:flex; flex-direction:column; overflow:hidden;
+  }
+  .compare-modal-head{
+    display:flex; align-items:center; justify-content:space-between; padding:20px 24px;
+    border-bottom:1px solid var(--border);
+  }
+  .compare-modal-head h3{margin:0;}
+  .compare-modal-body{padding:24px; overflow-y:auto;}
+  .compare-table{width:100%; border-collapse:collapse; font-size:13.5px;}
+  .compare-table th, .compare-table td{text-align:left; padding:12px 16px; border-bottom:1px solid var(--border); vertical-align:top;}
+  .compare-table th{font-weight:600; color:#5B6B85; white-space:nowrap; width:140px;}
+  .compare-table td a{color:var(--royal, #1463FF); font-weight:600;}
   .job-card h4{font-size:16px; font-weight:700; margin-bottom:4px; padding-right:24px;}
   .job-card .company{font-size:13px; color:var(--muted); margin-bottom:12px;}
   .job-meta{display:flex; flex-direction:column; gap:6px; font-size:12.5px; color:var(--muted); margin-bottom:16px;}
@@ -157,7 +176,17 @@
 
   <div class="compare-bar" id="compareBar">
     <span><b id="compareCount">0</b> selected for comparison</span>
-    <a href="#" class="btn btn-primary btn-sm">Compare Jobs</a>
+    <a href="#" class="btn btn-primary btn-sm" onclick="openCompareModal(); return false;">Compare Jobs</a>
+  </div>
+
+  <div id="compareModalOverlay" class="compare-modal-overlay" style="display:none;" onclick="if(event.target===this) closeCompareModal();">
+    <div class="compare-modal">
+      <div class="compare-modal-head">
+        <h3>Compare Jobs</h3>
+        <button type="button" class="btn-icon" onclick="closeCompareModal()" aria-label="Close">✕</button>
+      </div>
+      <div id="compareModalBody" class="compare-modal-body"></div>
+    </div>
   </div>
 
   <div class="job-grid" id="jobGrid">
@@ -178,9 +207,51 @@ function updateCompare(){
   bar.classList.toggle('show', checked >= 2);
 }
 
+// Reported directly: the selection mechanism (checkboxes, live count,
+// bar show/hide) existed, but clicking "Compare Jobs" itself did
+// nothing - no comparison view was ever built. This builds a real
+// side-by-side table from whichever 2+ jobs are currently checked.
+function openCompareModal() {
+  const checkedIds = Array.from(document.querySelectorAll('.compare-check:checked')).map((el) => el.dataset.jobId);
+  const jobs = allSavedJobs.filter((j) => checkedIds.includes(String(j.id)));
+  if (jobs.length < 2) return;
+
+  const rows = [
+    ['Title', (j) => escapeHtml(j.title_original || j.title_normalized || 'Untitled role')],
+    ['Company', (j) => escapeHtml(j.company_name || (j.source_type === 'recruiter_posted' ? 'Confidential search' : '—'))],
+    ['Location', (j) => escapeHtml(j.location_raw || '—')],
+    ['Match Score', (j) => j.match?.overall_score != null ? `${j.match.overall_score}%` : '—'],
+    ['Compensation', (j) => escapeHtml(j.compensation_text || (j.salary_min ? `$${j.salary_min}${j.salary_max ? '–$' + j.salary_max : '+'}` : '—'))],
+    ['Distance', (j) => j.distance_miles != null ? `${j.distance_miles} mi` : '—'],
+    ['Posted', (j) => escapeHtml(j.date_posted || j.first_seen_at || '—')],
+    ['Link', (j) => j.source_type === 'recruiter_posted'
+      ? `<a href="rook-apply.html?job=${escapeHtml(j.id)}">Apply</a>`
+      : (j.source_url ? `<a href="${escapeHtml(j.source_url)}" target="_blank">View Original</a>` : '—')],
+  ];
+
+  const html = `
+    <table class="compare-table">
+      <thead><tr><th></th>${jobs.map((j) => `<th>${escapeHtml(j.company_name || 'Job')}</th>`).join('')}</tr></thead>
+      <tbody>
+        ${rows.map(([label, getValue]) => `
+          <tr><th>${label}</th>${jobs.map((j) => `<td>${getValue(j)}</td>`).join('')}</tr>
+        `).join('')}
+      </tbody>
+    </table>`;
+
+  document.getElementById('compareModalBody').innerHTML = html;
+  document.getElementById('compareModalOverlay').style.display = 'flex';
+}
+
+function closeCompareModal() {
+  document.getElementById('compareModalOverlay').style.display = 'none';
+}
+
 function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
+
+let allSavedJobs = [];
 
 (async () => {
   const token = await rookRequireAuth();
@@ -199,6 +270,7 @@ function escapeHtml(str) {
       return;
     }
 
+    allSavedJobs = jobs;
     grid.innerHTML = jobs.map(renderSavedCard).join('');
   } catch (err) {
     grid.innerHTML = `<div class="empty-hint">Could not load saved jobs (${escapeHtml(err.message)}). Showing example cards below — see ROOK-Setup-Guide.pdf.</div>`;
@@ -218,6 +290,7 @@ function renderSavedCard(job) {
     : `<a href="${job.source_url || '#'}" target="_blank" class="btn btn-primary btn-sm">View Original</a>`;
   return `
     <div class="job-card" data-job-id="${escapeHtml(job.id)}">
+      <input type="checkbox" class="compare-check" data-job-id="${escapeHtml(job.id)}" onchange="updateCompare()" title="Select to compare" />
       ${score != null ? `<span class="match-pill">${score}% Match</span>` : ''}
       <h4>${escapeHtml(job.title_original || job.title_normalized || 'Untitled role')}</h4>
       <div class="company">${escapeHtml(job.company_name || (isRecruiterPosted ? 'Confidential search' : ''))} — ${escapeHtml(job.location_raw || '')}</div>

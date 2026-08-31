@@ -977,14 +977,14 @@ router.get("/saved-jobs", requireConfig, requireAuth, loadCandidateId, async (re
 
   const { data: profile } = await supabaseAdmin
     .from("candidate_profiles")
-    .select("subscription_status")
+    .select("subscription_status, home_lat, home_lng")
     .eq("id", req.candidateId)
     .maybeSingle();
 
   const jobs = (rows || [])
     .filter((row) => row.jobs) // guards against a job having been removed since it was saved
     .map((row) => ({
-      ...row.jobs,
+      ...attachDistance(row.jobs, profile),
       match: row.overall_score != null ? matchFromRow(row) : null,
       saved: true,
     }));
