@@ -102,6 +102,18 @@
     .tab-panel:last-child{page-break-after:auto;}
     .resume-body{max-height:none !important; overflow:visible !important;}
     body{background:#fff;}
+    /* Reported directly: the exported PDF showed résumé content jumbled
+       between the Original and Tailored columns in a confusing order.
+       .compare-grid is a genuine 2-column CSS grid, and browsers handle
+       multi-column grids poorly once content needs to paginate across
+       print pages - text gets sliced and reflowed unpredictably rather
+       than printing one column fully before the next. Forces a single
+       column specifically for print: Original prints completely, then
+       Tailored prints completely below it, each with a clean page break
+       instead of trying to keep two columns aligned across pages. */
+    .compare-grid{display:block !important;}
+    .compare-grid .resume-card{page-break-after:always;}
+    .compare-grid .resume-card:last-child{page-break-after:auto;}
   }
 </style>
 </head>
