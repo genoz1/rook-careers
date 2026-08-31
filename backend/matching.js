@@ -488,7 +488,24 @@ function scoreJob(job, profile) {
     dataPointsPossible++;
     dataPointsAvailable++;
     const jobText = `${job.title_original || ""} ${job.description_text || ""}`.toLowerCase();
-    const matchedIndustry = profile.desired_industries.find((ind) => jobText.includes(String(ind).toLowerCase()));
+    // Reported directly, with a concrete case: "Veterinary / Animal
+    // Health" as a whole never matches ordinary job text, since no
+    // real posting phrases it as that exact compound string with a
+    // slash — a description that says "veterinary clinics" or "animal
+    // health customers" (this job's own AI-extracted customer type was
+    // literally "Veterinarians") was silently scoring zero on stated
+    // industry interest. Splits each chip on "/" and other separators
+    // so "Veterinary / Animal Health" checks for "veterinary" OR
+    // "animal health" independently — the other four industry chips
+    // (Diagnostics, Medical Device, Capital Equipment, Pharmaceutical)
+    // are single terms already and are unaffected by this change.
+    const matchedIndustry = profile.desired_industries.find((ind) =>
+      String(ind)
+        .toLowerCase()
+        .split(/\s*[\/,&]\s*/)
+        .filter(Boolean)
+        .some((term) => jobText.includes(term))
+    );
     if (matchedIndustry) {
       prefScore += 15;
       reasons.push(`Matches your stated interest in ${matchedIndustry}`);
