@@ -149,7 +149,12 @@ const US_STATE_ABBRS = new Set([
 // misfire on a genuine domestic posting the way trying to text-match
 // every possible foreign city name inevitably would.
 function hasForeignCountryCodePrefix(locationRaw) {
-  const match = /^([A-Z]{2})\s*-/.exec((locationRaw || "").trim());
+  // Defensive: crashed a real ingest run when a Pinpoint job's raw
+  // location came through as an object (its documented shape is
+  // {id, name}, not a plain string) instead of the string this
+  // function expects - String(...) first so a malformed field from any
+  // adapter can never bring down an entire ingest batch over one job.
+  const match = /^([A-Z]{2})\s*-/.exec(String(locationRaw || "").trim());
   if (!match) return false;
   return !US_STATE_ABBRS.has(match[1]);
 }

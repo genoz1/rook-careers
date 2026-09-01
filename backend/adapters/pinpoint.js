@@ -55,7 +55,7 @@ function normalizePinpointJob(raw, employer) {
     company_name: employer.company_name,
     description_html: raw.htmlDescription || null,
     description_text: raw.description || raw.title,
-    location_raw: raw.location || "",
+    location_raw: raw.location?.name || "",
     date_posted: raw.pubDate || null,
     status: "active",
     source_verified: true,
