@@ -923,12 +923,20 @@ function scoreJob(job, profile) {
   } else {
     overall_score = null;
   }
-  if (hardDisqualifier && overall_score != null) {
-    overall_score = Math.min(overall_score, Math.min(prefCap, candCap));
-  }
-  if (overall_score != null) {
-    overall_score = Math.min(overall_score, overallCap);
-  }
+  // Direct instruction, stated plainly: no job should ever be hard
+  // disqualified from a candidate's view, and the score should just
+  // reflect the match - not be artificially capped by any mechanism.
+  // "You never know what a person might be interested in... if a
+  // person isn't able to see all of the jobs, what is the use." The
+  // individual hardDisqualifier / prefCap / candCap / overallCap
+  // assignments throughout this function (foreign country, distance,
+  // avoided industry, etc.) are left in place below - they still drive
+  // real, accurate concerns/reasons text explaining WHY a job scores
+  // the way it does - but none of them force the final score down to
+  // an artificial ceiling anymore. A genuinely poor match scores low
+  // because the real underlying calculation says so, not because of a
+  // cap layered on top of it; a candidate can always see every job,
+  // with the score honestly reflecting fit rather than gating visibility.
 
   const availabilityRatio = dataPointsPossible > 0 ? dataPointsAvailable / dataPointsPossible : 0;
   const confidence = availabilityRatio >= 0.75 ? "high" : availabilityRatio >= 0.4 ? "medium" : "low";
@@ -945,7 +953,6 @@ function scoreJob(job, profile) {
   const excellent_match = Boolean(
     overall_score != null &&
     overall_score >= 90 &&
-    !hardDisqualifier &&
     categories.experience.rating === "Strong" &&
     goodOrStrong(categories.industry_product.rating) &&
     goodOrStrong(categories.customer_specialty.rating) &&

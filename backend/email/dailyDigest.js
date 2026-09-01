@@ -94,7 +94,6 @@ async function sendDigestForCandidate(supabase, profile, appBaseUrl) {
     .select("*, jobs!inner(*)")
     .eq("candidate_id", profile.id)
     .eq("dismissed", false)
-    .eq("hard_disqualifier", false)
     .eq("jobs.status", "active")
     .eq("jobs.moderation_status", "approved")
     .order("overall_score", { ascending: false })
