@@ -443,20 +443,22 @@ function scoreJob(job, profile) {
   } else if (acceptedStateAbbrs.size > 0 && [...acceptedStateAbbrs].some((abbr) => locationMentionsState(job.location_raw, abbr))) {
     // --- Fallback: no real coordinates on one or both sides, so fall
     // back to state-matching. Reasonable when a ZIP hasn't been set yet,
-    // or a job's location text failed to geocode.
+    // or a job's location text failed to geocode - notably including
+    // Workday's generic "N Locations" placeholder for multi-site reqs,
+    // which is real text but carries no usable coordinates at all.
     //
-    // IMPORTANT: this deliberately does NOT award full credit. It used
-    // to award the same as a confirmed close-distance match, which
-    // created a real, reported inconsistency — an ungeocoded same-state
-    // job (full credit, distance genuinely unknown) could outrank a
-    // geocoded job confirmed to be much closer. Matching within a state
-    // is real information, worth more than nothing, but never worth
-    // MORE than a distance that's actually been verified — 19 points
-    // sits deliberately between the confirmed 120-mile tier (22) and
-    // 150-mile tier (17), reflecting genuine "somewhere in this state,
-    // exact distance unknown" uncertainty.
+    // Reported directly: several Abbott/Elanco-style "N Locations"
+    // postings genuinely far from home (Virginia, Ohio, the Carolinas
+    // for a Florida candidate) were still scoring 72% - this whole
+    // branch never got the distance-multiplier treatment added to the
+    // real-coordinates path above, so a job landing here could dilute
+    // to a deceptively high overall score exactly the same way the
+    // 900-mile Chicago job did before that fix. distanceMultiplier
+    // applied here too now, calibrated to the genuine uncertainty of
+    // each case rather than a real measured distance.
     const matchedAbbr = [...acceptedStateAbbrs].find((abbr) => locationMentionsState(job.location_raw, abbr));
     prefScore += 19;
+    distanceMultiplier = 0.8;
     reasons.push(
       matchedAbbr === homeStateAbbr
         ? "Location matches your home state (exact distance not yet available for this job)"
@@ -464,11 +466,11 @@ function scoreJob(job, profile) {
     );
   } else if (profile.willing_to_relocate) {
     prefScore += 14;
+    distanceMultiplier = 0.55;
     reasons.push("You've indicated openness to relocation");
   } else if (acceptedStateAbbrs.size > 0 && job.location_raw) {
     concerns.push(`Location (${job.location_raw}) may be outside your preferred states`);
-    hardDisqualifier = true;
-    prefCap = Math.min(prefCap, 65);
+    distanceMultiplier = 0.25;
   }
 
   // Purely informational — does not add or remove points. Being able to
