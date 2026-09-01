@@ -107,7 +107,7 @@ const NON_US_COUNTRY_SIGNALS = [
   // the largest/most common offshore hubs seen on job boards.
   "mumbai", "bangalore", "bengaluru", "delhi", "new delhi", "hyderabad",
   "pune", "chennai", "gurgaon", "gurugram", "noida", "kolkata",
-  "shanghai", "beijing", "shenzhen", "guangzhou", "manila", "jakarta",
+  "shanghai", "beijing", "shenzhen", "guangzhou", "manila", "taguig", "makati", "jakarta",
   "kuala lumpur", "bangkok", "ho chi minh city", "hanoi", "seoul",
   "tokyo", "osaka", "sao paulo", "mexico city", "dubai", "tel aviv",
   // Deliberately excludes city names with a real, notable US namesake

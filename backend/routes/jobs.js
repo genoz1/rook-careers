@@ -405,8 +405,17 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
   // since scoring every job nationwide for a single search would be
   // wasteful when only a few hundred are ever going to be geographically
   // relevant to what was actually asked.
-  const nearLat = req.query.near_lat != null ? Number(req.query.near_lat) : null;
-  const nearLng = req.query.near_lng != null ? Number(req.query.near_lng) : null;
+  // Direct instruction: "just copy the job search page and lock the zip
+  // code into wherever the customer's zip code is on their profile."
+  // Defaults near_lat/near_lng to the candidate's own real home
+  // coordinates when neither is explicitly given, so this becomes the
+  // literal same, already-proven-correct code path for BOTH an explicit
+  // "show jobs near X" search AND the default candidate-facing view -
+  // not a second, separate reimplementation of the same idea that could
+  // (and did) drift from it in some subtle way. One path, one set of
+  // bugs to ever find, not two.
+  const nearLat = req.query.near_lat != null ? Number(req.query.near_lat) : profile.home_lat;
+  const nearLng = req.query.near_lng != null ? Number(req.query.near_lng) : profile.home_lng;
   if (nearLat != null && nearLng != null && !Number.isNaN(nearLat) && !Number.isNaN(nearLng)) {
     const EXPLORE_RADIUS_MILES = 300;
     // Reported directly as genuinely slow: fetching ALL ~2,500+ active
@@ -440,19 +449,40 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
       return distanceMiles(nearLat, nearLng, job.job_lat, job.job_lng) <= EXPLORE_RADIUS_MILES;
     });
 
+    // A lat/lng bounding box can only ever match jobs that HAVE real
+    // coordinates - a genuinely remote role, or a vague multi-location
+    // posting that never successfully geocoded, would be silently
+    // dropped entirely rather than shown (even far down the list) if
+    // this were the only query run. Fetched separately since a NULL
+    // column can't be bounded by range; scoreJob()'s own fallback path
+    // (state-text-matching, or a flat remote credit) already applies an
+    // honest, non-inflated distanceMultiplier to these - same as the
+    // real-coordinates case above, just without an exact mile figure.
+    let noCoordsQuery = supabaseAdmin
+      .from("jobs")
+      .select(JOB_LIST_COLUMNS)
+      .eq("status", "active")
+      .eq("moderation_status", "approved")
+      .is("job_lat", null);
+    if (industry) noCoordsQuery = noCoordsQuery.eq("industry", industry);
+    if (state) noCoordsQuery = noCoordsQuery.eq("state", state);
+    if (keyword) noCoordsQuery = noCoordsQuery.or(`title_original.ilike.%${keyword}%,company_name.ilike.%${keyword}%`);
+    const { data: noCoordsJobs, error: noCoordsError } = await noCoordsQuery;
+    if (noCoordsError) return res.status(500).json({ error: noCoordsError.message });
+
     // Scores against a location-shifted COPY of the real profile — every
     // other preference (industry, comp, experience, exclusions) stays
     // the candidate's own real, actual profile; only the point distance
     // is measured from shifts to the explored location, which is the
     // entire point of "what if I lived here instead."
     const exploredProfile = { ...profile, home_lat: nearLat, home_lng: nearLng };
-    let scored = nearby
+    let scored = [...nearby, ...(noCoordsJobs || [])]
       .filter((job) => !mentionsNonUsCountry(job.location_raw, job.job_lng))
       .map((job) => ({ ...job, match: scoreJob(job, exploredProfile) }))
       .filter((job) => industry ? job.industry === industry : true)
       .filter((job) => state ? job.state === state : true)
-      .sort((a, b) => (b.match?.overall_score ?? -1) - (a.match?.overall_score ?? -1))
-      .slice(0, Number(limit));
+      .sort((a, b) => (b.match?.overall_score ?? -1) - (a.match?.overall_score ?? -1));
+    if (!keyword) scored = scored.slice(0, Number(limit));
 
     const { appStatusByJob, noteFor } = await loadEmployerHistory(profile.id);
     // saved status lives on candidate_job_matches, which this live-scoring
