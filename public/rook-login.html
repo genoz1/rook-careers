@@ -120,9 +120,14 @@
   const configured = window.ROOK_CONFIG.SUPABASE_URL !== "YOUR_SUPABASE_PROJECT_URL";
   if (!configured) document.getElementById('configWarning').style.display = 'block';
 
-  const client = configured
-    ? window.supabase.createClient(window.ROOK_CONFIG.SUPABASE_URL, window.ROOK_CONFIG.SUPABASE_ANON_KEY)
-    : null;
+  // Reported via audit: pages loading both rook-auth.js (which creates
+  // the shared rookSupabase client) and their own separate
+  // createClient() call trigger Supabase's own "Multiple GoTrueClient
+  // instances detected... may cause undefined behavior" warning, since
+  // both instances point at the same project and use the same
+  // localStorage session key. Reuses the shared client instead of
+  // creating a second, redundant one.
+  const client = configured ? rookSupabase : null;
 
   // No auth call here was protected against hanging forever — if
   // Supabase's SMTP relay is slow or failing (it tries to send a
