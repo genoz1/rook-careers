@@ -23,7 +23,21 @@
 const { titleLooksRelevant } = require('../relevanceFilter');
 
 function stripHtml(html) {
-  return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  return html.replace(/<[^>]*>/g, " ")
+    // Reported via audit: literal "&nbsp;" and encoded apostrophes were
+    // showing up in public job descriptions - stripping tags alone
+    // doesn't decode HTML entities, so they survived as raw text.
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&#39;|&apos;|&rsquo;|&lsquo;/gi, "'")
+    .replace(/&quot;|&rdquo;|&ldquo;/gi, '"')
+    .replace(/&ndash;/gi, "-")
+    .replace(/&mdash;/gi, "\u2014")
+    .replace(/&hellip;/gi, "...")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
