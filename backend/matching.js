@@ -314,6 +314,7 @@ function scoreJob(job, profile) {
   // overall_score, unconditionally, after the blend - a true ceiling
   // that can't be diluted by a strong score somewhere else.
   let overallCap = 100;
+  let distanceMultiplier = 1;
 
   // Five simplified categories for the job-card UI (spec: Experience,
   // Industry & Product, Customer & Specialty, Location & Preferences,
@@ -399,62 +400,45 @@ function scoreJob(job, profile) {
       || Object.values(STATE_ABBR).find((abbr) => locationMentionsState(job.location_raw, abbr));
     const inAcceptedRegion = acceptedStateAbbrs.size === 0 || [...acceptedStateAbbrs].some((abbr) => locationMentionsState(job.location_raw, abbr));
 
+    // Direct instruction, stated with a concrete worked example: for the
+    // same underlying job/fit, distance should be THE dominant
+    // differentiator - the same lab-diagnostics role should rank
+    // Villages > Orlando > Jacksonville > Iowa, in that order, purely
+    // on distance, regardless of how well it scores on every other
+    // category. The old additive-only approach (up to 35 of ~100
+    // preference points) gets diluted once blended with unrelated
+    // categories - a job with a terrible location fit but excellent
+    // comp/industry/freshness could still land a deceptively high
+    // overall score, which is exactly what let a 900+-mile job hit 98%.
+    // distanceMultiplier scales the FINAL overall_score directly
+    // (applied once, near the very end of this function) instead of
+    // being diluted as just one ingredient among several, so distance
+    // can never be washed out by unrelated categories compensating for
+    // it. Still fully visible at every tier, including the worst one -
+    // "should show up but way down the list," not hidden. A smooth
+    // curve rather than hard tiers, so two jobs at, say, 40 and 55
+    // miles still rank in the right order relative to each other
+    // instead of tying inside a flat bucket.
     if (miles <= 60) {
-      // Direct instruction: within 60 miles is the new "full credit"
-      // zone (tightened from the previous 90-mile threshold) — a
-      // genuinely comfortable commute/territory distance for field
-      // sales, and forces the Location & Preferences category label
-      // itself to "Strong" — not just a high number feeding into a
-      // blended ratio that compensation or travel-% mismatches could
-      // still drag down below the "Strong" threshold.
       locationForcedStrong = true;
       prefScore += 35;
-      reasons.push(`About ${Math.round(miles)} miles from you`);
-    } else if (miles <= 90) {
-      prefScore += 28;
-      reasons.push(`About ${Math.round(miles)} miles from you`);
-    } else if (miles <= 120) {
-      prefScore += 22;
-      reasons.push(`About ${Math.round(miles)} miles from you`);
-    } else if (miles <= 150) {
-      prefScore += 17;
-      reasons.push(`About ${Math.round(miles)} miles from you`);
+      distanceMultiplier = 1 - (miles / 300) * 0.15; // 0mi -> 1.0, 60mi -> 0.97
     } else if (miles <= 300) {
-      prefScore += 10;
-      reasons.push(`About ${Math.round(miles)} miles from you`);
-    } else if (inAcceptedRegion || profile.willing_to_relocate) {
-      // Genuinely far, but somewhere the candidate said they're open to
-      // (an accepted state/region) or willing to relocate for — real
-      // partial credit, not a hard disqualifier, but deliberately small
-      // now that the curve step-down is more gradual leading up to it.
-      //
-      // Direct instruction: a job this far out should score 50% AT
-      // BEST overall, regardless of how well it does on every other
-      // category — being in an "accepted region" earns it a real
-      // partial location score instead of an automatic disqualifying
-      // Gap, but it should never let a strong candidate/preference fit
-      // elsewhere pull the OVERALL score up past that ceiling the way
-      // the previous version allowed (a 746-mile job could still land
-      // at 76% overall on the strength of other categories). This caps
-      // overall_score itself, the same mechanism already used for the
-      // hard-disqualifier cases below, not just the location sub-score.
-      prefScore += 5;
-      overallCap = Math.min(overallCap, 50);
-      reasons.push(
+      prefScore += Math.round(35 - ((miles - 60) / 240) * 22); // eases down to ~13 pts at 300mi, for the Location category label
+      distanceMultiplier = 1 - (miles / 300) * 0.55; // 60mi -> 0.89, 150mi -> 0.73, 300mi -> 0.45
+    } else {
+      prefScore += 3;
+      distanceMultiplier = 0.25;
+    }
+    reasons.push(`About ${Math.round(miles)} miles from you`);
+    if (miles > 300 && !inAcceptedRegion && !profile.willing_to_relocate) {
+      concerns.push(`Location (${job.location_raw}, about ${Math.round(miles)} miles away) is far outside your area and not in a region you've said you're open to`);
+    } else if (miles > 300) {
+      concerns.push(
         profile.willing_to_relocate
           ? "Far from you, but you've indicated openness to relocation"
           : "Far from you, but within a region you said you're open to"
       );
-    } else {
-      concerns.push(`Location (${job.location_raw}, about ${Math.round(miles)} miles away) is far outside your area and not in a region you've said you're open to`);
-      hardDisqualifier = true;
-      prefCap = Math.min(prefCap, 65);
-      // Belt-and-suspenders with the overallCap mechanism above, rather
-      // than relying solely on the hardDisqualifier-gated cap further
-      // down - keeps both far-distance branches using the same,
-      // unconditional final-score ceiling instead of two different
-      // capping mechanisms that are easy to lose track of.
-      overallCap = Math.min(overallCap, 65);
     }
   } else if (acceptedStateAbbrs.size > 0 && [...acceptedStateAbbrs].some((abbr) => locationMentionsState(job.location_raw, abbr))) {
     // --- Fallback: no real coordinates on one or both sides, so fall
@@ -955,15 +939,29 @@ function scoreJob(job, profile) {
   // reflect the match - not be artificially capped by any mechanism.
   // "You never know what a person might be interested in... if a
   // person isn't able to see all of the jobs, what is the use." The
-  // individual hardDisqualifier / prefCap / candCap / overallCap
-  // assignments throughout this function (foreign country, distance,
-  // avoided industry, etc.) are left in place below - they still drive
-  // real, accurate concerns/reasons text explaining WHY a job scores
-  // the way it does - but none of them force the final score down to
-  // an artificial ceiling anymore. A genuinely poor match scores low
-  // because the real underlying calculation says so, not because of a
-  // cap layered on top of it; a candidate can always see every job,
-  // with the score honestly reflecting fit rather than gating visibility.
+  // individual hardDisqualifier / prefCap / candCap assignments
+  // throughout this function (avoided industry, missing requirements,
+  // etc.) are left in place below - they still drive real, accurate
+  // concerns/reasons text explaining WHY a job scores the way it does -
+  // but none of them force the final score down to an artificial
+  // ceiling anymore. A genuinely poor match scores low because the
+  // real underlying calculation says so, not because of a cap layered
+  // on top of it; a candidate can always see every job, with the score
+  // honestly reflecting fit rather than gating visibility.
+  //
+  // Distance is the one deliberate exception, per a later, separate
+  // direct instruction with a concrete worked example: for the same
+  // underlying fit, a closer job must always outrank a farther one
+  // (Villages > Orlando > Jacksonville > Iowa, in that order) - a rule
+  // that can only hold if distance scales the WHOLE score multiplicatively,
+  // not as one diluted ingredient among several that unrelated
+  // categories can compensate for. Still never hides anything - even
+  // the harshest multiplier (0.25, for 300+ miles with no stated
+  // openness to relocating there) leaves a real, visible, honestly-low
+  // score, not an exclusion.
+  if (overall_score != null) {
+    overall_score = Math.round(overall_score * distanceMultiplier);
+  }
 
   const availabilityRatio = dataPointsPossible > 0 ? dataPointsAvailable / dataPointsPossible : 0;
   const confidence = availabilityRatio >= 0.75 ? "high" : availabilityRatio >= 0.4 ? "medium" : "low";
