@@ -175,7 +175,7 @@
         </div>
         <div class="field-row">
           <div class="field"><label>Phone</label><input type="text" id="fieldPhone" placeholder="(555) 555-5555"></div>
-          <div class="field"><label>LinkedIn URL</label><input type="text" placeholder="linkedin.com/in/..." disabled title="Not yet connected to a saved field"></div>
+          <div class="field"><label>LinkedIn URL</label><input type="text" id="fieldLinkedin" placeholder="linkedin.com/in/..."></div>
         </div>
         <div class="field-row">
           <div class="field"><label>City</label><input type="text" id="fieldCity"></div>
@@ -538,6 +538,7 @@ function addRegion(region) {
     setVal('fieldName', currentProfile.name);
     setVal('fieldEmail', currentProfile.email);
     setVal('fieldPhone', currentProfile.phone);
+    setVal('fieldLinkedin', currentProfile.linkedin_url);
     setVal('fieldCity', currentProfile.home_city);
     setVal('fieldState', currentProfile.home_state);
     setVal('fieldZip', currentProfile.home_zip);
@@ -692,6 +693,7 @@ async function saveProfilePanel(panel, btn) {
       name: document.getElementById('fieldName').value.trim() || null,
       email: document.getElementById('fieldEmail').value.trim() || null,
       phone: document.getElementById('fieldPhone').value.trim() || null,
+      linkedin_url: document.getElementById('fieldLinkedin').value.trim() || null,
       home_city: document.getElementById('fieldCity').value.trim() || null,
       home_state: document.getElementById('fieldState').value.trim() || null,
       home_zip: document.getElementById('fieldZip').value.trim() || null,

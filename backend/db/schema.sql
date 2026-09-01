@@ -148,6 +148,7 @@ create table if not exists candidate_profiles (
   name text,
   email text,
   phone text,
+  linkedin_url text,
 
   home_city text,
   digest_enabled boolean default true,   -- opt-out flag for the daily match
