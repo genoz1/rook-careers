@@ -76,7 +76,28 @@ async function fetchActiveJobs(supabase) {
     activeJobs = activeJobs.concat(page || []);
     if (!page || page.length < PAGE_SIZE) break; // last page reached
   }
-  return activeJobs;
+
+  // Reported directly: "ON CONFLICT DO UPDATE command cannot affect
+  // row a second time" — Postgres refusing a batch upsert that
+  // contains the same (candidate_id, job_id) pair twice. Since job_id
+  // is a genuine primary key, that can only happen if this fetch
+  // itself returned the same job more than once (most plausible cause:
+  // active jobs being ingested/closed concurrently while this
+  // ~37-page scan was in progress can shift which rows fall in a given
+  // .range() window between requests, occasionally overlapping two
+  // pages on the same row). Deduplicating by id here is a robust fix
+  // regardless of the exact mechanism - downstream scoring/upsert code
+  // never has to handle this class of failure.
+  const seen = new Set();
+  const deduped = activeJobs.filter((job) => {
+    if (seen.has(job.id)) return false;
+    seen.add(job.id);
+    return true;
+  });
+  if (deduped.length !== activeJobs.length) {
+    console.log(`  (removed ${activeJobs.length - deduped.length} duplicate job row(s) from pagination overlap)`);
+  }
+  return deduped;
 }
 
 async function scoreAndStoreForCandidate(supabase, profile, activeJobs = null) {
