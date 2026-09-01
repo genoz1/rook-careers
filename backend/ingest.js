@@ -220,7 +220,19 @@ async function ingestEmployer(employer) {
 
     if (upsertedRow.job_lat == null && upsertedRow.location_raw) {
       try {
-        const coords = await geocodeLocation(upsertedRow.location_raw);
+        // Reported directly: multi-location Workday postings ("Virginia
+        // - Richmond | Virginia - Fairfax | Maryland - Baltimore | ...")
+        // were still scoring as if nearby - geocoding the WHOLE
+        // pipe-delimited string at once isn't a real address a geocoder
+        // can resolve, so it silently returned nothing, leaving these
+        // jobs to fall back to the less precise state-text-matching
+        // scoring path instead of a real distance. Geocoding just the
+        // first listed location (a clean "City, State, Country" string
+        // on its own) gives a real coordinate to score distance against
+        // - not necessarily the single closest of everywhere the req is
+        // open, but a genuine, usable point instead of none at all.
+        const firstLocation = upsertedRow.location_raw.split("|")[0].trim();
+        const coords = await geocodeLocation(firstLocation);
         if (coords) {
           await supabase.from("jobs").update({ job_lat: coords.lat, job_lng: coords.lng }).eq("id", upsertedRow.id);
         }
