@@ -196,10 +196,13 @@ function renderList() {
   try {
     const meRes = await rookApiFetch('/profile');
     const me = await meRes.json();
-    if (me?.name) {
-      document.getElementById('sideName').textContent = me.name;
-      document.getElementById('sideAvatar').textContent = me.name.split(' ').map((s) => s[0]).slice(0, 2).join('').toUpperCase();
-    }
+    // Reported via audit: this page showed a permanently hardcoded
+    // "Member" label while every other candidate page correctly shows
+    // the real subscription status - this page had reimplemented just
+    // the name/avatar half of rookApplySidebarProfile by hand and never
+    // set the plan-status half at all. Using the shared function
+    // directly instead keeps this page consistent with the rest.
+    rookApplySidebarProfile(me);
   } catch {}
 
   const loading = document.getElementById('loading');

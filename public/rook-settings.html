@@ -516,8 +516,24 @@ function addRegion(region) {
     // genuinely branded "Professional" on rook-pricing.html) - the bug
     // was showing it unconditionally to every candidate regardless of
     // their real subscription_status. Same fix as the sidebar card.
-    document.getElementById('subStatusText').textContent =
-      currentProfile.subscription_status === 'active' ? 'Professional Plan — Active' : 'Not currently subscribed';
+    //
+    // Reported via audit: this showed a flat "Active" even for a
+    // subscriber who'd already cancelled via Stripe's own portal -
+    // Stripe doesn't revoke access immediately on cancellation, it
+    // keeps the subscription "active" until the paid period ends, so
+    // subscription_status alone can't distinguish "renewing normally"
+    // from "ending soon." subscription_cancel_at (set by the
+    // customer.subscription.updated webhook) now surfaces that.
+    const subText = document.getElementById('subStatusText');
+    if (currentProfile.subscription_status === 'active' && currentProfile.subscription_cancel_at) {
+      const endDate = new Date(currentProfile.subscription_cancel_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+      subText.textContent = `Professional Plan — Cancels on ${endDate}`;
+      subText.style.color = '#B98900';
+    } else if (currentProfile.subscription_status === 'active') {
+      subText.textContent = 'Professional Plan — Active';
+    } else {
+      subText.textContent = 'Not currently subscribed';
+    }
 
     setVal('fieldName', currentProfile.name);
     setVal('fieldEmail', currentProfile.email);

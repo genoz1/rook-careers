@@ -160,6 +160,10 @@ create table if not exists candidate_profiles (
                                           -- webhook code referencing it has been
                                           -- sitting in the repo since before tonight
   stripe_customer_id text,               -- also written by the same webhook
+  subscription_cancel_at timestamptz,    -- set by customer.subscription.updated when
+                                          -- cancel_at_period_end is true (candidate
+                                          -- cancelled via Stripe's portal but keeps
+                                          -- access until this date) - null otherwise
   last_digest_sent_at timestamptz,       -- used to only email about jobs seen
                                           -- since the last successful send,
                                           -- so the same job doesn't get

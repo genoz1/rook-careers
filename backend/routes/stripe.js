@@ -166,7 +166,26 @@ router.post("/stripe/webhook", requireConfig, async (req, res) => {
       const sub = event.data.object;
       await supabaseAdmin
         .from("candidate_profiles")
-        .update({ subscription_status: "cancelled" })
+        .update({ subscription_status: "cancelled", subscription_cancel_at: null })
+        .eq("stripe_customer_id", sub.customer);
+      break;
+    }
+    case "customer.subscription.updated": {
+      // Reported via audit: ROOK showed "Professional Plan — Active"
+      // with no indication a subscriber had already cancelled via
+      // Stripe's own portal - Stripe doesn't revoke access immediately
+      // on cancellation, it sets cancel_at_period_end and keeps the
+      // subscription "active" until the paid period actually ends,
+      // which is exactly the gap between what Stripe showed and what
+      // ROOK displayed. This event fires whenever that flag changes
+      // (cancelling, or reversing a cancellation before the period
+      // ends), so subscription_cancel_at stays accurate either way -
+      // set when a cancellation is scheduled, cleared if reversed.
+      const sub = event.data.object;
+      const cancelAt = sub.cancel_at_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null;
+      await supabaseAdmin
+        .from("candidate_profiles")
+        .update({ subscription_cancel_at: cancelAt })
         .eq("stripe_customer_id", sub.customer);
       break;
     }
