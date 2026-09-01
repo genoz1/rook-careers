@@ -295,7 +295,7 @@
         <span class="chip" onclick="setTierFilter('saved', this)">Saved</span>
       </div>
     </div>
-    <div style="font-size:12.5px; color:#8B96AB; margin:-10px 0 16px;">Showing jobs within 150 miles of home (remote roles included regardless of distance). Looking farther out, or considering a different city? Try <a href="rook-search.html" style="color:var(--royal, #1463FF); font-weight:600;">Job Search</a>.</div>
+    <div style="font-size:12.5px; color:#8B96AB; margin:-10px 0 16px;">Showing jobs within 300 miles of home, plus remote/territory roles with no single fixed location. Looking farther out, or considering a different city? Try <a href="rook-search.html" style="color:var(--royal, #1463FF); font-weight:600;">Job Search</a>.</div>
 
     <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:14px;">
       <label style="display:flex; align-items:center; gap:7px; font-size:12.5px; color:#5B6B85; font-weight:600; cursor:pointer; margin:0;">
@@ -646,8 +646,17 @@
     // geocoded) is excluded rather than assumed to qualify, since
     // "150 miles or closer" is a real claim this view is making, not
     // just a display convenience.
-    const DASHBOARD_MAX_MILES = 150;
-    visible = visible.filter((j) => isRemoteJob(j) || (j.distance_miles != null && j.distance_miles <= DASHBOARD_MAX_MILES));
+    // Direct instruction: a hard cutoff was hiding jobs with no
+    // computed distance at all (never geocoded - common for vague
+    // "Territory/Field based" postings with no single named city),
+    // even when a real match against a nearby territory clearly
+    // existed. Reported directly: "I know there are more than 7 jobs
+    // within the 150 mile radius." A job with unknown distance now
+    // shows rather than being hidden - only a job CONFIRMED far away
+    // (a real computed distance over the cap) gets excluded here.
+    // Radius also widened to 300 per direct instruction.
+    const DASHBOARD_MAX_MILES = 300;
+    visible = visible.filter((j) => isRemoteJob(j) || j.distance_miles == null || j.distance_miles <= DASHBOARD_MAX_MILES);
 
     if (currentTierFilter === 'excellent') {
       visible = visible.filter((j) => j.match?.excellent_match);
