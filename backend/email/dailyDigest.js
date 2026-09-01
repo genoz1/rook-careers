@@ -13,6 +13,7 @@
 // to ignore ROOK's emails.
 
 const { sendEmail } = require("./resend");
+const { mentionsNonUsCountry } = require("../matching");
 
 // 60, not 70 ("Stretch Apply" tier) — chosen after testing against a
 // realistic minimal profile (just home_state + minimum_base_salary, no
@@ -97,12 +98,25 @@ async function sendDigestForCandidate(supabase, profile, appBaseUrl) {
     .eq("jobs.status", "active")
     .eq("jobs.moderation_status", "approved")
     .order("overall_score", { ascending: false })
-    .limit(MAX_JOBS_PER_EMAIL);
+    // Fetches a larger pool than the final email needs, not just
+    // MAX_JOBS_PER_EMAIL directly - foreign jobs get filtered out
+    // below, and doing that after an exact-count fetch could leave a
+    // digest with fewer than 10 jobs (or fewer than truly available)
+    // if any of the top-scored rows happened to be foreign postings.
+    .limit(MAX_JOBS_PER_EMAIL * 4);
 
   if (error) throw new Error(`Could not load matches for digest: ${error.message}`);
 
-  const scored = (matchRows || [])
+  // Explicit, firm instruction: foreign jobs should never show up
+  // anywhere, including here - the one deliberate exception to the
+  // broader "let all jobs show" rule used everywhere else. A genuine
+  // exclusion, not a low score, so it's guaranteed regardless of how
+  // scoring itself is tuned.
+  const domesticRows = (matchRows || []).filter((row) => !mentionsNonUsCountry(row.jobs?.location_raw, row.jobs?.job_lng));
+
+  const scored = domesticRows
     .filter((row) => (row.overall_score ?? -1) >= MIN_SCORE_TO_INCLUDE)
+    .slice(0, MAX_JOBS_PER_EMAIL)
     .map((row) => ({
       ...row.jobs,
       match: {

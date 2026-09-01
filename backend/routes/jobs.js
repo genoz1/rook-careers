@@ -447,6 +447,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     // entire point of "what if I lived here instead."
     const exploredProfile = { ...profile, home_lat: nearLat, home_lng: nearLng };
     let scored = nearby
+      .filter((job) => !mentionsNonUsCountry(job.location_raw, job.job_lng))
       .map((job) => ({ ...job, match: scoreJob(job, exploredProfile) }))
       .filter((job) => industry ? job.industry === industry : true)
       .filter((job) => state ? job.state === state : true)
@@ -516,6 +517,17 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
 
   let { data: rows, error } = await fetchScoredRows();
   if (error) return res.status(500).json({ error: error.message });
+
+  // Explicit, firm instruction: foreign jobs should never show up
+  // anywhere - the one deliberate exception to every other "let all
+  // jobs show, score is informational" rule elsewhere in this file.
+  // Unlike industry/skill-gap concerns, geography isn't a matter of
+  // "you never know what someone might be interested in" - a US
+  // candidate essentially never wants a job in Milan or Taipei to
+  // appear at all, even ranked low. Filtered as a genuine exclusion
+  // here (not just a low score) so it's guaranteed regardless of how
+  // scoring itself is tuned.
+  rows = (rows || []).filter((row) => !mentionsNonUsCountry(row.jobs?.location_raw, row.jobs?.job_lng));
 
   // Non-blocking fallback for a brand-new candidate whose scores haven't
   // been computed yet. This USED to run scoreAndStoreForCandidate
@@ -1024,6 +1036,7 @@ router.get("/saved-jobs", requireConfig, requireAuth, loadCandidateId, async (re
 
   const jobs = (rows || [])
     .filter((row) => row.jobs) // guards against a job having been removed since it was saved
+    .filter((row) => !mentionsNonUsCountry(row.jobs.location_raw, row.jobs.job_lng))
     .map((row) => ({
       ...attachDistance(row.jobs, profile),
       match: row.overall_score != null ? matchFromRow(row) : null,

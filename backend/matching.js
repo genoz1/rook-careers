@@ -128,9 +128,36 @@ const NON_US_COUNTRY_SIGNALS = [
 // job geocoded to a positive longitude - true of virtually all of
 // Europe, Africa, and Asia, Mumbai included - is definitively foreign
 // regardless of what its location text says or omits.
+const US_STATE_ABBRS = new Set([
+  "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA",
+  "KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ",
+  "NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT",
+  "VA","WA","WV","WI","WY","DC","PR",
+]);
+
+// Reported directly with a concrete example: Elanco postings in Milan,
+// Auckland, and Taipei were still showing up. Root cause: many Workday
+// tenants format international locations as "XX - City" (a 2-letter
+// COUNTRY code, e.g. "IT - Milano", "NZ - Auckland", "TW - Taipei"),
+// completely different from the "US NY Remote" style used for genuine
+// US postings on the very same tenant - neither the country-name list
+// above nor the coordinate check catches this, since these postings
+// often never get geocoded at all given the unusual format. A leading
+// 2-letter code that ISN'T a real US state/territory abbreviation is a
+// strong, low-risk structural signal on its own: no US state code
+// collides with a real country code like IT/NZ/TW, so this can't
+// misfire on a genuine domestic posting the way trying to text-match
+// every possible foreign city name inevitably would.
+function hasForeignCountryCodePrefix(locationRaw) {
+  const match = /^([A-Z]{2})\s*-/.exec((locationRaw || "").trim());
+  if (!match) return false;
+  return !US_STATE_ABBRS.has(match[1]);
+}
+
 function mentionsNonUsCountry(locationRaw, jobLng) {
   if (jobLng != null && jobLng > 0) return true;
   if (!locationRaw) return false;
+  if (hasForeignCountryCodePrefix(locationRaw)) return true;
   return NON_US_COUNTRY_SIGNALS.some((country) => new RegExp(`\\b${country}\\b`, "i").test(locationRaw));
 }
 
