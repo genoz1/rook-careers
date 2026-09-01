@@ -101,8 +101,35 @@ const NON_US_COUNTRY_SIGNALS = [
   "argentina", "colombia", "chile", "portugal", "austria", "denmark",
   "norway", "finland", "czech republic", "romania", "hungary", "greece",
   "new zealand", "united arab emirates", "saudi arabia", "egypt", "russia",
+  // Major foreign cities that commonly appear in job postings with no
+  // country name attached at all (the exact gap that let a Mumbai
+  // posting through undetected) - a practical, not exhaustive, list of
+  // the largest/most common offshore hubs seen on job boards.
+  "mumbai", "bangalore", "bengaluru", "delhi", "new delhi", "hyderabad",
+  "pune", "chennai", "gurgaon", "gurugram", "noida", "kolkata",
+  "shanghai", "beijing", "shenzhen", "guangzhou", "manila", "jakarta",
+  "kuala lumpur", "bangkok", "ho chi minh city", "hanoi", "seoul",
+  "tokyo", "osaka", "sao paulo", "mexico city", "dubai", "tel aviv",
+  // Deliberately excludes city names with a real, notable US namesake
+  // (e.g. Warsaw, Indiana - Zimmer Biomet's headquarters; London, KY;
+  // Dublin, OH/CA; Cairo, GA) - a false "foreign" flag on one of those
+  // would be a worse, harder-to-notice failure than occasionally
+  // missing a genuinely foreign posting from a same-named city.
 ];
-function mentionsNonUsCountry(locationRaw) {
+// Reported directly: a candidate's digest included a job in Mumbai,
+// India. The existing text-based check only catches job postings whose
+// location text names a specific country - a posting listing just the
+// city ("Mumbai", no "India" anywhere in the string) sailed straight
+// through undetected, since text-matching against a country-name list
+// can never cover every possible foreign city name. Added a second,
+// coordinate-based check that doesn't depend on how the location was
+// worded at all: the entire US (including Alaska, Hawaii, and Puerto
+// Rico) sits in the Western Hemisphere (negative longitude), so any
+// job geocoded to a positive longitude - true of virtually all of
+// Europe, Africa, and Asia, Mumbai included - is definitively foreign
+// regardless of what its location text says or omits.
+function mentionsNonUsCountry(locationRaw, jobLng) {
+  if (jobLng != null && jobLng > 0) return true;
   if (!locationRaw) return false;
   return NON_US_COUNTRY_SIGNALS.some((country) => new RegExp(`\\b${country}\\b`, "i").test(locationRaw));
 }
@@ -329,7 +356,7 @@ function scoreJob(job, profile) {
   // distance-primary scoring below, remote or not; "remote" is kept as
   // a purely informational callout, not a score input.
   const isRemoteLabeled = /remote/i.test(job.location_raw || "") || job.remote_status === "remote";
-  const mentionsForeignCountry = mentionsNonUsCountry(job.location_raw);
+  const mentionsForeignCountry = mentionsNonUsCountry(job.location_raw, job.job_lng);
 
   const hasRealCoordinates = profile.home_lat != null && profile.home_lng != null && job.job_lat != null && job.job_lng != null;
 
