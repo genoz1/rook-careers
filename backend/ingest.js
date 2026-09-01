@@ -295,20 +295,35 @@ const TIME_BUDGET_MS = 25 * 60 * 1000; // 25 min — 5 min of buffer under DO's 
 async function run() {
   const startedAt = Date.now();
 
+  // Optional: node backend/ingest.js <employer name or slug> runs the
+  // sync for just that one employer instead of the full active list -
+  // useful for verifying a specific fix without waiting on everyone
+  // else's turn in the normal oldest-first order below.
+  const employerFilter = process.argv[2];
+
   // Order by last_checked_at ascending (nulls first) rather than
   // whatever order the table happens to return — this means employers
   // that have never synced, or synced longest ago, get processed first.
   // If the time budget cuts a run short, it's a different employer that
   // gets skipped each time, not always the same ones at the end of an
   // arbitrary list order.
-  const { data: employers, error } = await supabase
+  let employerQuery = supabase
     .from("employers")
     .select("*")
     .eq("active", true)
     .order("last_checked_at", { ascending: true, nullsFirst: true });
+  if (employerFilter) {
+    employerQuery = employerQuery.or(`company_name.ilike.%${employerFilter}%,company_slug.ilike.%${employerFilter}%`);
+  }
+  const { data: employers, error } = await employerQuery;
 
   if (error) {
     console.error("Could not load employers:", error.message);
+    process.exit(1);
+  }
+
+  if (employerFilter && employers.length === 0) {
+    console.error(`No active employer matched "${employerFilter}".`);
     process.exit(1);
   }
 
