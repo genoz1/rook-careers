@@ -121,6 +121,13 @@ create index if not exists idx_jobs_employer on jobs(employer_id);
 create index if not exists idx_jobs_status on jobs(status);
 create index if not exists idx_jobs_category on jobs(category);
 create index if not exists idx_jobs_coords on jobs(job_lat, job_lng);
+-- Reported directly as a production statement timeout on the paginated
+-- job-loading query in backend/scoring/precompute.js. That query
+-- filters on (status, moderation_status) and orders by id - with only
+-- a single-column status index, Postgres has to scan and discard an
+-- increasing number of rows on each successive .range() page as the
+-- table grows, rather than seeking straight to the right rows.
+create index if not exists idx_jobs_status_moderation_id on jobs(status, moderation_status, id);
 
 -- Required for backend/ingest.js's upsert (ON CONFLICT employer_id, source_job_id)
 -- to work — without this, every ingestion run fails with a Postgres error
