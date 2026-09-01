@@ -69,10 +69,10 @@
   <div id="panelSignin">
     <h2>Welcome back</h2>
     <div class="sub">Log in to see your matches.</div>
-    <div class="field"><label>Email</label><input type="email" id="signinEmail" autocomplete="email"></div>
+    <div class="field"><label>Email</label><input type="email" id="signinEmail" autocomplete="email" required></div>
     <div class="field"><label>Password</label>
       <div class="pw-wrap">
-        <input type="password" id="signinPassword" autocomplete="current-password">
+        <input type="password" id="signinPassword" autocomplete="current-password" required>
         <button type="button" class="pw-toggle" onclick="togglePasswordVisibility('signinPassword', this)" aria-label="Show password">👁</button>
       </div>
     </div>
@@ -83,7 +83,7 @@
   <div id="panelForgot" style="display:none;">
     <h2>Reset your password</h2>
     <div class="sub">Enter your email and we'll send you a link to set a new password.</div>
-    <div class="field"><label>Email</label><input type="email" id="forgotEmail" autocomplete="email"></div>
+    <div class="field"><label>Email</label><input type="email" id="forgotEmail" autocomplete="email" required></div>
     <button class="btn" id="forgotBtn" onclick="handleForgotPassword()">Send Reset Link</button>
     <div style="text-align:center; margin-top:14px;"><a href="#" onclick="switchTab('signin'); return false;" style="font-size:13px;">← Back to log in</a></div>
   </div>
@@ -91,16 +91,16 @@
   <div id="panelSignup" style="display:none;">
     <h2>Create your account</h2>
     <div class="sub">Takes about a minute — you'll build your profile next.</div>
-    <div class="field"><label>Email</label><input type="email" id="signupEmail" autocomplete="email"></div>
+    <div class="field"><label>Email</label><input type="email" id="signupEmail" autocomplete="email" required></div>
     <div class="field"><label>Password</label>
       <div class="pw-wrap">
-        <input type="password" id="signupPassword" autocomplete="new-password">
+        <input type="password" id="signupPassword" autocomplete="new-password" required minlength="8">
         <button type="button" class="pw-toggle" onclick="togglePasswordVisibility('signupPassword', this)" aria-label="Show password">👁</button>
       </div>
     </div>
     <div class="field"><label>Confirm Password</label>
       <div class="pw-wrap">
-        <input type="password" id="signupPasswordConfirm" autocomplete="new-password">
+        <input type="password" id="signupPasswordConfirm" autocomplete="new-password" required minlength="8">
         <button type="button" class="pw-toggle" onclick="togglePasswordVisibility('signupPasswordConfirm', this)" aria-label="Show password">👁</button>
       </div>
     </div>
@@ -218,8 +218,17 @@
 
   async function handleSignIn() {
     if (!configured) return setMsg('Supabase isn\'t configured yet — see the warning below.', 'error');
-    const email = document.getElementById('signinEmail').value.trim();
-    const password = document.getElementById('signinPassword').value;
+    const emailEl = document.getElementById('signinEmail');
+    const passwordEl = document.getElementById('signinPassword');
+    // Reported via audit: relying entirely on custom JS validation
+    // (below) skips native browser validation UI and accessibility
+    // benefits (screen readers announcing a real invalid-field state,
+    // built-in red-outline/tooltip feedback) that required/minlength
+    // attributes provide for free. Checking native validity first adds
+    // that layer without replacing the existing custom checks.
+    if (!emailEl.reportValidity() || !passwordEl.reportValidity()) return;
+    const email = emailEl.value.trim();
+    const password = passwordEl.value;
     if (!email || !password) return setMsg('Enter your email and password.', 'error');
 
     document.getElementById('signinBtn').disabled = true;
@@ -246,9 +255,13 @@
 
   async function handleSignUp() {
     if (!configured) return setMsg('Supabase isn\'t configured yet — see the warning below.', 'error');
-    const email = document.getElementById('signupEmail').value.trim();
-    const password = document.getElementById('signupPassword').value;
-    const passwordConfirm = document.getElementById('signupPasswordConfirm').value;
+    const emailEl = document.getElementById('signupEmail');
+    const passwordEl = document.getElementById('signupPassword');
+    const passwordConfirmEl = document.getElementById('signupPasswordConfirm');
+    if (!emailEl.reportValidity() || !passwordEl.reportValidity() || !passwordConfirmEl.reportValidity()) return;
+    const email = emailEl.value.trim();
+    const password = passwordEl.value;
+    const passwordConfirm = passwordConfirmEl.value;
     if (!email || password.length < 8) return setMsg('Enter a valid email and an 8+ character password.', 'error');
     if (password !== passwordConfirm) return setMsg('Passwords don\'t match — please re-enter them.', 'error');
 
