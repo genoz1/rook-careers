@@ -390,6 +390,7 @@
       </div>
 
     </div>
+    <div id="dashboardPagination" style="display:flex; justify-content:center; gap:8px; margin-top:24px;"></div>
   </main>
 </div>
 
@@ -499,7 +500,7 @@
 
     async function loadJobs() {
     try {
-      const res = await rookApiFetch('/jobs?limit=20');
+      const res = await rookApiFetch('/jobs?limit=300');
       if (!res.ok) throw new Error('API returned ' + res.status);
       const data = await res.json();
       const jobs = Array.isArray(data) ? data : (data.jobs || []); // Array.isArray fallback covers any cached/older response shape
@@ -719,9 +720,45 @@
       });
     }
 
-    document.getElementById('jobList').innerHTML = visible.length > 0
-      ? visible.map(renderRealJobRow).join('')
+    // Direct instruction: the Dashboard only ever fetched (and showed)
+    // the top 20 jobs with no pagination at all, so anything past
+    // #20 was completely unreachable regardless of score - "I should
+    // be able to see all the results going all the way down to the
+    // lowest score." Real pagination now, same pattern as Job Search.
+    dashboardPage = 1;
+    renderDashboardPage(visible);
+  }
+
+  let dashboardPage = 1;
+  let lastVisibleJobs = [];
+  const DASHBOARD_PAGE_SIZE = 20;
+
+  function renderDashboardPage(visible) {
+    if (visible) lastVisibleJobs = visible;
+    const totalPages = Math.max(1, Math.ceil(lastVisibleJobs.length / DASHBOARD_PAGE_SIZE));
+    dashboardPage = Math.min(dashboardPage, totalPages);
+    const pageItems = lastVisibleJobs.slice((dashboardPage - 1) * DASHBOARD_PAGE_SIZE, dashboardPage * DASHBOARD_PAGE_SIZE);
+
+    document.getElementById('jobList').innerHTML = pageItems.length > 0
+      ? pageItems.map(renderRealJobRow).join('')
       : '<div style="text-align:center; padding:40px 20px; color:#5B6B85; font-size:14px;">No jobs match with this filter.</div>';
+
+    const pagEl = document.getElementById('dashboardPagination');
+    if (totalPages <= 1) {
+      pagEl.innerHTML = '';
+    } else {
+      let html = '';
+      for (let p = 1; p <= totalPages; p++) {
+        html += `<a href="#" onclick="goToDashboardPage(${p}); return false;" style="width:34px; height:34px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:600; background:${p === dashboardPage ? 'var(--navy)' : '#fff'}; color:${p === dashboardPage ? '#fff' : 'var(--navy)'}; border:1px solid var(--border); box-shadow:0 2px 8px -4px rgba(11,29,58,0.1);">${p}</a>`;
+      }
+      pagEl.innerHTML = html;
+    }
+  }
+
+  function goToDashboardPage(p) {
+    dashboardPage = p;
+    renderDashboardPage();
+    document.getElementById('jobList').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   // Five fixed categories, always shown in this order, same set on every
