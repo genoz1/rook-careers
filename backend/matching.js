@@ -553,11 +553,16 @@ function scoreJob(job, profile) {
       reasons.push(`Matches your stated interest in ${matchedIndustry}`);
     }
     if (Array.isArray(profile.industries_to_avoid) && profile.industries_to_avoid.length > 0) {
-      // Same bug class as the desired-industries fix above, and
-      // arguably worse here: a compound avoided-industry value silently
-      // failing to match means the candidate never gets warned about
-      // something they explicitly asked to avoid, rather than just
-      // under-scoring a good match.
+      // Reported directly via audit: the Settings UI promises "We'll
+      // filter these out" for industries a candidate marks to avoid,
+      // but this only ever added a soft warning concern - the job
+      // still scored and displayed normally otherwise (one example hit
+      // 98% despite matching an avoided industry). That's a real
+      // promise-vs-behavior mismatch, not just an under-scoring nuance
+      // like the desired-industries case above deserves a much harder
+      // response: an industry the candidate explicitly asked to avoid
+      // should behave like the non-US-country exclusion - hard
+      // disqualified and score-capped, not merely flagged.
       const avoided = profile.industries_to_avoid.find((ind) =>
         String(ind)
           .toLowerCase()
@@ -565,7 +570,11 @@ function scoreJob(job, profile) {
           .filter(Boolean)
           .some((term) => jobText.includes(term))
       );
-      if (avoided) concerns.push(`Mentions ${avoided}, which you asked to avoid`);
+      if (avoided) {
+        concerns.push(`Mentions ${avoided}, which you asked to avoid`);
+        hardDisqualifier = true;
+        prefCap = Math.min(prefCap, 40);
+      }
     }
   }
 
