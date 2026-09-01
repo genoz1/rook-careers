@@ -188,7 +188,7 @@
       </div>
 
       <div style="margin-top:24px; display:flex; gap:12px;">
-        <button type="button" class="btn btn-primary" id="submitBtn" onclick="submitApplication()" disabled>Submit Application</button>
+        <button type="button" class="btn btn-primary" id="submitBtn" onclick="submitApplication()" disabled>Preparing your application…</button>
         <a href="rook-job-analysis.html" id="cancelLink" class="btn btn-outline">Cancel</a>
       </div>
     </div>
@@ -277,13 +277,14 @@ function showStatus(msg, type) {
     }
 
     // Résumé on file check.
+    let hasResume = false;
     try {
       const profRes = await rookApiFetch('/profile');
       const profile = await profRes.json();
       if (profile?.resume_file_path) {
+        hasResume = true;
         const fileName = profile.resume_file_path.split('/').pop();
         document.getElementById('resumeFileName').textContent = fileName;
-        document.getElementById('submitBtn').disabled = false;
       } else {
         document.getElementById('resumeFileName').textContent = 'No résumé on file — upload one to apply';
       }
@@ -294,6 +295,17 @@ function showStatus(msg, type) {
     // Pre-fill the cover letter with the AI-generated draft (same
     // generator used for Application Package elsewhere in the app) —
     // the candidate can edit freely before submitting.
+    //
+    // Reported via audit: Submit was clickable the whole time this was
+    // still loading (it only ever depended on the résumé check above),
+    // so a candidate could click Submit while the field still just
+    // showed placeholder text. A real empty-value guard already exists
+    // in submitApplication() below, so a truly blank submission
+    // couldn't actually go through - but the button inviting a click
+    // during an indeterminate loading state is a real UX problem on
+    // its own, independent of that guard. Submit now only enables once
+    // this attempt has actually finished, success or fallback either
+    // way, not the moment the résumé check alone clears.
     try {
       const pkgRes = await rookApiFetch(`/application-package/${jobId}`);
       if (pkgRes.ok) {
@@ -305,6 +317,11 @@ function showStatus(msg, type) {
       }
     } catch {
       document.getElementById('coverLetterInput').placeholder = 'Write your cover letter for this role…';
+    }
+    if (hasResume) {
+      const btn = document.getElementById('submitBtn');
+      btn.disabled = false;
+      btn.textContent = 'Submit Application';
     }
   } catch (err) {
     showStatus('Could not load this job: ' + err.message, 'error');
