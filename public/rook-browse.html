@@ -145,6 +145,26 @@
       <option value="Capital Equipment">Capital Equipment</option>
       <option value="Pharmaceutical">Pharmaceutical</option>
     </select>
+    <select id="browseState" style="border:1px solid var(--border); border-radius:8px; padding:9px 12px; font-size:13.5px; font-family:inherit; background:#fff;" onchange="loadJobs()">
+      <option value="">All States</option>
+      <option value="AL">Alabama</option><option value="AK">Alaska</option><option value="AZ">Arizona</option>
+      <option value="AR">Arkansas</option><option value="CA">California</option><option value="CO">Colorado</option>
+      <option value="CT">Connecticut</option><option value="DE">Delaware</option><option value="FL">Florida</option>
+      <option value="GA">Georgia</option><option value="HI">Hawaii</option><option value="ID">Idaho</option>
+      <option value="IL">Illinois</option><option value="IN">Indiana</option><option value="IA">Iowa</option>
+      <option value="KS">Kansas</option><option value="KY">Kentucky</option><option value="LA">Louisiana</option>
+      <option value="ME">Maine</option><option value="MD">Maryland</option><option value="MA">Massachusetts</option>
+      <option value="MI">Michigan</option><option value="MN">Minnesota</option><option value="MS">Mississippi</option>
+      <option value="MO">Missouri</option><option value="MT">Montana</option><option value="NE">Nebraska</option>
+      <option value="NV">Nevada</option><option value="NH">New Hampshire</option><option value="NJ">New Jersey</option>
+      <option value="NM">New Mexico</option><option value="NY">New York</option><option value="NC">North Carolina</option>
+      <option value="ND">North Dakota</option><option value="OH">Ohio</option><option value="OK">Oklahoma</option>
+      <option value="OR">Oregon</option><option value="PA">Pennsylvania</option><option value="RI">Rhode Island</option>
+      <option value="SC">South Carolina</option><option value="SD">South Dakota</option><option value="TN">Tennessee</option>
+      <option value="TX">Texas</option><option value="UT">Utah</option><option value="VT">Vermont</option>
+      <option value="VA">Virginia</option><option value="WA">Washington</option><option value="WV">West Virginia</option>
+      <option value="WI">Wisconsin</option><option value="WY">Wyoming</option>
+    </select>
     <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--muted); white-space:nowrap;">
       <input type="checkbox" id="browseRemote" onchange="applyBrowseFilters()"> Remote only
     </label>
@@ -183,6 +203,8 @@
   </div>
 
   <div class="job-list" id="jobList" style="display:none;"></div>
+
+  <div id="browsePagination" style="display:flex; justify-content:center; gap:8px; margin-top:24px;"></div>
 
   <div style="margin-top:36px;">
     <div style="font-size:12.5px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.02em; margin-bottom:12px;">Browse by category</div>
@@ -227,11 +249,14 @@ function showLoadingState() {
 }
 
 let allBrowseJobs = [];
+let browsePage = 1;
+const BROWSE_PAGE_SIZE = 20;
 
 function showSuccessState(jobs, totalCount) {
   document.getElementById('skeletonList').style.display = 'none';
   document.getElementById('errorState').style.display = 'none';
   allBrowseJobs = jobs;
+  browsePage = 1;
 
   if (jobs.length === 0) {
     document.getElementById('resultsCount').textContent = '0';
@@ -239,6 +264,7 @@ function showSuccessState(jobs, totalCount) {
     document.getElementById('updatedLabel').style.display = 'none';
     document.getElementById('empty').style.display = 'block';
     document.getElementById('jobList').style.display = 'none';
+    document.getElementById('browsePagination').innerHTML = '';
     return;
   }
 
@@ -249,9 +275,15 @@ function showSuccessState(jobs, totalCount) {
 }
 
 // Client-side pass over the fetched batch for keyword/remote - industry
-// is passed to the server directly (see loadJobs), which already
-// supports it more efficiently than re-fetching everything each time.
+// and state are passed to the server directly (see loadJobs), which
+// already supports both more efficiently than re-fetching everything
+// each time just to filter it client-side.
 function applyBrowseFilters() {
+  browsePage = 1;
+  renderBrowsePage();
+}
+
+function renderBrowsePage() {
   const keyword = document.getElementById('browseKeyword').value.trim().toLowerCase();
   const remoteOnly = document.getElementById('browseRemote').checked;
   const filtered = allBrowseJobs.filter((job) => {
@@ -262,9 +294,31 @@ function applyBrowseFilters() {
     }
     return true;
   });
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / BROWSE_PAGE_SIZE));
+  browsePage = Math.min(browsePage, totalPages);
+  const pageItems = filtered.slice((browsePage - 1) * BROWSE_PAGE_SIZE, browsePage * BROWSE_PAGE_SIZE);
+
   document.getElementById('empty').style.display = filtered.length === 0 ? 'block' : 'none';
   document.getElementById('jobList').style.display = filtered.length === 0 ? 'none' : 'flex';
-  document.getElementById('jobList').innerHTML = filtered.map(renderTeaserCard).join('');
+  document.getElementById('jobList').innerHTML = pageItems.map(renderTeaserCard).join('');
+
+  const pagEl = document.getElementById('browsePagination');
+  if (totalPages <= 1) {
+    pagEl.innerHTML = '';
+  } else {
+    let html = '';
+    for (let p = 1; p <= totalPages; p++) {
+      html += `<a href="#" onclick="goToBrowsePage(${p}); return false;" style="width:34px; height:34px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:600; background:${p === browsePage ? 'var(--navy)' : '#fff'}; color:${p === browsePage ? '#fff' : 'var(--navy)'}; border:1px solid var(--border);">${p}</a>`;
+    }
+    pagEl.innerHTML = html;
+  }
+}
+
+function goToBrowsePage(p) {
+  browsePage = p;
+  renderBrowsePage();
+  document.getElementById('resultsBar').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function showErrorState() {
@@ -287,8 +341,10 @@ async function loadJobs() {
     // returns the true platform-wide count (total_count) separately
     // from however many jobs this particular request displays.
     const industry = document.getElementById('browseIndustry').value;
+    const state = document.getElementById('browseState').value;
     const params = new URLSearchParams({ limit: '200' });
     if (industry) params.set('industry', industry);
+    if (state) params.set('state', state);
     const res = await fetch('/api/jobs?' + params.toString());
     if (!res.ok) throw new Error('API returned ' + res.status);
     const data = await res.json();

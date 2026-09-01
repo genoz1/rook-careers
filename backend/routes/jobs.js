@@ -21,7 +21,7 @@
 
 const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
-const { scoreJob } = require("../matching");
+const { scoreJob, mentionsNonUsCountry } = require("../matching");
 const { scoreAndStoreForCandidate } = require("../scoring/precompute");
 const { distanceMiles } = require("../geocoding");
 const { sendEmail } = require("../email/resend");
@@ -290,6 +290,14 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     const { data, error } = await query;
     if (error) return res.status(500).json({ error: error.message });
 
+    // Reported via audit, twice: the public anonymous feed (unlike the
+    // authenticated Dashboard/digest, which both check this via
+    // scoreJob) never filtered out foreign postings at all - the
+    // very first thing a prospective customer sees could include jobs
+    // in Mumbai, London, or Toronto, undermining the promised
+    // medical/veterinary sales-in-the-US positioning immediately.
+    const usJobsOnly = (data || []).filter((job) => !mentionsNonUsCountry(job.location_raw, job.job_lng));
+
     // Sort by the anonymous visitor's real approximate location, not
     // raw recency. Reported real problem: an anonymous visitor in
     // Florida was seeing jobs in Australia and Texas at the top of the
@@ -326,9 +334,9 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
       console.error(`IP geolocation failed or timed out for anonymous browse request: ${err.message}`);
     }
 
-    let sorted = data;
+    let sorted = usJobsOnly;
     if (visitorCoords) {
-      sorted = [...data].sort((a, b) => {
+      sorted = [...usJobsOnly].sort((a, b) => {
         const distA = (a.job_lat != null && a.job_lng != null) ? distanceMiles(visitorCoords.lat, visitorCoords.lng, a.job_lat, a.job_lng) : null;
         const distB = (b.job_lat != null && b.job_lng != null) ? distanceMiles(visitorCoords.lat, visitorCoords.lng, b.job_lat, b.job_lng) : null;
         if (distA == null && distB == null) return 0;
