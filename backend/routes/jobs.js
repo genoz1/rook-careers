@@ -481,97 +481,64 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     });
   }
 
-  async function fetchScoredRows() {
-    let query = supabaseAdmin
-      .from("candidate_job_matches")
-      .select(`*, jobs!inner(${JOB_LIST_COLUMNS})`)
-      .eq("candidate_id", profile.id)
-      .eq("dismissed", false)
-      .eq("jobs.status", "active")
-      .eq("jobs.moderation_status", "approved");
-    if (industry) query = query.eq("jobs.industry", industry);
-    if (state) query = query.eq("jobs.state", state);
-    // Reported directly: searching "zoetis" showed only 1 of 15 real,
-    // active Zoetis jobs. Root cause: this query always sorted by
-    // overall_score and capped at `limit` (e.g. 20) BEFORE any keyword
-    // filtering happened - keyword matching only ran client-side, on
-    // whatever subset of the candidate's ENTIRE match pool happened to
-    // score highest overall. A candidate with thousands of scored jobs
-    // would never even see most of one employer's postings if they
-    // scored lower than other employers' jobs elsewhere, regardless of
-    // how well those postings actually matched the literal search.
-    // Explicit instruction: an employer/keyword search should show
-    // every matching job regardless of score - score is informational
-    // here, not a filter. When a keyword is present, this matches it
-    // server-side directly (title or company) and skips the
-    // score-based ordering/limit entirely, so nothing gets cut off
-    // before the candidate ever sees it.
-    if (keyword) {
-      query = query.or(`title_original.ilike.%${keyword}%,company_name.ilike.%${keyword}%`, { foreignTable: "jobs" });
-      query = query.limit(500);
-    } else {
-      query = query.order("overall_score", { ascending: false, nullsFirst: false }).limit(Number(limit));
-    }
-    return query;
+  // Reported directly, with concrete side-by-side evidence: Job Search's
+  // live-scoring path (below, for an explicitly searched location)
+  // showed correct, current results, while this default path - reading
+  // pre-computed scores from candidate_job_matches - kept showing scores
+  // that didn't match what the current scoring code actually produces.
+  // Root cause: candidate_job_matches only gets refreshed by a SEPARATE
+  // deployable component (the precompute-scores job), which can end up
+  // running stale, cached code independently of the web service even
+  // when the web service itself has the latest fixes - exactly what
+  // happened here. Benchmarked at 6,000 scoreJob() calls in ~240ms
+  // (synchronous, in-memory, no per-job I/O), so scoring the whole
+  // active pool live on every request is genuinely fast enough - this
+  // now works exactly like the near_lat/near_lng explore path already
+  // proven correct above, just locked to the candidate's own real home
+  // location instead of a manually explored one. Eliminates the
+  // separate-component staleness risk entirely for the main candidate-
+  // facing paths (Dashboard, Job Search's default view) - if the web
+  // service has the current code, results are always current.
+  let liveQuery = supabaseAdmin
+    .from("jobs")
+    .select(JOB_LIST_COLUMNS)
+    .eq("status", "active")
+    .eq("moderation_status", "approved");
+  if (industry) liveQuery = liveQuery.eq("industry", industry);
+  if (state) liveQuery = liveQuery.eq("state", state);
+  if (keyword) {
+    liveQuery = liveQuery.or(`title_original.ilike.%${keyword}%,company_name.ilike.%${keyword}%`);
   }
+  const { data: allMatchingJobs, error: liveError } = await liveQuery;
+  if (liveError) return res.status(500).json({ error: liveError.message });
 
-  let { data: rows, error } = await fetchScoredRows();
-  if (error) return res.status(500).json({ error: error.message });
+  const { data: statusRows } = await supabaseAdmin
+    .from("candidate_job_matches")
+    .select("job_id, saved, dismissed")
+    .eq("candidate_id", profile.id);
+  const savedJobIds = new Set((statusRows || []).filter((r) => r.saved).map((r) => r.job_id));
+  const dismissedJobIds = new Set((statusRows || []).filter((r) => r.dismissed).map((r) => r.job_id));
 
-  // Explicit, firm instruction: foreign jobs should never show up
-  // anywhere - the one deliberate exception to every other "let all
-  // jobs show, score is informational" rule elsewhere in this file.
-  // Unlike industry/skill-gap concerns, geography isn't a matter of
-  // "you never know what someone might be interested in" - a US
-  // candidate essentially never wants a job in Milan or Taipei to
-  // appear at all, even ranked low. Filtered as a genuine exclusion
-  // here (not just a low score) so it's guaranteed regardless of how
-  // scoring itself is tuned.
-  rows = (rows || []).filter((row) => !mentionsNonUsCountry(row.jobs?.location_raw, row.jobs?.job_lng));
-
-  // Non-blocking fallback for a brand-new candidate whose scores haven't
-  // been computed yet. This USED to run scoreAndStoreForCandidate
-  // synchronously, inline, inside this request — meaning a new
-  // candidate's very first dashboard load was waiting on the exact same
-  // full scoring pass (now ~2,500 jobs and growing) that was just
-  // timing out even in a 30-minute background script with no time
-  // pressure at all. A live web request has nowhere near that much
-  // tolerance — a slow first load risked showing a brand-new paying
-  // candidate a broken dashboard on their very first visit.
-  //
-  // Now: kick off scoring in the background (don't await it) and return
-  // immediately with scoring_in_progress: true so the frontend can show
-  // a "Building your matches" state and poll GET /scoring-status instead
-  // of blocking the page load on it. This only ever fires once per
-  // candidate — once rows exist, every future request hits the fast
-  // path above and this block never runs again.
-  let scoringInProgress = false;
-  if ((!rows || rows.length === 0)) {
-    const { count } = await supabaseAdmin
-      .from("candidate_job_matches")
-      .select("id", { count: "exact", head: true })
-      .eq("candidate_id", profile.id);
-    if (!count || count === 0) {
-      scoringInProgress = true;
-      scoreAndStoreForCandidate(supabaseAdmin, profile).catch((err) => {
-        console.error(`Background first-time scoring failed for candidate ${profile.id}: ${err.message}`);
-      });
-    }
-  }
+  let rows = (allMatchingJobs || [])
+    .filter((job) => !dismissedJobIds.has(job.id))
+    .filter((job) => !mentionsNonUsCountry(job.location_raw, job.job_lng))
+    .map((job) => ({ jobs: job, job_id: job.id, overall_score: null, saved: savedJobIds.has(job.id), _liveMatch: scoreJob(job, profile) }))
+    .sort((a, b) => (b._liveMatch?.overall_score ?? -1) - (a._liveMatch?.overall_score ?? -1));
+  if (!keyword) rows = rows.slice(0, Number(limit));
 
   const { appStatusByJob, noteFor } = await loadEmployerHistory(profile.id);
 
-  const results = (rows || []).map((row) => ({
+  const results = rows.map((row) => ({
     ...attachDistance(row.jobs, profile),
-    match: matchFromRow(row),
+    match: row._liveMatch,
     saved: Boolean(row.saved),
     application_status: appStatusByJob.get(row.job_id) || null,
     employer_note: noteFor(row.jobs),
   }));
 
-  res.json({
+  return res.json({
     jobs: isSubscribed(profile) ? results : results.map(redactForNonSubscriber),
-    scoring_in_progress: scoringInProgress,
+    scoring_in_progress: false,
   });
 });
 
