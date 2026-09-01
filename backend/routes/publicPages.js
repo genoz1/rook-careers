@@ -86,7 +86,39 @@ router.get("/jobs/:id", async (req, res, next) => {
     .eq("status", "active")
     .maybeSingle();
 
-  if (error || !job) return next(); // let the SPA catch-all show a normal 404-ish experience
+  if (error || !job) {
+    // Reported via audit: a nonexistent/expired job ID silently showed
+    // the plain homepage with no indication anything was wrong - the
+    // comment this replaces described falling through to "a normal
+    // 404-ish experience" via the SPA catch-all, but that catch-all is
+    // just index.html with no logic to recognize this was a failed job
+    // lookup specifically. Rendering a real, dedicated response here
+    // instead - properly 404-coded (good for crawlers too, not just
+    // human visitors) and clear about what happened.
+    return res.status(404).send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>Job Not Found | ROOK</title>
+<style>
+  body{font-family:-apple-system,'Segoe UI',sans-serif; background:#F5F7FA; color:#0B1D3A; margin:0; padding:0;}
+  .wrap{max-width:560px; margin:0 auto; padding:100px 24px; text-align:center;}
+  h1{font-size:26px; margin-bottom:12px;}
+  p{color:#5B6B85; font-size:15px; line-height:1.6; margin-bottom:28px;}
+  a{display:inline-block; background:#0B1D3A; color:#fff; text-decoration:none; padding:12px 24px; border-radius:8px; font-weight:600;}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>This job isn't available anymore</h1>
+    <p>It may have been filled, closed by the employer, or the link may be outdated. Browse current openings instead.</p>
+    <a href="/rook-browse.html">Browse Open Roles</a>
+  </div>
+</body>
+</html>`);
+  }
 
   const title = job.title_original || job.title_normalized || "Open role";
   const comp = job.compensation_text || (job.salary_min ? `$${job.salary_min}${job.salary_max ? "–$" + job.salary_max : "+"}` : "");
