@@ -835,7 +835,7 @@
           <div class="company">${companyLine}</div>
           ${nearDistance}
           ${tags ? `<div class="tag-row">${tags}${expandToggle}</div>` : ''}
-          <div class="job-meta-line">${job.date_posted ? 'Posted ' + escapeHtml(job.date_posted) : ''} · Sourced via ${escapeHtml(job.source_type || 'unknown')}</div>
+          <div class="job-meta-line">${job.date_posted ? 'Posted ' + escapeHtml(new Date(job.date_posted).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })) : ''} · Sourced via ${escapeHtml(friendlySourceLabel(job.source_type))}</div>
         </div>
         <div class="job-actions">
           <span class="match-level ${level.cls}">${level.label}</span>
@@ -843,6 +843,20 @@
           ${primaryActionBtn}
         </div>
       </div>`;
+  }
+
+  // Reported via audit: internal source_type values (e.g. "oraclehcm",
+  // "agency_aggregated") were shown directly to candidates - meaningless
+  // engineering detail (a candidate has no reason to know or care which
+  // ATS platform an employer's career site runs on). Direct-employer
+  // ATS types all collapse to one friendly label since the distinction
+  // between them is purely internal; only the genuinely different
+  // categories (recruiter-posted, agency-aggregated) get their own.
+  function friendlySourceLabel(sourceType) {
+    if (sourceType === 'recruiter_posted') return 'Posted by Recruiter';
+    if (sourceType === 'agency_aggregated') return 'Staffing Agency';
+    if (sourceType === 'manual' || sourceType === 'custom') return 'Company Career Site';
+    return 'Company Career Site';
   }
 
   function escapeHtml(str) {
