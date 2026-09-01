@@ -481,10 +481,12 @@
       setTimeout(poll, 4000);
     }
 
-    async function loadJobs() {
+    async function loadJobs(keyword) {
     try {
+      const params = new URLSearchParams({ limit: '300' });
+      if (keyword) params.set('keyword', keyword);
       const [jobsRes, profileRes] = await Promise.all([
-        rookApiFetch('/jobs?limit=300'),
+        rookApiFetch('/jobs?' + params.toString()),
         rookApiFetch('/profile').catch(() => null),
       ]);
       if (!jobsRes.ok) throw new Error('API returned ' + jobsRes.status);
@@ -523,7 +525,19 @@
       } catch {}
 
       // Wire up every filter control to re-filter on change.
-      document.getElementById('filterKeyword').addEventListener('input', applyFiltersAndRender);
+      // Reported directly: keyword search only ever filtered whatever
+      // was already fetched (the candidate's top 300 jobs by score) -
+      // an employer search could miss most of that company's real
+      // postings if they scored lower than other employers' jobs
+      // elsewhere. Debounced re-fetch from the server instead, which
+      // now matches the keyword directly against title/company with no
+      // score-based limit (see fetchScoredRows in jobs.js) - so a
+      // keyword search genuinely shows every matching job.
+      let keywordDebounce;
+      document.getElementById('filterKeyword').addEventListener('input', (e) => {
+        clearTimeout(keywordDebounce);
+        keywordDebounce = setTimeout(() => loadJobs(e.target.value.trim()), 400);
+      });
       document.getElementById('remoteOnlyFilter').addEventListener('change', applyFiltersAndRender);
       document.querySelectorAll('.filter-industry').forEach((el) => el.addEventListener('change', applyFiltersAndRender));
       document.querySelectorAll('.filter-travel').forEach((el) => el.addEventListener('change', applyFiltersAndRender));

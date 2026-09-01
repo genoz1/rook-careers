@@ -251,7 +251,7 @@ router.get("/public-job-count", requireConfig, async (req, res) => {
 
 // GET /api/jobs?industry=Veterinary&state=FL&limit=20
 router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
-  const { industry, state, limit = 20 } = req.query;
+  const { industry, state, limit = 20, keyword } = req.query;
 
   // Anonymous browsing — teaser only, unchanged from before: company
   // name and any way to actually apply stay withheld; everything about
@@ -487,11 +487,30 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
       .eq("candidate_id", profile.id)
       .eq("dismissed", false)
       .eq("jobs.status", "active")
-      .eq("jobs.moderation_status", "approved")
-      .order("overall_score", { ascending: false, nullsFirst: false })
-      .limit(Number(limit));
+      .eq("jobs.moderation_status", "approved");
     if (industry) query = query.eq("jobs.industry", industry);
     if (state) query = query.eq("jobs.state", state);
+    // Reported directly: searching "zoetis" showed only 1 of 15 real,
+    // active Zoetis jobs. Root cause: this query always sorted by
+    // overall_score and capped at `limit` (e.g. 20) BEFORE any keyword
+    // filtering happened - keyword matching only ran client-side, on
+    // whatever subset of the candidate's ENTIRE match pool happened to
+    // score highest overall. A candidate with thousands of scored jobs
+    // would never even see most of one employer's postings if they
+    // scored lower than other employers' jobs elsewhere, regardless of
+    // how well those postings actually matched the literal search.
+    // Explicit instruction: an employer/keyword search should show
+    // every matching job regardless of score - score is informational
+    // here, not a filter. When a keyword is present, this matches it
+    // server-side directly (title or company) and skips the
+    // score-based ordering/limit entirely, so nothing gets cut off
+    // before the candidate ever sees it.
+    if (keyword) {
+      query = query.or(`title_original.ilike.%${keyword}%,company_name.ilike.%${keyword}%`, { foreignTable: "jobs" });
+      query = query.limit(500);
+    } else {
+      query = query.order("overall_score", { ascending: false, nullsFirst: false }).limit(Number(limit));
+    }
     return query;
   }
 
