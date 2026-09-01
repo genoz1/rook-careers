@@ -542,7 +542,7 @@
       jobList.dataset.demo = 'false';
       applyRecruiterToggle();
       updateStats(jobs);
-      showBanner('Showing ' + currentJobs.length + ' live job(s) from your database, ranked by your real match score.', 'info');
+      showBanner('Showing live jobs from your database, ranked by your real match score.', 'info');
       revealDemo();
     } catch (err) {
       showBanner('Could not reach the ROOK API (' + err.message + '). Showing example matches below — see ROOK-Setup-Guide.pdf to get the backend running.');

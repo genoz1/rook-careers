@@ -421,7 +421,7 @@
 
       status.innerHTML = `Showing jobs closest to "${escapeHtml(query)}" first. <a href="#" onclick="clearNearLocation(); return false;" style="color:var(--royal); font-weight:600;">Clear</a>`;
       applyFiltersAndRender();
-      showBanner(`Showing ${jobs.length} live job(s) near "${escapeHtml(query)}", scored for that location.`, 'info');
+      showBanner(`Showing jobs near "${escapeHtml(query)}", scored for that location.`, 'info');
     } catch (err) {
       document.getElementById('jobListLoading').style.display = 'none';
       document.getElementById('jobList').style.display = '';
@@ -502,7 +502,7 @@
       allJobs = jobs;
       document.getElementById('jobList').dataset.demo = 'false';
       applyFiltersAndRender();
-      showBanner(`Showing ${jobs.length} live job(s), scored against your profile.`, 'info');
+      showBanner(`Showing live jobs, scored against your profile.`, 'info');
       revealDemo();
 
       // Prefill "Show jobs near" with the candidate's own saved home zip
