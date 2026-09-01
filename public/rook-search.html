@@ -419,9 +419,12 @@
       document.getElementById('jobListLoading').style.display = 'none';
       document.getElementById('jobList').style.display = '';
 
-      status.innerHTML = `Showing jobs closest to "${escapeHtml(query)}" first. <a href="#" onclick="clearNearLocation(); return false;" style="color:var(--royal); font-weight:600;">Clear</a>`;
+      const radiusVal = document.getElementById('radiusSelect').value;
+      const radiusNote = radiusVal === '0' ? '' : ` within ${radiusVal} miles`;
+      const nearOrSorted = radiusVal === '0' ? 'sorted by distance from' : 'near';
+      status.innerHTML = `Showing jobs closest to "${escapeHtml(query)}" first${radiusNote}${radiusVal === '0' ? ' — no distance limit applied' : ''}. <a href="#" onclick="clearNearLocation(); return false;" style="color:var(--royal); font-weight:600;">Clear</a>`;
       applyFiltersAndRender();
-      showBanner(`Showing jobs near "${escapeHtml(query)}", scored for that location.`, 'info');
+      showBanner(`Showing jobs ${nearOrSorted} "${escapeHtml(query)}"${radiusNote}.`, 'info');
     } catch (err) {
       document.getElementById('jobListLoading').style.display = 'none';
       document.getElementById('jobList').style.display = '';
