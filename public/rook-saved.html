@@ -236,7 +236,10 @@ function openCompareModal() {
     ['Match Score', (j) => j.match?.overall_score != null ? `${j.match.overall_score}%` : '—'],
     ['Compensation', (j) => escapeHtml(j.compensation_text || (j.salary_min ? `$${j.salary_min}${j.salary_max ? '–$' + j.salary_max : '+'}` : '—'))],
     ['Distance', (j) => j.distance_miles != null ? `${j.distance_miles} mi` : '—'],
-    ['Posted', (j) => escapeHtml(j.date_posted || j.first_seen_at || '—')],
+    ['Posted', (j) => {
+      const raw = j.date_posted || j.first_seen_at;
+      return raw ? escapeHtml(new Date(raw).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })) : '—';
+    }],
     ['Link', (j) => j.source_type === 'recruiter_posted'
       ? `<a href="rook-apply.html?job=${escapeHtml(j.id)}">Apply</a>`
       : (j.source_url ? `<a href="${escapeHtml(j.source_url)}" target="_blank">View Original</a>` : '—')],

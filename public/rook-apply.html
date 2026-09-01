@@ -259,7 +259,7 @@ function showStatus(msg, type) {
       ['Compensation', job.compensation_text || (job.salary_min ? `$${job.salary_min}${job.salary_max ? '–$' + job.salary_max : '+'}` : null)],
       ['Travel', job.travel_percentage != null ? job.travel_percentage + '%' : null],
       ['Industry', job.ai_analysis?.required_industries?.[0] || job.ai_analysis?.preferred_industries?.[0] || null],
-      ['Posted', job.date_posted || job.first_seen_at],
+      ['Posted', (job.date_posted || job.first_seen_at) ? new Date(job.date_posted || job.first_seen_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null],
       ['Source', 'Recruiter'],
     ].filter(([, v]) => v);
     document.getElementById('factGrid').innerHTML = facts.map(([label, value]) =>
