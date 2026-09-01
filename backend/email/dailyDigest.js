@@ -2,19 +2,16 @@
 // digest emails work, e.g. MedReps' daily email) and the per-candidate
 // logic that decides what goes in it.
 //
-// Only jobs seen since the candidate's last successful digest are
-// eligible, so the same job doesn't get re-emailed every day forever —
-// tracked via candidate_profiles.last_digest_sent_at. For a candidate's
-// very first digest (that column is still null), "since last digest"
-// would mean literally every job ever ingested, which could be hundreds
-// — so first-ever digests are scoped to jobs first seen in the last 3
-// days instead, a reasonable "what's fresh right now" window.
+// Sends each candidate's top 10 overall matches (by precomputed
+// overall_score), regardless of whether they're newly seen or have
+// been sitting in their match list for a while - a candidate's best
+// real opportunities don't stop being worth surfacing just because
+// nothing new happened to appear since yesterday.
 //
 // A candidate with zero qualifying jobs this run gets no email at all —
 // an empty "no matches today" email has no value and just trains people
 // to ignore ROOK's emails.
 
-const { scoreJob } = require("../matching");
 const { sendEmail } = require("./resend");
 
 // 60, not 70 ("Stretch Apply" tier) — chosen after testing against a
@@ -28,7 +25,6 @@ const { sendEmail } = require("./resend");
 // candidates for gaps that are the job posting's fault, not theirs.
 const MIN_SCORE_TO_INCLUDE = 60;
 const MAX_JOBS_PER_EMAIL = 10;
-const FIRST_DIGEST_WINDOW_DAYS = 3;
 
 function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -82,48 +78,49 @@ async function sendDigestForCandidate(supabase, profile, appBaseUrl) {
   if (!profile.email) return { sent: false, reason: "no_email" };
   if (profile.digest_enabled === false) return { sent: false, reason: "opted_out" };
 
-  const sinceDate = profile.last_digest_sent_at
-    ? new Date(profile.last_digest_sent_at)
-    : new Date(Date.now() - FIRST_DIGEST_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  // Direct instruction: show the candidate's top matches overall, not
+  // just ones newly seen since the last digest - a candidate whose best
+  // real opportunities haven't changed day to day shouldn't get an
+  // empty inbox just because nothing new happened to appear.
+  //
+  // Reads from the same precomputed candidate_job_matches table the
+  // Dashboard uses, rather than re-scoring every active job (~6,000+)
+  // fresh inside this script for every candidate - reuses the work
+  // precompute-scores.js already did, stays consistent with what the
+  // candidate sees on their Dashboard, and scales the same way the
+  // Dashboard's own speed fix did tonight.
+  const { data: matchRows, error } = await supabase
+    .from("candidate_job_matches")
+    .select("*, jobs!inner(*)")
+    .eq("candidate_id", profile.id)
+    .eq("dismissed", false)
+    .eq("hard_disqualifier", false)
+    .eq("jobs.status", "active")
+    .eq("jobs.moderation_status", "approved")
+    .order("overall_score", { ascending: false })
+    .limit(MAX_JOBS_PER_EMAIL);
 
-  const { data: candidateJobs, error } = await supabase
-    .from("jobs")
-    .select("*")
-    .eq("status", "active")
-    .gte("first_seen_at", sinceDate.toISOString())
-    .order("first_seen_at", { ascending: false }) // most-recent-first, so if a candidate's
-      // "since" window has grown wide (they've gone a while without a qualifying match), the
-      // 500-row cap below keeps the newest jobs rather than an arbitrary, potentially-stale slice
-    .limit(500);
+  if (error) throw new Error(`Could not load matches for digest: ${error.message}`);
 
-  if (error) throw new Error(`Could not load jobs for digest: ${error.message}`);
-
-  const scored = (candidateJobs || [])
-    .map((job) => ({ ...job, match: scoreJob(job, profile) }))
-    .filter((job) => (job.match.overall_score ?? -1) >= MIN_SCORE_TO_INCLUDE)
-    // A location_prefs rating of "Gap" means scoreJob() already hard-
-    // disqualified this job on location — either it's outside the US
-    // (mentionsForeignCountry) or it's far away and not somewhere the
-    // candidate said they're open to (accepted state or willing to
-    // relocate). That disqualification caps overall_score at 65, not
-    // below MIN_SCORE_TO_INCLUDE (60) - so a disqualified job could
-    // still clear the filter above and land in the "curated" daily
-    // email. Reported directly: a Florida candidate's top-10 digest
-    // included California/Oregon/Pennsylvania postings at 74-80%,
-    // exactly this gap. An unsolicited "here are your matches today"
-    // email deserves a stricter bar than the general browse-everything
-    // dashboard, where a candidate voluntarily looking at a wider net
-    // is a different, better context for the same result to appear in.
-    .filter((job) => job.match.categories?.location_prefs?.rating !== "Gap")
-    .sort((a, b) => (b.match.overall_score ?? -1) - (a.match.overall_score ?? -1))
-    .slice(0, MAX_JOBS_PER_EMAIL);
+  const scored = (matchRows || [])
+    .filter((row) => (row.overall_score ?? -1) >= MIN_SCORE_TO_INCLUDE)
+    .map((row) => ({
+      ...row.jobs,
+      match: {
+        overall_score: row.overall_score,
+        excellent_match: row.overall_score >= 90,
+        recommendation: row.recommendation,
+        reasons: row.strong_match_reasons || row.reasons || [],
+        concerns: row.concerns || [],
+      },
+    }));
 
   if (scored.length === 0) return { sent: false, reason: "no_qualifying_matches" };
 
   const html = renderDigestHtml({ name: profile.name, jobs: scored, appBaseUrl });
   await sendEmail({
     to: profile.email,
-    subject: `${scored.length} new match${scored.length === 1 ? "" : "es"} on ROOK`,
+    subject: `${scored.length} top match${scored.length === 1 ? "" : "es"} on ROOK`,
     html,
     // No real inbox behind DIGEST_FROM_EMAIL (Resend sends mail, it
     // doesn't host mailboxes) - route any candidate reply to a real,
