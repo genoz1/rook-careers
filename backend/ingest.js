@@ -27,6 +27,7 @@ const { fetchDrupalCareersJobs, normalizeDrupalCareersJob } = require("./adapter
 const { fetchTeamtailorJobs, normalizeTeamtailorJob } = require("./adapters/teamtailor");
 const { fetchPinpointJobs, normalizePinpointJob } = require("./adapters/pinpoint");
 const { fetchEightfoldJobs, normalizeEightfoldJob } = require("./adapters/eightfold");
+const { fetchPaylocityJobs, normalizePaylocityJob } = require("./adapters/paylocity");
 const { analyzeJob } = require("./ai/jobAnalysis");
 const { generateEmbedding } = require("./ai/embeddings");
 const { geocodeLocation } = require("./geocoding");
@@ -96,6 +97,9 @@ async function ingestEmployer(employer) {
     } else if (employer.ats_type === "eightfold") {
       rawJobs = await fetchEightfoldJobs(employer.ats_identifier);
       normalize = normalizeEightfoldJob;
+    } else if (employer.ats_type === "paylocity") {
+      rawJobs = await fetchPaylocityJobs(employer.ats_identifier);
+      normalize = normalizePaylocityJob;
     } else {
       console.log(`  Skipping — no adapter for ats_type "${employer.ats_type}"`);
       return;
