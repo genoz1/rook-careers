@@ -130,6 +130,26 @@
     <span class="updated" id="updatedLabel" style="display:none;">Updated continuously</span>
   </div>
 
+  <!-- Reported via audit: this page advertised 6,000+ roles with no
+       way to narrow them down at all - a new visitor had to scroll
+       through a large unfiltered feed. Basic discovery controls,
+       client-side filtered against the fetched batch (industry is
+       also passed to the server, which already supports it). -->
+  <div style="background:#fff; border:1px solid var(--border); border-radius:16px; padding:16px 20px; margin-bottom:20px; display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
+    <input type="text" id="browseKeyword" placeholder="Search job titles or companies…" style="flex:1; min-width:180px; border:1px solid var(--border); border-radius:8px; padding:9px 12px; font-size:13.5px; font-family:inherit;" oninput="applyBrowseFilters()">
+    <select id="browseIndustry" style="border:1px solid var(--border); border-radius:8px; padding:9px 12px; font-size:13.5px; font-family:inherit; background:#fff;" onchange="loadJobs()">
+      <option value="">All Industries</option>
+      <option value="Diagnostics">Diagnostics</option>
+      <option value="Veterinary / Animal Health">Veterinary / Animal Health</option>
+      <option value="Medical Device">Medical Device</option>
+      <option value="Capital Equipment">Capital Equipment</option>
+      <option value="Pharmaceutical">Pharmaceutical</option>
+    </select>
+    <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--muted); white-space:nowrap;">
+      <input type="checkbox" id="browseRemote" onchange="applyBrowseFilters()"> Remote only
+    </label>
+  </div>
+
   <!-- Skeleton state: shown immediately, before the request resolves.
        Never replaced by a "0 jobs" or empty message until we know the
        real outcome — that's the core bug this whole page was rebuilt
@@ -206,9 +226,12 @@ function showLoadingState() {
   document.getElementById('errorState').style.display = 'none';
 }
 
+let allBrowseJobs = [];
+
 function showSuccessState(jobs, totalCount) {
   document.getElementById('skeletonList').style.display = 'none';
   document.getElementById('errorState').style.display = 'none';
+  allBrowseJobs = jobs;
 
   if (jobs.length === 0) {
     document.getElementById('resultsCount').textContent = '0';
@@ -222,9 +245,26 @@ function showSuccessState(jobs, totalCount) {
   document.getElementById('resultsCount').textContent = totalCount.toLocaleString();
   document.getElementById('resultsLabel').textContent = 'open roles right now';
   document.getElementById('updatedLabel').style.display = 'inline';
-  document.getElementById('empty').style.display = 'none';
-  document.getElementById('jobList').style.display = 'flex';
-  document.getElementById('jobList').innerHTML = jobs.map(renderTeaserCard).join('');
+  applyBrowseFilters();
+}
+
+// Client-side pass over the fetched batch for keyword/remote - industry
+// is passed to the server directly (see loadJobs), which already
+// supports it more efficiently than re-fetching everything each time.
+function applyBrowseFilters() {
+  const keyword = document.getElementById('browseKeyword').value.trim().toLowerCase();
+  const remoteOnly = document.getElementById('browseRemote').checked;
+  const filtered = allBrowseJobs.filter((job) => {
+    if (remoteOnly && job.remote_status !== 'remote' && job.remote_status !== 'hybrid') return false;
+    if (keyword) {
+      const text = `${job.title_original || ''} ${job.title_normalized || ''} ${job.company_name || ''}`.toLowerCase();
+      if (!text.includes(keyword)) return false;
+    }
+    return true;
+  });
+  document.getElementById('empty').style.display = filtered.length === 0 ? 'block' : 'none';
+  document.getElementById('jobList').style.display = filtered.length === 0 ? 'none' : 'flex';
+  document.getElementById('jobList').innerHTML = filtered.map(renderTeaserCard).join('');
 }
 
 function showErrorState() {
@@ -246,7 +286,10 @@ async function loadJobs() {
     // also sorts these by the visitor's real IP-based location and
     // returns the true platform-wide count (total_count) separately
     // from however many jobs this particular request displays.
-    const res = await fetch('/api/jobs?limit=30');
+    const industry = document.getElementById('browseIndustry').value;
+    const params = new URLSearchParams({ limit: '200' });
+    if (industry) params.set('industry', industry);
+    const res = await fetch('/api/jobs?' + params.toString());
     if (!res.ok) throw new Error('API returned ' + res.status);
     const data = await res.json();
     const jobs = Array.isArray(data) ? data : (data.jobs || []); // Array.isArray fallback covers any cached/older response shape
