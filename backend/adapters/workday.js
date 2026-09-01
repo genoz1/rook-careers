@@ -177,6 +177,25 @@ function extractChildBrand(tenant, text) {
   return null;
 }
 
+// Mirrors backend/matching.js's NON_US_COUNTRY_SIGNALS list (kept as
+// full names there since that list also matches free-text location
+// strings) - translates Workday's ISO alpha-2 country code into a name
+// that detector already recognizes, only for countries actually on
+// that list, since matches nowhere else in the pipeline check for any
+// other code anyway.
+const ALPHA2_TO_COUNTRY_NAME = {
+  CN: "china", IN: "india", DE: "germany", GB: "united kingdom", CA: "canada",
+  MX: "mexico", BR: "brazil", FR: "france", JP: "japan", AU: "australia",
+  SG: "singapore", ES: "spain", IT: "italy", NL: "netherlands", CH: "switzerland",
+  IE: "ireland", PL: "poland", SE: "sweden", BE: "belgium", KR: "south korea",
+  TW: "taiwan", HK: "hong kong", PH: "philippines", VN: "vietnam", TH: "thailand",
+  MY: "malaysia", ID: "indonesia", ZA: "south africa", IL: "israel", TR: "turkey",
+  AR: "argentina", CO: "colombia", CL: "chile", PT: "portugal", AT: "austria",
+  DK: "denmark", NO: "norway", FI: "finland", CZ: "czech republic", RO: "romania",
+  HU: "hungary", GR: "greece", NZ: "new zealand", AE: "united arab emirates",
+  SA: "saudi arabia", EG: "egypt", RU: "russia",
+};
+
 function normalizeWorkdayJob(raw, employer) {
   const { tenant, wdNumber, site } = parseWorkdayIdentifier(employer.ats_identifier);
   const baseUrl = `https://${tenant}.${wdNumber}.myworkdayjobs.com/${site}`;
@@ -184,6 +203,40 @@ function normalizeWorkdayJob(raw, employer) {
   const info = raw.detail?.jobPostingInfo || {};
   const description = info.jobDescription || "";
   const childBrand = extractChildBrand(tenant, description);
+
+  // Reported directly: multi-location postings showed a generic "2
+  // Locations" (or "US Territory Field based") placeholder instead of
+  // real place names, and two Australian postings weren't being
+  // caught by the foreign-country filter at all - because location_raw
+  // was pulling from the LIST view's summary text (locationsText),
+  // which is exactly that generic placeholder for any multi-location
+  // req, never the real city/state/country. Workday's own detail
+  // payload (already being fetched for every relevant job, one request
+  // per posting) has the real data the list view only hints at:
+  // jobPostingInfo.location is a clean "City, State, Country" string,
+  // and additionalLocations is an array of the same for every other
+  // site a multi-location req is open at. Joining these gives a real,
+  // complete location string - which also means the existing
+  // country-name text check downstream can actually catch a foreign
+  // posting like "Sydney, New South Wales, Australia", since the word
+  // "Australia" is now genuinely present in the text instead of never
+  // having been fetched at all.
+  const additionalLocs = Array.isArray(info.additionalLocations) ? info.additionalLocations : [];
+  const realLocations = [info.location, ...additionalLocs].filter(Boolean);
+  let location_raw = realLocations.length > 0 ? realLocations.join(" | ") : (raw.locationsText || "");
+  // Belt-and-suspenders: Workday's detail payload also carries an
+  // explicit ISO country code, a more reliable signal than text-
+  // matching alone since it can't be missed by phrasing. Translated to
+  // a full country name (not just appending the bare 2-letter code,
+  // which the downstream text-based detector wouldn't recognize) and
+  // added to location_raw only if that country isn't already
+  // genuinely mentioned there, so foreign-country detection can never
+  // miss a posting regardless of how its location text was phrased.
+  const countryCode = info.jobRequisitionLocation?.country?.alpha2Code;
+  const countryName = countryCode ? ALPHA2_TO_COUNTRY_NAME[countryCode] : null;
+  if (countryName && !new RegExp(`\\b${countryName}\\b`, "i").test(location_raw)) {
+    location_raw = location_raw ? `${location_raw}, ${countryName}` : countryName;
+  }
 
   return {
     source_job_id: info.jobReqId || raw.bulletFields?.[0] || raw.externalPath,
@@ -195,7 +248,7 @@ function normalizeWorkdayJob(raw, employer) {
     company_name: childBrand || employer.company_name,
     description_html: info.jobDescription || null,
     description_text: stripHtml(description),
-    location_raw: raw.locationsText || "",
+    location_raw,
     // Workday's list view only gives relative text ("Posted 3 Days Ago"),
     // not a real date — leaving this null rather than guessing.
     date_posted: null,
