@@ -165,7 +165,7 @@ async function ingestEmployer(employer) {
     // posting is never stored at all, rather than relying on every
     // downstream reader (dashboard, digest, search) to correctly
     // demote it after the fact.
-    if (mentionsNonUsCountry(job.location_raw)) {
+    if (mentionsNonUsCountry(job.location_raw, null, job.title_original)) {
       nonUsSkippedCount++;
       continue;
     }

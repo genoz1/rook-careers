@@ -315,7 +315,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     // very first thing a prospective customer sees could include jobs
     // in Mumbai, London, or Toronto, undermining the promised
     // medical/veterinary sales-in-the-US positioning immediately.
-    const usJobsOnly = (data || []).filter((job) => !mentionsNonUsCountry(job.location_raw, job.job_lng));
+    const usJobsOnly = (data || []).filter((job) => !mentionsNonUsCountry(job.location_raw, job.job_lng, job.title_original));
 
     // Sort by real match score, the same scoreJob() the Dashboard and
     // every other authenticated view use — not a separate, bespoke
@@ -521,7 +521,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     // entire point of "what if I lived here instead."
     const exploredProfile = { ...profile, home_lat: nearLat, home_lng: nearLng };
     let scored = [...nearby, ...(noCoordsJobs || [])]
-      .filter((job) => !mentionsNonUsCountry(job.location_raw, job.job_lng))
+      .filter((job) => !mentionsNonUsCountry(job.location_raw, job.job_lng, job.title_original))
       .map((job) => ({ ...job, match: scoreJob(job, exploredProfile) }))
       .filter((job) => industry ? job.industry === industry : true)
       .filter((job) => state ? job.state === state : true)
@@ -596,7 +596,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
 
   let rows = (allMatchingJobs || [])
     .filter((job) => !dismissedJobIds.has(job.id))
-    .filter((job) => !mentionsNonUsCountry(job.location_raw, job.job_lng))
+    .filter((job) => !mentionsNonUsCountry(job.location_raw, job.job_lng, job.title_original))
     .map((job) => ({ jobs: job, job_id: job.id, overall_score: null, saved: savedJobIds.has(job.id), _liveMatch: scoreJob(job, profile) }))
     .sort((a, b) => (b._liveMatch?.overall_score ?? -1) - (a._liveMatch?.overall_score ?? -1));
   if (!keyword) rows = rows.slice(0, Number(limit));
@@ -694,7 +694,7 @@ router.get("/recruiter-jobs", requireConfig, optionalAuth, async (req, res) => {
   }
 
   const results = jobsData
-    .filter((job) => !mentionsNonUsCountry(job.location_raw, job.job_lng))
+    .filter((job) => !mentionsNonUsCountry(job.location_raw, job.job_lng, job.title_original))
     .map((job) => {
       const match = profile ? scoreJob(job, profile) : null;
       return {
@@ -795,13 +795,13 @@ router.get("/new-matches-today-count", requireConfig, requireAuth, loadCandidate
   // shouldn't be counted as one of their matches either.
   const { data: todaysJobs, error } = await supabaseAdmin
     .from("jobs")
-    .select("location_raw, job_lng")
+    .select("location_raw, job_lng, title_original")
     .eq("status", "active")
     .eq("moderation_status", "approved")
     .gte("date_posted", todayStart.toISOString());
 
   if (error) return res.status(500).json({ error: error.message });
-  const count = (todaysJobs || []).filter((job) => !mentionsNonUsCountry(job.location_raw, job.job_lng)).length;
+  const count = (todaysJobs || []).filter((job) => !mentionsNonUsCountry(job.location_raw, job.job_lng, job.title_original)).length;
   res.json({ new_today: count });
 });
 
@@ -1105,7 +1105,7 @@ router.get("/saved-jobs", requireConfig, requireAuth, loadCandidateId, async (re
 
   const jobs = (rows || [])
     .filter((row) => row.jobs) // guards against a job having been removed since it was saved
-    .filter((row) => !mentionsNonUsCountry(row.jobs.location_raw, row.jobs.job_lng))
+    .filter((row) => !mentionsNonUsCountry(row.jobs.location_raw, row.jobs.job_lng, row.jobs.title_original))
     .map((row) => ({
       ...attachDistance(row.jobs, profile),
       match: row.overall_score != null ? matchFromRow(row) : null,

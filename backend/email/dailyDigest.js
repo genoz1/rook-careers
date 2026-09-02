@@ -112,7 +112,7 @@ async function sendDigestForCandidate(supabase, profile, appBaseUrl) {
   // broader "let all jobs show" rule used everywhere else. A genuine
   // exclusion, not a low score, so it's guaranteed regardless of how
   // scoring itself is tuned.
-  const domesticRows = (matchRows || []).filter((row) => !mentionsNonUsCountry(row.jobs?.location_raw, row.jobs?.job_lng));
+  const domesticRows = (matchRows || []).filter((row) => !mentionsNonUsCountry(row.jobs?.location_raw, row.jobs?.job_lng, row.jobs?.title_original));
 
   const scored = domesticRows
     .filter((row) => (row.overall_score ?? -1) >= MIN_SCORE_TO_INCLUDE)

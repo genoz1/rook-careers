@@ -159,8 +159,24 @@ function hasForeignCountryCodePrefix(locationRaw) {
   return !US_STATE_ABBRS.has(match[1]);
 }
 
-function mentionsNonUsCountry(locationRaw, jobLng) {
+// A real, low-risk structural signal, same reasoning as the
+// country-code-prefix check above: no legitimate US job posting title
+// or location would contain untranslated Chinese/Japanese/Korean
+// script. Catches the gap the two checks below can both miss at once —
+// a foreign city name that isn't on the NON_US_COUNTRY_SIGNALS list
+// (e.g. "Suita", a real Osaka-area city) AND a job that never
+// successfully geocoded (so job_lng is null, not a positive number) -
+// which together let a literal Japanese-language posting through
+// undetected on every surface that filters by location_raw/job_lng
+// alone. Ranges: Hiragana/Katakana, CJK Unified Ideographs, Hangul.
+function containsNonLatinScript(text) {
+  if (!text) return false;
+  return /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af]/.test(String(text));
+}
+
+function mentionsNonUsCountry(locationRaw, jobLng, titleRaw) {
   if (jobLng != null && jobLng > 0) return true;
+  if (containsNonLatinScript(titleRaw) || containsNonLatinScript(locationRaw)) return true;
   if (!locationRaw) return false;
   if (hasForeignCountryCodePrefix(locationRaw)) return true;
   return NON_US_COUNTRY_SIGNALS.some((country) => new RegExp(`\\b${country}\\b`, "i").test(locationRaw));
@@ -389,7 +405,7 @@ function scoreJob(job, profile) {
   // distance-primary scoring below, remote or not; "remote" is kept as
   // a purely informational callout, not a score input.
   const isRemoteLabeled = /remote/i.test(job.location_raw || "") || job.remote_status === "remote";
-  const mentionsForeignCountry = mentionsNonUsCountry(job.location_raw, job.job_lng);
+  const mentionsForeignCountry = mentionsNonUsCountry(job.location_raw, job.job_lng, job.title_original);
 
   const hasRealCoordinates = profile.home_lat != null && profile.home_lng != null && job.job_lat != null && job.job_lng != null;
 
@@ -1106,4 +1122,4 @@ function scoreJob(job, profile) {
   };
 }
 
-module.exports = { scoreJob, stateAbbrFromName, extractSalaryFigure, extractJobTravelPercentage, mentionsNonUsCountry };
+module.exports = { scoreJob, stateAbbrFromName, extractSalaryFigure, extractJobTravelPercentage, mentionsNonUsCountry, containsNonLatinScript };
