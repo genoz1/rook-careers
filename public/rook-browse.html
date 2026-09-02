@@ -390,11 +390,27 @@ document.getElementById('zipInput').addEventListener('keydown', (e) => {
 // View Analysis/Apply/Subscribe, since none of those apply pre-signup.
 function renderTeaserJobRow(job) {
   const comp = job.compensation_text || (job.salary_min ? `$${job.salary_min}${job.salary_max ? '–$' + job.salary_max : '+'}` : '');
+  // Same distinct treatment as the Dashboard/Job Search pages: a
+  // purple accent border plus a badge for recruiter-posted and
+  // agency-aggregated (staffing agency) listings, so they don't blend
+  // in with employer-verified, ATS-pulled postings. This was carried
+  // over from the real job-row renderer but got dropped when this
+  // page's card renderer was rebuilt — source_type survives the
+  // anonymous redaction untouched, so the data was always there, it
+  // just wasn't being used here.
+  const isRecruiterPosted = job.source_type === 'recruiter_posted';
+  const isAgencySourced = job.source_type === 'agency_aggregated';
+  const rowStyle = (isRecruiterPosted || isAgencySourced) ? 'border-left:4px solid #7C3AED; background:#FAF8FF;' : '';
+  const sourceBadge = isRecruiterPosted
+    ? `<span style="font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:99px; background:#7C3AED18; color:#7C3AED; text-transform:uppercase; letter-spacing:0.02em; margin-left:8px;">Posted by Recruiter</span>`
+    : isAgencySourced
+      ? `<span style="font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:99px; background:#7C3AED18; color:#7C3AED; text-transform:uppercase; letter-spacing:0.02em; margin-left:8px;">Agency Listing</span>`
+      : '';
   return `
-    <a href="/jobs/${escapeHtml(job.id)}" class="job-row">
+    <a href="/jobs/${escapeHtml(job.id)}" class="job-row" style="${rowStyle}">
       <div class="score-ring">🔒</div>
       <div class="job-info">
-        <h4>${escapeHtml(job.title_original || job.title_normalized || 'Untitled role')}</h4>
+        <h4>${escapeHtml(job.title_original || job.title_normalized || 'Untitled role')}${sourceBadge}</h4>
         <div class="company"><span style="color:#7C3AED; font-weight:600;">🔒 Employer revealed with ROOK</span> — ${escapeHtml(job.location_raw || '')}${comp ? ' &nbsp;·&nbsp; ' + escapeHtml(comp) : ''}</div>
         <div class="job-meta-line">${job.date_posted ? 'Posted ' + escapeHtml(job.date_posted) : ''}</div>
       </div>
