@@ -46,16 +46,13 @@
 
   .container{max-width:840px; margin:-38px auto 0; padding:0 24px 60px; position:relative;}
 
-  /* ZIP gate — the only location input on this page. No browser
-     geolocation, no IP-based lookup — a visitor-typed ZIP is the only
-     location source, both because it's guaranteed to work and because
-     it's exactly what a real candidate profile provides (home ZIP). */
-  .zip-gate{background:#fff; border:1px solid var(--border); border-radius:20px; padding:40px 32px; text-align:center; box-shadow:0 8px 24px rgba(7,30,65,0.06);}
-  .zip-gate h2{font-size:20px; margin-bottom:8px;}
-  .zip-gate p{color:var(--muted); font-size:13.5px; margin-bottom:20px;}
-  .zip-gate-form{display:flex; justify-content:center; gap:10px; flex-wrap:wrap;}
-  .zip-gate input{width:140px; border:1px solid var(--border); border-radius:8px; padding:11px 14px; font-size:15px; font-family:inherit; text-align:center;}
-  .zip-gate-error{color:#C0392B; font-size:12.5px; font-weight:600; margin-top:12px; display:none;}
+  /* ZIP bar — always visible, editable, never hides the rest of the
+     page. No browser geolocation, no IP-based lookup — a visitor-typed
+     ZIP is the only location source. */
+  .zip-bar{background:#fff; border:1px solid var(--border); border-radius:16px; padding:14px 18px; margin-bottom:20px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; box-shadow:0 8px 24px rgba(7,30,65,0.06);}
+  .zip-bar-label{font-size:13.5px; font-weight:600; color:var(--navy); white-space:nowrap;}
+  .zip-bar input{width:110px; border:1px solid var(--border); border-radius:8px; padding:9px 12px; font-size:14px; font-family:inherit; text-align:center;}
+  .zip-bar-error{color:#C0392B; font-size:12.5px; font-weight:600; display:none;}
 
   .results-bar{background:#fff; border:1px solid var(--border); border-radius:20px; padding:20px 24px; display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; box-shadow:0 8px 24px rgba(7,30,65,0.06); gap:12px; flex-wrap:wrap;}
   .results-bar .count-block{display:flex; align-items:baseline; gap:10px;}
@@ -105,7 +102,7 @@
     .results-bar .count-num{font-size:26px;}
     .job-row{grid-template-columns:1fr; text-align:left; padding:16px;}
     .job-actions{flex-direction:row; align-items:center; flex-wrap:wrap;}
-    .zip-gate{padding:28px 20px;}
+    .zip-bar{padding:12px 14px;}
   }
 </style>
 </head>
@@ -133,19 +130,22 @@
 
 <div class="container">
 
-  <!-- ZIP gate: the only location input on this page. No browser
-       geolocation, no IP-based lookup, nothing automatic. -->
-  <div class="zip-gate" id="zipGate">
-    <h2>See jobs near you</h2>
-    <p>Enter your ZIP code to find current openings in your area.</p>
-    <div class="zip-gate-form">
-      <input type="text" id="zipInput" placeholder="ZIP code" maxlength="5" inputmode="numeric">
-      <button type="button" class="btn btn-primary" onclick="submitZip()">Show Jobs</button>
-    </div>
-    <div class="zip-gate-error" id="zipError"></div>
+  <!-- Persistent, always-on-page ZIP bar — not a blocking gate. Direct
+       instruction: a full-page gate that shows/hides based on cached
+       location created confusion over whether it "should" appear on a
+       given visit. This is simpler: always visible, always editable,
+       never hides the rest of the page. Pre-filled from a ZIP given
+       earlier this month, if any; jobs load with a sensible sitewide
+       default (most recent, unsorted by distance) if no ZIP has been
+       given yet, rather than blocking on one. -->
+  <div class="zip-bar" id="zipBar">
+    <span class="zip-bar-label">📍 Show jobs near</span>
+    <input type="text" id="zipInput" placeholder="ZIP code" maxlength="5" inputmode="numeric">
+    <button type="button" class="btn btn-primary btn-sm" onclick="submitZip()">Update</button>
+    <span class="zip-bar-error" id="zipError"></span>
   </div>
 
-  <div id="resultsSection" style="display:none;">
+  <div id="resultsSection">
     <div class="results-bar" id="resultsBar">
       <div class="count-block">
         <span class="count-num" id="resultsCount">—</span>
@@ -289,21 +289,21 @@ function getCachedZipLocation() {
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed.lat !== 'number' || typeof parsed.lng !== 'number') return null;
     if (Date.now() - (parsed.savedAt || 0) > ZIP_LOCATION_MAX_AGE_MS) return null;
-    return { lat: parsed.lat, lng: parsed.lng, state: parsed.state || null };
+    return { lat: parsed.lat, lng: parsed.lng, state: parsed.state || null, zip: parsed.zip || null };
   } catch {
     return null;
   }
 }
 
-function cacheZipLocation(lat, lng, state) {
+function cacheZipLocation(lat, lng, state, zip) {
   try {
-    localStorage.setItem(ZIP_LOCATION_STORAGE_KEY, JSON.stringify({ lat, lng, state, savedAt: Date.now() }));
+    localStorage.setItem(ZIP_LOCATION_STORAGE_KEY, JSON.stringify({ lat, lng, state, zip, savedAt: Date.now() }));
   } catch {
     // Storage full/blocked (private browsing, etc.) — non-fatal.
   }
 }
 
-let currentVisitorLocation = null; // {lat, lng, state} — the visitor's ZIP-derived location, once known
+let currentVisitorLocation = null; // {lat, lng, state} — the visitor's ZIP-derived location, once known; null is a valid state (no location given yet)
 
 async function loadJobs() {
   showLoadingState();
@@ -318,7 +318,9 @@ async function loadJobs() {
     // redacted teaser shape (no company name, no apply link, no match
     // score) for any request with no valid session, scored through the
     // exact same near-location logic the real, signed-in Job Search
-    // page uses.
+    // page uses. With no location given yet, the backend falls back to
+    // a plain recency-ordered list (see the anonymous branch of GET
+    // /api/jobs) rather than erroring or showing nothing.
     const res = await fetch('/api/jobs?' + params.toString());
     if (!res.ok) throw new Error('API returned ' + res.status);
     const data = await res.json();
@@ -331,13 +333,18 @@ async function loadJobs() {
   }
 }
 
+// Direct instruction: keep the ZIP box as a normal, always-visible part
+// of the page instead of a full-page gate that shows/hides based on
+// cached state — simpler, and there's no more "did it show up or not"
+// behavior to reason about. Updating the ZIP just re-runs loadJobs()
+// with the new location; nothing else on the page is ever hidden by it.
 async function submitZip() {
   const zip = document.getElementById('zipInput').value.trim();
   const errEl = document.getElementById('zipError');
   errEl.style.display = 'none';
   if (!/^\d{5}$/.test(zip)) {
     errEl.textContent = 'Enter a valid 5-digit ZIP code.';
-    errEl.style.display = 'block';
+    errEl.style.display = 'inline';
     return;
   }
   try {
@@ -345,18 +352,16 @@ async function submitZip() {
     const data = await res.json();
     if (!res.ok) {
       errEl.textContent = data.error || 'Could not find that ZIP code.';
-      errEl.style.display = 'block';
+      errEl.style.display = 'inline';
       return;
     }
     currentVisitorLocation = { lat: data.lat, lng: data.lng, state: data.state || null };
-    cacheZipLocation(data.lat, data.lng, data.state || null);
-    document.getElementById('zipGate').style.display = 'none';
-    document.getElementById('resultsSection').style.display = 'block';
+    cacheZipLocation(data.lat, data.lng, data.state || null, zip);
     loadJobs();
   } catch (err) {
     console.error('ZIP geocoding failed:', err);
     errEl.textContent = 'Something went wrong — please try again.';
-    errEl.style.display = 'block';
+    errEl.style.display = 'inline';
   }
 }
 
@@ -364,17 +369,17 @@ document.getElementById('zipInput').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') submitZip();
 });
 
-// A ZIP given earlier this month skips the gate entirely; otherwise
-// the gate (shown by default) is the only way in — no browser
-// geolocation, no IP lookup, nothing automatic.
+// A ZIP given earlier this month pre-fills the box and is used
+// immediately; otherwise jobs just load with no location yet (plain
+// recency order) and the box sits there empty, ready to be filled in
+// whenever the visitor wants — never blocking the rest of the page.
 (() => {
   const cached = getCachedZipLocation();
   if (cached) {
     currentVisitorLocation = cached;
-    document.getElementById('zipGate').style.display = 'none';
-    document.getElementById('resultsSection').style.display = 'block';
-    loadJobs();
+    if (cached.zip) document.getElementById('zipInput').value = cached.zip;
   }
+  loadJobs();
 })();
 
 // Same visual card as rook-search.html's real renderRealJobRow — the

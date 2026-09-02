@@ -369,10 +369,11 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     const nearStateName = typeof req.query.near_state === "string" ? req.query.near_state : null;
 
     if (nearLat == null || nearLng == null || Number.isNaN(nearLat) || Number.isNaN(nearLng)) {
-      // Should not normally happen — the ZIP gate is mandatory on the
-      // frontend — but if this endpoint is ever hit with no location at
-      // all, fall back to a plain recency-ordered, redacted list rather
-      // than erroring.
+      // The normal state for a first-time visitor now — the ZIP box on
+      // the frontend is a persistent, optional part of the page rather
+      // than a mandatory gate, so plenty of requests will genuinely
+      // have no location yet. Falls back to a plain recency-ordered,
+      // redacted list rather than erroring or showing nothing.
       let fallbackQuery = supabaseAnon
         .from("jobs")
         .select(JOB_LIST_COLUMNS)
