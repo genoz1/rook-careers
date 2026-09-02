@@ -730,19 +730,35 @@ router.get("/guarantee-status", requireConfig, requireAuth, loadCandidateId, asy
 // mathematically almost always exactly the limit value (20) regardless
 // of what was actually posted today, since there are thousands of
 // active jobs and the top 20 by score are shown regardless of date.
+//
+// Reported directly as "always low": this counted rows from
+// candidate_job_matches (the precomputed table) - the exact same
+// staleness problem already fixed for the main jobs list and the
+// recruiter-jobs endpoint. A job posted today that hadn't yet been
+// through a precompute run (increasingly likely now that the main
+// candidate-facing paths no longer depend on that table at all) simply
+// had no row there, so it could never be counted here even though it's
+// a completely real, live job the candidate would actually see. Now
+// counts directly from the jobs table itself - no precompute
+// dependency, matches what "New" actually means on the New tab.
 router.get("/new-matches-today-count", requireConfig, requireAuth, loadCandidateId, async (req, res) => {
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
 
-  const { count, error } = await supabaseAdmin
-    .from("candidate_job_matches")
-    .select("id, jobs!inner(date_posted, status)", { count: "exact", head: true })
-    .eq("candidate_id", req.candidateId)
-    .eq("jobs.status", "active")
-    .gte("jobs.date_posted", todayStart.toISOString());
+  // Excludes foreign postings so this count stays honest — the "New"
+  // tab itself doesn't filter by score (matching that here too), but a
+  // job that would never actually show to this candidate at all
+  // shouldn't be counted as one of their matches either.
+  const { data: todaysJobs, error } = await supabaseAdmin
+    .from("jobs")
+    .select("location_raw, job_lng")
+    .eq("status", "active")
+    .eq("moderation_status", "approved")
+    .gte("date_posted", todayStart.toISOString());
 
   if (error) return res.status(500).json({ error: error.message });
-  res.json({ new_today: count || 0 });
+  const count = (todaysJobs || []).filter((job) => !mentionsNonUsCountry(job.location_raw, job.job_lng)).length;
+  res.json({ new_today: count });
 });
 
 // POST /api/jobs/:id/apply — in-site application for a recruiter-posted
