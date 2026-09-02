@@ -17,13 +17,21 @@
 
 const REQUEST_TIMEOUT_MS = 20_000;
 
-async function sendEmail({ to, subject, html, replyTo }) {
+async function sendEmail({ to, subject, html, replyTo, fromName = "ROOK" }) {
   if (!process.env.RESEND_API_KEY) {
     throw new Error("RESEND_API_KEY is not configured");
   }
   if (!process.env.DIGEST_FROM_EMAIL) {
     throw new Error("DIGEST_FROM_EMAIL is not configured");
   }
+
+  // Resend (like any mail API) shows whatever's in the "from" header —
+  // a bare address with no display name renders as the raw address in
+  // the inbox list, which is why every ROOK email showed up as
+  // "applications@mail...." instead of a company name. Wrapping it as
+  // "Name <address>" fixes that without touching DIGEST_FROM_EMAIL
+  // itself or any call site.
+  const fromHeader = `${fromName} <${process.env.DIGEST_FROM_EMAIL}>`;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -37,7 +45,7 @@ async function sendEmail({ to, subject, html, replyTo }) {
         "Authorization": `Bearer ${process.env.RESEND_API_KEY}`,
       },
       body: JSON.stringify({
-        from: process.env.DIGEST_FROM_EMAIL,
+        from: fromHeader,
         to: [to],
         subject,
         html,
