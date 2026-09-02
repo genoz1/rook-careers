@@ -338,7 +338,8 @@ async function loadJobs() {
     // Deliberately no auth header — the backend automatically returns a
     // redacted "teaser" shape (no company name, no apply link) for any
     // request with no valid session, regardless of how it arrived. It
-    // also sorts these by the visitor's real IP-based location and
+    // also scores these the same way the Dashboard scores real
+    // candidates (scoreJob(), not a separate distance-only sort) and
     // returns the true platform-wide count (total_count) separately
     // from however many jobs this particular request displays.
     const industry = document.getElementById('browseIndustry').value;
@@ -346,6 +347,17 @@ async function loadJobs() {
     const params = new URLSearchParams({ limit: '200' });
     if (industry) params.set('industry', industry);
     if (state) params.set('state', state);
+    // Direct instruction: use the visitor's actual computer location,
+    // not just an IP-based guess, whenever the browser can provide it.
+    // Short-timeout, best-effort only — a visitor who denies the
+    // permission prompt, or whose browser lacks geolocation entirely,
+    // still gets a fully working page; the backend falls back to
+    // IP-based geolocation on its own when these params are absent.
+    const coords = await getBrowserCoordsWithTimeout();
+    if (coords) {
+      params.set('visitor_lat', coords.lat);
+      params.set('visitor_lng', coords.lng);
+    }
     const res = await fetch('/api/jobs?' + params.toString());
     if (!res.ok) throw new Error('API returned ' + res.status);
     const data = await res.json();
@@ -359,6 +371,29 @@ async function loadJobs() {
     console.error('Failed to load browse jobs:', err);
     showErrorState();
   }
+}
+
+// Resolves to {lat, lng} from the browser's own Geolocation API, or
+// null if it's unsupported, denied, or doesn't respond within 2.5s —
+// never rejects, so a slow or blocked permission prompt can't hang the
+// page's initial load. 2.5s is generous enough for a fast GPS/Wi-Fi fix
+// on most devices while still keeping the page feeling responsive.
+function getBrowserCoordsWithTimeout() {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) return resolve(null);
+    const timer = setTimeout(() => resolve(null), 2500);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        clearTimeout(timer);
+        resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      },
+      () => {
+        clearTimeout(timer);
+        resolve(null); // denied, unavailable, or errored — fall back silently
+      },
+      { timeout: 2500, maximumAge: 300000 }
+    );
+  });
 }
 
 loadJobs();

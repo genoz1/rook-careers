@@ -317,52 +317,77 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     // medical/veterinary sales-in-the-US positioning immediately.
     const usJobsOnly = (data || []).filter((job) => !mentionsNonUsCountry(job.location_raw, job.job_lng));
 
-    // Sort by the anonymous visitor's real approximate location, not
-    // raw recency. Reported real problem: an anonymous visitor in
-    // Florida was seeing jobs in Australia and Texas at the top of the
-    // page meant to convince them to sign up — nothing was using
-    // location at all for this page. There's no candidate profile yet
-    // (they haven't signed up), so this uses IP-based geolocation
-    // (ipwho.is, free, no API key, no permission prompt needed unlike
-    // the browser Geolocation API) as a reasonable approximation of
-    // where the visitor actually is.
+    // Sort by real match score, the same scoreJob() the Dashboard and
+    // every other authenticated view use — not a separate, bespoke
+    // distance-only sort. Direct instruction: this page should be
+    // "scored like the dashboard." A visitor has no profile yet, so
+    // this scores against a minimal synthetic profile containing only
+    // home_lat/home_lng — every other scoreJob() field (résumé,
+    // industries, salary floor, etc.) is simply absent, which scoreJob
+    // already handles safely everywhere it's read (Array.isArray
+    // guards, `|| []`/`|| ""` fallbacks, a `resume && jobAI` gate
+    // around the whole candidate-fit block). The practical effect for
+    // an anonymous visitor is a location-and-freshness-driven score —
+    // the same Preference Fit logic (distance-primary, state fallback,
+    // the mentionsNonUsCountry hard disqualifier) the Dashboard relies
+    // on, just with no candidate-fit component to add on top of it
+    // yet. This mirrors the exact pattern the "explore a different
+    // location" feature below already uses for a signed-in candidate
+    // (a location-shifted copy of their real profile through the same
+    // scoreJob()) — one proven scoring path, not a second
+    // implementation that could drift from it.
     //
+    // Direct instruction: use the visitor's OWN COMPUTER location
+    // (browser Geolocation API, sent by the page as visitor_lat/
+    // visitor_lng query params) as the primary source, since it's
+    // precise and doesn't depend on IP geolocation being accurate for
+    // however the visitor's traffic happens to be routed. IP-based
+    // geolocation (ipwho.is) remains as the fallback for a visitor who
+    // denies/never sees the browser permission prompt, or whose browser
+    // doesn't support it at all — better an approximate location than
+    // none.
+    const queryLat = req.query.visitor_lat != null ? Number(req.query.visitor_lat) : null;
+    const queryLng = req.query.visitor_lng != null ? Number(req.query.visitor_lng) : null;
+    const hasQueryCoords = queryLat != null && queryLng != null && !Number.isNaN(queryLat) && !Number.isNaN(queryLng);
+
+    let visitorCoords = hasQueryCoords ? { lat: queryLat, lng: queryLng } : null;
+
     // Wrapped with a hard 1.5s timeout — this is a best-effort nicety,
     // not something worth ever blocking the page on. Without a
     // timeout, a slow or unreachable external geolocation service could
     // stall this entire response indefinitely; a plain try/catch alone
     // doesn't protect against a hang, only against an outright error.
-    let visitorCoords = null;
-    try {
-      const forwardedFor = req.headers["x-forwarded-for"];
-      const ip = (forwardedFor ? forwardedFor.split(",")[0].trim() : null) || req.socket.remoteAddress;
-      if (ip && ip !== "::1" && ip !== "127.0.0.1") {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 1500);
-        try {
-          const geoRes = await fetch(`https://ipwho.is/${ip}`, { signal: controller.signal });
-          const geo = await geoRes.json();
-          if (geo?.success && geo.latitude != null && geo.longitude != null) {
-            visitorCoords = { lat: geo.latitude, lng: geo.longitude };
+    // Only attempted when the browser didn't already supply precise
+    // coordinates above.
+    if (!visitorCoords) {
+      try {
+        const forwardedFor = req.headers["x-forwarded-for"];
+        const ip = (forwardedFor ? forwardedFor.split(",")[0].trim() : null) || req.socket.remoteAddress;
+        if (ip && ip !== "::1" && ip !== "127.0.0.1") {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 1500);
+          try {
+            const geoRes = await fetch(`https://ipwho.is/${ip}`, { signal: controller.signal });
+            const geo = await geoRes.json();
+            if (geo?.success && geo.latitude != null && geo.longitude != null) {
+              visitorCoords = { lat: geo.latitude, lng: geo.longitude };
+            }
+          } finally {
+            clearTimeout(timeoutId);
           }
-        } finally {
-          clearTimeout(timeoutId);
         }
+      } catch (err) {
+        console.error(`IP geolocation failed or timed out for anonymous browse request: ${err.message}`);
       }
-    } catch (err) {
-      console.error(`IP geolocation failed or timed out for anonymous browse request: ${err.message}`);
     }
 
+    const anonymousProfile = visitorCoords ? { home_lat: visitorCoords.lat, home_lng: visitorCoords.lng } : {};
     let sorted = usJobsOnly;
     if (visitorCoords) {
-      sorted = [...usJobsOnly].sort((a, b) => {
-        const distA = (a.job_lat != null && a.job_lng != null) ? distanceMiles(visitorCoords.lat, visitorCoords.lng, a.job_lat, a.job_lng) : null;
-        const distB = (b.job_lat != null && b.job_lng != null) ? distanceMiles(visitorCoords.lat, visitorCoords.lng, b.job_lat, b.job_lng) : null;
-        if (distA == null && distB == null) return 0;
-        if (distA == null) return 1;
-        if (distB == null) return -1;
-        return distA - distB;
-      });
+      sorted = [...usJobsOnly]
+        .map((job) => ({ job, score: scoreJob(job, anonymousProfile).overall_score ?? -1 }))
+        .sort((a, b) => b.score - a.score)
+        .map((entry) => entry.job);
     }
     sorted = sorted.slice(0, Number(limit));
 
