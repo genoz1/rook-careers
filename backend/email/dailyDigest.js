@@ -121,7 +121,7 @@ async function sendDigestForCandidate(supabase, profile, appBaseUrl) {
       ...row.jobs,
       match: {
         overall_score: row.overall_score,
-        excellent_match: row.overall_score >= 90,
+        excellent_match: row.overall_score >= 85,
         recommendation: row.recommendation,
         reasons: row.strong_match_reasons || row.reasons || [],
         concerns: row.concerns || [],

@@ -775,7 +775,7 @@
 
   function matchLevelInfo(score) {
     if (score == null) return { label: 'Unscored', cls: 'ml-strong' };
-    if (score >= 90) return { label: 'Excellent Match', cls: 'ml-excellent' };
+    if (score >= 85) return { label: 'Excellent Match', cls: 'ml-excellent' };
     if (score >= 75) return { label: 'Strong Match', cls: 'ml-strong' };
     return { label: 'Possible Match', cls: 'ml-possible' };
   }

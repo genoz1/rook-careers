@@ -280,8 +280,8 @@
 
     <div class="stat-grid">
       <div class="stat-card"><div class="num" id="statNewMatches">—</div><div class="lbl">New Matches Today</div></div>
-      <div class="stat-card accent"><div class="num" id="statExcellent">—</div><div class="lbl">Excellent Matches (90%+)</div></div>
-      <div class="stat-card"><div class="num" id="statStrong">—</div><div class="lbl">Strong Matches (75–89%)</div></div>
+      <div class="stat-card accent"><div class="num" id="statExcellent">—</div><div class="lbl">Excellent Matches (85%+)</div></div>
+      <div class="stat-card"><div class="num" id="statStrong">—</div><div class="lbl">Strong Matches (75–84%)</div></div>
       <div class="stat-card"><div class="num" id="statApplications">—</div><div class="lbl">Applications In Progress</div></div>
     </div>
 
@@ -572,8 +572,8 @@
   })();
 
   async function updateStats(jobs) {
-    const excellent = jobs.filter((j) => (j.match?.overall_score ?? -1) >= 90).length;
-    const strong = jobs.filter((j) => (j.match?.overall_score ?? -1) >= 75 && j.match.overall_score < 90).length;
+    const excellent = jobs.filter((j) => (j.match?.overall_score ?? -1) >= 85).length;
+    const strong = jobs.filter((j) => (j.match?.overall_score ?? -1) >= 75 && j.match.overall_score < 85).length;
 
     document.getElementById('statExcellent').textContent = excellent;
     document.getElementById('statStrong').textContent = strong;
@@ -679,7 +679,7 @@
     if (currentTierFilter === 'excellent') {
       visible = visible.filter((j) => j.match?.excellent_match);
     } else if (currentTierFilter === 'strong') {
-      visible = visible.filter((j) => !j.match?.excellent_match && (j.match?.overall_score ?? -1) >= 75 && (j.match?.overall_score ?? -1) < 90);
+      visible = visible.filter((j) => !j.match?.excellent_match && (j.match?.overall_score ?? -1) >= 75 && (j.match?.overall_score ?? -1) < 85);
     } else if (currentTierFilter === 'saved') {
       visible = visible.filter((j) => j.saved);
     } else if (currentTierFilter === 'new') {
@@ -832,7 +832,7 @@
 
     // EXCELLENT MATCH is a distinct tier above the normal recommendation
     // ladder — see backend/matching.js's excellent_match determination
-    // (stricter than overall_score >= 90 alone; it also requires every
+    // (stricter than overall_score >= 85 alone; it also requires every
     // category to clear its bar).
     const REC_COLORS = { 'Strong Apply': '#00806E', 'Apply': '#1463FF', 'Stretch Apply': '#B98900', 'Skip': '#8B96AB' };
     const recColor = match?.excellent_match ? '#7C3AED' : (REC_COLORS[match?.recommendation] || '#8B96AB');

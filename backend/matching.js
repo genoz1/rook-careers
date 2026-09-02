@@ -988,18 +988,18 @@ function scoreJob(job, profile) {
   const availabilityRatio = dataPointsPossible > 0 ? dataPointsAvailable / dataPointsPossible : 0;
   const confidence = availabilityRatio >= 0.75 ? "high" : availabilityRatio >= 0.4 ? "medium" : "low";
 
-  // --- Excellent Match determination (backs the 30-day guarantee) ---
-  // Deliberately stricter than just "overall_score >= 90" — scoring 90%
+  // --- Excellent Match determination ---
+  // Deliberately stricter than just "overall_score >= 85" — scoring 85%
   // on preference-fit alone with no résumé/job-AI data at all would
   // otherwise qualify, which isn't a real "excellent match," it's an
   // absence of information. Every category that has data must clear its
   // bar, and any category with no data (rating === null) fails the
-  // requirement rather than being ignored, since the guarantee shouldn't
-  // be gameable by incomplete candidate/job data.
+  // requirement rather than being ignored, since this shouldn't be
+  // gameable by incomplete candidate/job data.
   const goodOrStrong = (r) => r === "Strong" || r === "Good";
   const excellent_match = Boolean(
     overall_score != null &&
-    overall_score >= 90 &&
+    overall_score >= 85 &&
     categories.experience.rating === "Strong" &&
     goodOrStrong(categories.industry_product.rating) &&
     goodOrStrong(categories.customer_specialty.rating) &&
