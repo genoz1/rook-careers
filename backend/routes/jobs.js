@@ -178,7 +178,23 @@ function scrubCompanyNameFromText(text, companyName) {
   // significant standalone word from the company name too (skipping
   // short/common legal-suffix words) catches this without needing to
   // guess every possible abbreviated form in advance.
-  const words = companyName.split(/\s+/).filter((w) => w.replace(/[^a-zA-Z]/g, "").length > 3 && !COMPANY_SUFFIX_WORDS.has(w.toLowerCase()));
+  //
+  // Reported directly, a second gap: a company known by a short
+  // all-caps acronym/brand (e.g. "MWI", for MWI Animal Health) leaked
+  // straight through in a job TITLE ("Regional Manager - MWI") even
+  // after this fix, because "MWI" is only 3 characters and the
+  // length-based filter below exists specifically to skip short,
+  // common, non-identifying words (like "of" or "co") — it wasn't
+  // meant to also exclude a genuinely identifying short acronym. An
+  // all-caps token is treated as identifying regardless of length,
+  // since ordinary English words this short are essentially never
+  // fully capitalized in normal text.
+  const words = companyName.split(/\s+/).filter((w) => {
+    const letters = w.replace(/[^a-zA-Z]/g, "");
+    if (COMPANY_SUFFIX_WORDS.has(w.toLowerCase())) return false;
+    if (letters.length > 3) return true;
+    return letters.length >= 2 && letters === letters.toUpperCase();
+  });
   for (const word of words) {
     result = result.replace(new RegExp(`\\b${escapeRegex(word)}\\b`, "gi"), "this employer");
   }
@@ -190,11 +206,23 @@ function redactForNonSubscriber(job) {
     company_name, source_url, application_url,
     recruiter_name, recruiter_email, recruiter_company, recruiter_contact_method, // same gate applies to recruiter postings
     description_text, description_preview,
+    title_original, title_normalized,
     ...rest
   } = job;
   const scrubbedFullText = scrubCompanyNameFromText(description_text, company_name);
   return {
     ...rest,
+    // Real gate bypass this closes: a job's TITLE can name the employer
+    // directly (e.g. "Regional Manager - MWI"), and neither this
+    // function nor its callers ever touched title_original/
+    // title_normalized before now — every other field was gated, but
+    // the title was shown completely unredacted to every non-subscribed
+    // and anonymous viewer regardless. Reported directly with a real
+    // example. Falls back to the original title only when scrubbing
+    // isn't possible (no company_name on file) rather than showing
+    // nothing.
+    title_original: scrubCompanyNameFromText(title_original, company_name) ?? title_original,
+    title_normalized: scrubCompanyNameFromText(title_normalized, company_name) ?? title_normalized,
     description_text: scrubbedFullText,
     description_preview: scrubCompanyNameFromText(description_preview, company_name) ?? (scrubbedFullText ? scrubbedFullText.slice(0, 300) : undefined),
     subscription_required: true,
