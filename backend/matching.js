@@ -820,11 +820,19 @@ function scoreJob(job, profile) {
       // animal"). Falls back to checking the RAW résumé text directly
       // before concluding it's a real gap, rather than trusting the
       // narrower structured extraction alone.
-      if (!matchedSpecialty && profile.resume_text) {
-        const resumeTextLower = profile.resume_text.toLowerCase();
+      if (!matchedSpecialty) {
+        // Broadened further: profile.resume_text can itself be empty
+        // for some accounts even though resume_structured is fully
+        // populated - stringifying the whole structured resume object
+        // catches a mention buried in a work-history bullet or
+        // description field that isn't `specialties` at all, on top of
+        // the raw text. Same principle either way: check everywhere
+        // real résumé content might live before concluding a genuine
+        // gap, rather than trusting one specific field.
+        const haystack = `${profile.resume_text || ""} ${JSON.stringify(resume)}`.toLowerCase();
         matchedSpecialty = jobSpecialties.find((spec) => {
           const words = [...significantWords(spec)];
-          return words.length > 0 && words.some((w) => resumeTextLower.includes(w));
+          return words.length > 0 && words.some((w) => haystack.includes(w));
         });
       }
       cat.customer_specialty.max += 8;
