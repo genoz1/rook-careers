@@ -907,15 +907,41 @@ function scoreJob(job, profile) {
       // résumé mentions that the one-time AI parse didn't specifically
       // extract into that field - falls back to the raw résumé text too.
       const resumeWords = significantWords(resumeClinicalText + " " + resumeFullText);
-      const unmet = mandatoryClinical.find((req) => {
+      // Direct instruction, a genuinely better philosophy given how
+      // imperfect the underlying résumé extraction can be: assume a
+      // stated requirement IS met by default (full credit) and only
+      // deduct for a requirement CONFIRMED missing, rather than the
+      // other way around (no credit unless positively confirmed) -
+      // "we shouldn't assume a candidate lacks something just because
+      // we couldn't extract confirmation of it." Every mandatory
+      // requirement is worth an even share of 15 points, starting at
+      // full credit; each one genuinely unmet subtracts its share
+      // rather than zeroing the whole category out for one gap among
+      // several, and still forces the category to "Gap" for visibility
+      // in the breakdown (matching.js's rating logic below) exactly as
+      // before - full credit is a default assumption, not a way to
+      // silently hide a real, confirmed gap from the candidate.
+      cat.requirements.max += 15;
+      candMax += 15;
+      dataPointsPossible++;
+      dataPointsAvailable++;
+      const perRequirement = 15 / mandatoryClinical.length;
+      let requirementScore = 15;
+      let anyUnmet = false;
+      for (const req of mandatoryClinical) {
         const reqWords = [...significantWords(req.requirement)];
-        if (reqWords.length === 0) return false;
-        return !reqWords.some((w) => resumeWords.has(w) || resumeClinicalText.includes(w) || resumeFullText.includes(w));
-      });
-      if (unmet) {
-        concerns.push(`Job requires "${unmet.requirement}" — not clearly shown on your résumé`);
-        hardDisqualifier = true;
-        candCap = Math.min(candCap, 60);
+        const isMet = reqWords.length === 0 || reqWords.some(
+          (w) => resumeWords.has(w) || resumeClinicalText.includes(w) || resumeFullText.includes(w)
+        );
+        if (!isMet) {
+          requirementScore -= perRequirement;
+          concerns.push(`Job requires "${req.requirement}" — not clearly shown on your résumé`);
+          anyUnmet = true;
+        }
+      }
+      cat.requirements.score += requirementScore;
+      candScore += requirementScore;
+      if (anyUnmet) {
         catGap.add("requirements");
       }
     }
