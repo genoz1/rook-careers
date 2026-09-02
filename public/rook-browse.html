@@ -131,6 +131,22 @@
   </div>
   <p id="employerCountLine" style="font-size:13px; color:var(--muted); font-weight:500; margin:-14px 0 24px;">Sourced directly from 230+ employer career sites — not traditional job boards.</p>
 
+  <!-- Location prompt: shown only when we don't already have a
+       location for this visitor (no cached ZIP, and browser
+       geolocation didn't resolve). Browser location and IP-based
+       geolocation have both proven unreliable in practice (permission
+       denial, a browser silently remembering an earlier denial, or the
+       server-side IP lookup failing) - asking directly has no such
+       failure mode. Dismissible: a visitor who skips it still gets a
+       fully working, just unsorted-by-distance, page. -->
+  <div id="zipPrompt" style="display:none; background:#fff; border:1px solid var(--border); border-radius:16px; padding:16px 20px; margin-bottom:20px; align-items:center; gap:12px; flex-wrap:wrap;">
+    <span style="font-size:13.5px; color:var(--navy); font-weight:600;">📍 See jobs near you — enter your ZIP code:</span>
+    <input type="text" id="zipInput" placeholder="ZIP code" maxlength="5" inputmode="numeric" style="width:110px; border:1px solid var(--border); border-radius:8px; padding:8px 12px; font-size:13.5px; font-family:inherit;">
+    <button type="button" class="btn btn-primary btn-sm" onclick="submitZip()">Show Nearby Jobs</button>
+    <a href="#" onclick="dismissZipPrompt(); return false;" style="font-size:12.5px; color:var(--muted); font-weight:600;">Not now</a>
+    <span id="zipError" style="font-size:12.5px; color:#C0392B; font-weight:600; display:none;"></span>
+  </div>
+
   <!-- Reported via audit: this page advertised 6,000+ roles with no
        way to narrow them down at all - a new visitor had to scroll
        through a large unfiltered feed. Basic discovery controls,
@@ -332,6 +348,33 @@ function showErrorState() {
   document.getElementById('errorState').style.display = 'block';
 }
 
+const ZIP_COORDS_STORAGE_KEY = 'rook_visitor_coords_v1';
+const ZIP_COORDS_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days — a ZIP-derived location is stable enough to reuse for a month without re-asking
+
+function getCachedZipCoords() {
+  try {
+    const raw = localStorage.getItem(ZIP_COORDS_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed.lat !== 'number' || typeof parsed.lng !== 'number') return null;
+    if (Date.now() - (parsed.savedAt || 0) > ZIP_COORDS_MAX_AGE_MS) return null;
+    return { lat: parsed.lat, lng: parsed.lng };
+  } catch {
+    return null; // corrupted/unavailable storage — just fall through to asking again
+  }
+}
+
+function cacheZipCoords(lat, lng) {
+  try {
+    localStorage.setItem(ZIP_COORDS_STORAGE_KEY, JSON.stringify({ lat, lng, savedAt: Date.now() }));
+  } catch {
+    // Storage full/blocked (private browsing, etc.) — non-fatal, this
+    // visitor just gets asked again on their next visit.
+  }
+}
+
+let currentVisitorCoords = null; // set once we have a location from any source, so filter changes (industry/state dropdowns) keep using it
+
 async function loadJobs() {
   showLoadingState();
   try {
@@ -347,16 +390,9 @@ async function loadJobs() {
     const params = new URLSearchParams({ limit: '200' });
     if (industry) params.set('industry', industry);
     if (state) params.set('state', state);
-    // Direct instruction: use the visitor's actual computer location,
-    // not just an IP-based guess, whenever the browser can provide it.
-    // Short-timeout, best-effort only — a visitor who denies the
-    // permission prompt, or whose browser lacks geolocation entirely,
-    // still gets a fully working page; the backend falls back to
-    // IP-based geolocation on its own when these params are absent.
-    const coords = await getBrowserCoordsWithTimeout();
-    if (coords) {
-      params.set('visitor_lat', coords.lat);
-      params.set('visitor_lng', coords.lng);
+    if (currentVisitorCoords) {
+      params.set('visitor_lat', currentVisitorCoords.lat);
+      params.set('visitor_lng', currentVisitorCoords.lng);
     }
     const res = await fetch('/api/jobs?' + params.toString());
     if (!res.ok) throw new Error('API returned ' + res.status);
@@ -396,7 +432,59 @@ function getBrowserCoordsWithTimeout() {
   });
 }
 
-loadJobs();
+function dismissZipPrompt() {
+  document.getElementById('zipPrompt').style.display = 'none';
+}
+
+async function submitZip() {
+  const zip = document.getElementById('zipInput').value.trim();
+  const errEl = document.getElementById('zipError');
+  errEl.style.display = 'none';
+  if (!/^\d{5}$/.test(zip)) {
+    errEl.textContent = 'Enter a valid 5-digit ZIP code.';
+    errEl.style.display = 'inline';
+    return;
+  }
+  try {
+    const res = await fetch('/api/public-geocode-zip?zip=' + encodeURIComponent(zip));
+    const data = await res.json();
+    if (!res.ok) {
+      errEl.textContent = data.error || 'Could not find that ZIP code.';
+      errEl.style.display = 'inline';
+      return;
+    }
+    currentVisitorCoords = { lat: data.lat, lng: data.lng };
+    cacheZipCoords(data.lat, data.lng);
+    dismissZipPrompt();
+    loadJobs();
+  } catch (err) {
+    console.error('ZIP geocoding failed:', err);
+    errEl.textContent = 'Something went wrong — please try again.';
+    errEl.style.display = 'inline';
+  }
+}
+
+// Location resolution order: a ZIP the visitor already gave us this
+// month (no prompt needed) → the browser's own geolocation (silent,
+// no prompt shown by this page itself — the browser's native
+// permission prompt may still appear) → otherwise, show the ZIP
+// prompt as a guaranteed, dependency-free fallback that doesn't rely
+// on any permission or third-party service being reachable.
+(async () => {
+  const cached = getCachedZipCoords();
+  if (cached) {
+    currentVisitorCoords = cached;
+    return;
+  }
+  const browserCoords = await getBrowserCoordsWithTimeout();
+  if (browserCoords) {
+    currentVisitorCoords = browserCoords;
+    return;
+  }
+  document.getElementById('zipPrompt').style.display = 'flex';
+})().finally(() => {
+  loadJobs();
+});
 
 function renderTeaserCard(job) {
   const comp = job.compensation_text || (job.salary_min ? `$${job.salary_min}${job.salary_max ? '–$' + job.salary_max : '+'}` : '');

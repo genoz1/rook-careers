@@ -23,7 +23,7 @@ const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
 const { scoreJob, mentionsNonUsCountry } = require("../matching");
 const { scoreAndStoreForCandidate } = require("../scoring/precompute");
-const { distanceMiles } = require("../geocoding");
+const { distanceMiles, geocodeZip } = require("../geocoding");
 const { sendEmail } = require("../email/resend");
 
 function escapeHtmlServer(str) {
@@ -266,6 +266,25 @@ router.get("/public-employer-count", requireConfig, async (req, res) => {
   if (error) return res.status(500).json({ error: error.message });
   const uniqueEmployers = new Set((data || []).map((row) => row.employer_id));
   res.json({ total_count: uniqueEmployers.size });
+});
+
+// GET /api/public-geocode-zip?zip=32162 — anonymous-safe ZIP-to-
+// coordinates lookup for the Find Jobs page's "enter your ZIP" prompt.
+// Direct instruction: browser geolocation and IP-based geolocation have
+// both proven unreliable in practice for this page (permission denial,
+// a browser silently remembering an earlier denial, or the outbound
+// IP-lookup call failing) - a visitor-entered ZIP has no such failure
+// mode, since it doesn't depend on any permission prompt or third-party
+// service being reachable from wherever this app happens to be hosted.
+// Reuses geocodeZip() exactly as-is (same function already used when a
+// candidate saves their ZIP in Settings) rather than a second
+// geocoding implementation that could drift from it.
+router.get("/public-geocode-zip", requireConfig, async (req, res) => {
+  const zip = String(req.query.zip || "").trim();
+  if (!/^\d{5}$/.test(zip)) return res.status(400).json({ error: "Enter a valid 5-digit ZIP code." });
+  const coords = await geocodeZip(zip);
+  if (!coords) return res.status(404).json({ error: "Could not find that ZIP code." });
+  res.json(coords);
 });
 
 // GET /api/jobs?industry=Veterinary&state=FL&limit=20
