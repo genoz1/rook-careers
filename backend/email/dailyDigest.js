@@ -45,8 +45,8 @@ function renderDigestHtml({ name, jobs, appBaseUrl }) {
             </div>
             ${job.match?.overall_score != null ? `<div style="font-size:12px; color:#12B8A6; font-weight:600; margin-top:4px;">${job.match.overall_score}% match${job.match.recommendation ? " · " + escapeHtml(job.match.recommendation) : ""}</div>` : ""}
           </td>
-          <td style="padding:18px 0; border-bottom:1px solid #E3E8F0; text-align:right; vertical-align:top;">
-            <a href="${analysisUrl}" style="background:#071E41; color:#fff; padding:10px 18px; border-radius:6px; font-size:13px; font-weight:600; text-decoration:none; display:inline-block;">View Job</a>
+          <td width="110" style="padding:18px 0; border-bottom:1px solid #E3E8F0; text-align:right; vertical-align:top; white-space:nowrap;">
+            <a href="${analysisUrl}" style="background:#071E41; color:#fff; padding:10px 18px; border-radius:6px; font-size:13px; font-weight:600; text-decoration:none; white-space:nowrap; display:inline-block;">View Job</a>
           </td>
         </tr>`;
     })
@@ -135,10 +135,10 @@ async function sendDigestForCandidate(supabase, profile, appBaseUrl) {
     to: profile.email,
     subject: `${scored.length} top match${scored.length === 1 ? "" : "es"} on ROOK`,
     html,
-    // No real inbox behind DIGEST_FROM_EMAIL (Resend sends mail, it
-    // doesn't host mailboxes) - route any candidate reply to a real,
-    // monitored address instead of it going nowhere.
-    replyTo: "eugenezentko@gmail.com",
+    // Intentionally no replyTo: this is a no-reply digest. Candidate
+    // replies land wherever DIGEST_FROM_EMAIL's mailbox is configured
+    // (or nowhere, if it's a pure sending address) rather than Gene's
+    // personal inbox.
   });
 
   return { sent: true, jobCount: scored.length };
