@@ -487,7 +487,7 @@
       <div class="stat-label">Current Opportunities</div>
     </div>
     <div class="stat-item">
-      <div class="stat-num" id="statEmployerCount">—</div>
+      <div class="stat-num" id="statEmployerCount">230+</div>
       <div class="stat-label">Employer Career Sites Searched Directly</div>
     </div>
     <div class="stat-item">
@@ -781,19 +781,6 @@
     }
   } catch (err) {
     console.error('Could not load homepage job count:', err);
-  }
-})();
-
-(async () => {
-  try {
-    const res = await fetch('/api/public-employer-count');
-    if (!res.ok) return;
-    const data = await res.json();
-    if (data.total_count > 0) {
-      document.getElementById('statEmployerCount').textContent = data.total_count.toLocaleString();
-    }
-  } catch (err) {
-    console.error('Could not load homepage employer count:', err);
   }
 })();
 </script>
