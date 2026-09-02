@@ -201,6 +201,20 @@ function redactForNonSubscriber(job) {
   };
 }
 
+// Stricter than redactForNonSubscriber: an anonymous visitor has no
+// account at all, so on top of the usual company/apply-link redaction,
+// this also strips the match score, recommendation, categories,
+// reasons, and concerns entirely. Direct instruction: "mask the job
+// details so when the customer actually signs up its the same
+// format" — same card layout and same real scoreJob()-driven ranking
+// as a signed-in candidate would see, just with everything that would
+// reveal the fit or the employer removed rather than shown for free.
+function redactForAnonymous(job) {
+  const withCompanyRedacted = redactForNonSubscriber(job);
+  const { match, ...rest } = withCompanyRedacted;
+  return rest;
+}
+
 // Builds the employer_note map (spec factor #43, employer-history
 // awareness) — unrelated to match scoring, still computed live here
 // since it's a small, fast query, not something worth precomputing.
@@ -291,11 +305,18 @@ router.get("/public-geocode-zip", requireConfig, async (req, res) => {
 router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
   const { industry, state, limit = 20, keyword } = req.query;
 
-  // Anonymous browsing — teaser only, unchanged from before: company
-  // name and any way to actually apply stay withheld; everything about
-  // the role itself stays visible. No scoring concept applies here, so
-  // this still queries jobs directly by recency, not through
-  // candidate_job_matches.
+  // Anonymous browsing. Direct instruction: "copy the job search page
+  // [...] and mask the job details so when the customer actually
+  // signs up it's the same format" — this reuses the EXACT same
+  // bounding-box + scoreJob() logic as the authenticated near_lat/
+  // near_lng "explore a location" path just below (not a second,
+  // separate reimplementation that could drift from it), scored
+  // against a minimal synthetic profile built from a ZIP the visitor
+  // typed themselves (see rook-browse.html — no browser geolocation,
+  // no IP lookup, no auto-detection of any kind). The only difference
+  // from the signed-in experience is what the RESPONSE hides
+  // (redactForAnonymous strips company/apply-link AND the match score
+  // itself), not how the ranking is computed.
   if (!req.user) {
     // Real total count of active+approved jobs platform-wide, not just
     // however many this request happens to fetch. Reported real bug:
@@ -310,125 +331,90 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
       .eq("status", "active")
       .eq("moderation_status", "approved");
 
-    let query = supabaseAnon
+    const nearLat = req.query.near_lat != null ? Number(req.query.near_lat) : null;
+    const nearLng = req.query.near_lng != null ? Number(req.query.near_lng) : null;
+    // Full state name (e.g. "Florida"), as returned by geocodeZip — lets
+    // the no-coordinates fallback below match jobs by state the same
+    // way it would for a signed-in candidate with a real home_state,
+    // instead of skipping that branch entirely for every anonymous
+    // visitor.
+    const nearStateName = typeof req.query.near_state === "string" ? req.query.near_state : null;
+
+    if (nearLat == null || nearLng == null || Number.isNaN(nearLat) || Number.isNaN(nearLng)) {
+      // Should not normally happen — the ZIP gate is mandatory on the
+      // frontend — but if this endpoint is ever hit with no location at
+      // all, fall back to a plain recency-ordered, redacted list rather
+      // than erroring.
+      let fallbackQuery = supabaseAnon
+        .from("jobs")
+        .select(JOB_LIST_COLUMNS)
+        .eq("status", "active")
+        .eq("moderation_status", "approved")
+        .order("date_posted", { ascending: false })
+        .limit(Number(limit));
+      if (industry) fallbackQuery = fallbackQuery.eq("industry", industry);
+      if (state) fallbackQuery = fallbackQuery.eq("state", state);
+      const { data: fallbackJobs, error: fallbackError } = await fallbackQuery;
+      if (fallbackError) return res.status(500).json({ error: fallbackError.message });
+      const usOnly = (fallbackJobs || []).filter((job) => !mentionsNonUsCountry(job.location_raw, job.job_lng, job.title_original));
+      return res.json({ jobs: usOnly.map(redactForAnonymous), total_count: totalCount || 0, explored_location: false });
+    }
+
+    const EXPLORE_RADIUS_MILES = 300; // same constant as the authenticated explore path below — one radius, not two to keep in sync
+    const latDelta = EXPLORE_RADIUS_MILES / 69;
+    const lngDelta = EXPLORE_RADIUS_MILES / (69 * Math.max(0.1, Math.cos((nearLat * Math.PI) / 180)));
+
+    const { data: boxJobs, error: boxError } = await supabaseAnon
       .from("jobs")
-      // Trimmed to only what this page actually renders or needs for
-      // sorting — was previously select("*"), which pulled every
-      // column including full ai_analysis JSON and job_embedding
-      // vectors for up to 200 rows on every single anonymous page
-      // load. Those are large and completely unused here.
-      .select("id, title_original, title_normalized, location_raw, compensation_text, salary_min, salary_max, date_posted, description_text, company_name, job_lat, job_lng, remote_status")
+      .select(JOB_LIST_COLUMNS)
       .eq("status", "active")
       .eq("moderation_status", "approved")
-      .order("date_posted", { ascending: false })
-      .limit(Math.max(Number(limit), 200)); // pull enough candidates to sort by distance below, not just the final display count
-    if (industry) query = query.eq("industry", industry);
-    if (state) query = query.eq("state", state);
+      .gte("job_lat", nearLat - latDelta)
+      .lte("job_lat", nearLat + latDelta)
+      .gte("job_lng", nearLng - lngDelta)
+      .lte("job_lng", nearLng + lngDelta);
+    if (boxError) return res.status(500).json({ error: boxError.message });
 
-    const { data, error } = await query;
-    if (error) return res.status(500).json({ error: error.message });
+    const nearby = (boxJobs || []).filter((job) => {
+      if (job.job_lat == null || job.job_lng == null) return false;
+      return distanceMiles(nearLat, nearLng, job.job_lat, job.job_lng) <= EXPLORE_RADIUS_MILES;
+    });
 
-    // Reported via audit, twice: the public anonymous feed (unlike the
-    // authenticated Dashboard/digest, which both check this via
-    // scoreJob) never filtered out foreign postings at all - the
-    // very first thing a prospective customer sees could include jobs
-    // in Mumbai, London, or Toronto, undermining the promised
-    // medical/veterinary sales-in-the-US positioning immediately.
-    const usJobsOnly = (data || []).filter((job) => !mentionsNonUsCountry(job.location_raw, job.job_lng, job.title_original));
+    // Same reasoning as the authenticated path: a bounding box can only
+    // ever match jobs that HAVE real coordinates — fetched separately so
+    // a vague multi-location or never-geocoded posting isn't silently
+    // dropped, just scored through scoreJob()'s own honest fallback.
+    let noCoordsQuery = supabaseAnon
+      .from("jobs")
+      .select(JOB_LIST_COLUMNS)
+      .eq("status", "active")
+      .eq("moderation_status", "approved")
+      .is("job_lat", null);
+    if (industry) noCoordsQuery = noCoordsQuery.eq("industry", industry);
+    if (state) noCoordsQuery = noCoordsQuery.eq("state", state);
+    if (keyword) noCoordsQuery = noCoordsQuery.or(`title_original.ilike.%${keyword}%,company_name.ilike.%${keyword}%`);
+    const { data: noCoordsJobs, error: noCoordsError } = await noCoordsQuery;
+    if (noCoordsError) return res.status(500).json({ error: noCoordsError.message });
 
-    // Sort by real match score, the same scoreJob() the Dashboard and
-    // every other authenticated view use — not a separate, bespoke
-    // distance-only sort. Direct instruction: this page should be
-    // "scored like the dashboard." A visitor has no profile yet, so
-    // this scores against a minimal synthetic profile containing only
-    // home_lat/home_lng — every other scoreJob() field (résumé,
-    // industries, salary floor, etc.) is simply absent, which scoreJob
-    // already handles safely everywhere it's read (Array.isArray
-    // guards, `|| []`/`|| ""` fallbacks, a `resume && jobAI` gate
-    // around the whole candidate-fit block). The practical effect for
-    // an anonymous visitor is a location-and-freshness-driven score —
-    // the same Preference Fit logic (distance-primary, state fallback,
-    // the mentionsNonUsCountry hard disqualifier) the Dashboard relies
-    // on, just with no candidate-fit component to add on top of it
-    // yet. This mirrors the exact pattern the "explore a different
-    // location" feature below already uses for a signed-in candidate
-    // (a location-shifted copy of their real profile through the same
-    // scoreJob()) — one proven scoring path, not a second
-    // implementation that could drift from it.
-    //
-    // Direct instruction: use the visitor's OWN COMPUTER location
-    // (browser Geolocation API, sent by the page as visitor_lat/
-    // visitor_lng query params) as the primary source, since it's
-    // precise and doesn't depend on IP geolocation being accurate for
-    // however the visitor's traffic happens to be routed. IP-based
-    // geolocation (ipwho.is) remains as the fallback for a visitor who
-    // denies/never sees the browser permission prompt, or whose browser
-    // doesn't support it at all — better an approximate location than
-    // none.
-    const queryLat = req.query.visitor_lat != null ? Number(req.query.visitor_lat) : null;
-    const queryLng = req.query.visitor_lng != null ? Number(req.query.visitor_lng) : null;
-    const hasQueryCoords = queryLat != null && queryLng != null && !Number.isNaN(queryLat) && !Number.isNaN(queryLng);
+    // The synthetic profile a visitor's ZIP produces — home_lat/lng and
+    // home_state only. Every other scoreJob() field (résumé, industries,
+    // salary floor, willing_to_relocate) is simply absent, which
+    // scoreJob already handles safely everywhere it's read.
+    const anonymousProfile = { home_lat: nearLat, home_lng: nearLng, home_state: nearStateName };
+    let scored = [...nearby, ...(noCoordsJobs || [])]
+      .filter((job) => !mentionsNonUsCountry(job.location_raw, job.job_lng, job.title_original))
+      .map((job) => ({ ...job, match: scoreJob(job, anonymousProfile) }))
+      .filter((job) => industry ? job.industry === industry : true)
+      .filter((job) => state ? job.state === state : true)
+      .sort((a, b) => (b.match?.overall_score ?? -1) - (a.match?.overall_score ?? -1));
+    if (!keyword) scored = scored.slice(0, Number(limit));
 
-    let visitorCoords = hasQueryCoords ? { lat: queryLat, lng: queryLng } : null;
-
-    // Wrapped with a hard 1.5s timeout — this is a best-effort nicety,
-    // not something worth ever blocking the page on. Without a
-    // timeout, a slow or unreachable external geolocation service could
-    // stall this entire response indefinitely; a plain try/catch alone
-    // doesn't protect against a hang, only against an outright error.
-    // Only attempted when the browser didn't already supply precise
-    // coordinates above.
-    if (!visitorCoords) {
-      try {
-        const forwardedFor = req.headers["x-forwarded-for"];
-        const ip = (forwardedFor ? forwardedFor.split(",")[0].trim() : null) || req.socket.remoteAddress;
-        if (ip && ip !== "::1" && ip !== "127.0.0.1") {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 1500);
-          try {
-            const geoRes = await fetch(`https://ipwho.is/${ip}`, { signal: controller.signal });
-            const geo = await geoRes.json();
-            if (geo?.success && geo.latitude != null && geo.longitude != null) {
-              visitorCoords = { lat: geo.latitude, lng: geo.longitude };
-            }
-          } finally {
-            clearTimeout(timeoutId);
-          }
-        }
-      } catch (err) {
-        console.error(`IP geolocation failed or timed out for anonymous browse request: ${err.message}`);
-      }
-    }
-
-    const anonymousProfile = visitorCoords ? { home_lat: visitorCoords.lat, home_lng: visitorCoords.lng } : {};
-    let sorted = usJobsOnly;
-    if (visitorCoords) {
-      sorted = [...usJobsOnly]
-        .map((job) => ({ job, score: scoreJob(job, anonymousProfile).overall_score ?? -1 }))
-        .sort((a, b) => b.score - a.score)
-        .map((entry) => entry.job);
-    }
-    sorted = sorted.slice(0, Number(limit));
-
-    const teaser = sorted.map((job) => ({
-      id: job.id,
-      title_original: job.title_original,
-      title_normalized: job.title_normalized,
-      location_raw: job.location_raw,
-      compensation_text: job.compensation_text,
-      salary_min: job.salary_min,
-      salary_max: job.salary_max,
-      date_posted: job.date_posted,
-      // Scrubbed against the real company_name BEFORE that field gets
-      // left off this teaser object — same bug fix as
-      // redactForNonSubscriber above, applies here too since this is a
-      // separate code path (anonymous browsing has no candidate profile
-      // to check a subscription against, so it never reaches that
-      // function at all).
-      description_preview: scrubCompanyNameFromText((job.description_text || "").slice(0, 160), job.company_name),
-      gated: true,
+    const results = scored.map((job) => ({
+      ...attachDistance(job, anonymousProfile),
+      match: job.match,
     }));
-    return res.json({ jobs: teaser, total_count: totalCount || 0, sorted_by_location: Boolean(visitorCoords) });
+
+    return res.json({ jobs: results.map(redactForAnonymous), total_count: totalCount || 0, explored_location: true });
   }
 
   const { data: profile } = await supabaseAdmin

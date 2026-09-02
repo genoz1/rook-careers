@@ -41,19 +41,22 @@ async function fetchWithTimeout(url, options = {}) {
 }
 
 /**
- * Geocode a US ZIP code to {lat, lng}, or null if not found/on error.
+ * Geocode a US ZIP code to {lat, lng, state}, or null if not found/on
+ * error. `state` is the full state name (e.g. "Florida") as Nominatim
+ * reports it, not an abbreviation — callers that need an abbreviation
+ * should run it through matching.js's stateAbbrFromName().
  */
 async function geocodeZip(zip) {
   if (!zip || !/^\d{5}$/.test(String(zip).trim())) return null;
   await throttle();
   try {
-    const url = `https://nominatim.openstreetmap.org/search?postalcode=${encodeURIComponent(zip)}&country=us&format=json&limit=1`;
+    const url = `https://nominatim.openstreetmap.org/search?postalcode=${encodeURIComponent(zip)}&country=us&format=json&limit=1&addressdetails=1`;
     const res = await fetchWithTimeout(url);
     if (!res.ok) return null;
     const results = await res.json();
     const first = results?.[0];
     if (!first) return null;
-    return { lat: parseFloat(first.lat), lng: parseFloat(first.lon) };
+    return { lat: parseFloat(first.lat), lng: parseFloat(first.lon), state: first.address?.state || null };
   } catch {
     return null;
   }
