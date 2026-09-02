@@ -473,8 +473,23 @@ function scoreJob(job, profile) {
     prefScore += 14;
     distanceMultiplier = 0.55;
     reasons.push("You've indicated openness to relocation");
-  } else if (acceptedStateAbbrs.size > 0 && job.location_raw) {
-    concerns.push(`Location (${job.location_raw}) may be outside your preferred states`);
+  } else {
+    // Reported directly, confirmed with an exact math match (100%
+    // candidate_fit + 43% preference_fit = 71.5, rounds to the exact
+    // 72% reported): this branch used to require
+    // acceptedStateAbbrs.size > 0 - meaning if that set was ever
+    // genuinely empty (home_state not resolving to a valid
+    // abbreviation, and no preferred_states set either), EVERY branch
+    // in this whole chain got skipped, leaving distanceMultiplier
+    // silently stuck at its untouched default of 1 - a completely
+    // unpenalized location, worse than even the fallback's "matches
+    // your state" case. A true catch-all now: no real coordinates, no
+    // state match, not willing to relocate, for whatever reason -
+    // treated the same as the confirmed-far real-coordinates case,
+    // since there's no genuine information here suggesting otherwise.
+    if (job.location_raw) {
+      concerns.push(`Location (${job.location_raw}) may be outside your preferred states`);
+    }
     distanceMultiplier = 0.25;
   }
 
