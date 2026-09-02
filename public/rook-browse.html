@@ -155,14 +155,6 @@
     </div>
     <p id="employerCountLine" style="font-size:13px; color:var(--muted); font-weight:500; margin:-14px 0 24px;">Sourced directly from 230+ employer career sites — not traditional job boards.</p>
 
-    <!-- Remote-only filter only now — industry and state dropdowns
-         removed per direct instruction. -->
-    <div style="background:#fff; border:1px solid var(--border); border-radius:16px; padding:16px 20px; margin-bottom:20px; display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
-      <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--muted); white-space:nowrap;">
-        <input type="checkbox" id="browseRemote" onchange="applyBrowseFilters()"> Remote only
-      </label>
-    </div>
-
     <div class="job-list" id="skeletonList">
       <div class="skeleton-row">
         <div class="skeleton-bar" style="width:70px; height:18px; border-radius:999px;"></div>
@@ -249,11 +241,7 @@ function applyBrowseFilters() {
 }
 
 function renderBrowsePage() {
-  const remoteOnly = document.getElementById('browseRemote').checked;
-  const filtered = allBrowseJobs.filter((job) => {
-    if (remoteOnly && job.remote_status !== 'remote' && job.remote_status !== 'hybrid') return false;
-    return true;
-  });
+  const filtered = allBrowseJobs;
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / BROWSE_PAGE_SIZE));
   browsePage = Math.min(browsePage, totalPages);
