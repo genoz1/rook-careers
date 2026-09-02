@@ -119,6 +119,22 @@
   .trust-item .t{font-size:14.5px; font-weight:700; color:var(--navy);}
   .trust-item .d{font-size:12.5px; color:var(--muted); margin-top:2px; line-height:1.5;}
 
+  .stats-row{
+    display:grid; grid-template-columns:repeat(3,1fr); gap:0;
+    max-width:1000px; margin:0 auto; padding:36px clamp(32px, calc((100vw - 1200px)/2 + 32px), 200px) 0;
+    border-top:1px solid var(--border);
+  }
+  .stat-item{text-align:center; padding:0 20px; border-left:1px solid var(--border);}
+  .stat-item:first-child{border-left:none;}
+  .stat-num{font-family:var(--font-display); font-size:34px; font-weight:700; color:var(--navy); line-height:1.15;}
+  .stat-label{font-size:12.5px; color:var(--muted); font-weight:600; margin-top:6px; line-height:1.4;}
+  .stats-sub{max-width:640px; margin:24px auto 0; padding:0 32px 8px; text-align:center; font-size:13.5px; color:var(--muted); line-height:1.6;}
+  @media (max-width:820px){
+    .stats-row{grid-template-columns:1fr; gap:20px; border-top:none;}
+    .stat-item{border-left:none; border-top:1px solid var(--border); padding-top:20px;}
+    .stat-item:first-child{border-top:none; padding-top:0;}
+  }
+
   /* Hero photo: full-bleed to viewport edge, no card frame */
   .hero-photo-wrap{position:relative; min-height:560px; overflow:hidden;}
   .hero-photo{
@@ -419,9 +435,7 @@
       <div class="eyebrow"><span class="dot"></span> Built exclusively for medical &amp; veterinary sales</div>
       <h1 class="hero-h">The right opportunity.<br>Expertly <span class="accent">matched.</span></h1>
       <p class="hero-sub">ROOK continuously searches for medical sales jobs, pharmaceutical sales jobs, medical device sales jobs, and veterinary and animal health sales jobs — then matches the best ones to your experience, territory, compensation goals, and career path, so you spend less time searching and more time pursuing the right roles.</p>
-      <p id="jobCountProof" style="font-size:13.5px; font-weight:600; color:var(--muted); margin-bottom:6px;">Real, current opportunities tracked directly from employer career sites.</p>
-      <p id="employerCountProof" style="font-size:13.5px; font-weight:600; color:var(--muted); margin-bottom:18px;">Sourced directly from hundreds of companies' own career pages — not job boards.</p>
-      <div class="hero-actions">
+      <div class="hero-actions" style="margin-bottom:0;">
         <a href="rook-login.html" class="btn btn-primary">Find My Matches</a>
         <a href="rook-login.html" class="btn btn-outline">Upload My Resume</a>
       </div>
@@ -466,6 +480,22 @@
       <div class="d">Specialized around this industry</div>
     </div>
   </div>
+
+  <div class="stats-row" id="statsRow">
+    <div class="stat-item">
+      <div class="stat-num" id="statJobCount">—</div>
+      <div class="stat-label">Current Opportunities</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num" id="statEmployerCount">—</div>
+      <div class="stat-label">Employer Career Sites Searched Directly</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num" style="font-size:22px;">Continuously Updated</div>
+      <div class="stat-label">New opportunities added automatically</div>
+    </div>
+  </div>
+  <p class="stats-sub">ROOK goes directly to employer career sites to uncover opportunities you may never see on a traditional job board — then matches them to your experience.</p>
 </section>
 
 <section class="benefits">
@@ -736,37 +766,31 @@
 </footer>
 
 <script>
-// Never shows a raw "0" or a loading placeholder in the hero — the
-// static, already-true fallback text stays visible until (and unless)
-// the count loads successfully, at which point it's replaced with the
-// specific number as a stronger credibility signal. If the fetch fails,
-// the fallback line remains, which is still an accurate statement on
-// its own.
+// Stats row: both numbers start as "—" (set in the markup) and stay
+// there — never a raw "0" or a guessed placeholder number — until each
+// live endpoint responds. If a fetch fails, that one box just keeps
+// showing "—" rather than a stale or fabricated figure; the other box
+// and the static "Continuously Updated" box are unaffected either way.
 (async () => {
   try {
     const res = await fetch('/api/public-job-count');
     if (!res.ok) return;
     const data = await res.json();
     if (data.total_count > 0) {
-      document.getElementById('jobCountProof').textContent =
-        `${data.total_count.toLocaleString()} opportunities currently tracked from employer career sites.`;
+      document.getElementById('statJobCount').textContent = data.total_count.toLocaleString() + '+';
     }
   } catch (err) {
     console.error('Could not load homepage job count:', err);
   }
 })();
 
-// Same never-shows-a-raw-0-or-placeholder approach as the job count
-// above: the static "hundreds of companies" fallback line stays until
-// the real count loads, and stays put for good if the fetch fails.
 (async () => {
   try {
     const res = await fetch('/api/public-employer-count');
     if (!res.ok) return;
     const data = await res.json();
     if (data.total_count > 0) {
-      document.getElementById('employerCountProof').textContent =
-        `Direct integrations with ${data.total_count.toLocaleString()} employers — not job boards.`;
+      document.getElementById('statEmployerCount').textContent = data.total_count.toLocaleString();
     }
   } catch (err) {
     console.error('Could not load homepage employer count:', err);

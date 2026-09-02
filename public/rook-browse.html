@@ -129,6 +129,7 @@
     </div>
     <span class="updated" id="updatedLabel" style="display:none;">Updated continuously</span>
   </div>
+  <p id="employerCountLine" style="font-size:13px; color:var(--muted); font-weight:500; margin:-14px 0 24px;"></p>
 
   <!-- Reported via audit: this page advertised 6,000+ roles with no
        way to narrow them down at all - a new visitor had to scroll
@@ -361,6 +362,24 @@ async function loadJobs() {
 }
 
 loadJobs();
+
+// Platform-wide employer count, independent of the current search/
+// filter state above (that count is scoped to matching jobs; this one
+// is a flat total across the whole platform) — same live endpoint and
+// same never-show-a-raw-0-or-placeholder approach as the homepage.
+(async () => {
+  try {
+    const res = await fetch('/api/public-employer-count');
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.total_count > 0) {
+      document.getElementById('employerCountLine').textContent =
+        `Sourced directly from ${data.total_count.toLocaleString()} employer career sites — not traditional job boards.`;
+    }
+  } catch (err) {
+    console.error('Could not load browse-page employer count:', err);
+  }
+})();
 
 function renderTeaserCard(job) {
   const comp = job.compensation_text || (job.salary_min ? `$${job.salary_min}${job.salary_max ? '–$' + job.salary_max : '+'}` : '');
