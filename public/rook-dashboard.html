@@ -500,7 +500,24 @@
 
     async function loadJobs() {
     try {
-      const res = await rookApiFetch('/jobs?limit=300');
+      // Direct instruction: use the literal same mechanism as Job
+      // Search's "show jobs near X" (already confirmed correct),
+      // locked to the candidate's own saved ZIP instead of a manual
+      // search - geocode fresh and pass explicit near_lat/near_lng,
+      // rather than relying on any server-side default that could
+      // silently behave differently. Byte-for-byte the same two-step
+      // flow Job Search itself uses.
+      const profileRes = await rookApiFetch('/profile');
+      const profileForZip = profileRes.ok ? await profileRes.json() : null;
+      let jobsUrl = '/jobs?limit=300';
+      if (profileForZip?.home_zip) {
+        const geoRes = await rookApiFetch('/geocode?q=' + encodeURIComponent(profileForZip.home_zip));
+        if (geoRes.ok) {
+          const geo = await geoRes.json();
+          jobsUrl = `/jobs?limit=300&near_lat=${geo.lat}&near_lng=${geo.lng}`;
+        }
+      }
+      const res = await rookApiFetch(jobsUrl);
       if (!res.ok) throw new Error('API returned ' + res.status);
       const data = await res.json();
       const jobs = Array.isArray(data) ? data : (data.jobs || []); // Array.isArray fallback covers any cached/older response shape
