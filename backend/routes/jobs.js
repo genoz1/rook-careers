@@ -627,31 +627,41 @@ router.get("/recruiter-jobs", requireConfig, optionalAuth, async (req, res) => {
     profile = data;
   }
 
-  let scoresByJobId = new Map();
+  let savedByJobId = new Map();
   let appStatusByJob = new Map();
   let noteFor = () => null;
   if (profile) {
+    // Reported directly: recruiter-posted/agency jobs were still
+    // showing stale scores (same root bug just fixed in scoreJob()
+    // itself, but this endpoint read pre-computed rows instead of
+    // scoring live) - a Chicago and a Virginia posting both still
+    // ranking in the top 10 despite the distance-scoring fix, because
+    // this endpoint never actually recomputed anything. Now scores
+    // live via scoreJob(), same as the main /jobs endpoint, so this
+    // always reflects whatever scoring code is currently deployed
+    // rather than depending on a separate precompute run.
     const { data: matchRows } = await supabaseAdmin
       .from("candidate_job_matches")
-      .select("*")
+      .select("job_id, saved")
       .eq("candidate_id", profile.id)
-      .eq("dismissed", false)
       .in("job_id", jobsData.map((j) => j.id));
-    scoresByJobId = new Map((matchRows || []).map((r) => [r.job_id, r]));
+    savedByJobId = new Map((matchRows || []).map((r) => [r.job_id, r.saved]));
     ({ appStatusByJob, noteFor } = await loadEmployerHistory(profile.id));
   }
 
-  const results = jobsData.map((job) => {
-    const matchRow = scoresByJobId.get(job.id);
-    return {
-      ...attachDistance(job, profile),
-      match: matchRow ? matchFromRow(matchRow) : null,
-      scored: Boolean(matchRow),
-      saved: Boolean(matchRow?.saved),
-      application_status: appStatusByJob.get(job.id) || null,
-      employer_note: noteFor(job),
-    };
-  });
+  const results = jobsData
+    .filter((job) => !mentionsNonUsCountry(job.location_raw, job.job_lng))
+    .map((job) => {
+      const match = profile ? scoreJob(job, profile) : null;
+      return {
+        ...attachDistance(job, profile),
+        match,
+        scored: Boolean(match),
+        saved: Boolean(savedByJobId.get(job.id)),
+        application_status: appStatusByJob.get(job.id) || null,
+        employer_note: noteFor(job),
+      };
+    });
 
   // Same paywall as the main /jobs endpoint: full detail only for a
   // signed-in, subscribed candidate. Anonymous visitors and signed-in
