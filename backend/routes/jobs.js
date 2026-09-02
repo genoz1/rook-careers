@@ -508,6 +508,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
       jobs: isSubscribed(profile) ? results : results.map(redactForNonSubscriber),
       scoring_in_progress: false,
       explored_location: true,
+      _debug_marker: "EXPLORE_BRANCH_v1_WITH_NOCOORDS_MERGE",
     });
   }
 
@@ -569,6 +570,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
   return res.json({
     jobs: isSubscribed(profile) ? results : results.map(redactForNonSubscriber),
     scoring_in_progress: false,
+    _debug_marker: "NO_NEAR_LOCATION_FALLBACK_v1",
   });
 });
 
