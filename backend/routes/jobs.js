@@ -249,6 +249,25 @@ router.get("/public-job-count", requireConfig, async (req, res) => {
   res.json({ total_count: count || 0 });
 });
 
+// GET /api/public-employer-count — same pattern as /public-job-count
+// above: a single fast count for the homepage's "Direct integrations
+// with N employers" line. Counts distinct employer_id values with at
+// least one active, approved job right now, not every row ever
+// inserted into the employers table over time — a company that was
+// onboarded once but currently has zero live postings shouldn't count
+// toward "employers we're sourcing from right now."
+router.get("/public-employer-count", requireConfig, async (req, res) => {
+  const { data, error } = await supabaseAnon
+    .from("jobs")
+    .select("employer_id")
+    .eq("status", "active")
+    .eq("moderation_status", "approved")
+    .not("employer_id", "is", null);
+  if (error) return res.status(500).json({ error: error.message });
+  const uniqueEmployers = new Set((data || []).map((row) => row.employer_id));
+  res.json({ total_count: uniqueEmployers.size });
+});
+
 // GET /api/jobs?industry=Veterinary&state=FL&limit=20
 router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
   const { industry, state, limit = 20, keyword } = req.query;

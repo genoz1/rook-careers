@@ -419,7 +419,8 @@
       <div class="eyebrow"><span class="dot"></span> Built exclusively for medical &amp; veterinary sales</div>
       <h1 class="hero-h">The right opportunity.<br>Expertly <span class="accent">matched.</span></h1>
       <p class="hero-sub">ROOK continuously searches for medical sales jobs, pharmaceutical sales jobs, medical device sales jobs, and veterinary and animal health sales jobs — then matches the best ones to your experience, territory, compensation goals, and career path, so you spend less time searching and more time pursuing the right roles.</p>
-      <p id="jobCountProof" style="font-size:13.5px; font-weight:600; color:var(--muted); margin-bottom:18px;">Real, current opportunities tracked directly from employer career sites.</p>
+      <p id="jobCountProof" style="font-size:13.5px; font-weight:600; color:var(--muted); margin-bottom:6px;">Real, current opportunities tracked directly from employer career sites.</p>
+      <p id="employerCountProof" style="font-size:13.5px; font-weight:600; color:var(--muted); margin-bottom:18px;">Sourced directly from hundreds of companies' own career pages — not job boards.</p>
       <div class="hero-actions">
         <a href="rook-login.html" class="btn btn-primary">Find My Matches</a>
         <a href="rook-login.html" class="btn btn-outline">Upload My Resume</a>
@@ -752,6 +753,23 @@
     }
   } catch (err) {
     console.error('Could not load homepage job count:', err);
+  }
+})();
+
+// Same never-shows-a-raw-0-or-placeholder approach as the job count
+// above: the static "hundreds of companies" fallback line stays until
+// the real count loads, and stays put for good if the fetch fails.
+(async () => {
+  try {
+    const res = await fetch('/api/public-employer-count');
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.total_count > 0) {
+      document.getElementById('employerCountProof').textContent =
+        `Direct integrations with ${data.total_count.toLocaleString()} employers — not job boards.`;
+    }
+  } catch (err) {
+    console.error('Could not load homepage employer count:', err);
   }
 })();
 </script>
