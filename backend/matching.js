@@ -807,7 +807,26 @@ function scoreJob(job, profile) {
       candMax += 8;
       dataPointsPossible++;
       if (resumeSpecialties.length > 0) dataPointsAvailable++;
-      const matchedSpecialty = findOverlap(jobSpecialties, resumeSpecialties);
+      let matchedSpecialty = findOverlap(jobSpecialties, resumeSpecialties);
+      // Reported directly with a concrete false-positive: a candidate
+      // with 5 real years of small-animal sales experience still got
+      // flagged with "Job calls for specialty experience (Small animal
+      // medicine) not shown on your résumé." findOverlap() itself is
+      // reasonably robust (exact/substring/word-root matching), so the
+      // real gap is almost certainly upstream - the one-time AI résumé
+      // parse that built the structured `specialties` list can miss a
+      // specialty the full résumé genuinely describes, especially with
+      // different wording (e.g. "companion animal" rather than "small
+      // animal"). Falls back to checking the RAW résumé text directly
+      // before concluding it's a real gap, rather than trusting the
+      // narrower structured extraction alone.
+      if (!matchedSpecialty && profile.resume_text) {
+        const resumeTextLower = profile.resume_text.toLowerCase();
+        matchedSpecialty = jobSpecialties.find((spec) => {
+          const words = [...significantWords(spec)];
+          return words.length > 0 && words.some((w) => resumeTextLower.includes(w));
+        });
+      }
       cat.customer_specialty.max += 8;
       if (matchedSpecialty) {
         candScore += 8;
@@ -868,9 +887,31 @@ function scoreJob(job, profile) {
     const mandatoryClinical = (jobAI.clinical_requirements || []).filter((r) => r.strength === "mandatory");
     if (mandatoryClinical.length > 0) {
       const resumeClinicalText = (resume.clinical_technical_experience || []).join(" ").toLowerCase();
-      const unmet = mandatoryClinical.find(
-        (req) => !resumeClinicalText.includes(String(req.requirement).toLowerCase().split(" ")[0])
-      );
+      const resumeFullText = (profile.resume_text || "").toLowerCase();
+      // Reported directly, with two concrete false-positive examples: a
+      // candidate with 5 years of actual small-animal sales experience
+      // still got flagged with "Job calls for specialty experience
+      // (Small animal medicine) not shown on your résumé," and another
+      // real "Medical/scientific background" requirement flagged as
+      // unmet despite genuinely relevant experience. Root cause: this
+      // only ever checked the résumé text for the FIRST WORD of the
+      // requirement phrase (req.requirement.split(" ")[0]) - for
+      // "Medical/scientific background," splitting on spaces alone
+      // never separates the slash-joined "Medical/scientific" at all,
+      // so it checked for that exact, near-impossible compound string
+      // verbatim; for "Small animal medicine" it checked only the
+      // single generic word "small," missing genuine experience
+      // described with different but clearly related wording. Also
+      // only ever checked the narrow structured
+      // clinical_technical_experience field, missing anything the full
+      // résumé mentions that the one-time AI parse didn't specifically
+      // extract into that field - falls back to the raw résumé text too.
+      const resumeWords = significantWords(resumeClinicalText + " " + resumeFullText);
+      const unmet = mandatoryClinical.find((req) => {
+        const reqWords = [...significantWords(req.requirement)];
+        if (reqWords.length === 0) return false;
+        return !reqWords.some((w) => resumeWords.has(w) || resumeClinicalText.includes(w) || resumeFullText.includes(w));
+      });
       if (unmet) {
         concerns.push(`Job requires "${unmet.requirement}" — not clearly shown on your résumé`);
         hardDisqualifier = true;
