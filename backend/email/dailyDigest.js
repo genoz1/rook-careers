@@ -14,6 +14,7 @@
 
 const { sendEmail } = require("./resend");
 const { mentionsNonUsCountry } = require("../matching");
+const { isSubscribed, scrubCompanyNameFromText, redactForNonSubscriber } = require("../routes/jobs");
 
 // 60, not 70 ("Stretch Apply" tier) — chosen after testing against a
 // realistic minimal profile (just home_state + minimum_base_salary, no
@@ -31,26 +32,45 @@ function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
-function renderDigestHtml({ name, jobs, appBaseUrl }) {
+function renderDigestHtml({ name, jobs, appBaseUrl, subscribed }) {
   const rows = jobs
     .map((job) => {
       const comp = job.compensation_text || (job.salary_min ? `$${job.salary_min}${job.salary_max ? "–$" + job.salary_max : "+"}` : "");
-      const analysisUrl = `${appBaseUrl}/rook-job-analysis.html?job=${encodeURIComponent(job.id)}`;
+      // A non-subscribed recipient's jobs have already been through
+      // redactForNonSubscriber, which sets subscription_required and
+      // strips company_name/source_url — this just decides what the
+      // row and button say/link to based on that, the same "who's
+      // hiring" gate the Dashboard and every other surface use.
+      const detailUrl = job.subscription_required
+        ? `${appBaseUrl}/rook-pricing.html`
+        : `${appBaseUrl}/rook-job-analysis.html?job=${encodeURIComponent(job.id)}`;
+      const companyLine = job.subscription_required
+        ? `<span style="color:#7C3AED; font-weight:600;">🔒 Subscribe to see who's hiring</span> · ${escapeHtml(job.location_raw || "")}${comp ? " · " + escapeHtml(comp) : ""}`
+        : `${escapeHtml(job.company_name || "")} · ${escapeHtml(job.location_raw || "")}${comp ? " · " + escapeHtml(comp) : ""}`;
+      const buttonLabel = job.subscription_required ? "Unlock" : "View Job";
       return `
         <tr>
           <td style="padding:18px 0; border-bottom:1px solid #E3E8F0;">
-            <a href="${analysisUrl}" style="color:#1463FF; font-size:16px; font-weight:600; text-decoration:none;">${escapeHtml(job.title_original || "Untitled role")}</a>
+            <a href="${detailUrl}" style="color:#1463FF; font-size:16px; font-weight:600; text-decoration:none;">${escapeHtml(job.title_original || "Untitled role")}</a>
             <div style="font-size:13px; color:#5B6B85; margin-top:4px;">
-              ${escapeHtml(job.company_name || "")} · ${escapeHtml(job.location_raw || "")}${comp ? " · " + escapeHtml(comp) : ""}
+              ${companyLine}
             </div>
             ${job.match?.overall_score != null ? `<div style="font-size:12px; color:#12B8A6; font-weight:600; margin-top:4px;">${job.match.overall_score}% match${job.match.recommendation ? " · " + escapeHtml(job.match.recommendation) : ""}</div>` : ""}
           </td>
           <td width="110" style="padding:18px 0; border-bottom:1px solid #E3E8F0; text-align:right; vertical-align:top; white-space:nowrap;">
-            <a href="${analysisUrl}" style="background:#071E41; color:#fff; padding:10px 18px; border-radius:6px; font-size:13px; font-weight:600; text-decoration:none; white-space:nowrap; display:inline-block;">View Job</a>
+            <a href="${detailUrl}" style="background:#071E41; color:#fff; padding:10px 18px; border-radius:6px; font-size:13px; font-weight:600; text-decoration:none; white-space:nowrap; display:inline-block;">${buttonLabel}</a>
           </td>
         </tr>`;
     })
     .join("");
+
+  const introLine = subscribed
+    ? `<p style="margin:0; font-size:14px; color:#5B6B85;">Here ${jobs.length === 1 ? "is" : "are"} ${jobs.length} new match${jobs.length === 1 ? "" : "es"} for you today:</p>`
+    : `<p style="margin:0; font-size:14px; color:#5B6B85;">${jobs.length === 1 ? "This role is" : `These ${jobs.length} roles are`} still waiting for you — subscribe to see who's hiring and apply directly:</p>`;
+
+  const footerLine = subscribed
+    ? `<a href="${appBaseUrl}/rook-dashboard.html" style="color:#1463FF; font-size:13px; font-weight:600; text-decoration:none;">See all your matches on ROOK →</a>`
+    : `<a href="${appBaseUrl}/rook-pricing.html" style="background:#1463FF; color:#fff; padding:12px 24px; border-radius:6px; font-size:14px; font-weight:700; text-decoration:none; display:inline-block;">Join ROOK to see who's hiring →</a>`;
 
   return `
     <div style="font-family:-apple-system,Helvetica,Arial,sans-serif; max-width:600px; margin:0 auto; background:#fff;">
@@ -59,13 +79,13 @@ function renderDigestHtml({ name, jobs, appBaseUrl }) {
       </div>
       <div style="background:#F5F7FA; padding:20px 24px; text-align:center;">
         <p style="margin:0 0 4px; font-size:15px; color:#071E41;">Hello ${escapeHtml(name || "there")},</p>
-        <p style="margin:0; font-size:14px; color:#5B6B85;">Here ${jobs.length === 1 ? "is" : "are"} ${jobs.length} new match${jobs.length === 1 ? "" : "es"} for you today:</p>
+        ${introLine}
       </div>
       <table width="100%" cellpadding="0" cellspacing="0" style="padding:0 24px;">
         ${rows}
       </table>
       <div style="padding:24px; text-align:center;">
-        <a href="${appBaseUrl}/rook-dashboard.html" style="color:#1463FF; font-size:13px; font-weight:600; text-decoration:none;">See all your matches on ROOK →</a>
+        ${footerLine}
       </div>
     </div>`;
 }
@@ -130,10 +150,25 @@ async function sendDigestForCandidate(supabase, profile, appBaseUrl) {
 
   if (scored.length === 0) return { sent: false, reason: "no_qualifying_matches" };
 
-  const html = renderDigestHtml({ name: profile.name, jobs: scored, appBaseUrl });
+  // Direct instruction: a candidate who finished onboarding but never
+  // subscribed should keep getting this daily email, with real jobs
+  // and their real match score as the enticement, but the "who's
+  // hiring" reveal and the direct job link stay behind the same
+  // subscribe gate as everywhere else — reusing redactForNonSubscriber
+  // exactly as the Dashboard does, not a separate implementation.
+  // Reported directly, a real gap this closes: every recipient
+  // previously saw the actual company name and a direct link to the
+  // job regardless of subscription status, which gave away the exact
+  // thing ROOK charges for.
+  const subscribed = isSubscribed(profile);
+  const emailJobs = subscribed ? scored : scored.map(redactForNonSubscriber);
+
+  const html = renderDigestHtml({ name: profile.name, jobs: emailJobs, appBaseUrl, subscribed });
   await sendEmail({
     to: profile.email,
-    subject: `${scored.length} top match${scored.length === 1 ? "" : "es"} on ROOK`,
+    subject: subscribed
+      ? `${scored.length} top match${scored.length === 1 ? "" : "es"} on ROOK`
+      : `${scored.length} job${scored.length === 1 ? "" : "s"} waiting for you on ROOK — see who's hiring`,
     html,
     // Intentionally no replyTo: this is a no-reply digest. Candidate
     // replies land wherever DIGEST_FROM_EMAIL's mailbox is configured

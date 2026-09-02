@@ -1149,4 +1149,14 @@ router.get("/saved-jobs", requireConfig, requireAuth, loadCandidateId, async (re
   res.json(isSubscribed(profile) ? jobs : jobs.map(redactForNonSubscriber));
 });
 
+// Attached to the router itself (not a separate export shape) so
+// server.js's existing `require("./backend/routes/jobs")` still works
+// unchanged as Express middleware, while dailyDigest.js can pull these
+// specific functions off the same module — one gating implementation
+// reused everywhere a non-subscribed candidate's view needs masking,
+// not a second copy that could drift from it.
+router.isSubscribed = isSubscribed;
+router.scrubCompanyNameFromText = scrubCompanyNameFromText;
+router.redactForNonSubscriber = redactForNonSubscriber;
+
 module.exports = router;
