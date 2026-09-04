@@ -297,37 +297,195 @@ router.post("/stripe/create-portal-session", requireConfig, requireAuth, async (
 // user_id for checkout.session.completed (client_reference_id is the
 // only identifier available on that event), by stripe_customer_id for
 // every other subscription/invoice event.
-async function applyGuardedSubscriptionUpdate(supabaseAdmin, { matchColumn, matchValue, eventCreatedUnix, buildFields }) {
+//
+// Reported directly, a real production bug: the previous version did a
+// separate SELECT to check staleness, then a separate UPDATE to write
+// — two round trips with a gap between them. Two Stripe webhook events
+// arriving close together (a live reactivate-then-cancel test, 19
+// seconds apart) could interleave across that gap: the newer
+// (cancellation) event's write landed first, then the older
+// (reactivation) event's write — which had already read the row
+// *before* the cancellation wrote — landed second and silently
+// clobbered it, even though the guard's own timestamp logic was
+// correct in isolation. A "newer event wins" check is worthless if a
+// second request can still write in between the check and the write.
+//
+// Fixed by making the staleness check and the write the SAME
+// Postgres statement: `UPDATE ... WHERE subscription_status_synced_at
+// IS NULL OR subscription_status_synced_at < this_event's_timestamp`.
+// Postgres evaluates that WHERE clause against the row's actual
+// current value at the exact instant it takes the row lock for the
+// write — not a snapshot read moments earlier in application code —
+// so whichever event's write is processed SECOND by Postgres always
+// sees whatever the first one already wrote, and correctly fails to
+// match if it's the older event. There is no gap for a second request
+// to land in. The timestamp comparison itself is a real Postgres
+// timestamptz comparison (via .is()/.lt() against the actual column),
+// not a JavaScript string comparison — the exact string format
+// Postgres happens to return is irrelevant to it.
+//
+// Two sequential attempts, not one query with an OR, so this only
+// relies on supabase-js's plain, well-documented single-condition
+// filters rather than hand-built OR-filter strings: first assumes no
+// prior sync exists at all (a brand new row), and only if that matches
+// zero rows does it fall back to the "is this event newer than
+// whatever's already there" comparison. Both attempts are
+// independently atomic — there's no unsafe gap between them, since
+// each one's WHERE clause is re-evaluated by Postgres against
+// whatever the row's true value is at that exact moment, regardless of
+// what the other attempt observed.
+//
+// setOnceFields (trial_started_at, subscription_started_at, the UTM
+// columns) are handled as their own separate atomic conditional
+// writes — `WHERE <gate column> IS NULL` — deliberately outside the
+// staleness-guarded update above. They must never be touched by a
+// stale/duplicate event, but they also must never be blocked by an
+// unrelated, legitimate status change that doesn't concern them.
+//
+// Each entry is { gate, fields }: `gate` is the one column whose
+// current NULL-ness decides whether this entire group gets written —
+// e.g. the 5 UTM columns are one group gated on utm_source alone, so
+// they're written together or not at all, rather than each column
+// independently deciding based on its own (possibly legitimately
+// empty) value.
+async function applySetOnceFields(supabaseAdmin, matchColumn, matchValue, logPrefix, groups) {
+  for (const { gate, fields } of groups) {
+    const { error } = await supabaseAdmin
+      .from("candidate_profiles")
+      .update(fields)
+      .eq(matchColumn, matchValue)
+      .is(gate, null);
+    if (error) {
+      console.error(`${logPrefix}: failed to set-once (gated on "${gate}") — ${error.message}`);
+    }
+  }
+}
+
+async function applyGuardedSubscriptionUpdate(supabaseAdmin, { matchColumn, matchValue, eventId, eventCreatedUnix, fields, setOnceFields, reconcile }) {
   if (!matchValue) return { applied: false, reason: "no_match_value" };
 
   const eventCreatedAt = new Date(eventCreatedUnix * 1000).toISOString();
+  const updatePayload = { ...fields, subscription_status_synced_at: eventCreatedAt };
+  const logPrefix = `[stripe webhook] event ${eventId || "(no id)"} (created ${eventCreatedAt}) for ${matchColumn}=${matchValue}`;
 
-  const { data: existing, error: fetchError } = await supabaseAdmin
+  let { data, error } = await supabaseAdmin
     .from("candidate_profiles")
-    .select("subscription_status_synced_at, subscription_started_at, trial_started_at, utm_source")
+    .update(updatePayload)
+    .eq(matchColumn, matchValue)
+    .is("subscription_status_synced_at", null)
+    .select("id");
+
+  if (!error && (!data || data.length === 0)) {
+    ({ data, error } = await supabaseAdmin
+      .from("candidate_profiles")
+      .update(updatePayload)
+      .eq(matchColumn, matchValue)
+      .lt("subscription_status_synced_at", eventCreatedAt)
+      .select("id"));
+  }
+
+  if (error) {
+    console.error(`${logPrefix}: DB ERROR — ${error.message}`);
+    return { applied: false, reason: "update_error", error };
+  }
+
+  if (data && data.length > 0) {
+    console.log(`${logPrefix}: APPLIED — fields: ${Object.keys(fields).join(", ") || "(none)"}`);
+    if (setOnceFields && setOnceFields.length > 0) {
+      await applySetOnceFields(supabaseAdmin, matchColumn, matchValue, logPrefix, setOnceFields);
+    }
+    return { applied: true, update: updatePayload };
+  }
+
+  // Neither attempt matched. Stripe's event.created has only
+  // second-level precision, so this could mean either "a genuinely
+  // later event already landed" (safe to skip) or "a DIFFERENT,
+  // equally legitimate event landed in the same second" (NOT safe to
+  // skip — that second event could represent newer information a
+  // strict-inequality check has no way to order against this one).
+  // This read exists ONLY to tell those two cases apart — it never
+  // decides whether to apply THIS event's own payload, so it cannot
+  // reintroduce the original read-then-write race the atomic update
+  // above already closed.
+  const { data: currentRow, error: readError } = await supabaseAdmin
+    .from("candidate_profiles")
+    .select("subscription_status_synced_at")
     .eq(matchColumn, matchValue)
     .maybeSingle();
 
-  if (fetchError) return { applied: false, reason: "fetch_error", error: fetchError };
-  if (!existing) return { applied: false, reason: "no_matching_profile" };
+  if (readError) {
+    console.error(`${logPrefix}: DB ERROR (tie-check read) — ${readError.message}`);
+    return { applied: false, reason: "update_error", error: readError };
+  }
 
-  // Strictly older (or exactly equal, i.e. a redelivered duplicate of
-  // the same event) is discarded — only a genuinely newer event is
-  // allowed to change state. This is the core defense against both
-  // out-of-order delivery and duplicate delivery in one comparison.
-  if (existing.subscription_status_synced_at && existing.subscription_status_synced_at >= eventCreatedAt) {
+  if (!currentRow) {
+    console.log(`${logPrefix}: SKIPPED — no matching profile`);
+    return { applied: false, reason: "no_matching_profile" };
+  }
+
+  const isExactTie = currentRow.subscription_status_synced_at === eventCreatedAt;
+
+  if (!isExactTie || !reconcile) {
+    console.log(`${logPrefix}: SKIPPED — a genuinely newer event is already recorded`);
     return { applied: false, reason: "stale_or_duplicate_event" };
   }
 
-  const fields = buildFields(existing) || {};
-  const update = { ...fields, subscription_status_synced_at: eventCreatedAt };
+  // Direct instruction: do not use event ID ordering to break a tie —
+  // Stripe event IDs are not chronologically sortable. Instead, ask
+  // Stripe directly what's actually true right now for this
+  // subscription, rather than trusting either tied webhook's payload
+  // — this makes webhook delivery order irrelevant to the outcome,
+  // which is the only real fix for a tie that database timestamps
+  // alone cannot break.
+  console.log(`${logPrefix}: TIE at ${eventCreatedAt} with an already-recorded event — reconciling directly against Stripe's live subscription state instead of trusting delivery order`);
 
-  const { error: updateError } = await supabaseAdmin
+  let authoritative;
+  try {
+    authoritative = await reconcile();
+  } catch (err) {
+    console.error(`${logPrefix}: reconciliation fetch failed — ${err.message}`);
+    return { applied: false, reason: "reconcile_error", error: err };
+  }
+
+  const reconcilePayload = { ...authoritative.fields, subscription_status_synced_at: eventCreatedAt };
+  const { error: reconcileError } = await supabaseAdmin
     .from("candidate_profiles")
-    .update(update)
+    .update(reconcilePayload)
     .eq(matchColumn, matchValue);
 
-  return { applied: !updateError, error: updateError, update };
+  if (reconcileError) {
+    console.error(`${logPrefix}: DB ERROR (reconciliation write) — ${reconcileError.message}`);
+    return { applied: false, reason: "update_error", error: reconcileError };
+  }
+
+  console.log(`${logPrefix}: RECONCILED — fields: ${Object.keys(authoritative.fields).join(", ") || "(none)"}`);
+
+  if (authoritative.setOnceFields && authoritative.setOnceFields.length > 0) {
+    await applySetOnceFields(supabaseAdmin, matchColumn, matchValue, logPrefix, authoritative.setOnceFields);
+  }
+
+  return { applied: true, reconciled: true, update: reconcilePayload };
+}
+
+// Maps a LIVE Stripe subscription object (from stripe.subscriptions.
+// retrieve(), not a webhook event payload) to our DB fields. Used both
+// by checkout.session.completed (which already always fetches live)
+// and by the tie-reconciliation path below, so there's one definition
+// of "how do we turn Stripe's subscription state into our columns,"
+// not two that could drift apart.
+function mapLiveSubscriptionToFields(sub) {
+  const fields = {
+    subscription_status: sub.status,
+    subscription_cancel_at: sub.cancel_at_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
+  };
+  const setOnceFields = [];
+  if (sub.status === "trialing" && sub.trial_end) {
+    fields.trial_ends_at = new Date(sub.trial_end * 1000).toISOString();
+  }
+  if (sub.status === "active") {
+    setOnceFields.push({ gate: "subscription_started_at", fields: { subscription_started_at: new Date().toISOString() } });
+  }
+  return { fields, setOnceFields };
 }
 
 // The actual event-handling logic, factored out of the route handler so
@@ -353,30 +511,39 @@ async function handleStripeWebhookEvent(event, { stripe, supabaseAdmin }) {
       return applyGuardedSubscriptionUpdate(supabaseAdmin, {
         matchColumn: "user_id",
         matchValue: userId,
+        eventId: event.id,
         eventCreatedUnix: event.created,
-        buildFields: (existing) => {
+        fields: (() => {
           const fields = {
             subscription_status: sub.status,
             stripe_customer_id: session.customer,
           };
+          if (sub.status === "trialing" && sub.trial_end) {
+            fields.trial_ends_at = new Date(sub.trial_end * 1000).toISOString();
+          }
+          return fields;
+        })(),
+        setOnceFields: (() => {
+          const groups = [];
           if (sub.status === "trialing") {
-            if (!existing.trial_started_at) fields.trial_started_at = new Date().toISOString();
-            if (sub.trial_end) fields.trial_ends_at = new Date(sub.trial_end * 1000).toISOString();
+            groups.push({ gate: "trial_started_at", fields: { trial_started_at: new Date().toISOString() } });
           } else if (sub.status === "active") {
             // Trial disabled (TRIAL_PERIOD_DAYS=0) or somehow already
             // past trial by the time this webhook is processed — this
             // is the real "started paying" moment in that case.
-            if (!existing.subscription_started_at) fields.subscription_started_at = new Date().toISOString();
+            groups.push({ gate: "subscription_started_at", fields: { subscription_started_at: new Date().toISOString() } });
           }
           // UTM fallback: only fill in if onboarding didn't already
-          // capture it (see routes/profile.js) — never overwrite a
-          // real first-touch value already on file.
-          if (!existing.utm_source) {
-            const utm = pickUtmFields(session.metadata || {});
-            Object.assign(fields, utm);
+          // capture it (see routes/profile.js) — gated as one group on
+          // utm_source alone, so all 5 columns are written together or
+          // not at all, rather than each independently deciding based
+          // on its own (possibly legitimately empty) value.
+          const utm = pickUtmFields(session.metadata || {});
+          if (Object.keys(utm).length > 0) {
+            groups.push({ gate: "utm_source", fields: utm });
           }
-          return fields;
-        },
+          return groups;
+        })(),
       });
     }
 
@@ -387,31 +554,36 @@ async function handleStripeWebhookEvent(event, { stripe, supabaseAdmin }) {
       return applyGuardedSubscriptionUpdate(supabaseAdmin, {
         matchColumn: "stripe_customer_id",
         matchValue: sub.customer,
+        eventId: event.id,
         eventCreatedUnix: event.created,
-        buildFields: (existing) => {
-          const fields = {
-            subscription_status: sub.status,
-            // Reported via audit: ROOK showed "Professional Plan —
-            // Active" with no indication a subscriber had already
-            // cancelled via Stripe's own portal - Stripe doesn't
-            // revoke access immediately on cancellation, it sets
-            // cancel_at_period_end and keeps the subscription "active"
-            // (or "trialing", if cancelled mid-trial) until the period
-            // actually ends. subscription_cancel_at surfaces that
-            // regardless of which status the cancellation happened
-            // from.
-            subscription_cancel_at: cancelAt,
-          };
-          // This is the real "first successful $29 payment" moment for
-          // anyone who came through a trial — Stripe transitions the
-          // subscription from 'trialing' to 'active' automatically when
-          // the trial ends and the charge succeeds, which fires this
-          // exact event. Set once, same pattern as everywhere else.
-          if (sub.status === "active" && !existing.subscription_started_at) {
-            fields.subscription_started_at = new Date().toISOString();
-          }
-          return fields;
+        fields: {
+          subscription_status: sub.status,
+          // Reported via audit: ROOK showed "Professional Plan —
+          // Active" with no indication a subscriber had already
+          // cancelled via Stripe's own portal - Stripe doesn't
+          // revoke access immediately on cancellation, it sets
+          // cancel_at_period_end and keeps the subscription "active"
+          // (or "trialing", if cancelled mid-trial) until the period
+          // actually ends. subscription_cancel_at surfaces that
+          // regardless of which status the cancellation happened
+          // from.
+          subscription_cancel_at: cancelAt,
         },
+        // This is the real "first successful $29 payment" moment for
+        // anyone who came through a trial — Stripe transitions the
+        // subscription from 'trialing' to 'active' automatically when
+        // the trial ends and the charge succeeds, which fires this
+        // exact event. Set once, same pattern as everywhere else —
+        // gated on subscription_started_at itself being null, so a
+        // later renewal's "still active" event can't re-trigger it.
+        setOnceFields: sub.status === "active"
+          ? [{ gate: "subscription_started_at", fields: { subscription_started_at: new Date().toISOString() } }]
+          : [],
+        // Only invoked on an exact-timestamp tie with another event —
+        // re-fetches this exact subscription live rather than trusting
+        // this event's own (possibly out-of-date-by-the-time-it's-
+        // processed) embedded object.
+        reconcile: async () => mapLiveSubscriptionToFields(await stripe.subscriptions.retrieve(sub.id)),
       });
     }
 
@@ -422,8 +594,9 @@ async function handleStripeWebhookEvent(event, { stripe, supabaseAdmin }) {
       return applyGuardedSubscriptionUpdate(supabaseAdmin, {
         matchColumn: "stripe_customer_id",
         matchValue: invoice.customer,
+        eventId: event.id,
         eventCreatedUnix: event.created,
-        buildFields: () => ({
+        fields: {
           // Direct instruction: a failed first (or any) charge must not
           // leave the account with paid access indefinitely. 'past_due'
           // is a real Stripe status and is neither 'trialing' nor
@@ -434,7 +607,8 @@ async function handleStripeWebhookEvent(event, { stripe, supabaseAdmin }) {
           // behind this one; both converging on the same value is fine
           // and expected, not a conflict).
           subscription_status: "past_due",
-        }),
+        },
+        reconcile: async () => mapLiveSubscriptionToFields(await stripe.subscriptions.retrieve(invoice.subscription)),
       });
     }
 
@@ -443,11 +617,13 @@ async function handleStripeWebhookEvent(event, { stripe, supabaseAdmin }) {
       return applyGuardedSubscriptionUpdate(supabaseAdmin, {
         matchColumn: "stripe_customer_id",
         matchValue: sub.customer,
+        eventId: event.id,
         eventCreatedUnix: event.created,
-        buildFields: () => ({
+        fields: {
           subscription_status: "cancelled",
           subscription_cancel_at: null,
-        }),
+        },
+        reconcile: async () => mapLiveSubscriptionToFields(await stripe.subscriptions.retrieve(sub.id)),
       });
     }
 

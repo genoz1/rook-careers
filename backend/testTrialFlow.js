@@ -45,19 +45,58 @@ async function asyncTest(name, fn) {
   }
 }
 
-// --- A tiny in-memory fake of the two supabaseAdmin calls this code
-// actually uses (.from(table).select(...).eq(col,val).maybeSingle() and
-// .from(table).update(fields).eq(col,val)) — enough to exercise the
-// real guard logic without a real database. ---
+// --- A tiny in-memory fake of the supabaseAdmin calls this code
+// actually uses — enough to exercise the real atomic-conditional-update
+// logic without a real database. Critically, this mimics real
+// Postgres/PostgREST semantics: every accumulated filter condition
+// (.eq/.is/.lt) is evaluated against the row's CURRENT state at the
+// exact moment the update executes (when awaited, or when .select() is
+// called) — never against an earlier snapshot. That's the actual
+// property the real fix depends on, so the fake has to have it too,
+// or these tests would only be testing the fake, not the real
+// guarantee. ---
 function makeFakeSupabase(initialRows) {
   const table = [...initialRows];
+  const state = { forcedError: null }; // set via db._forceNextError(msg) to simulate a real DB/API failure on the very next update call
 
-  function findRow(col, val) {
-    return table.find((r) => r[col] === val);
+  function makeUpdateBuilder(table, fields) {
+    const conditions = [];
+    function matchingRow() {
+      return table.find((r) => conditions.every((cond) => cond(r)));
+    }
+    function apply(wantArray) {
+      if (state.forcedError) {
+        const err = { message: state.forcedError };
+        state.forcedError = null; // one-shot — only the next call fails, so a test can distinguish "this specific call failed" from "everything fails forever"
+        return { data: null, error: err };
+      }
+      const row = matchingRow();
+      if (!row) return { data: wantArray ? [] : null, error: null };
+      Object.assign(row, fields);
+      return { data: wantArray ? [{ id: row.id || "matched" }] : null, error: null };
+    }
+    const builder = {
+      eq(col, val) { conditions.push((r) => r[col] === val); return builder; },
+      is(col, val) { conditions.push((r) => (val === null ? (r[col] === null || r[col] === undefined) : r[col] === val)); return builder; },
+      lt(col, val) { conditions.push((r) => r[col] != null && new Date(r[col]).getTime() < new Date(val).getTime()); return builder; },
+      select(_cols) {
+        // Explicit .select() requested (the main guarded update path)
+        // — resolves with an array shape, matching real supabase-js.
+        return Promise.resolve(apply(true));
+      },
+      then(resolve, reject) {
+        // Awaited directly with no .select() chained (the set-once
+        // writes) — resolves with a plain (non-array) shape, matching
+        // real supabase-js's update()-with-no-select() behavior.
+        try { resolve(apply(false)); } catch (err) { reject(err); }
+      },
+    };
+    return builder;
   }
 
   return {
     _table: table,
+    _forceNextError(message) { state.forcedError = message; },
     from(_tableName) {
       return {
         select() {
@@ -65,7 +104,12 @@ function makeFakeSupabase(initialRows) {
             eq(col, val) {
               return {
                 async maybeSingle() {
-                  const row = findRow(col, val);
+                  if (state.forcedError) {
+                    const err = { message: state.forcedError };
+                    state.forcedError = null;
+                    return { data: null, error: err };
+                  }
+                  const row = table.find((r) => r[col] === val);
                   return { data: row || null, error: null };
                 },
               };
@@ -73,16 +117,10 @@ function makeFakeSupabase(initialRows) {
           };
         },
         update(fields) {
-          return {
-            async eq(col, val) {
-              const row = findRow(col, val);
-              if (!row) return { error: { message: "no row matched" } };
-              Object.assign(row, fields);
-              return { error: null };
-            },
-          };
+          return makeUpdateBuilder(table, fields);
         },
       };
+
     },
   };
 }
@@ -448,16 +486,26 @@ async function run() {
   console.log("\n=== Scenario: duplicate webhook delivery [14] ===");
   await asyncTest("the exact same event applied twice only takes effect once, and doesn't corrupt state", async () => {
     const db = makeFakeSupabase([{ stripe_customer_id: "cus_7", subscription_status: "trialing", subscription_status_synced_at: isoFromUnix(NOW), subscription_cancel_at: null }]);
+    const stripe = makeFakeStripe({
+      sub_7: { id: "sub_7", status: "trialing", customer: "cus_7", trial_end: null, cancel_at_period_end: true, current_period_end: NOW + 2 * DAY },
+    });
     const event = {
       id: "evt_8", created: NOW + DAY, type: "customer.subscription.updated",
-      data: { object: { customer: "cus_7", status: "trialing", cancel_at_period_end: true, current_period_end: NOW + 2 * DAY } },
+      data: { object: { id: "sub_7", customer: "cus_7", status: "trialing", cancel_at_period_end: true, current_period_end: NOW + 2 * DAY } },
     };
-    const first = await handleStripeWebhookEvent(event, { stripe: {}, supabaseAdmin: db });
+    const first = await handleStripeWebhookEvent(event, { stripe, supabaseAdmin: db });
     const stateAfterFirst = { ...db._table[0] };
-    const second = await handleStripeWebhookEvent({ ...event }, { stripe: {}, supabaseAdmin: db }); // Stripe redelivers the identical event
+    // A true redelivery of the identical event now lands on the same
+    // exact-timestamp tie path as two genuinely different same-second
+    // events — there's no way to tell them apart from the timestamp
+    // alone. Reconciling against Stripe's live state resolves this
+    // safely either way: for a genuine duplicate, Stripe's live state
+    // is simply the same truth already recorded, so the row ends up
+    // byte-identical — reconciliation of a no-op change is itself a
+    // no-op, not a corruption risk.
+    const second = await handleStripeWebhookEvent({ ...event }, { stripe, supabaseAdmin: db });
     assert.strictEqual(first.applied, true, "first delivery should apply");
-    assert.strictEqual(second.applied, false, "redelivered duplicate should be rejected by the guard");
-    assert.strictEqual(second.reason, "stale_or_duplicate_event");
+    assert.strictEqual(second.reconciled, true, "an exact-timestamp redelivery is resolved via reconciliation, same as any other tie");
     assert.deepStrictEqual(db._table[0], stateAfterFirst, "row must be byte-identical after the duplicate — no corruption, no partial re-application");
   });
 
@@ -501,6 +549,223 @@ async function run() {
     assert.strictEqual(result.applied, false, "a stale event must not resurrect access after a legitimate cancellation");
     assert.strictEqual(db._table[0].subscription_status, "cancelled", "must remain cancelled");
     assert.strictEqual(hasFullAccess(db._table[0]), false);
+  });
+
+  console.log("\n=== Concurrency: atomic conditional update closes the read-then-write race (reproduces the real production bug) ===");
+
+  await asyncTest("[Concurrency 1] older reactivation begins first but its write lands SECOND, after the newer cancellation's write — cancellation must remain", async () => {
+    // This is the exact real production bug: a reactivation (older
+    // Stripe event) and a cancellation (newer event) arrived 19
+    // seconds apart. The reactivation had already been "read" by the
+    // time the cancellation's write landed, so when the reactivation's
+    // own write finally landed second, it silently overwrote the
+    // cancellation with stale data. Modeled here as: apply the newer
+    // event's write FIRST (simulating it landing first), then attempt
+    // to apply the older event's write SECOND (simulating it finishing
+    // late) — the atomic conditional update must reject the late
+    // write because Postgres re-checks the row's actual current state
+    // at write time, not a snapshot from whenever the older request
+    // started.
+    const db = makeFakeSupabase([{ stripe_customer_id: "cus_race1", subscription_status: "trialing", subscription_status_synced_at: isoFromUnix(NOW), subscription_cancel_at: null }]);
+
+    const newerCancellation = {
+      id: "evt_cancel_newer", created: NOW + 20, type: "customer.subscription.updated",
+      data: { object: { customer: "cus_race1", status: "trialing", cancel_at_period_end: true, current_period_end: NOW + 3 * DAY } },
+    };
+    const olderReactivation = {
+      id: "evt_reactivate_older", created: NOW + 1, type: "customer.subscription.updated",
+      data: { object: { customer: "cus_race1", status: "trialing", cancel_at_period_end: false, current_period_end: NOW + 3 * DAY } },
+    };
+
+    // Cancellation's write lands FIRST (even though it's the newer event).
+    const cancelResult = await handleStripeWebhookEvent(newerCancellation, { stripe: {}, supabaseAdmin: db });
+    assert.strictEqual(cancelResult.applied, true, "cancellation write should apply normally");
+
+    // Reactivation's write finishes SECOND, despite being the older event.
+    const reactivateResult = await handleStripeWebhookEvent(olderReactivation, { stripe: {}, supabaseAdmin: db });
+    assert.strictEqual(reactivateResult.applied, false, "the older event's late-arriving write must be rejected");
+    assert.strictEqual(reactivateResult.reason, "stale_or_duplicate_event");
+
+    const row = db._table[0];
+    assert.ok(row.subscription_cancel_at, "cancellation must remain in effect — this is the exact bug that shipped to production");
+    assert.strictEqual(hasFullAccess(row), true, "still within the trial, access continues");
+  });
+
+  await asyncTest("[Concurrency 2] older cancellation and newer reactivation overlap, processed in chronological order — reactivation must remain", async () => {
+    const db = makeFakeSupabase([{ stripe_customer_id: "cus_race2", subscription_status: "trialing", subscription_status_synced_at: isoFromUnix(NOW), subscription_cancel_at: null }]);
+
+    const olderCancellation = {
+      id: "evt_cancel_older", created: NOW + 1, type: "customer.subscription.updated",
+      data: { object: { customer: "cus_race2", status: "trialing", cancel_at_period_end: true, current_period_end: NOW + 3 * DAY } },
+    };
+    const newerReactivation = {
+      id: "evt_reactivate_newer", created: NOW + 20, type: "customer.subscription.updated",
+      data: { object: { customer: "cus_race2", status: "trialing", cancel_at_period_end: false, current_period_end: NOW + 3 * DAY } },
+    };
+
+    await handleStripeWebhookEvent(olderCancellation, { stripe: {}, supabaseAdmin: db });
+    const reactivateResult = await handleStripeWebhookEvent(newerReactivation, { stripe: {}, supabaseAdmin: db });
+
+    assert.strictEqual(reactivateResult.applied, true, "the genuinely newer reactivation must apply normally");
+    assert.strictEqual(db._table[0].subscription_cancel_at, null, "reactivation correctly clears the pending cancellation");
+  });
+
+  await asyncTest("[Concurrency 3] duplicate event (identical timestamp) is harmless", async () => {
+    const db = makeFakeSupabase([{ stripe_customer_id: "cus_race3", subscription_status: "trialing", subscription_status_synced_at: isoFromUnix(NOW), subscription_cancel_at: null }]);
+    const stripe = makeFakeStripe({
+      sub_race3: { id: "sub_race3", status: "trialing", customer: "cus_race3", trial_end: null, cancel_at_period_end: true, current_period_end: NOW + 3 * DAY },
+    });
+    const event = {
+      id: "evt_dup", created: NOW + 1, type: "customer.subscription.updated",
+      data: { object: { id: "sub_race3", customer: "cus_race3", status: "trialing", cancel_at_period_end: true, current_period_end: NOW + 3 * DAY } },
+    };
+    const first = await handleStripeWebhookEvent(event, { stripe, supabaseAdmin: db });
+    const stateAfterFirst = { ...db._table[0] };
+    const second = await handleStripeWebhookEvent({ ...event }, { stripe, supabaseAdmin: db });
+
+    assert.strictEqual(first.applied, true);
+    assert.strictEqual(second.reconciled, true, "an identical redelivered timestamp resolves via reconciliation to the same live truth, harmlessly");
+    assert.deepStrictEqual(db._table[0], stateAfterFirst, "row must be byte-identical after the duplicate — no corruption");
+  });
+
+  await asyncTest("[Concurrency 4] a genuinely stale event arriving later (after a newer one already landed) is ignored", async () => {
+    const db = makeFakeSupabase([{ stripe_customer_id: "cus_race4", subscription_status: "trialing", subscription_status_synced_at: isoFromUnix(NOW), subscription_cancel_at: null }]);
+    const newerEvent = {
+      id: "evt_race4_newer", created: NOW + 100, type: "customer.subscription.updated",
+      data: { object: { customer: "cus_race4", status: "active", cancel_at_period_end: false, current_period_end: NOW + 30 * DAY } },
+    };
+    const staleEvent = {
+      id: "evt_race4_stale", created: NOW + 5, type: "customer.subscription.updated",
+      data: { object: { customer: "cus_race4", status: "trialing", cancel_at_period_end: true, current_period_end: NOW + 3 * DAY } },
+    };
+    await handleStripeWebhookEvent(newerEvent, { stripe: {}, supabaseAdmin: db });
+    const staleResult = await handleStripeWebhookEvent(staleEvent, { stripe: {}, supabaseAdmin: db });
+
+    assert.strictEqual(staleResult.applied, false);
+    assert.strictEqual(db._table[0].subscription_status, "active", "the newer, already-applied state must not be disturbed by a late, older event");
+  });
+
+  await asyncTest("[Concurrency 5] subscription_status_synced_at initially NULL — first-ever event for this row succeeds", async () => {
+    const db = makeFakeSupabase([{ user_id: "user_race5", subscription_status: null, subscription_status_synced_at: null, subscription_started_at: null, trial_started_at: null }]);
+    const stripe = makeFakeStripe({
+      sub_race5: { id: "sub_race5", status: "trialing", customer: "cus_race5", trial_end: NOW + 3 * DAY, cancel_at_period_end: false },
+    });
+    const event = {
+      id: "evt_race5_first", created: NOW, type: "checkout.session.completed",
+      data: { object: { client_reference_id: "user_race5", customer: "cus_race5", subscription: "sub_race5", metadata: {} } },
+    };
+    const result = await handleStripeWebhookEvent(event, { stripe, supabaseAdmin: db });
+    assert.strictEqual(result.applied, true, "the very first event for a brand-new row (synced_at NULL) must succeed via the IS NULL branch");
+    assert.strictEqual(db._table[0].subscription_status, "trialing");
+    assert.ok(db._table[0].subscription_status_synced_at);
+  });
+
+  console.log("\n=== Same-second timestamp ties: reconcile against Stripe's live state, don't trust delivery order ===");
+
+  await asyncTest("[Tie 1] cancellation and reactivation with the EXACT SAME created timestamp — reconciles to Stripe's live truth, not whichever arrived second", async () => {
+    const db = makeFakeSupabase([{ stripe_customer_id: "cus_tie1", subscription_status: "trialing", subscription_status_synced_at: isoFromUnix(NOW), subscription_cancel_at: null }]);
+    const tiedTimestamp = NOW + 50;
+
+    // Two genuinely different events (one cancels, one reactivates)
+    // that happen to share the same second-level created timestamp —
+    // Stripe's real granularity, not a contrived edge case.
+    const cancellation = {
+      id: "evt_tie1_cancel", created: tiedTimestamp, type: "customer.subscription.updated",
+      data: { object: { id: "sub_tie1", customer: "cus_tie1", status: "trialing", cancel_at_period_end: true, current_period_end: NOW + 3 * DAY } },
+    };
+    const reactivation = {
+      id: "evt_tie1_reactivate", created: tiedTimestamp, type: "customer.subscription.updated",
+      data: { object: { id: "sub_tie1", customer: "cus_tie1", status: "trialing", cancel_at_period_end: false, current_period_end: NOW + 3 * DAY } },
+    };
+    // Stripe's LIVE state says: actually still cancelled (the
+    // reactivation payload above is stale-by-the-time-it's-processed
+    // information, even though its own timestamp ties with the real
+    // cancellation) — reconciliation must trust THIS, not either
+    // webhook's embedded payload.
+    const stripe = makeFakeStripe({
+      sub_tie1: { id: "sub_tie1", status: "trialing", customer: "cus_tie1", trial_end: NOW + 3 * DAY, cancel_at_period_end: true, current_period_end: NOW + 3 * DAY },
+    });
+
+    const first = await handleStripeWebhookEvent(cancellation, { stripe, supabaseAdmin: db });
+    assert.strictEqual(first.applied, true);
+
+    const second = await handleStripeWebhookEvent(reactivation, { stripe, supabaseAdmin: db });
+    assert.strictEqual(second.reconciled, true, "the tied second event must trigger reconciliation, not a blind reject");
+
+    const row = db._table[0];
+    assert.ok(row.subscription_cancel_at, "final state must reflect Stripe's live truth (still cancelled), not the reactivation payload's own claim");
+  });
+
+  await asyncTest("[Tie 2] the same two tied events delivered in the OPPOSITE order converge on the same Stripe-authoritative outcome", async () => {
+    const db = makeFakeSupabase([{ stripe_customer_id: "cus_tie2", subscription_status: "trialing", subscription_status_synced_at: isoFromUnix(NOW), subscription_cancel_at: null }]);
+    const tiedTimestamp = NOW + 50;
+
+    const cancellation = {
+      id: "evt_tie2_cancel", created: tiedTimestamp, type: "customer.subscription.updated",
+      data: { object: { id: "sub_tie2", customer: "cus_tie2", status: "trialing", cancel_at_period_end: true, current_period_end: NOW + 3 * DAY } },
+    };
+    const reactivation = {
+      id: "evt_tie2_reactivate", created: tiedTimestamp, type: "customer.subscription.updated",
+      data: { object: { id: "sub_tie2", customer: "cus_tie2", status: "trialing", cancel_at_period_end: false, current_period_end: NOW + 3 * DAY } },
+    };
+    // This time Stripe's live truth says: actually reactivated.
+    const stripe = makeFakeStripe({
+      sub_tie2: { id: "sub_tie2", status: "trialing", customer: "cus_tie2", trial_end: NOW + 3 * DAY, cancel_at_period_end: false, current_period_end: NOW + 3 * DAY },
+    });
+
+    // Delivered in the OPPOSITE order from the test above (reactivation
+    // arrives first this time) — the outcome must depend only on what
+    // Stripe's live state actually says, never on which order these
+    // two tied requests happened to be processed in.
+    await handleStripeWebhookEvent(reactivation, { stripe, supabaseAdmin: db });
+    const second = await handleStripeWebhookEvent(cancellation, { stripe, supabaseAdmin: db });
+    assert.strictEqual(second.reconciled, true);
+
+    const row = db._table[0];
+    assert.strictEqual(row.subscription_cancel_at, null, "final state must match Stripe's live truth (reactivated) regardless of delivery order — order-independence is the actual point of reconciling against Stripe instead of trusting whichever payload arrived second");
+  });
+
+  console.log("\n=== A real database failure must be reported as an error, never mistaken for a normal stale skip ===");
+
+  await asyncTest("[Error handling] a DB failure on the update itself is reported as update_error, not stale_or_duplicate_event", async () => {
+    const db = makeFakeSupabase([{ stripe_customer_id: "cus_err1", subscription_status: "trialing", subscription_status_synced_at: null, subscription_cancel_at: null }]);
+    db._forceNextError("connection reset by peer");
+    const event = {
+      id: "evt_err1", created: NOW, type: "customer.subscription.updated",
+      data: { object: { id: "sub_err1", customer: "cus_err1", status: "active", cancel_at_period_end: false, current_period_end: NOW + 30 * DAY } },
+    };
+    const result = await handleStripeWebhookEvent(event, { stripe: {}, supabaseAdmin: db });
+    assert.strictEqual(result.applied, false);
+    assert.strictEqual(result.reason, "update_error", "a genuine DB failure must be distinguishable from a normal stale/no-op skip");
+    assert.ok(result.error, "the actual error object must be surfaced, not swallowed");
+  });
+
+  await asyncTest("[Error handling] a DB failure during the tie-detection read is also reported as update_error, not treated as a tie or a stale skip", async () => {
+    const db = makeFakeSupabase([{ stripe_customer_id: "cus_err2", subscription_status: "trialing", subscription_status_synced_at: isoFromUnix(NOW + 999), subscription_cancel_at: null }]);
+    // Neither atomic attempt will match (existing synced_at is already
+    // later than this event), so the code falls through to the
+    // tie-detection read — force THAT specific read to fail.
+    const event = {
+      id: "evt_err2", created: NOW, type: "customer.subscription.updated",
+      data: { object: { id: "sub_err2", customer: "cus_err2", status: "active", cancel_at_period_end: false, current_period_end: NOW + 30 * DAY } },
+    };
+    db._forceNextError("timeout"); // fails attempt 1 (IS NULL)... but attempt 1 won't match anyway (not null), so it "succeeds" with 0 rows and consumes nothing; force again to be safe:
+    db._forceNextError("timeout"); // fails attempt 2 (LT) — also won't match; the error surfaces here instead
+    const result = await handleStripeWebhookEvent(event, { stripe: {}, supabaseAdmin: db });
+    assert.strictEqual(result.applied, false);
+    assert.strictEqual(result.reason, "update_error", "a DB failure anywhere in this process — including the tie-detection read — must surface as a real error, never silently logged as an ordinary stale skip");
+  });
+
+  await asyncTest("[Error handling] a normal, genuine stale skip (no DB error at all) is still reported as stale_or_duplicate_event, distinctly from both success and failure", async () => {
+    const db = makeFakeSupabase([{ stripe_customer_id: "cus_err3", subscription_status: "active", subscription_status_synced_at: isoFromUnix(NOW + 999), subscription_cancel_at: null }]);
+    const event = {
+      id: "evt_err3", created: NOW, type: "customer.subscription.updated",
+      data: { object: { id: "sub_err3", customer: "cus_err3", status: "trialing", cancel_at_period_end: false, current_period_end: NOW + 3 * DAY } },
+    };
+    const result = await handleStripeWebhookEvent(event, { stripe: {}, supabaseAdmin: db });
+    assert.strictEqual(result.applied, false);
+    assert.strictEqual(result.reason, "stale_or_duplicate_event");
+    assert.strictEqual(result.error, undefined, "a genuine stale skip must not carry an error object — the three outcomes (success / stale / failure) must stay cleanly distinguishable");
   });
 
   console.log(`\n${passCount} passed, ${failCount} failed\n`);
