@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script src="rook-attribution.js"></script>
 <!-- Google tag (gtag.js) -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=AW-18428232873"></script>
 <script>
@@ -579,6 +580,13 @@
       preferred_states: Array.from(document.querySelectorAll('.state-check:checked')).map((el) => el.value),
       desired_industries: selectedChips('desiredIndustries'),
       industries_to_avoid: selectedChips('industriesToAvoid'),
+      // First-touch ad attribution (see rook-attribution.js) — captured
+      // once here, at profile creation, since onboarding is normally
+      // the first time a candidate has a profile row at all. The
+      // backend only actually writes these if the profile doesn't
+      // already have an attribution value on file, so re-running this
+      // on a later save (re-onboarding, editing) can't clobber it.
+      ...rookGetStoredAttribution(),
       // Customer types and sales type don't map to their own schema columns
       // yet — stored together in sales_experience as a simple record of
       // which chips were selected, so the data isn't silently discarded

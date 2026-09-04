@@ -163,15 +163,54 @@ create table if not exists candidate_profiles (
                                           -- this yet, but the column exists
                                           -- so a future UI doesn't need a migration
   subscription_status text,              -- written by backend/routes/stripe.js's
-                                          -- webhook ('active'/'cancelled') — this
-                                          -- column didn't exist even though the
-                                          -- webhook code referencing it has been
-                                          -- sitting in the repo since before tonight
+                                          -- webhook ('trialing'/'active'/'past_due'/
+                                          -- 'cancelled') — this column didn't exist
+                                          -- even though the webhook code referencing
+                                          -- it has been sitting in the repo since
+                                          -- before tonight. 'trialing' added when the
+                                          -- free trial shipped — see
+                                          -- matching.js's hasFullAccess()/
+                                          -- isPayingSubscriber() for how this is
+                                          -- interpreted; nothing should check this
+                                          -- column directly for "does this candidate
+                                          -- have access," only through those two
+                                          -- functions.
   stripe_customer_id text,               -- also written by the same webhook
   subscription_cancel_at timestamptz,    -- set by customer.subscription.updated when
                                           -- cancel_at_period_end is true (candidate
                                           -- cancelled via Stripe's portal but keeps
-                                          -- access until this date) - null otherwise
+                                          -- access until this date) - null otherwise.
+                                          -- Applies the same way whether the
+                                          -- cancellation happened during the trial or
+                                          -- after converting to paid.
+  trial_started_at timestamptz,          -- set once, the first time this candidate's
+                                          -- subscription enters 'trialing' — never
+                                          -- overwritten afterward, same "set once"
+                                          -- pattern as subscription_started_at below.
+  trial_ends_at timestamptz,             -- Stripe's trial_end for the current/most
+                                          -- recent trial, mirrored here so the
+                                          -- frontend (Settings page) can show "Free
+                                          -- trial — ends <date>" without a live
+                                          -- Stripe API call on every page load.
+  subscription_status_synced_at timestamptz,
+                                          -- the Stripe event `created` timestamp of
+                                          -- the most recent webhook event that
+                                          -- updated subscription_status. Compared on
+                                          -- every incoming webhook before applying an
+                                          -- update — Stripe does not guarantee
+                                          -- delivery order, so a delayed/retried
+                                          -- older event arriving after a newer one
+                                          -- must not be allowed to regress status
+                                          -- (e.g. an active paying subscriber getting
+                                          -- knocked back to trialing by a stale,
+                                          -- late-arriving event).
+  utm_source text,                       -- first-touch attribution, captured client-
+  utm_medium text,                       -- side at first landing (see
+  utm_campaign text,                     -- public/rook-attribution.js) and saved once
+  utm_term text,                         -- at profile creation — never overwritten by
+  utm_content text,                      -- a later save, so a candidate's original ad
+                                          -- source stays intact through onboarding,
+                                          -- trial, and eventual payment.
   last_digest_sent_at timestamptz,       -- used to only email about jobs seen
                                           -- since the last successful send,
                                           -- so the same job doesn't get
@@ -382,3 +421,18 @@ create policy "recruiters write own profile" on recruiter_profiles
 -- own postings, not just free-text fields with no actual account behind
 -- them.
 alter table jobs add column if not exists recruiter_id uuid references recruiter_profiles(id) on delete set null;
+
+-- Free trial (2026-09): trial timestamps, a webhook-ordering
+-- guard, and first-touch ad-attribution columns. Run this against the
+-- live database before deploying the trial code — the CREATE TABLE
+-- above reflects the target end-state schema for a fresh database, but
+-- candidate_profiles already exists in production, so only an ALTER
+-- actually applies these to it.
+alter table candidate_profiles add column if not exists trial_started_at timestamptz;
+alter table candidate_profiles add column if not exists trial_ends_at timestamptz;
+alter table candidate_profiles add column if not exists subscription_status_synced_at timestamptz;
+alter table candidate_profiles add column if not exists utm_source text;
+alter table candidate_profiles add column if not exists utm_medium text;
+alter table candidate_profiles add column if not exists utm_campaign text;
+alter table candidate_profiles add column if not exists utm_term text;
+alter table candidate_profiles add column if not exists utm_content text;

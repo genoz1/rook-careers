@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script src="rook-attribution.js"></script>
 <!-- Google tag (gtag.js) -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=AW-18428232873"></script>
 <script>
@@ -109,6 +110,12 @@
       <span class="period">/ month</span>
     </div>
     <div class="annual-note">or $249/year — save ~28%</div>
+    <!-- Empty by default (no banner) — matches the original $29-upfront
+         design exactly when the trial is off/unset. Only filled in by
+         JS below when the server reports a trial is actually active,
+         so a page that never gets this far (JS disabled, fetch fails)
+         still shows the correct, safe default: no trial claim. -->
+    <div id="trialBanner" style="display:none; background:#F0F7FF; border:1px solid #D6E7FF; border-radius:10px; padding:10px 16px; margin:14px 0; text-align:center; font-size:14px; font-weight:700; color:#1463FF;"></div>
     <ul class="plan-list">
       <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Unlimited AI-matched opportunities</li>
       <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Daily job discovery across trusted sources</li>
@@ -117,7 +124,18 @@
       <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Cover letters &amp; recruiter outreach messages</li>
       <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Interview prep &amp; application tracking</li>
     </ul>
+    <!-- Default text is the ORIGINAL $29-upfront wording — matches what
+         the page showed before the trial existed. JS below switches
+         this to the trial CTA only once the server confirms a trial is
+         actually active, so "no trial" is always the safe fallback,
+         never the other way around. -->
     <a href="#" class="btn btn-primary" id="subscribeBtn" onclick="handleSubscribe(event)">Get My Matches</a>
+    <!-- Direct instruction: the automatic $29/month renewal must be
+         clear BEFORE the customer enters payment information — this
+         sits directly under the button, on our own page, before Stripe's
+         hosted checkout ever loads. Empty/hidden by default, same
+         safe-fallback pattern as the banner above. -->
+    <div id="renewalDisclosure" style="display:none; font-size:12px; color:var(--muted, #5B6B85); text-align:center; margin-top:10px; line-height:1.5;"></div>
     <div id="subscribeMsg" style="font-size:12.5px; color:#C23B3B; text-align:center; margin-top:10px;"></div>
   </div>
 </div>
@@ -126,6 +144,43 @@
 <script src="rook-config.js"></script>
 <script src="rook-auth.js"></script>
 <script>
+  // Direct instruction: disabling the trial (TRIAL_PERIOD_DAYS=0) must
+  // be a true one-setting rollback — no copy change required anywhere,
+  // AND no hardcoded day count anywhere. Every piece of trial copy on
+  // this page is built from the actual number the server reports, so
+  // changing TRIAL_PERIOD_DAYS from 3 to 7 (or anything else) updates
+  // this page automatically on next load — nothing here to edit.
+  let subscribeBtnDefaultText = 'Get My Matches';
+  let trialActive = false;
+
+  async function applyTrialConfig() {
+    try {
+      const res = await fetch('/api/stripe/trial-config');
+      if (!res.ok) return; // fetch failed — keep the safe, no-trial default markup as-is
+      const data = await res.json();
+      const days = Number(data.trialDays) || 0;
+      trialActive = days > 0;
+      if (trialActive) {
+        subscribeBtnDefaultText = `Start Your ${days}-Day Free Trial`;
+        document.getElementById('subscribeBtn').textContent = subscribeBtnDefaultText;
+        const banner = document.getElementById('trialBanner');
+        banner.textContent = `${days} days free, then $29/month. Cancel anytime.`;
+        banner.style.display = 'block';
+        const disclosure = document.getElementById('renewalDisclosure');
+        disclosure.textContent = `$0 today. Then $29/month after your ${days}-day free trial. Cancel anytime.`;
+        disclosure.style.display = 'block';
+      }
+      // trialDays === 0 (or the request fails): leave the page exactly
+      // as it was written above — "Get My Matches," no banner, no
+      // renewal disclosure. That's the deliberate default, not a
+      // special case to branch into.
+    } catch {
+      // Network error — same reasoning as a non-ok response above:
+      // the markup already shows the correct no-trial default.
+    }
+  }
+  applyTrialConfig();
+
   async function handleSubscribe(e) {
     e.preventDefault();
     const btn = document.getElementById('subscribeBtn');
@@ -138,15 +193,24 @@
       return;
     }
 
-    btn.textContent = 'Redirecting to checkout...';
+    btn.textContent = trialActive ? 'Starting your free trial...' : 'Redirecting to checkout...';
     try {
-      const res = await rookApiFetch('/stripe/create-checkout-session', { method: 'POST' });
+      // Forward first-touch ad attribution (see rook-attribution.js) so
+      // it lands in Stripe metadata alongside the trial/subscription —
+      // this is what lets a trial start (and its eventual paid
+      // conversion) be traced back to Google, LinkedIn, Facebook,
+      // organic, etc. Harmless to send even when there's no trial.
+      const res = await rookApiFetch('/stripe/create-checkout-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(rookGetStoredAttribution()),
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Could not start checkout');
       window.location.href = data.url;
     } catch (err) {
       msg.textContent = err.message;
-      btn.textContent = 'Get My Matches';
+      btn.textContent = subscribeBtnDefaultText;
     }
   }
 </script>

@@ -21,7 +21,7 @@
 
 const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
-const { scoreJob, mentionsNonUsCountry } = require("../matching");
+const { scoreJob, mentionsNonUsCountry, hasFullAccess } = require("../matching");
 const { scoreAndStoreForCandidate } = require("../scoring/precompute");
 const { distanceMiles, geocodeZip } = require("../geocoding");
 const { sendEmail } = require("../email/resend");
@@ -122,19 +122,19 @@ function matchFromRow(row) {
   };
 }
 
-// The actual paywall: a signed-in candidate without an active
-// subscription still sees their REAL match score, reasons, and every
-// other job detail — that's what makes the paywall worth paying past,
-// unlike the anonymous teaser, which hides that too. Only the employer's
-// identity and the real way to apply are withheld, the same two fields
-// gated from anonymous visitors. subscription_status is written by the
-// Stripe webhook (backend/routes/stripe.js) — anything other than the
-// literal string 'active' (null, 'cancelled', undefined) is treated as
-// not subscribed, so a candidate is gated by default unless payment has
-// genuinely gone through.
-function isSubscribed(profile) {
-  return profile?.subscription_status === "active";
-}
+// The actual paywall: a signed-in candidate without full access (no
+// active trial or paid subscription) still sees their REAL match
+// score, reasons, and every other job detail — that's what makes the
+// paywall worth paying past, unlike the anonymous teaser, which hides
+// that too. Only the employer's identity and the real way to apply are
+// withheld, the same two fields gated from anonymous visitors.
+// subscription_status is written by the Stripe webhook
+// (backend/routes/stripe.js). Gating decision itself moved to
+// matching.js's hasFullAccess() — centralized there so every gate in
+// the app (Dashboard, Job Search, saved jobs, job detail, and the
+// daily digest) uses the exact same definition of "full access," which
+// now includes a trialing candidate as well as an actively paying one.
+// See that file's comment for the reasoning.
 
 // Escapes regex special characters in a company name before using it in
 // a pattern — company names can contain characters like "." or "+"
@@ -583,7 +583,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     }));
 
     return res.json({
-      jobs: isSubscribed(profile) ? results : results.map(redactForNonSubscriber),
+      jobs: hasFullAccess(profile) ? results : results.map(redactForNonSubscriber),
       scoring_in_progress: false,
       explored_location: true,
       _debug_marker: "EXPLORE_BRANCH_v1_WITH_NOCOORDS_MERGE",
@@ -646,7 +646,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
   }));
 
   return res.json({
-    jobs: isSubscribed(profile) ? results : results.map(redactForNonSubscriber),
+    jobs: hasFullAccess(profile) ? results : results.map(redactForNonSubscriber),
     scoring_in_progress: false,
     _debug_marker: "NO_NEAR_LOCATION_FALLBACK_v1",
   });
@@ -745,7 +745,7 @@ router.get("/recruiter-jobs", requireConfig, optionalAuth, async (req, res) => {
   // signed-in, subscribed candidate. Anonymous visitors and signed-in
   // candidates without an active subscription both get the redacted
   // view (company identity and the real apply link withheld).
-  res.json(isSubscribed(profile) ? results : results.map(redactForNonSubscriber));
+  res.json(hasFullAccess(profile) ? results : results.map(redactForNonSubscriber));
 });
 
 // GET /api/guarantee-status — powers the "We've found N of your 5
@@ -1086,7 +1086,7 @@ router.get("/jobs/:id", requireConfig, optionalAuth, async (req, res) => {
   }
 
   const result = { ...data, match, saved: Boolean(row?.saved) };
-  res.json(isSubscribed(profile) ? result : redactForNonSubscriber(result));
+  res.json(hasFullAccess(profile) ? result : redactForNonSubscriber(result));
 });
 
 // POST /api/jobs/:id/save — toggle whether this job is saved. Body: { saved: true|false }.
@@ -1133,7 +1133,7 @@ router.get("/saved-jobs", requireConfig, requireAuth, loadCandidateId, async (re
 
   const { data: profile } = await supabaseAdmin
     .from("candidate_profiles")
-    .select("subscription_status, home_lat, home_lng")
+    .select("subscription_status, home_lat, home_lng, trial_ends_at, subscription_cancel_at")
     .eq("id", req.candidateId)
     .maybeSingle();
 
@@ -1146,7 +1146,7 @@ router.get("/saved-jobs", requireConfig, requireAuth, loadCandidateId, async (re
       saved: true,
     }));
 
-  res.json(isSubscribed(profile) ? jobs : jobs.map(redactForNonSubscriber));
+  res.json(hasFullAccess(profile) ? jobs : jobs.map(redactForNonSubscriber));
 });
 
 // Attached to the router itself (not a separate export shape) so
@@ -1154,8 +1154,9 @@ router.get("/saved-jobs", requireConfig, requireAuth, loadCandidateId, async (re
 // unchanged as Express middleware, while dailyDigest.js can pull these
 // specific functions off the same module — one gating implementation
 // reused everywhere a non-subscribed candidate's view needs masking,
-// not a second copy that could drift from it.
-router.isSubscribed = isSubscribed;
+// not a second copy that could drift from it. The entitlement check
+// itself (hasFullAccess) now lives in matching.js instead — dailyDigest.js
+// imports that directly.
 router.scrubCompanyNameFromText = scrubCompanyNameFromText;
 router.redactForNonSubscriber = redactForNonSubscriber;
 

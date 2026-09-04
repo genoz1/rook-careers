@@ -6,7 +6,15 @@
 //   3. Put your Stripe secret key in STRIPE_SECRET_KEY.
 //   4. Create a webhook endpoint in the Stripe dashboard pointing at
 //      https://<your-app-domain>/api/stripe/webhook and put its signing
-//      secret in STRIPE_WEBHOOK_SECRET.
+//      secret in STRIPE_WEBHOOK_SECRET. Make sure the endpoint is
+//      subscribed to at least: checkout.session.completed,
+//      customer.subscription.updated, customer.subscription.deleted,
+//      and invoice.payment_failed.
+//
+// Free trial (2026-09): TRIAL_PERIOD_DAYS controls the trial length
+// in days. Set it to 0 or remove it entirely to go back to charging
+// $29 immediately at signup — no code change needed either way, this
+// is the single switch.
 
 const express = require("express");
 const Stripe = require("stripe");
@@ -30,6 +38,14 @@ const supabaseAdmin = (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_
   ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
   : null;
 
+// The trial-length switch. TRIAL_PERIOD_DAYS unset, empty, "0", or any
+// non-positive value all mean "no trial" — checkout behaves exactly as
+// it did before this feature existed (card charged immediately).
+function getTrialPeriodDays() {
+  const raw = Number(process.env.TRIAL_PERIOD_DAYS);
+  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 0;
+}
+
 function requireConfig(req, res, next) {
   if (!isConfigured || !stripe || !supabaseAnon || !supabaseAdmin) {
     return res.status(503).json({
@@ -48,25 +64,167 @@ async function requireAuth(req, res, next) {
   next();
 }
 
+// GET /api/stripe/trial-config — public, no auth required (just a
+// yes/no on whether a trial is currently offered, nothing sensitive).
+// Direct instruction: disabling the trial via TRIAL_PERIOD_DAYS must be
+// a true one-setting rollback with no copy change required anywhere —
+// the pricing page calls this on load and switches its own CTA/
+// messaging automatically, rather than having the trial-on/trial-off
+// wording hardcoded on the frontend where flipping the env var alone
+// wouldn't be enough to revert it. Deliberately not gated behind
+// requireConfig — this is a plain env var read, unrelated to whether
+// Stripe/Supabase credentials happen to be configured yet.
+router.get("/stripe/trial-config", (req, res) => {
+  res.json({ trialDays: getTrialPeriodDays() });
+});
+
+// Only these five keys are ever trusted from the client for attribution —
+// an allowlist, not a blind passthrough of req.body, so this endpoint
+// can't be used to write arbitrary metadata onto a Stripe object.
+const UTM_FIELDS = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"];
+function pickUtmFields(body) {
+  const out = {};
+  for (const key of UTM_FIELDS) {
+    if (body && typeof body[key] === "string" && body[key].trim()) out[key] = body[key].trim().slice(0, 200);
+  }
+  return out;
+}
+
 // POST /api/stripe/create-checkout-session
-// Called from the Pricing page's "Get My Matches" button once the
-// candidate is signed in. Redirects them to Stripe-hosted checkout.
+// Pure function, no Stripe/Express dependency — builds the exact
+// checkout.sessions.create() params, so the trial-on vs trial-off
+// (TRIAL_PERIOD_DAYS=0) branching can be verified directly in a test
+// without a real HTTP request or a real Stripe account.
+function buildCheckoutSessionParams({ trialDays, utm, userEmail, userId, publicAppUrl, priceId }) {
+  const sessionParams = {
+    mode: "subscription",
+    payment_method_types: ["card"],
+    // Explicit rather than relying on Stripe's default: a trial
+    // subscription must still collect a real card up front, per
+    // direct instruction. Stripe's default for subscription-mode
+    // Checkout already does this, but this makes the requirement
+    // impossible to silently lose to a future Stripe default change.
+    payment_method_collection: "always",
+    customer_email: userEmail,
+    line_items: [{ price: priceId, quantity: 1 }],
+    // Direct instruction: this URL is the "Trial Started" signal, not
+    // "Paid Subscription" — checkout completing here means a $0 trial
+    // began, not that $29 was collected. Deliberately a different
+    // query param than before (was checkout=success) so it can never
+    // be confused with — or accidentally re-used for — the real
+    // paid-conversion signal, which will fire from the webhook once
+    // the first actual charge succeeds (separate follow-up; see
+    // customer.subscription.updated below).
+    //
+    // Conditional on the trial actually being active: with
+    // TRIAL_PERIOD_DAYS=0 (trial disabled), checkout completing here
+    // IS an immediate real charge again, exactly like before this
+    // feature existed — so this reverts to the original checkout=
+    // success param in that case, keeping the existing LinkedIn
+    // "Paid Subscription" conversion rule correctly matching the
+    // scenario it was actually built for.
+    success_url: trialDays > 0
+      ? `${publicAppUrl}/rook-dashboard.html?trial=started`
+      : `${publicAppUrl}/rook-dashboard.html?checkout=success`,
+    cancel_url: `${publicAppUrl}/rook-pricing.html?checkout=cancelled`,
+    client_reference_id: userId,
+    // Also on the Checkout Session itself (not just subscription_data
+    // below) so the attribution is visible on the Session object in
+    // Stripe's dashboard even before a subscription exists.
+    metadata: utm,
+  };
+
+  if (trialDays > 0) {
+    sessionParams.subscription_data = { trial_period_days: trialDays, metadata: utm };
+  } else if (Object.keys(utm).length > 0) {
+    sessionParams.subscription_data = { metadata: utm };
+  }
+
+  return sessionParams;
+}
+
+// Called from the Pricing page's "Start Your N-Day Free Trial" button (N is dynamic, from TRIAL_PERIOD_DAYS)
+// once the candidate is signed in. Redirects them to Stripe-hosted
+// checkout.
 router.post("/stripe/create-checkout-session", requireConfig, requireAuth, async (req, res) => {
   try {
-    const session = await stripe.checkout.sessions.create({
-      mode: "subscription",
-      payment_method_types: ["card"],
-      customer_email: req.user.email,
-      line_items: [{ price: process.env.STRIPE_PRICE_ID_MONTHLY, quantity: 1 }],
-      success_url: `${process.env.PUBLIC_APP_URL}/rook-dashboard.html?checkout=success`,
-      cancel_url: `${process.env.PUBLIC_APP_URL}/rook-pricing.html?checkout=cancelled`,
-      client_reference_id: req.user.id,
+    const trialDays = getTrialPeriodDays();
+    const utm = pickUtmFields(req.body);
+    const sessionParams = buildCheckoutSessionParams({
+      trialDays,
+      utm,
+      userEmail: req.user.email,
+      userId: req.user.id,
+      publicAppUrl: process.env.PUBLIC_APP_URL,
+      priceId: process.env.STRIPE_PRICE_ID_MONTHLY,
     });
+
+    const session = await stripe.checkout.sessions.create(sessionParams);
     res.json({ url: session.url });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
+
+// Direct instruction: "cancel anytime, keep access through the end of
+// what you already paid/trial'd for" depends on the Stripe Dashboard's
+// Customer Portal cancellation setting (Settings → Billing → Customer
+// portal → Cancellations, mode "immediately" vs "at end of billing
+// period") — a real account-level setting that lives entirely outside
+// this codebase. ROOK's application code must NOT create or modify
+// that configuration automatically; changing a live billing account's
+// behavior as a side effect of a webhook/API route is exactly the kind
+// of surprising, hard-to-trace mutation that should be a deliberate,
+// reviewed action in Stripe's own dashboard, not something a code
+// change silently does on your behalf.
+//
+// This is read-only: it checks the account's current Billing Portal
+// configuration and logs a clear warning if the cancellation mode
+// isn't what the product promises, but never creates or updates
+// anything. Checked once per server process (cached — this is a
+// once-per-deploy account setting, not something that changes request
+// to request) so it costs at most one extra Stripe API call per
+// process lifetime, not one per portal-session request.
+let portalConfigCheckedThisProcess = false;
+async function warnIfPortalCancellationModeIsWrong(stripeClient) {
+  if (portalConfigCheckedThisProcess) return;
+  portalConfigCheckedThisProcess = true;
+
+  try {
+    const configs = await stripeClient.billingPortal.configurations.list({ limit: 1, is_default: true });
+    const config = configs.data[0];
+    const mode = config?.features?.subscription_cancel?.mode;
+
+    if (!config) {
+      console.warn(
+        "[stripe] No default Billing Portal configuration found on this account. " +
+        "Customers won't be able to manage their subscription via the portal until one exists. " +
+        "Set one up in the Stripe Dashboard: Settings -> Billing -> Customer portal."
+      );
+    } else if (mode !== "at_period_end") {
+      console.warn(
+        `[stripe] Billing Portal cancellation mode is currently "${mode || "unset"}", not "at_period_end". ` +
+        "A trial or paying candidate who cancels via the portal will lose access IMMEDIATELY instead of " +
+        "keeping it through their trial end / paid-through date, contradicting ROOK's own cancellation " +
+        "promise. Fix in the Stripe Dashboard: Settings -> Billing -> Customer portal -> Cancellations -> " +
+        "set 'When customers cancel their subscription' to 'At the end of the billing period'. " +
+        "ROOK's code deliberately does not change this setting automatically."
+      );
+    }
+  } catch (err) {
+    // Never let this check itself break the actual portal-session
+    // request it's running alongside — it's a diagnostic, not a
+    // requirement for the feature to function.
+    console.error(`[stripe] Could not check Billing Portal configuration: ${err.message}`);
+  }
+}
+
+// Test-only: clears the in-memory "already checked" flag so a test can
+// exercise the check more than once, instead of only ever hitting the
+// already-checked fast path after the first call.
+function _resetPortalConfigCheckForTests() {
+  portalConfigCheckedThisProcess = false;
+}
 
 // POST /api/stripe/create-portal-session
 // Called from Settings → Subscription's "Update Payment Method" button.
@@ -75,7 +233,9 @@ router.post("/stripe/create-checkout-session", requireConfig, requireAuth, async
 // needing to build any of that itself. Requires a stripe_customer_id on
 // file, which is set once the candidate's first checkout completes (see
 // the webhook handler below) — someone who's never subscribed has
-// nothing to manage yet.
+// nothing to manage yet. Works identically for a trialing candidate —
+// Stripe's portal already knows how to show/cancel a trial subscription,
+// nothing ROOK-specific needed here for that.
 router.post("/stripe/create-portal-session", requireConfig, requireAuth, async (req, res) => {
   // Whole handler wrapped in one try/catch now, not just the Stripe
   // call — a failure in the database lookup itself, or the response
@@ -96,6 +256,9 @@ router.post("/stripe/create-portal-session", requireConfig, requireAuth, async (
     if (!profile?.stripe_customer_id) {
       return res.status(400).json({ error: "No billing account on file yet — subscribe first from the Pricing page." });
     }
+
+    // Read-only diagnostic — does not affect this request either way.
+    warnIfPortalCancellationModeIsWrong(stripe);
 
     const session = await stripe.billingPortal.sessions.create({
       customer: profile.stripe_customer_id,
@@ -119,6 +282,181 @@ router.post("/stripe/create-portal-session", requireConfig, requireAuth, async (
   }
 });
 
+// Applies a subscription-status-affecting update with an out-of-order/
+// duplicate-delivery guard. Stripe does not guarantee webhook delivery
+// order, and will redeliver events on retry — without this guard, a
+// delayed or redelivered OLDER event arriving after a newer one could
+// silently regress an actively-paying subscriber's status back to
+// something stale (e.g. back to "trialing", or undoing a cancellation
+// that was itself later reversed). eventCreatedUnix is the Stripe
+// event's own `created` timestamp (authoritative "when did this really
+// happen," independent of network/retry timing), compared against the
+// last-applied event's timestamp already on file for this row.
+//
+// matchColumn/matchValue identify the candidate_profiles row: by
+// user_id for checkout.session.completed (client_reference_id is the
+// only identifier available on that event), by stripe_customer_id for
+// every other subscription/invoice event.
+async function applyGuardedSubscriptionUpdate(supabaseAdmin, { matchColumn, matchValue, eventCreatedUnix, buildFields }) {
+  if (!matchValue) return { applied: false, reason: "no_match_value" };
+
+  const eventCreatedAt = new Date(eventCreatedUnix * 1000).toISOString();
+
+  const { data: existing, error: fetchError } = await supabaseAdmin
+    .from("candidate_profiles")
+    .select("subscription_status_synced_at, subscription_started_at, trial_started_at, utm_source")
+    .eq(matchColumn, matchValue)
+    .maybeSingle();
+
+  if (fetchError) return { applied: false, reason: "fetch_error", error: fetchError };
+  if (!existing) return { applied: false, reason: "no_matching_profile" };
+
+  // Strictly older (or exactly equal, i.e. a redelivered duplicate of
+  // the same event) is discarded — only a genuinely newer event is
+  // allowed to change state. This is the core defense against both
+  // out-of-order delivery and duplicate delivery in one comparison.
+  if (existing.subscription_status_synced_at && existing.subscription_status_synced_at >= eventCreatedAt) {
+    return { applied: false, reason: "stale_or_duplicate_event" };
+  }
+
+  const fields = buildFields(existing) || {};
+  const update = { ...fields, subscription_status_synced_at: eventCreatedAt };
+
+  const { error: updateError } = await supabaseAdmin
+    .from("candidate_profiles")
+    .update(update)
+    .eq(matchColumn, matchValue);
+
+  return { applied: !updateError, error: updateError, update };
+}
+
+// The actual event-handling logic, factored out of the route handler so
+// it can be exercised directly in a test with a hand-built event object
+// and a fake supabaseAdmin/stripe — no real HTTP request, no real Stripe
+// signature, no real database required to verify this logic is correct.
+async function handleStripeWebhookEvent(event, { stripe, supabaseAdmin }) {
+  switch (event.type) {
+    case "checkout.session.completed": {
+      const session = event.data.object;
+      const userId = session.client_reference_id;
+      if (!userId) return { applied: false, reason: "no_client_reference_id" };
+
+      // The Checkout Session alone doesn't say whether a trial was
+      // actually applied — retrieve the real subscription object so
+      // the status written here is authoritative (Stripe's own
+      // 'trialing' or 'active'), not assumed from what this server
+      // requested at checkout-creation time. Keeps this correct even
+      // if TRIAL_PERIOD_DAYS changes between when checkout was created
+      // and when this webhook is processed.
+      const sub = await stripe.subscriptions.retrieve(session.subscription);
+
+      return applyGuardedSubscriptionUpdate(supabaseAdmin, {
+        matchColumn: "user_id",
+        matchValue: userId,
+        eventCreatedUnix: event.created,
+        buildFields: (existing) => {
+          const fields = {
+            subscription_status: sub.status,
+            stripe_customer_id: session.customer,
+          };
+          if (sub.status === "trialing") {
+            if (!existing.trial_started_at) fields.trial_started_at = new Date().toISOString();
+            if (sub.trial_end) fields.trial_ends_at = new Date(sub.trial_end * 1000).toISOString();
+          } else if (sub.status === "active") {
+            // Trial disabled (TRIAL_PERIOD_DAYS=0) or somehow already
+            // past trial by the time this webhook is processed — this
+            // is the real "started paying" moment in that case.
+            if (!existing.subscription_started_at) fields.subscription_started_at = new Date().toISOString();
+          }
+          // UTM fallback: only fill in if onboarding didn't already
+          // capture it (see routes/profile.js) — never overwrite a
+          // real first-touch value already on file.
+          if (!existing.utm_source) {
+            const utm = pickUtmFields(session.metadata || {});
+            Object.assign(fields, utm);
+          }
+          return fields;
+        },
+      });
+    }
+
+    case "customer.subscription.updated": {
+      const sub = event.data.object;
+      const cancelAt = sub.cancel_at_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null;
+
+      return applyGuardedSubscriptionUpdate(supabaseAdmin, {
+        matchColumn: "stripe_customer_id",
+        matchValue: sub.customer,
+        eventCreatedUnix: event.created,
+        buildFields: (existing) => {
+          const fields = {
+            subscription_status: sub.status,
+            // Reported via audit: ROOK showed "Professional Plan —
+            // Active" with no indication a subscriber had already
+            // cancelled via Stripe's own portal - Stripe doesn't
+            // revoke access immediately on cancellation, it sets
+            // cancel_at_period_end and keeps the subscription "active"
+            // (or "trialing", if cancelled mid-trial) until the period
+            // actually ends. subscription_cancel_at surfaces that
+            // regardless of which status the cancellation happened
+            // from.
+            subscription_cancel_at: cancelAt,
+          };
+          // This is the real "first successful $29 payment" moment for
+          // anyone who came through a trial — Stripe transitions the
+          // subscription from 'trialing' to 'active' automatically when
+          // the trial ends and the charge succeeds, which fires this
+          // exact event. Set once, same pattern as everywhere else.
+          if (sub.status === "active" && !existing.subscription_started_at) {
+            fields.subscription_started_at = new Date().toISOString();
+          }
+          return fields;
+        },
+      });
+    }
+
+    case "invoice.payment_failed": {
+      const invoice = event.data.object;
+      if (!invoice.subscription) return { applied: false, reason: "not_a_subscription_invoice" };
+
+      return applyGuardedSubscriptionUpdate(supabaseAdmin, {
+        matchColumn: "stripe_customer_id",
+        matchValue: invoice.customer,
+        eventCreatedUnix: event.created,
+        buildFields: () => ({
+          // Direct instruction: a failed first (or any) charge must not
+          // leave the account with paid access indefinitely. 'past_due'
+          // is a real Stripe status and is neither 'trialing' nor
+          // 'active', so hasFullAccess() immediately starts returning
+          // false — the account is cut off from full access right away
+          // rather than waiting on customer.subscription.updated to
+          // arrive with the same information (it likely will too, close
+          // behind this one; both converging on the same value is fine
+          // and expected, not a conflict).
+          subscription_status: "past_due",
+        }),
+      });
+    }
+
+    case "customer.subscription.deleted": {
+      const sub = event.data.object;
+      return applyGuardedSubscriptionUpdate(supabaseAdmin, {
+        matchColumn: "stripe_customer_id",
+        matchValue: sub.customer,
+        eventCreatedUnix: event.created,
+        buildFields: () => ({
+          subscription_status: "cancelled",
+          subscription_cancel_at: null,
+        }),
+      });
+    }
+
+    default:
+      // Other event types are ignored for now.
+      return { applied: false, reason: "unhandled_event_type" };
+  }
+}
+
 // POST /api/stripe/webhook
 // Stripe calls this directly (not the browser) to notify you of
 // subscription events. Must receive the RAW request body — see the
@@ -134,67 +472,25 @@ router.post("/stripe/webhook", requireConfig, async (req, res) => {
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  switch (event.type) {
-    case "checkout.session.completed": {
-      const session = event.data.object;
-      const userId = session.client_reference_id;
-      // Mark the candidate as subscribed. Add a `subscription_status`
-      // and `stripe_customer_id` column to candidate_profiles if you
-      // want to track this in the same table.
-      // subscription_started_at is only ever set here, the first time a
-      // given candidate goes active — NOT overwritten on later renewal
-      // events. Records their real subscription start date rather than
-      // whatever later webhook activity happens to fire.
-      // checkout.session.completed only fires on that initial purchase,
-      // so a plain update on every hit here is already safe, but the
-      // guard below makes that explicit instead of relying on Stripe's
-      // event semantics alone.
-      const { data: existing } = await supabaseAdmin
-        .from("candidate_profiles")
-        .select("subscription_started_at")
-        .eq("user_id", userId)
-        .maybeSingle();
-      const update = { subscription_status: "active", stripe_customer_id: session.customer };
-      if (!existing?.subscription_started_at) update.subscription_started_at = new Date().toISOString();
-      await supabaseAdmin
-        .from("candidate_profiles")
-        .update(update)
-        .eq("user_id", userId);
-      break;
+  try {
+    const result = await handleStripeWebhookEvent(event, { stripe, supabaseAdmin });
+    if (!result.applied && result.reason && result.reason !== "unhandled_event_type") {
+      console.log(`Webhook ${event.type} (${event.id}) not applied: ${result.reason}`);
     }
-    case "customer.subscription.deleted": {
-      const sub = event.data.object;
-      await supabaseAdmin
-        .from("candidate_profiles")
-        .update({ subscription_status: "cancelled", subscription_cancel_at: null })
-        .eq("stripe_customer_id", sub.customer);
-      break;
-    }
-    case "customer.subscription.updated": {
-      // Reported via audit: ROOK showed "Professional Plan — Active"
-      // with no indication a subscriber had already cancelled via
-      // Stripe's own portal - Stripe doesn't revoke access immediately
-      // on cancellation, it sets cancel_at_period_end and keeps the
-      // subscription "active" until the paid period actually ends,
-      // which is exactly the gap between what Stripe showed and what
-      // ROOK displayed. This event fires whenever that flag changes
-      // (cancelling, or reversing a cancellation before the period
-      // ends), so subscription_cancel_at stays accurate either way -
-      // set when a cancellation is scheduled, cleared if reversed.
-      const sub = event.data.object;
-      const cancelAt = sub.cancel_at_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null;
-      await supabaseAdmin
-        .from("candidate_profiles")
-        .update({ subscription_cancel_at: cancelAt })
-        .eq("stripe_customer_id", sub.customer);
-      break;
-    }
-    default:
-      // Other event types are ignored for now.
-      break;
+  } catch (err) {
+    console.error(`Webhook ${event.type} (${event.id}) handling failed: ${err.message}`);
+    // Still acknowledge receipt with 200 below rather than 500 — a
+    // handler bug shouldn't make Stripe retry-storm an event forever.
+    // The failure is logged for follow-up instead.
   }
 
   res.json({ received: true });
 });
 
 module.exports = router;
+module.exports.handleStripeWebhookEvent = handleStripeWebhookEvent;
+module.exports.applyGuardedSubscriptionUpdate = applyGuardedSubscriptionUpdate;
+module.exports.getTrialPeriodDays = getTrialPeriodDays;
+module.exports.buildCheckoutSessionParams = buildCheckoutSessionParams;
+module.exports.warnIfPortalCancellationModeIsWrong = warnIfPortalCancellationModeIsWrong;
+module.exports._resetPortalConfigCheckForTests = _resetPortalConfigCheckForTests;

@@ -13,8 +13,8 @@
 // to ignore ROOK's emails.
 
 const { sendEmail } = require("./resend");
-const { mentionsNonUsCountry } = require("../matching");
-const { isSubscribed, scrubCompanyNameFromText, redactForNonSubscriber } = require("../routes/jobs");
+const { mentionsNonUsCountry, hasFullAccess } = require("../matching");
+const { scrubCompanyNameFromText, redactForNonSubscriber } = require("../routes/jobs");
 
 // 60, not 70 ("Stretch Apply" tier) — chosen after testing against a
 // realistic minimal profile (just home_state + minimum_base_salary, no
@@ -154,19 +154,19 @@ async function sendDigestForCandidate(supabase, profile, appBaseUrl) {
   // subscribed should keep getting this daily email, with real jobs
   // and their real match score as the enticement, but the "who's
   // hiring" reveal and the direct job link stay behind the same
-  // subscribe gate as everywhere else — reusing redactForNonSubscriber
-  // exactly as the Dashboard does, not a separate implementation.
-  // Reported directly, a real gap this closes: every recipient
-  // previously saw the actual company name and a direct link to the
-  // job regardless of subscription status, which gave away the exact
-  // thing ROOK charges for.
-  const subscribed = isSubscribed(profile);
-  const emailJobs = subscribed ? scored : scored.map(redactForNonSubscriber);
+  // full-access gate as everywhere else — reusing redactForNonSubscriber
+  // exactly as the Dashboard does, not a separate implementation. A
+  // trialing candidate has full access already (see matching.js's
+  // hasFullAccess), so they get the same real, unmasked digest an
+  // active subscriber does — there's nothing to nudge them toward
+  // joining, they're already in.
+  const hasAccess = hasFullAccess(profile);
+  const emailJobs = hasAccess ? scored : scored.map(redactForNonSubscriber);
 
-  const html = renderDigestHtml({ name: profile.name, jobs: emailJobs, appBaseUrl, subscribed });
+  const html = renderDigestHtml({ name: profile.name, jobs: emailJobs, appBaseUrl, subscribed: hasAccess });
   await sendEmail({
     to: profile.email,
-    subject: subscribed
+    subject: hasAccess
       ? `${scored.length} top match${scored.length === 1 ? "" : "es"} on ROOK`
       : `${scored.length} job${scored.length === 1 ? "" : "s"} waiting for you on ROOK — see who's hiring`,
     html,

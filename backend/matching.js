@@ -1122,4 +1122,71 @@ function scoreJob(job, profile) {
   };
 }
 
-module.exports = { scoreJob, stateAbbrFromName, extractSalaryFigure, extractJobTravelPercentage, mentionsNonUsCountry, containsNonLatinScript };
+// Centralized subscription-entitlement logic. Direct instruction: do not
+// replace "active" with "trialing" ad hoc in each of the six+ places
+// that gate content — one definition, used everywhere, so trial access
+// and paid-conversion reporting can never drift out of sync with each
+// other.
+//
+// Two distinct questions, two distinct functions:
+//   - hasFullAccess: should this candidate see full, ungated content
+//     right now? True for BOTH a trialing candidate and an actively
+//     paying one — from the product's perspective during the trial
+//     window, they get identical access.
+//   - isPayingSubscriber: has this candidate's card actually been
+//     successfully charged at least once? True only for "active" —
+//     this is the "real, converted, paying customer" signal, kept
+//     separate so a future paid-conversion report (or a server-side ad
+//     conversion call) can query it without ever confusing a free
+//     trial for revenue.
+//
+// Direct instruction: hasFullAccess must NOT simply trust the stored
+// status string — it must also check the actual expiration timestamps
+// already on the row (trial_ends_at, subscription_cancel_at), so a
+// delayed or entirely missed Stripe webhook can never leave an expired
+// trial (or a cancelled-and-past-its-paid-through-date subscription)
+// with indefinite access. The webhook is what USUALLY updates the
+// status promptly, but this function is the actual, authoritative
+// access gate, and it has to be correct even in the gap before that
+// webhook arrives (or if it never arrives at all — a real possibility
+// with any webhook-based system).
+//
+// Takes the candidate's profile row (or the relevant subset of it) —
+// not just the bare status string — specifically so it can check those
+// timestamps. Every caller must pass real, freshly-queried column
+// values; there is no reasonable stale-safe default here.
+function hasFullAccess(profile) {
+  if (!profile) return false;
+  const status = profile.subscription_status;
+  if (status !== "trialing" && status !== "active") return false;
+
+  const now = Date.now();
+
+  // A scheduled cancellation cuts access exactly at the date Stripe
+  // recorded, regardless of which of the two access-granting statuses
+  // the row still shows — covers both "cancelled mid-trial, trial
+  // since ended" and "cancelled while paying, paid-through period
+  // since ended," including the case where the webhook that would
+  // normally flip the status to 'cancelled' hasn't arrived yet.
+  if (profile.subscription_cancel_at && new Date(profile.subscription_cancel_at).getTime() <= now) {
+    return false;
+  }
+
+  // A trial's own natural end date cuts access even when the
+  // candidate never cancelled anything — this is the specific case a
+  // delayed/missed "trial converted to active" (or "trial ended, first
+  // charge failed") webhook would otherwise leave open indefinitely.
+  // Only checked for 'trialing' — once status is genuinely 'active'
+  // (the trial converted), the old trial_ends_at is irrelevant.
+  if (status === "trialing" && profile.trial_ends_at && new Date(profile.trial_ends_at).getTime() <= now) {
+    return false;
+  }
+
+  return true;
+}
+
+function isPayingSubscriber(status) {
+  return status === "active";
+}
+
+module.exports = { scoreJob, stateAbbrFromName, extractSalaryFigure, extractJobTravelPercentage, mentionsNonUsCountry, containsNonLatinScript, hasFullAccess, isPayingSubscriber };

@@ -10,7 +10,8 @@
     "discover-employers": "node backend/discoverEmployers.js",
     "send-digest": "node backend/sendDigest.js",
     "precompute-scores": "node backend/precomputeScores.js",
-    "archive-old-jobs": "node backend/archiveOldJobs.js"
+    "archive-old-jobs": "node backend/archiveOldJobs.js",
+    "test-trial-flow": "node backend/testTrialFlow.js"
   },
   "engines": {
     "node": ">=18.0.0"

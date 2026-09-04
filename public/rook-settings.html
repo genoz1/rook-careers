@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script src="rook-attribution.js"></script>
 <!-- Google tag (gtag.js) -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=AW-18428232873"></script>
 <script>
@@ -532,14 +533,28 @@ function addRegion(region) {
     // keeps the subscription "active" until the paid period ends, so
     // subscription_status alone can't distinguish "renewing normally"
     // from "ending soon." subscription_cancel_at (set by the
-    // customer.subscription.updated webhook) now surfaces that.
+    // customer.subscription.updated webhook) now surfaces that. Same
+    // reasoning applies to a trial cancelled mid-trial — status stays
+    // 'trialing' (full access continues) until the scheduled date.
     const subText = document.getElementById('subStatusText');
-    if (currentProfile.subscription_status === 'active' && currentProfile.subscription_cancel_at) {
+    if (currentProfile.subscription_status === 'trialing' && currentProfile.subscription_cancel_at) {
+      const endDate = new Date(currentProfile.subscription_cancel_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+      subText.textContent = `Free Trial — Cancels on ${endDate}`;
+      subText.style.color = '#B98900';
+    } else if (currentProfile.subscription_status === 'trialing') {
+      const trialEndDate = currentProfile.trial_ends_at
+        ? new Date(currentProfile.trial_ends_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+        : null;
+      subText.textContent = trialEndDate ? `Free Trial — Ends ${trialEndDate}, then $29/month` : 'Free Trial';
+    } else if (currentProfile.subscription_status === 'active' && currentProfile.subscription_cancel_at) {
       const endDate = new Date(currentProfile.subscription_cancel_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
       subText.textContent = `Professional Plan — Cancels on ${endDate}`;
       subText.style.color = '#B98900';
     } else if (currentProfile.subscription_status === 'active') {
       subText.textContent = 'Professional Plan — Active';
+    } else if (currentProfile.subscription_status === 'past_due') {
+      subText.textContent = 'Payment failed — please update your card';
+      subText.style.color = '#C23B3B';
     } else {
       subText.textContent = 'Not currently subscribed';
     }

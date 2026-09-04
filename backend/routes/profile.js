@@ -67,6 +67,28 @@ router.get("/profile", requireConfig, requireAuth, async (req, res) => {
 router.put("/profile", requireConfig, requireAuth, async (req, res) => {
   const payload = { ...req.body, user_id: req.user.id, updated_at: new Date().toISOString() };
 
+  // First-touch UTM attribution: set once, at whichever save is this
+  // candidate's first (normally onboarding), then never touched again —
+  // a later Settings edit re-sending the same locally-cached values
+  // would be harmless, but this guard makes that explicit rather than
+  // relying on the frontend to behave, and protects against a stale
+  // browser-cached attribution value from a much earlier visit
+  // clobbering a real one already on file.
+  const UTM_FIELDS = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"];
+  const { data: existingRow } = await supabaseAdmin
+    .from("candidate_profiles")
+    .select("utm_source")
+    .eq("user_id", req.user.id)
+    .maybeSingle();
+  if (existingRow?.utm_source) {
+    UTM_FIELDS.forEach((field) => delete payload[field]);
+  } else {
+    UTM_FIELDS.forEach((field) => {
+      if (typeof payload[field] === "string") payload[field] = payload[field].trim().slice(0, 200);
+      else delete payload[field];
+    });
+  }
+
   // If a ZIP was provided, geocode it once here so home_lat/home_lng save
   // in the same write — powers the proximity bonus in backend/matching.js.
   // A geocoding failure doesn't block saving the rest of the profile; it
