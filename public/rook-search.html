@@ -351,6 +351,10 @@
   // title_original, and description_text is the only option that
   // actually works with the data that exists.
   let allJobs = [];
+  // Safe default (matches the original, pre-trial wording) until
+  // loadJobs()'s prefetch resolves — see rookLockedJobCtaLabel() in
+  // rook-auth.js.
+  let lockedJobCtaLabel = 'Subscribe to Unlock';
   let nearLocationCoords = null; // { lat, lng } once a "show jobs near" search is active
   // Guards against out-of-order responses: if the candidate searches
   // several locations in quick succession (each a real network round
@@ -498,6 +502,7 @@
       const [jobsRes, profileRes] = await Promise.all([
         rookApiFetch('/jobs?' + params.toString()),
         rookApiFetch('/profile').catch(() => null),
+        rookLockedJobCtaLabel().then((label) => { lockedJobCtaLabel = label; }),
       ]);
       if (!jobsRes.ok) throw new Error('API returned ' + jobsRes.status);
       const jobsData = await jobsRes.json();
@@ -844,7 +849,7 @@
       ? `<span style="color:#7C3AED; font-weight:600;">🔒 Subscribe to see who's hiring</span> — ${escapeHtml(job.location_raw || '')} ${comp ? '&nbsp;·&nbsp; ' + escapeHtml(comp) : ''}`
       : `${escapeHtml(job.company_name || (isRecruiterPosted ? 'Confidential search' : ''))} — ${escapeHtml(job.location_raw || '')} ${comp ? '&nbsp;·&nbsp; ' + escapeHtml(comp) : ''}`;
     const primaryActionBtn = job.subscription_required
-      ? `<a href="rook-pricing.html" class="btn btn-primary btn-sm">Subscribe to Unlock</a>`
+      ? `<a href="rook-pricing.html" class="btn btn-primary btn-sm">${escapeHtml(lockedJobCtaLabel)}</a>`
       : isRecruiterPosted
         // Real bug this fixes: isRecruiterPosted was computed but never
         // actually used here, so a recruiter-posted job (which has no

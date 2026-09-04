@@ -27,8 +27,10 @@ Return ONLY a JSON object with this exact shape, no other text:
   "specialties": [string],
   "certifications": [string],
   "performance_highlights": [string],
-  "employers": [{"company": string, "title": string, "start": string|null, "end": string|null}]
+  "employers": [{"company": string, "title": string, "start": string|null, "end": string|null, "achievements": string|null}]
 }
+
+For each entry in "employers", "achievements" should contain the bullet points, responsibilities, or accomplishments listed specifically under THAT role in the résumé — as they actually appear, one per line, not summarized or rewritten. Only include what the résumé actually states for that specific job; never invent an achievement, and never move or copy a bullet from one job into another employer's entry. If a role has no bullets/accomplishments listed at all, use null for that employer's "achievements" rather than leaving it out of the object.
 
 Use these controlled vocabularies where the résumé content matches them, in addition to anything else genuinely present:
 - industries: Medical Device, Diagnostics, Reference Laboratory, Point-of-Care Diagnostics, Pharmaceutical, Biotech/Life Sciences, Veterinary/Animal Health, Dental, Healthcare SaaS, Distribution, Capital Equipment, Consumables
@@ -38,9 +40,12 @@ Use these controlled vocabularies where the résumé content matches them, in ad
 /**
  * Analyze résumé text and return structured data for matching.
  * @param {string} resumeText - extracted plain text from the résumé
+ * @param {object} [deps] - injectable dependencies for testing; defaults
+ *   to the real Claude client. Never used by the one real caller
+ *   (backend/routes/profile.js), which relies on the default.
  * @returns {Promise<object>} structured résumé data (see SYSTEM_PROMPT shape)
  */
-async function analyzeResume(resumeText) {
+async function analyzeResume(resumeText, { callAI = callClaudeForJSON } = {}) {
   if (!resumeText || resumeText.trim().length < 50) {
     throw new Error("Résumé text is too short or empty to analyze");
   }
@@ -56,7 +61,7 @@ async function analyzeResume(resumeText) {
   // failed" and shown to the candidate as "we couldn't automatically
   // read your work history," even though extraction and analysis were
   // both actually working right up until the token limit cut them off.
-  return callClaudeForJSON(SYSTEM_PROMPT, `Résumé text:\n\n${truncated}`, 4000);
+  return callAI(SYSTEM_PROMPT, `Résumé text:\n\n${truncated}`, 4000);
 }
 
-module.exports = { analyzeResume };
+module.exports = { analyzeResume, SYSTEM_PROMPT };

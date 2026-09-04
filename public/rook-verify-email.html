@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="assets/favicon.ico" sizes="any">
+<link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="icon" href="assets/favicon-16.png" type="image/png" sizes="16x16">
+<link rel="apple-touch-icon" href="assets/rook-icon-180.png">
+<link rel="icon" href="assets/rook-icon-192.png" type="image/png" sizes="192x192">
+<meta name="theme-color" content="#071E41">
+<title>Verifying your email — ROOK</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --navy:#071E41; --royal:#1463FF; --gray:#F5F7FA; --muted:#5B6B85; --border:#E3E8F0;
+    --font-display:'Space Grotesk', sans-serif; --font-body:'Inter', sans-serif;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    font-family:var(--font-body); color:var(--navy); background:var(--gray);
+    min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:24px; overflow-x:hidden; text-align:center;
+  }
+  h1,h2{font-family:var(--font-display); letter-spacing:-0.01em;}
+  a{color:var(--royal); text-decoration:none; font-weight:600;}
+  .logo{display:flex; align-items:center; gap:12px; font-family:var(--font-display); font-weight:700; font-size:22px; margin-bottom:32px;}
+  .card{background:#fff; border-radius:16px; padding:36px; width:100%; max-width:400px; box-shadow:0 20px 45px -18px rgba(11,29,58,0.2);}
+  h2{font-size:20px; margin-bottom:10px;}
+  .sub{font-size:13.5px; color:var(--muted); line-height:1.6;}
+  .sub.error{color:#C23B3B;}
+  .spinner{
+    width:28px; height:28px; border-radius:50%; border:3px solid var(--border); border-top-color:var(--royal);
+    margin:0 auto 18px; animation:spin 0.8s linear infinite;
+  }
+  @keyframes spin{ to { transform:rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div class="logo">
+  <img src="assets/rook-icon-192.png" alt="ROOK" style="height:46px; width:auto; display:block;">
+  <span style="font-family:var(--font-display); font-weight:700; font-size:36px; letter-spacing:-0.02em; color:var(--navy); line-height:1;">ROOK</span>
+</div>
+
+<div class="card">
+  <div class="spinner" id="spinner"></div>
+  <h2 id="statusHeading">Verifying your email…</h2>
+  <div class="sub" id="statusSub">Just a moment.</div>
+</div>
+
+<script src="rook-config.js"></script>
+<script src="rook-auth.js"></script>
+<script>
+  const configured = window.ROOK_CONFIG.SUPABASE_URL !== "YOUR_SUPABASE_PROJECT_URL";
+
+  function showError(message) {
+    document.getElementById('spinner').style.display = 'none';
+    document.getElementById('statusHeading').textContent = 'Verification link problem';
+    const sub = document.getElementById('statusSub');
+    sub.textContent = message;
+    sub.className = 'sub error';
+  }
+
+  // Direct instruction: after a successful verification, route based
+  // on whether the now-authenticated candidate still needs onboarding
+  // — reuses the exact same check rookRouteAfterLogin() already makes
+  // elsewhere (GET /api/profile — null means onboarding hasn't been
+  // completed yet), just with a different destination for the
+  // "already has a profile" case, since here that should land back on
+  // login with a clear "verified" message rather than skip straight
+  // to the dashboard. This is a one-shot check-and-redirect with no
+  // path that ever sends the browser back to this same page, so there
+  // is no redirect loop to avoid creating.
+  async function routeAfterVerification() {
+    try {
+      const res = await rookApiFetch('/profile');
+      const profile = res.ok ? await res.json() : null;
+      if (profile) {
+        // Direct instruction: an already-authenticated, already-
+        // onboarded candidate should not be forced back through login
+        // — straight to the dashboard, same destination a normal
+        // sign-in would send them to.
+        window.location.href = 'rook-dashboard.html';
+      } else {
+        window.location.href = 'rook-onboarding.html';
+      }
+    } catch {
+      // Network/backend hiccup on the profile check itself — same
+      // safe default as rookRouteAfterLogin(): send toward setup
+      // rather than leave the user stranded on this page.
+      window.location.href = 'rook-onboarding.html';
+    }
+  }
+
+  if (!configured) {
+    showError('ROOK isn\'t fully configured yet — please contact support.');
+  } else {
+    // Supabase's client automatically reads the confirmation tokens
+    // out of the URL and establishes a session, firing SIGNED_IN —
+    // same documented pattern rook-reset-password.html already uses
+    // for its own PASSWORD_RECOVERY event.
+    let handled = false;
+
+    rookSupabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_IN' && !handled) {
+        handled = true;
+        routeAfterVerification();
+      }
+    });
+
+    // Some browsers/redirect paths land here with the session already
+    // established before this listener attaches (no SIGNED_IN fires
+    // in that case) — a direct session check shortly after covers
+    // that, without racing the listener above.
+    setTimeout(async () => {
+      if (handled) return;
+      const token = await rookGetAccessToken();
+      if (token) {
+        handled = true;
+        routeAfterVerification();
+        return;
+      }
+      // No session was established client-side — but that's a
+      // separate step from the email verification itself. Supabase
+      // confirms the email server-side (at the link's own /verify
+      // endpoint) BEFORE ever redirecting the browser here; landing on
+      // this page at all means that already succeeded. A missing
+      // session just means auto-sign-in didn't happen (a different
+      // browser/context than where signup started, hash parsing
+      // blocked, etc.) — direct instruction: don't treat that as a
+      // failure. Only an EXPLICIT error Supabase itself attached to
+      // the redirect (an actually invalid/expired/already-used link)
+      // is treated as a real failure here.
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+      const queryParams = new URLSearchParams(window.location.search);
+      const linkError = hashParams.get('error_description') || hashParams.get('error')
+        || queryParams.get('error_description') || queryParams.get('error');
+      if (linkError) {
+        showError('This verification link is invalid or has expired. Please sign up again, or log in if you\'ve already verified.');
+      } else {
+        window.location.href = 'rook-login.html?verified=1';
+      }
+    }, 2500);
+  }
+</script>
+
+<script type="text/javascript">
+_linkedin_partner_id = "9629410";
+window._linkedin_data_partner_ids = window._linkedin_data_partner_ids || [];
+window._linkedin_data_partner_ids.push(_linkedin_partner_id);
+</script><script type="text/javascript">
+(function(l) {
+if (!l){window.lintrk = function(a,b){window.lintrk.q.push([a,b])};
+window.lintrk.q=[]}
+var s = document.getElementsByTagName("script")[0];
+var b = document.createElement("script");
+b.type = "text/javascript";b.async = true;
+b.src = "https://snap.licdn.com/li.lms-analytics/insight.min.js";
+s.parentNode.insertBefore(b, s);})(window.lintrk);
+</script>
+<noscript>
+<img height="1" width="1" style="display:none;" alt="" src="https://px.ads.linkedin.com/collect/?pid=9629410&fmt=gif" />
+</noscript>
+</body>
+</html>

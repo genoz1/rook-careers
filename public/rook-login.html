@@ -117,6 +117,19 @@
     <button class="btn" id="signupBtn" onclick="handleSignUp()">Create Account</button>
   </div>
 
+  <!-- Direct instruction: after signup, the user must see an
+       unmissable confirmation state, not a small inline message next
+       to a form that's already switched back to the login tab (easy
+       to read as "signup failed, try logging in" instead of "you're
+       almost done"). A dedicated panel, same pattern as panelForgot
+       above, replaces the whole form rather than just adding text
+       near it. -->
+  <div id="panelCheckEmail" style="display:none;">
+    <h2>Check your email</h2>
+    <div class="sub">We sent a verification link to <strong id="checkEmailAddress"></strong>. Click it to verify your account. Once verified, you can sign in and continue.</div>
+    <div style="text-align:center; margin-top:14px;"><a href="#" onclick="switchTab('signin'); return false;" style="font-size:13px;">← Back to log in</a></div>
+  </div>
+
   <div class="msg" id="authMsg"></div>
 </div>
 
@@ -139,6 +152,14 @@
   // creating a second, redundant one.
   const client = configured ? rookSupabase : null;
 
+  // Landed here from rook-verify-email.html after a successful
+  // confirmation click — see that page for the full routing logic.
+  // Stays on the (already-default-active) sign-in tab.
+  if (new URLSearchParams(window.location.search).get('verified') === '1') {
+    setMsg('Email verified — you can now sign in.', 'success');
+    window.history.replaceState({}, '', 'rook-login.html'); // drop the query param so a later refresh doesn't re-show this
+  }
+
   // No auth call here was protected against hanging forever — if
   // Supabase's SMTP relay is slow or failing (it tries to send a
   // confirmation/reset email as part of these same requests), the
@@ -159,15 +180,31 @@
     document.getElementById('panelSignin').style.display = tab === 'signin' ? 'block' : 'none';
     document.getElementById('panelSignup').style.display = tab === 'signup' ? 'block' : 'none';
     document.getElementById('panelForgot').style.display = 'none';
+    document.getElementById('panelCheckEmail').style.display = 'none';
     setMsg('');
   }
 
   function showForgotPassword() {
     document.getElementById('panelSignin').style.display = 'none';
     document.getElementById('panelSignup').style.display = 'none';
+    document.getElementById('panelCheckEmail').style.display = 'none';
     document.getElementById('panelForgot').style.display = 'block';
     document.getElementById('tabSignin').classList.remove('active');
     document.getElementById('tabSignup').classList.remove('active');
+    setMsg('');
+  }
+
+  // Replaces the signup form entirely with an unmissable confirmation
+  // state — see panelCheckEmail above for why this exists instead of
+  // just an inline message next to the (now-hidden) form.
+  function showCheckEmail(email) {
+    document.getElementById('panelSignin').style.display = 'none';
+    document.getElementById('panelSignup').style.display = 'none';
+    document.getElementById('panelForgot').style.display = 'none';
+    document.getElementById('panelCheckEmail').style.display = 'block';
+    document.getElementById('tabSignin').classList.remove('active');
+    document.getElementById('tabSignup').classList.remove('active');
+    document.getElementById('checkEmailAddress').textContent = email;
     setMsg('');
   }
 
@@ -284,8 +321,20 @@
       // relay is failing or slow, this used to hang indefinitely with
       // the button stuck disabled and no error ever shown. This is what
       // "the page froze" on sign-up actually was.
+      // Root cause of "the verification link sends the user to the
+      // homepage": this call never specified emailRedirectTo, so
+      // Supabase fell back to its account-wide Site URL default (the
+      // homepage) for the confirmation link's destination — regardless
+      // of which page the signup itself happened on. Pointed instead
+      // at a dedicated landing page that knows what to do next
+      // (onboarding vs. login), rather than relying on a generic
+      // account-wide default that was never meant for this specific
+      // flow.
       result = await withTimeout(
-        client.auth.signUp({ email, password }),
+        client.auth.signUp({
+          email, password,
+          options: { emailRedirectTo: `${window.location.origin}/rook-verify-email.html` },
+        }),
         15000,
         'The request timed out — the email server may be having trouble sending your confirmation email right now. Please try again shortly.'
       );
@@ -296,8 +345,7 @@
     document.getElementById('signupBtn').disabled = false;
 
     if (result.error) return setMsg(result.error.message, 'error');
-    setMsg('Account created — check your email to confirm, then log in.', 'success');
-    switchTab('signin');
+    showCheckEmail(email);
   }
 </script>
 

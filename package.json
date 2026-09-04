@@ -11,7 +11,8 @@
     "send-digest": "node backend/sendDigest.js",
     "precompute-scores": "node backend/precomputeScores.js",
     "archive-old-jobs": "node backend/archiveOldJobs.js",
-    "test-trial-flow": "node backend/testTrialFlow.js"
+    "test-trial-flow": "node backend/testTrialFlow.js",
+    "test-resume-achievements": "node backend/testResumeAchievements.js"
   },
   "engines": {
     "node": ">=18.0.0"

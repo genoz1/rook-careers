@@ -167,6 +167,9 @@ function escapeHtml(str) {
 }
 
 let allRecruiterJobs = [];
+// Safe default (matches the original, pre-trial wording) until the
+// prefetch below resolves — see rookLockedJobCtaLabel() in rook-auth.js.
+let lockedJobCtaLabel = 'Subscribe to Unlock';
 
 function isRemoteJob(j) {
   return j.remote_status === 'remote' || /remote/i.test(j.location_raw || '');
@@ -228,7 +231,10 @@ function renderList() {
     // small, browsable list, not the full pool candidates get matched
     // against — no reason their visibility here should depend on
     // scoring timing at all.
-    const res = await rookApiFetch('/recruiter-jobs');
+    const [res] = await Promise.all([
+      rookApiFetch('/recruiter-jobs'),
+      rookLockedJobCtaLabel().then((label) => { lockedJobCtaLabel = label; }),
+    ]);
     if (!res.ok) throw new Error('API returned ' + res.status);
     const jobs = await res.json();
     allRecruiterJobs = Array.isArray(jobs) ? jobs : [];
@@ -262,7 +268,7 @@ function renderRow(job) {
     ? `<span class="match-badge" style="background:#7C3AED18; color:#7C3AED;">Agency Listing</span>`
     : `<span class="match-badge" style="background:#7C3AED18; color:#7C3AED;">Posted by Recruiter</span>`;
   const actionHref = `rook-job-analysis.html?job=${encodeURIComponent(job.id)}`;
-  const actionLabel = job.subscription_required ? 'Subscribe to Unlock' : 'View Job';
+  const actionLabel = job.subscription_required ? lockedJobCtaLabel : 'View Job';
   const distanceLine = (!isRemoteJob(job) && job.distance_miles != null) ? `<div class="job-meta">${job.distance_miles} mi away</div>` : '';
 
   return `

@@ -39,6 +39,38 @@ async function rookSignOut(loginPage = "rook-login.html") {
   window.location.href = loginPage;
 }
 
+// Cached trial-day lookup shared by every page that needs to decide
+// between "Subscribe to Unlock" and a trial CTA for a locked job —
+// one fetch per page load, reused by every job card render rather
+// than one request per card. Resolves to 0 (the safe "no trial"
+// default) if the request fails, same reasoning as every other
+// trial-config consumer in the app: never show a trial claim that
+// might not be real.
+let rookTrialDaysCache = null;
+async function rookGetTrialDays() {
+  if (rookTrialDaysCache !== null) return rookTrialDaysCache;
+  try {
+    const res = await fetch(`${window.ROOK_CONFIG.API_BASE}/stripe/trial-config`);
+    const data = res.ok ? await res.json() : {};
+    rookTrialDaysCache = Number(data.trialDays) || 0;
+  } catch {
+    rookTrialDaysCache = 0;
+  }
+  return rookTrialDaysCache;
+}
+
+// The actual locked-job CTA label, shared everywhere a candidate sees
+// one, so the wording can't drift between pages. While a trial is
+// active, this replaces the friction of "Subscribe to Unlock" (asking
+// for money) with a trial-framed CTA — access rules are unchanged,
+// this is copy only. Falls back to the original wording the instant
+// TRIAL_PERIOD_DAYS is 0, with no separate code path to keep in sync.
+async function rookLockedJobCtaLabel() {
+  const days = await rookGetTrialDays();
+  if (days <= 0) return "Subscribe to Unlock";
+  return `Start ${days}-Day Free Trial`;
+}
+
 // Fills in the sidebar's name/avatar/plan card (the ".side-foot" block
 // present on every logged-in page) from a real candidate profile object.
 // This used to be literal hardcoded text ("Gene Zentko", "Professional

@@ -423,6 +423,10 @@
   // exists; the demo rows only ever appear as a genuine fallback, not
   // as a default first frame.
   let currentJobs = [];
+  // Safe default (matches the original, pre-trial wording) until
+  // loadJobs()'s prefetch resolves — see rookLockedJobCtaLabel() in
+  // rook-auth.js.
+  let lockedJobCtaLabel = 'Subscribe to Unlock';
 
   (async () => {
     const token = await rookRequireAuth();
@@ -510,6 +514,10 @@
 
     async function loadJobs() {
     try {
+      // Kicked off in parallel here, awaited just before rendering
+      // below — overlaps with the rest of this function's own fetches
+      // instead of adding to them sequentially.
+      const ctaLabelPromise = rookLockedJobCtaLabel();
       // Direct instruction: use the literal same mechanism as Job
       // Search's "show jobs near X" (already confirmed correct),
       // locked to the candidate's own saved ZIP instead of a manual
@@ -568,6 +576,7 @@
       } catch {}
 
       jobList.dataset.demo = 'false';
+      lockedJobCtaLabel = await ctaLabelPromise;
       applyRecruiterToggle();
       updateStats(jobs);
       showBanner('Showing live jobs from your database, ranked by your real match score.', 'info');
@@ -908,7 +917,7 @@
     // anything to click to apply."
     let primaryActionBtn;
     if (job.subscription_required) {
-      primaryActionBtn = `<a href="rook-pricing.html" class="btn btn-primary btn-sm">Subscribe to Unlock</a>`;
+      primaryActionBtn = `<a href="rook-pricing.html" class="btn btn-primary btn-sm">${escapeHtml(lockedJobCtaLabel)}</a>`;
     } else if (isRecruiterPosted) {
       primaryActionBtn = `<a href="rook-apply.html?job=${escapeHtml(job.id)}" class="btn btn-primary btn-sm">Apply Now</a>`;
     } else {
