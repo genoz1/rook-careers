@@ -169,11 +169,14 @@
         const disclosure = document.getElementById('renewalDisclosure');
         disclosure.textContent = `$0 today. Then $29/month after your ${days}-day free trial. Cancel anytime.`;
         disclosure.style.display = 'block';
+        document.getElementById('faqTrialAnswer').textContent =
+          `Yes. ROOK includes a ${days}-day free trial with full access. After the trial, the subscription is $29/month unless you cancel before the trial ends.`;
       }
       // trialDays === 0 (or the request fails): leave the page exactly
       // as it was written above — "Get My Matches," no banner, no
-      // renewal disclosure. That's the deliberate default, not a
-      // special case to branch into.
+      // renewal disclosure, and the FAQ's original no-trial answer.
+      // That's the deliberate default, not a special case to branch
+      // into.
     } catch {
       // Network error — same reasoning as a non-ok response above:
       // the markup already shows the correct no-trial default.
@@ -223,7 +226,7 @@
     <h2>Questions</h2>
     <div class="faq-item">
       <h4>Is there a free trial?</h4>
-      <p>There's no crippled free tier — every subscriber gets full access to matching, tailored résumés, and application tools from day one.</p>
+      <p id="faqTrialAnswer">There's no crippled free tier — every subscriber gets full access to matching, tailored résumés, and application tools from day one.</p>
     </div>
     <div class="faq-item">
       <h4>Can I cancel anytime?</h4>
