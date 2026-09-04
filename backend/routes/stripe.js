@@ -467,6 +467,24 @@ async function applyGuardedSubscriptionUpdate(supabaseAdmin, { matchColumn, matc
   return { applied: true, reconciled: true, update: reconcilePayload };
 }
 
+// Reported directly, a real production crash: Stripe's "Basil" API
+// version (2025-03-31 onward — this account is on a later version
+// still) removed current_period_end/current_period_start from the top
+// level of the Subscription object entirely, moving them onto each
+// subscription item instead (items.data[].current_period_end). Reading
+// sub.current_period_end directly returns undefined on any account
+// using that API version or later, and new Date(undefined * 1000)
+// silently produces an Invalid Date whose .toISOString() call throws
+// "Invalid time value" — with no [stripe webhook] log line at all,
+// since the crash happens before this file's own logging/error
+// handling ever runs. Checks the pre-Basil top-level field first (in
+// case this account or a future one is ever pinned to an older API
+// version), then falls back to the current per-item location.
+function getCurrentPeriodEnd(sub) {
+  if (sub.current_period_end != null) return sub.current_period_end;
+  return sub.items?.data?.[0]?.current_period_end ?? null;
+}
+
 // Maps a LIVE Stripe subscription object (from stripe.subscriptions.
 // retrieve(), not a webhook event payload) to our DB fields. Used both
 // by checkout.session.completed (which already always fetches live)
@@ -474,9 +492,10 @@ async function applyGuardedSubscriptionUpdate(supabaseAdmin, { matchColumn, matc
 // of "how do we turn Stripe's subscription state into our columns,"
 // not two that could drift apart.
 function mapLiveSubscriptionToFields(sub) {
+  const periodEnd = getCurrentPeriodEnd(sub);
   const fields = {
     subscription_status: sub.status,
-    subscription_cancel_at: sub.cancel_at_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
+    subscription_cancel_at: (sub.cancel_at_period_end && periodEnd != null) ? new Date(periodEnd * 1000).toISOString() : null,
   };
   const setOnceFields = [];
   if (sub.status === "trialing" && sub.trial_end) {
@@ -549,7 +568,8 @@ async function handleStripeWebhookEvent(event, { stripe, supabaseAdmin }) {
 
     case "customer.subscription.updated": {
       const sub = event.data.object;
-      const cancelAt = sub.cancel_at_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null;
+      const periodEnd = getCurrentPeriodEnd(sub);
+      const cancelAt = (sub.cancel_at_period_end && periodEnd != null) ? new Date(periodEnd * 1000).toISOString() : null;
 
       return applyGuardedSubscriptionUpdate(supabaseAdmin, {
         matchColumn: "stripe_customer_id",

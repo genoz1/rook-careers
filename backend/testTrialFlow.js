@@ -768,6 +768,64 @@ async function run() {
     assert.strictEqual(result.error, undefined, "a genuine stale skip must not carry an error object — the three outcomes (success / stale / failure) must stay cleanly distinguishable");
   });
 
+  console.log("\n=== Stripe API 'Basil' compatibility: current_period_end moved to subscription items (real production crash) ===");
+
+  await asyncTest("[Basil] cancellation with current_period_end ONLY on the subscription item (no top-level field) applies correctly, no crash", async () => {
+    const db = makeFakeSupabase([{ stripe_customer_id: "cus_basil1", subscription_status: "trialing", subscription_status_synced_at: isoFromUnix(NOW), subscription_cancel_at: null }]);
+    const periodEnd = NOW + 3 * DAY;
+    const event = {
+      id: "evt_basil1", created: NOW + 10, type: "customer.subscription.updated",
+      data: {
+        object: {
+          id: "sub_basil1", customer: "cus_basil1", status: "trialing", cancel_at_period_end: true,
+          // Deliberately NO top-level current_period_end — this is
+          // exactly the real payload shape on any account using
+          // Stripe's Basil API version (2025-03-31) or later, where
+          // that field only exists per subscription item now.
+          items: { data: [{ current_period_end: periodEnd }] },
+        },
+      },
+    };
+    const result = await handleStripeWebhookEvent(event, { stripe: {}, supabaseAdmin: db });
+    assert.strictEqual(result.applied, true, "must not crash, and must apply normally, even with no top-level current_period_end");
+    assert.strictEqual(db._table[0].subscription_cancel_at, isoFromUnix(periodEnd), "must correctly read the period end from the subscription item");
+  });
+
+  await asyncTest("[Basil] reconciliation path (tie) also handles the item-level current_period_end shape correctly", async () => {
+    const db = makeFakeSupabase([{ stripe_customer_id: "cus_basil2", subscription_status: "trialing", subscription_status_synced_at: isoFromUnix(NOW), subscription_cancel_at: null }]);
+    const tiedTimestamp = NOW + 50;
+    const periodEnd = NOW + 3 * DAY;
+
+    const first = {
+      id: "evt_basil2_a", created: tiedTimestamp, type: "customer.subscription.updated",
+      data: { object: { id: "sub_basil2", customer: "cus_basil2", status: "trialing", cancel_at_period_end: false, items: { data: [{ current_period_end: periodEnd }] } } },
+    };
+    const second = {
+      id: "evt_basil2_b", created: tiedTimestamp, type: "customer.subscription.updated",
+      data: { object: { id: "sub_basil2", customer: "cus_basil2", status: "trialing", cancel_at_period_end: true, items: { data: [{ current_period_end: periodEnd }] } } },
+    };
+    // Stripe's live state (also Basil-shaped — no top-level field) says: cancelled.
+    const stripe = makeFakeStripe({
+      sub_basil2: { id: "sub_basil2", status: "trialing", customer: "cus_basil2", trial_end: periodEnd, cancel_at_period_end: true, items: { data: [{ current_period_end: periodEnd }] } },
+    });
+
+    await handleStripeWebhookEvent(first, { stripe, supabaseAdmin: db });
+    const result = await handleStripeWebhookEvent(second, { stripe, supabaseAdmin: db });
+    assert.strictEqual(result.reconciled, true);
+    assert.ok(db._table[0].subscription_cancel_at, "reconciliation must not crash and must correctly resolve the item-level period end");
+  });
+
+  await asyncTest("[Basil] reactivation (cancel_at_period_end: false) never touches current_period_end at all, so it's unaffected either way", async () => {
+    const db = makeFakeSupabase([{ stripe_customer_id: "cus_basil3", subscription_status: "trialing", subscription_status_synced_at: isoFromUnix(NOW), subscription_cancel_at: isoFromUnix(NOW + 3 * DAY) }]);
+    const event = {
+      id: "evt_basil3", created: NOW + 10, type: "customer.subscription.updated",
+      data: { object: { id: "sub_basil3", customer: "cus_basil3", status: "trialing", cancel_at_period_end: false, items: { data: [] } } }, // no items at all — still must not crash, since cancel_at_period_end is false
+    };
+    const result = await handleStripeWebhookEvent(event, { stripe: {}, supabaseAdmin: db });
+    assert.strictEqual(result.applied, true);
+    assert.strictEqual(db._table[0].subscription_cancel_at, null, "reactivation clears the cancellation regardless of the current_period_end field's shape");
+  });
+
   console.log(`\n${passCount} passed, ${failCount} failed\n`);
   if (failCount > 0) process.exit(1);
 }
