@@ -363,7 +363,11 @@
       <div class="card">
         <h3>Subscription</h3>
         <div class="plan-row">
-          <div><div class="t" id="subStatusText">Loading...</div><div class="d">Manage billing, invoices, and your card on file through Stripe</div></div>
+          <div>
+            <div class="t" id="subStatusText">Loading...</div>
+            <div class="d" id="subStatusDetail" style="display:none;"></div>
+            <div class="d">Manage billing, invoices, and your card on file through Stripe</div>
+          </div>
           <a href="rook-pricing.html" class="btn btn-outline">Change Plan</a>
         </div>
         <button type="button" class="btn btn-outline" onclick="openBillingPortal()">Manage Subscription</button>
@@ -401,6 +405,23 @@ function showPanel(name, el){
   document.getElementById('panel-' + name).classList.add('active');
   el.classList.add('active');
 }
+
+// Selects a panel from a ?section= query param on load — this is what
+// lets the Stripe billing portal's "Return to ROOK" link
+// (rook-settings.html?section=subscription) land directly on the
+// Subscription panel instead of always defaulting to Profile. Falls
+// back to the existing default (Profile, already marked "active" in
+// the HTML) when the param is missing or doesn't match a real panel —
+// never errors, just leaves the page exactly as it was before this
+// existed.
+function selectPanelFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const section = params.get('section');
+  if (!section) return;
+  const navEl = document.querySelector(`.settings-nav a[data-panel="${section}"]`);
+  if (navEl) showPanel(section, navEl);
+}
+selectPanelFromUrl();
 
 async function openBillingPortal() {
   const msg = document.getElementById('billingMsg');
@@ -537,10 +558,15 @@ function addRegion(region) {
     // reasoning applies to a trial cancelled mid-trial — status stays
     // 'trialing' (full access continues) until the scheduled date.
     const subText = document.getElementById('subStatusText');
+    const subDetail = document.getElementById('subStatusDetail');
+    subDetail.style.display = 'none';
+    subDetail.textContent = '';
     if (currentProfile.subscription_status === 'trialing' && currentProfile.subscription_cancel_at) {
       const endDate = new Date(currentProfile.subscription_cancel_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-      subText.textContent = `Free Trial — Cancels on ${endDate}`;
+      subText.textContent = 'Free Trial — Canceled';
       subText.style.color = '#B98900';
+      subDetail.textContent = `Access ends ${endDate}. You will not be charged.`;
+      subDetail.style.display = 'block';
     } else if (currentProfile.subscription_status === 'trialing') {
       const trialEndDate = currentProfile.trial_ends_at
         ? new Date(currentProfile.trial_ends_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
@@ -548,8 +574,10 @@ function addRegion(region) {
       subText.textContent = trialEndDate ? `Free Trial — Ends ${trialEndDate}, then $29/month` : 'Free Trial';
     } else if (currentProfile.subscription_status === 'active' && currentProfile.subscription_cancel_at) {
       const endDate = new Date(currentProfile.subscription_cancel_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-      subText.textContent = `Professional Plan — Cancels on ${endDate}`;
+      subText.textContent = 'Professional Plan — Canceled';
       subText.style.color = '#B98900';
+      subDetail.textContent = `Access ends ${endDate}. You will not be charged again.`;
+      subDetail.style.display = 'block';
     } else if (currentProfile.subscription_status === 'active') {
       subText.textContent = 'Professional Plan — Active';
     } else if (currentProfile.subscription_status === 'past_due') {

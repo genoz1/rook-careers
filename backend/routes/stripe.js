@@ -262,7 +262,7 @@ router.post("/stripe/create-portal-session", requireConfig, requireAuth, async (
 
     const session = await stripe.billingPortal.sessions.create({
       customer: profile.stripe_customer_id,
-      return_url: `${process.env.PUBLIC_APP_URL || ""}/rook-settings.html`,
+      return_url: `${process.env.PUBLIC_APP_URL || ""}/rook-settings.html?section=subscription`,
     });
     res.json({ url: session.url });
   } catch (err) {
