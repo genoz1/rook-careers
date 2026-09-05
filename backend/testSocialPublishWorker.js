@@ -40,7 +40,7 @@ function baseJob(overrides = {}) {
     id: "job-1", employer_id: "employer-1", source_job_id: "src-1", source_type: "greenhouse",
     title_original: "Territory Sales Manager", location_raw: "Atlanta, GA", territory: "Southeast",
     ai_analysis: { required_industries: ["Medical Device"], preferred_industries: [], product_categories: [] },
-    compensation_text: "$90,000 - $120,000", employment_type: "Full-Time", remote_status: "field",
+    compensation_text: "$90,000 - $120,000", employment_type: "Full-Time", remote_status: "field", experience_min_years: 3,
     company_name: "Acme Diagnostics", status: "active", moderation_status: "approved",
     social_eligible: true, expires_at: null, last_seen_at: NOW.toISOString(),
     ...overrides,

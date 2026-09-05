@@ -21,6 +21,7 @@ const {
   normalizeCategoryForSocial,
   normalizeLocationForSocial,
   dedupeLocationAgainstTitle,
+  sanitizeTitleForSocial,
   countAvailableFacts,
   computeRichnessScore,
   generateHookFromAiAnalysis,
@@ -418,6 +419,87 @@ async function run() {
     assert.ok(!evaluateEligibility(job, { now: NOW }).reason_codes.includes("no_factual_hook"));
   });
 
+  console.log("\n=== Product Manager / Technical Product Manager roles remain fully eligible ===");
+  test("a Product Manager role is eligible under the exact same rules as any other role — no categorical exclusion exists", () => {
+    const job = baseJob({ title_original: "Product Manager", ai_analysis: aiAnalysis({ required_industries: ["Healthcare SaaS"] }) });
+    assert.strictEqual(evaluateEligibility(job, { now: NOW }).eligible, true);
+  });
+  test("a Technical Product Manager role is eligible under the exact same rules as any other role", () => {
+    const job = baseJob({ title_original: "Technical Product Manager", ai_analysis: aiAnalysis({ required_industries: ["Healthcare SaaS"] }) });
+    assert.strictEqual(evaluateEligibility(job, { now: NOW }).eligible, true);
+  });
+
+  console.log("\n=== 'Full-Time,' category, location, compensation, and work arrangement must never BE the hook alone ===");
+  test("'Full-Time' never appears in the hook, in any circumstance", () => {
+    const job = baseJob({ employment_type: "Full-Time", experience_min_years: 4 });
+    assert.ok(!generateSocialSafeHook(job).includes("Full-Time"), "employment type must never surface in the hook at all, not even alongside other content");
+  });
+  test("compensation alone, with no other anchor, is never used as the hook", () => {
+    const job = baseJob({ compensation_text: "$90,000 - $120,000", employment_type: null, remote_status: null, experience_min_years: null, ai_analysis: aiAnalysis() });
+    assert.strictEqual(generateSocialSafeHook(job), null, "compensation must never stand in as the hook by itself");
+  });
+  test("work arrangement (remote/hybrid) alone, with no other anchor, is never used as the hook", () => {
+    const job = baseJob({ remote_status: "remote", compensation_text: null, salary_min: null, salary_max: null, employment_type: null, experience_min_years: null, ai_analysis: aiAnalysis() });
+    assert.strictEqual(generateSocialSafeHook(job), null, "work arrangement must never stand in as the hook by itself");
+  });
+  test("category and location are never sourced into the hook at all — confirmed by construction (generateSocialSafeHook never reads job.category-related or location fields)", () => {
+    const job = baseJob({ category: "should-never-appear", location_raw: "should-never-appear-either", experience_min_years: 4 });
+    const hook = generateSocialSafeHook(job);
+    assert.ok(!hook.includes("should-never-appear"));
+  });
+  test("compensation MAY supplement a hook that already has a genuine anchor (experience years or ai_analysis content)", () => {
+    const job = baseJob({ compensation_text: "$90,000 - $120,000", employment_type: null, remote_status: null, experience_min_years: 4, ai_analysis: aiAnalysis() });
+    assert.strictEqual(generateSocialSafeHook(job), "4+ yrs experience · $90,000 - $120,000");
+  });
+
+  console.log("\n=== Title sanitization: strips a demonstrable employer/product suffix for public display only ===");
+  test("sanitizeTitleForSocial strips the exact reported pattern", () => {
+    assert.strictEqual(sanitizeTitleForSocial("Technical Product Manager (AI) - Vault Medical", "Vault Medical"), "Technical Product Manager (AI)");
+  });
+  test("sanitizeTitleForSocial leaves a title with no employer-matching suffix completely unchanged", () => {
+    assert.strictEqual(sanitizeTitleForSocial("Technical Product Manager (AI) - Northeast Region", "Vault Medical"), "Technical Product Manager (AI) - Northeast Region");
+  });
+  test("sanitizeTitleForSocial never touches job.title_original itself — only the value it returns", () => {
+    const original = "Technical Product Manager (AI) - Vault Medical";
+    sanitizeTitleForSocial(original, "Vault Medical");
+    assert.strictEqual(original, "Technical Product Manager (AI) - Vault Medical", "the input string/reference must be completely unaffected");
+  });
+
+  console.log("\n=== Location normalization: 'Massachusetts - Boston' -> 'Boston, MA' (full state name pattern) ===");
+  test("normalizes a full state name + dash + city", () => {
+    assert.strictEqual(normalizeLocationForSocial("Massachusetts - Boston"), "Boston, MA");
+  });
+  test("a non-state word before the dash is left unchanged, not guessed at", () => {
+    assert.strictEqual(normalizeLocationForSocial("Remote - Nationwide"), "Remote - Nationwide");
+  });
+
+  console.log("\n=== PRODUCTION-SHAPED REGRESSION: Technical Product Manager (AI) - Vault Medical ===");
+  test("the exact validated production record: title sanitized, location normalized, factual hook derived, and genuinely eligible", () => {
+    const technicalProductManagerJob = baseJob({
+      id: "prod-tpm-job",
+      title_original: "Technical Product Manager (AI) - Vault Medical",
+      location_raw: "Massachusetts - Boston",
+      territory: null,
+      company_name: "Vault Medical",
+      compensation_text: null, salary_min: null, salary_max: null,
+      employment_type: "Full-Time", remote_status: null, experience_min_years: null,
+      ai_analysis: {
+        required_industries: ["Healthcare SaaS"], preferred_industries: [], product_categories: [],
+        specialty_requirements: ["healthcare AI content workflows and clinical content review"],
+      },
+    });
+
+    const eligibility = evaluateEligibility(technicalProductManagerJob, { now: NOW });
+    assert.strictEqual(eligibility.eligible, true, `expected eligible, got reasons: ${eligibility.reason_codes.join(", ")}`);
+
+    const candidate = buildCandidateResponse(technicalProductManagerJob, SECRET);
+    assert.strictEqual(candidate.title, "Technical Product Manager (AI)", "employer suffix stripped for public display");
+    assert.strictEqual(candidate.location_display, "Boston, MA", "full-state-name pattern normalized");
+    assert.ok(candidate.social_safe_hook && !candidate.social_safe_hook.includes("Full-Time"), "hook must never be the bare employment type");
+    assert.ok(!candidate.social_safe_hook.toLowerCase().includes("vault"), "employer name must never leak into the hook");
+    assert.strictEqual(technicalProductManagerJob.title_original, "Technical Product Manager (AI) - Vault Medical", "the stored/raw title is completely untouched");
+  });
+
   console.log("\n=== Hook fallback: derived from stored ai_analysis fields when the primary allowlist yields nothing ===");
   test("generateHookFromAiAnalysis builds a hook from required_customer_types + specialty_requirements alone", () => {
     const job = baseJob({
@@ -536,9 +618,21 @@ async function run() {
   });
 
   console.log("\n=== Employer-name redaction ===");
-  test("evaluateEligibility fails a job whose title itself names the employer", () => {
+  test("a title with the employer name as a trailing dash-suffix is now RESCUED by sanitization, not rejected", () => {
+    // Direct correction: sanitizeTitleForSocial strips this exact
+    // pattern for public display, so the redaction check (which now
+    // checks the sanitized title) correctly finds nothing left to
+    // object to — this is the new, intended behavior, not a
+    // regression of the old rejection-only behavior.
     const job = baseJob({ title_original: "Sales Rep - Acme Diagnostics Division", company_name: "Acme Diagnostics" });
-    assert.ok(evaluateEligibility(job, { now: NOW }).reason_codes.includes("redaction_failed"));
+    const result = evaluateEligibility(job, { now: NOW });
+    assert.ok(!result.reason_codes.includes("redaction_failed"));
+    assert.strictEqual(buildCandidateResponse(job, SECRET).title, "Sales Rep");
+  });
+  test("redaction still correctly rejects an employer name that is NOT a clean trailing suffix — sanitization only handles that one specific pattern", () => {
+    const job = baseJob({ title_original: "Acme Diagnostics Territory Sales Manager", company_name: "Acme Diagnostics" });
+    const result = evaluateEligibility(job, { now: NOW });
+    assert.ok(result.reason_codes.includes("redaction_failed"), "the employer name here isn't a trailing dash-suffix, so sanitization doesn't touch it, and redaction must still catch it");
   });
 
   console.log("\n=== Branded/product-term protection: real authoritative source, not an empty variable ===");

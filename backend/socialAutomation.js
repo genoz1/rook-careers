@@ -251,13 +251,13 @@ function generateHookFromAiAnalysis(job) {
     ? String(ai.sales_motion[0]).trim() : null;
 
   if (customerType && specialty) {
-    return `Support ${singularizeForHook(customerType).toLowerCase()} relationships and ${specialty.toLowerCase()}`;
+    return `Support ${singularizeForHook(customerType).toLowerCase()} relationships and ${specialty}`;
   }
   if (customerType) {
     return `Support ${singularizeForHook(customerType).toLowerCase()} relationships`;
   }
   if (specialty) {
-    return `Focus on ${specialty.toLowerCase()}`;
+    return `Focus on ${specialty}`;
   }
   if (motion) {
     return `${motion} sales role`;
@@ -266,7 +266,29 @@ function generateHookFromAiAnalysis(job) {
 }
 
 function generateSocialSafeHook(job) {
+  // Direct instruction: "Full-Time," category, location, compensation,
+  // and work arrangement must never BE the hook by themselves — all of
+  // them are already shown as their own separate grid facts, so
+  // restating one alone adds no real information. A genuine anchor
+  // (something derived from stored ai_analysis data, or experience
+  // years) is required first; compensation/work arrangement may only
+  // ever supplement an anchor that's already there, never stand in
+  // for one. "Full-Time" itself is never used at all, in any position.
   const parts = [];
+
+  const aiHook = generateHookFromAiAnalysis(job);
+  if (aiHook) {
+    parts.push(aiHook);
+  } else if (job.experience_min_years != null) {
+    parts.push(`${job.experience_min_years}+ yrs experience`);
+  }
+
+  if (parts.length === 0) {
+    // No genuine anchor available — compensation/remote status alone
+    // are never sufficient. Excluded rather than posted with a hollow
+    // restatement of an already-displayed fact.
+    return null;
+  }
 
   if (job.compensation_text && String(job.compensation_text).trim()) {
     parts.push(String(job.compensation_text).trim());
@@ -277,19 +299,7 @@ function generateSocialSafeHook(job) {
   if (job.remote_status === "remote") parts.push("Remote");
   else if (job.remote_status === "hybrid") parts.push("Hybrid");
 
-  if (job.employment_type && /full.?time/i.test(job.employment_type)) parts.push("Full-Time");
-
-  if (job.experience_min_years != null) {
-    parts.push(`${job.experience_min_years}+ yrs experience`);
-  }
-
-  if (parts.length > 0) return parts.slice(0, 3).join(" · "); // short — this is a hook, not a summary
-
-  // Nothing in the primary allowlist (compensation/remote/employment/
-  // experience) — try the stored ai_analysis fields before giving up.
-  // Direct instruction: if neither path yields a safe hook, the job
-  // is excluded rather than posted with an invented one.
-  return generateHookFromAiAnalysis(job);
+  return parts.slice(0, 3).join(" · "); // short — this is a hook, not a summary
 }
 
 function containsEmployerIdentity(text, companyName) {
@@ -323,15 +333,43 @@ function isSociallyComplete(job) {
 // as "Cleveland, OH". Only reformats a recognized pattern; anything
 // that doesn't match is returned unchanged rather than guessed at.
 // =================================================================
+const US_STATE_NAME_TO_ABBR = {
+  alabama: "AL", alaska: "AK", arizona: "AZ", arkansas: "AR", california: "CA",
+  colorado: "CO", connecticut: "CT", delaware: "DE", florida: "FL", georgia: "GA",
+  hawaii: "HI", idaho: "ID", illinois: "IL", indiana: "IN", iowa: "IA",
+  kansas: "KS", kentucky: "KY", louisiana: "LA", maine: "ME", maryland: "MD",
+  massachusetts: "MA", michigan: "MI", minnesota: "MN", mississippi: "MS", missouri: "MO",
+  montana: "MT", nebraska: "NE", nevada: "NV", "new hampshire": "NH", "new jersey": "NJ",
+  "new mexico": "NM", "new york": "NY", "north carolina": "NC", "north dakota": "ND", ohio: "OH",
+  oklahoma: "OK", oregon: "OR", pennsylvania: "PA", "rhode island": "RI", "south carolina": "SC",
+  "south dakota": "SD", tennessee: "TN", texas: "TX", utah: "UT", vermont: "VT",
+  virginia: "VA", washington: "WA", "west virginia": "WV", wisconsin: "WI", wyoming: "WY",
+  "district of columbia": "DC",
+};
+
 function normalizeLocationForSocial(locationRaw) {
   if (!locationRaw) return locationRaw;
   const text = String(locationRaw).trim();
-  const match = text.match(/^(?:USA|US)\s+([A-Za-z]{2})\s*-\s*(.+)$/);
-  if (match) {
-    const state = match[1].toUpperCase();
-    const city = match[2].trim();
+
+  // Pattern 1: "USA OH - Cleveland" / "US OH - Cleveland" (country + state abbreviation + dash + city).
+  const abbrMatch = text.match(/^(?:USA|US)\s+([A-Za-z]{2})\s*-\s*(.+)$/);
+  if (abbrMatch) {
+    const state = abbrMatch[1].toUpperCase();
+    const city = abbrMatch[2].trim();
     if (city) return `${city}, ${state}`;
   }
+
+  // Pattern 2: "Massachusetts - Boston" (full state name + dash + city).
+  // Only reformats when the segment before the dash is a real,
+  // recognized US state name — anything else (e.g. "Remote -
+  // Nationwide") is left unchanged rather than guessed at.
+  const fullNameMatch = text.match(/^([A-Za-z ]+?)\s*-\s*(.+)$/);
+  if (fullNameMatch) {
+    const abbr = US_STATE_NAME_TO_ABBR[fullNameMatch[1].trim().toLowerCase()];
+    const city = fullNameMatch[2].trim();
+    if (abbr && city) return `${city}, ${abbr}`;
+  }
+
   return text;
 }
 
@@ -468,11 +506,19 @@ function evaluateEligibility(job, { freshnessWindowDays, now = new Date(), expec
   const contentUnchanged = !expectedContentVersion || expectedContentVersion === currentContentVersion;
   if (!contentUnchanged) reasonCodes.push("content_changed");
 
+  // Checks the SANITIZED title (the same value buildCandidateResponse
+  // actually displays), not the raw stored title — direct instruction
+  // that a title with a legitimate, demonstrable employer suffix
+  // (e.g. "Technical Product Manager (AI) - Vault Medical") should
+  // remain eligible once that suffix is stripped for public display,
+  // not be rejected outright for what the raw database column
+  // happens to contain before sanitization.
+  const sanitizedTitleForRedaction = sanitizeTitleForSocial(job.title_original, job.company_name);
   const redactionOk =
     !containsEmployerIdentity(hook, job.company_name) &&
-    !containsEmployerIdentity(job.title_original, job.company_name) &&
+    !containsEmployerIdentity(sanitizedTitleForRedaction, job.company_name) &&
     !containsBrandedTerm(hook, brandedTerms) &&
-    !containsBrandedTerm(job.title_original, brandedTerms);
+    !containsBrandedTerm(sanitizedTitleForRedaction, brandedTerms);
   if (!redactionOk) reasonCodes.push("redaction_failed");
 
   return {
@@ -554,13 +600,40 @@ function scoreAndSortCandidates(jobs, {
   return scored.map((s) => s.job);
 }
 
+// =================================================================
+// Public title sanitization — direct instruction: remove a
+// distinctive employer, division, or product identifier that appears
+// after a separator (e.g. "Technical Product Manager (AI) - Vault
+// Medical" -> "Technical Product Manager (AI)"). Applies ONLY to the
+// value returned here for social display — job.title_original in the
+// database, and the real /jobs/:id page (which reads that column
+// directly, not through this function), are never touched.
+//
+// Only strips the suffix when it demonstrably references the
+// employer (reusing the same scrub logic already relied on
+// everywhere else in this module) — never a generic, legitimate
+// qualifier like a territory or work-arrangement suffix that happens
+// to follow a dash for some other reason.
+// =================================================================
+function sanitizeTitleForSocial(title, companyName) {
+  if (!title) return title;
+  const match = String(title).match(/^(.*?)\s*[-–—]\s*(.+)$/);
+  if (!match) return title;
+  const [, mainPart, suffix] = match;
+  if (containsEmployerIdentity(suffix, companyName) && mainPart.trim()) {
+    return mainPart.trim();
+  }
+  return title;
+}
+
 function buildCandidateResponse(job, spacingSecret) {
+  const sanitizedTitle = sanitizeTitleForSocial(job.title_original, job.company_name);
   const normalizedLocation = normalizeLocationForSocial(job.location_raw);
-  const dedupedLocation = dedupeLocationAgainstTitle(job.title_original, normalizedLocation);
+  const dedupedLocation = dedupeLocationAgainstTitle(sanitizedTitle, normalizedLocation);
   return {
     job_id: job.id,
     public_url: `https://rookcareers.com/jobs/${job.id}`,
-    title: job.title_original, // never rewritten, regardless of any location normalization/dedup applied below
+    title: sanitizedTitle, // public social display only — job.title_original and the real job page are never altered
     location_display: dedupedLocation,
     territory_display: job.territory || null,
     category: normalizeCategoryForSocial(job),
@@ -632,6 +705,7 @@ module.exports = {
   normalizeCategoryForSocial,
   normalizeLocationForSocial,
   dedupeLocationAgainstTitle,
+  sanitizeTitleForSocial,
   countAvailableFacts,
   computeRichnessScore,
   generateHookFromAiAnalysis,
