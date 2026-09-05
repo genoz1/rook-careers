@@ -32,6 +32,17 @@ function pageShell({ title, description, canonicalUrl, ogImage, bodyHtml, jsonLd
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
+  <!-- Google tag (gtag.js) — these server-rendered pages have no
+       existing Google tag to integrate with, unlike the static public/
+       pages, so this is a standalone loader rather than an added
+       config() call. -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-LDG2CL5Z8R"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-LDG2CL5Z8R');
+  </script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapeHtml(title)}</title>
@@ -101,6 +112,14 @@ router.get("/jobs/:id", async (req, res, next) => {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex">
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-LDG2CL5Z8R"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-LDG2CL5Z8R');
+</script>
 <title>Job Not Found | ROOK</title>
 <style>
   body{font-family:-apple-system,'Segoe UI',sans-serif; background:#F5F7FA; color:#0B1D3A; margin:0; padding:0;}

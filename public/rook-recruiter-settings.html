@@ -9,6 +9,13 @@
   gtag('js', new Date());
 
   gtag('config', 'AW-18428232873');
+
+  // Direct instruction: integrate with the existing gtag.js runtime
+  // already loaded above for Google Ads, rather than loading a second,
+  // duplicate copy of gtag.js just for GA4 — gtag.js is a single shared
+  // runtime that supports multiple config() calls for different
+  // products (Ads conversion ID, GA4 measurement ID) side by side.
+  gtag('config', 'G-LDG2CL5Z8R');
 </script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
