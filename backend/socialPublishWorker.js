@@ -29,6 +29,7 @@ const {
 const { listAllChannels, createPost } = require("./socialBuffer");
 const { identifyRookChannels } = require("./socialChannels");
 const { buildPostCopy } = require("./socialPostCopy");
+const { preflightCheckMedia } = require("./socialMediaPreflight");
 const { renderFeaturedJobGraphic } = require("./socialGraphic");
 const { writeGraphicFile, verifyWrittenFile } = require("./socialGraphicStorage");
 
@@ -169,6 +170,11 @@ async function runValidationOnly(config, deps = {}) {
   });
   await (deps.verifyWrittenFile || verifyWrittenFile)(written.absolutePath);
 
+  // Informational here (this mode never contacts Buffer regardless) —
+  // surfaces a real media-accessibility problem before the operator
+  // ever attempts the live test, rather than only discovering it then.
+  const mediaPreflight = await (deps.preflightCheckMedia || preflightCheckMedia)(written.publicUrl);
+
   const postCopy = buildPostCopy(candidate);
 
   return {
@@ -177,6 +183,7 @@ async function runValidationOnly(config, deps = {}) {
     candidate,
     validation,
     graphicUrl: written.publicUrl,
+    mediaPreflight,
     postCopy,
     sentToBuffer: false,
   };
@@ -239,6 +246,43 @@ async function runControlledLiveTest(config, { confirmLive } = {}, deps = {}) {
   });
   await (deps.verifyWrittenFile || verifyWrittenFile)(written.absolutePath);
 
+  // Direct instruction: a real preflight fetch of the exact public URL
+  // — the same way Buffer itself will fetch it — before contacting
+  // Buffer at all. If this fails, send nothing to either channel. The
+  // failure is still recorded to social_post_history (via the same
+  // upsert-on-run_key path used below for a normal outcome) so a
+  // retry after fixing the underlying media problem updates this same
+  // row instead of finding nothing to work from.
+  const mediaPreflight = await (deps.preflightCheckMedia || preflightCheckMedia)(written.publicUrl);
+  if (!mediaPreflight.ok) {
+    const failureRow = buildHistoryRow({
+      runKey: `LIVE-TEST-${topJob.id}`,
+      slot: "am",
+      jobId: topJob.id,
+      jobFingerprint: fingerprint,
+      contentVersion: candidate.content_version,
+      employerSpacingKey: computeEmployerSpacingKey(topJob.employer_id, config.spacingSecret),
+      category: candidate.category,
+      scheduledFor: new Date().toISOString(),
+      facebook: { channelId: channels.facebook.id, status: "failed" },
+      linkedin: { channelId: channels.linkedin.id, status: "failed" },
+      creativeUrl: written.publicUrl,
+      captionVersion: "v1",
+      selectedAt: new Date().toISOString(),
+      validatedAt: new Date().toISOString(),
+      failureReason: `Media preflight failed: ${mediaPreflight.reason}`,
+    });
+    const { error: preflightHistoryError } = await supabaseAdmin.from("social_post_history").upsert(failureRow, { onConflict: "run_key" });
+    return {
+      ok: false,
+      stage: "media_preflight",
+      jobId: topJob.id,
+      reason: mediaPreflight.reason,
+      graphicUrl: written.publicUrl,
+      historyRecorded: !preflightHistoryError,
+    };
+  }
+
   const postCopy = buildPostCopy(candidate);
   const results = { facebook: null, linkedin: null };
 
@@ -246,6 +290,11 @@ async function runControlledLiveTest(config, { confirmLive } = {}, deps = {}) {
     try {
       const post = await createPostFn(config.bufferAccessToken, {
         channelId: channels.facebook.id, text: postCopy, photoUrl: written.publicUrl, mode: "shareNow",
+        // Direct fix: Buffer's schema requires this field for Facebook
+        // (FacebookPostMetadataInput.type: PostTypeFacebook!,
+        // non-nullable) — its absence is exactly the reported
+        // "Facebook posts require a type (post, story, or reel)" error.
+        metadata: { facebook: { type: "post" } },
       });
       results.facebook = { status: "sent", bufferPostId: post?.id || null, channelId: channels.facebook.id };
     } catch (err) {
@@ -257,6 +306,9 @@ async function runControlledLiveTest(config, { confirmLive } = {}, deps = {}) {
 
   if (!alreadyPosted.linkedin) {
     try {
+      // LinkedIn's Buffer schema has no required post-type field (only
+      // Facebook's does) — left exactly as before, no metadata added,
+      // per direct instruction to keep it unchanged unless required.
       const post = await createPostFn(config.bufferAccessToken, {
         channelId: channels.linkedin.id, text: postCopy, photoUrl: written.publicUrl, mode: "shareNow",
       });

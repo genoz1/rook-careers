@@ -108,7 +108,7 @@ async function listAllChannels(accessToken, opts) {
  * GraphQL API takes a single channelId, not an array of profile IDs
  * like the old REST API did.
  */
-async function createPost(accessToken, { channelId, text, photoUrl, mode = "shareNow", dueAt }, opts) {
+async function createPost(accessToken, { channelId, text, photoUrl, mode = "shareNow", dueAt, metadata }, opts) {
   if (!channelId) throw new Error("createPost requires a channelId");
   const query = `
     mutation CreatePost($input: CreatePostInput!) {
@@ -129,6 +129,12 @@ async function createPost(accessToken, { channelId, text, photoUrl, mode = "shar
   const input = { text, channelId, schedulingType: "automatic", mode };
   if (photoUrl) input.assets = [{ image: { url: photoUrl } }];
   if (mode === "customScheduled" && dueAt) input.dueAt = dueAt;
+  // Direct fix: Buffer's schema requires FacebookPostMetadataInput.type
+  // (PostTypeFacebook!, non-nullable) — omitting it is exactly the
+  // reported "Facebook posts require a type (post, story, or reel)"
+  // error. Passed through generically here; the caller decides which
+  // platform's metadata (if any) applies for a given channel.
+  if (metadata) input.metadata = metadata;
 
   const data = await bufferGraphQLRequest(accessToken, query, { input }, opts);
   const result = data?.createPost;

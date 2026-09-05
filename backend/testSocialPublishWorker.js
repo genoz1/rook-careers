@@ -13,6 +13,7 @@ const {
   loadConfig, requireConfigKeys, discoverChannels, runValidationOnly, runControlledLiveTest,
 } = require("./socialPublishWorker");
 const { computeJobFingerprint } = require("./socialAutomation");
+const { preflightCheckMedia } = require("./socialMediaPreflight");
 
 let passCount = 0, failCount = 0;
 function test(name, fn) {
@@ -63,7 +64,19 @@ function makeMockSupabase({ jobs = [], employers = [], history = [] } = {}) {
         const rows = (name === "jobs" ? jobs : name === "employers" ? employers : history).filter((r) => filters.every((f) => f(r)));
         return { data: rows[0] || null, error: null };
       },
-      upsert: async (row) => { history.push(row); return { data: row, error: null }; },
+      upsert: async (row, opts = {}) => {
+        // Genuinely simulates upsert-on-conflict, matching real
+        // Postgres/PostgREST behavior for onConflict: "run_key" — an
+        // existing row with the same run_key is updated in place, not
+        // duplicated. Without this, a test could "pass" even if the
+        // real upsert call were broken and silently created a second
+        // row instead of updating the first.
+        const conflictCol = opts.onConflict || "run_key";
+        const existingIndex = history.findIndex((r) => r[conflictCol] === row[conflictCol]);
+        if (existingIndex >= 0) history[existingIndex] = { ...history[existingIndex], ...row };
+        else history.push(row);
+        return { data: row, error: null };
+      },
       then: (resolve) => {
         const rows = (name === "jobs" ? jobs : name === "employers" ? employers : history).filter((r) => filters.every((f) => f(r)));
         resolve({ data: rows, error: null });
@@ -371,7 +384,7 @@ async function run() {
     const fakeVerifyWrittenFile = async () => {};
 
     const result = await runControlledLiveTest(config, { confirmLive: true }, {
-      supabaseAdmin, supabaseAnon, listAllChannels: fakeListAllChannels, createPost: fakeCreatePost,
+      supabaseAdmin, supabaseAnon, listAllChannels: fakeListAllChannels, createPost: fakeCreatePost, preflightCheckMedia: async () => ({ ok: true }),
       writeGraphicFile: fakeWriteGraphicFile, verifyWrittenFile: fakeVerifyWrittenFile,
     });
 
@@ -383,6 +396,151 @@ async function run() {
     assert.ok(result.results.linkedin.bufferPostId);
     assert.strictEqual(result.historyRecorded, true);
     assert.ok(!JSON.stringify(result).toLowerCase().includes("acme"), "employer name must never appear anywhere in the result");
+  });
+
+  console.log("\n=== Facebook createPost includes the required metadata; LinkedIn is left unchanged ===");
+  await asyncTest("the Facebook createPost call includes metadata: { facebook: { type: 'post' } }", async () => {
+    const config = loadConfig({
+      SUPABASE_URL: "x", SUPABASE_SERVICE_ROLE_KEY: "x", SUPABASE_ANON_KEY: "x", SOCIAL_SPACING_HMAC_SECRET: SECRET,
+      BUFFER_ACCESS_TOKEN: "x", BUFFER_ROOK_LINKEDIN_CHANNEL_ID: "li-page-1", BUFFER_ROOK_FACEBOOK_CHANNEL_ID: "fb-page-1",
+    });
+    const job = baseJob();
+    const supabaseAdmin = makeMockSupabase({ jobs: [job], employers: [{ company_name: "Acme Diagnostics" }], history: [] });
+    const supabaseAnon = makeMockSupabase({ jobs: [job] });
+    const fakeListAllChannels = async () => [LINKEDIN_PAGE, FACEBOOK_PAGE];
+    const calls = [];
+    const fakeCreatePost = async (token, opts) => { calls.push(opts); return { id: `update-${calls.length}`, status: "sent" }; };
+
+    await runControlledLiveTest(config, { confirmLive: true }, {
+      supabaseAdmin, supabaseAnon, listAllChannels: fakeListAllChannels, createPost: fakeCreatePost,
+      preflightCheckMedia: async () => ({ ok: true }),
+      writeGraphicFile: async () => ({ absolutePath: "/tmp/fake.png", publicUrl: "https://rookcareers.com/social/featured/fake.png" }),
+      verifyWrittenFile: async () => {},
+    });
+
+    const facebookCall = calls.find((c) => c.channelId === "fb-page-1");
+    const linkedinCall = calls.find((c) => c.channelId === "li-page-1");
+    assert.deepStrictEqual(facebookCall.metadata, { facebook: { type: "post" } }, "Facebook must include the required post-type metadata — this is the exact reported bug fix");
+    assert.strictEqual(linkedinCall.metadata, undefined, "LinkedIn must be left unchanged — no metadata added, per direct instruction");
+  });
+
+  console.log("\n=== Preflight media check: real request-level verification, not just a local file check ===");
+  function mockPreflightFetch(response) {
+    return async () => response;
+  }
+  await asyncTest("preflightCheckMedia passes for a genuinely valid PNG response", async () => {
+    const pngBytes = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from("restofpngdata")]);
+    const httpFetch = mockPreflightFetch({ status: 200, headers: { get: () => "image/png" }, arrayBuffer: async () => pngBytes.buffer.slice(pngBytes.byteOffset, pngBytes.byteOffset + pngBytes.byteLength) });
+    const result = await preflightCheckMedia("https://rookcareers.com/social/featured/x.png", { httpFetch });
+    assert.strictEqual(result.ok, true);
+  });
+  await asyncTest("preflightCheckMedia fails when the URL is unreachable (network error)", async () => {
+    const httpFetch = async () => { throw new Error("getaddrinfo ENOTFOUND"); };
+    const result = await preflightCheckMedia("https://rookcareers.com/social/featured/x.png", { httpFetch });
+    assert.strictEqual(result.ok, false);
+    assert.ok(result.reason.includes("Could not reach"));
+  });
+  await asyncTest("preflightCheckMedia fails on a non-200 status", async () => {
+    const httpFetch = mockPreflightFetch({ status: 404, headers: { get: () => null } });
+    const result = await preflightCheckMedia("https://rookcareers.com/social/featured/x.png", { httpFetch });
+    assert.strictEqual(result.ok, false);
+    assert.ok(result.reason.includes("404"));
+  });
+  await asyncTest("preflightCheckMedia fails on a redirect instead of a direct 200 (redirect: manual surfaces the 3xx)", async () => {
+    const httpFetch = mockPreflightFetch({ status: 302, headers: { get: () => null } });
+    const result = await preflightCheckMedia("https://rookcareers.com/social/featured/x.png", { httpFetch });
+    assert.strictEqual(result.ok, false);
+    assert.ok(result.reason.includes("redirected"));
+  });
+  await asyncTest("preflightCheckMedia fails on the wrong Content-Type — this is exactly the 'Image could not be read' failure mode", async () => {
+    const httpFetch = mockPreflightFetch({ status: 200, headers: { get: () => "text/html" }, arrayBuffer: async () => Buffer.from("<html>404</html>").buffer });
+    const result = await preflightCheckMedia("https://rookcareers.com/social/featured/x.png", { httpFetch });
+    assert.strictEqual(result.ok, false);
+    assert.ok(result.reason.includes("text/html"));
+  });
+  await asyncTest("preflightCheckMedia fails on an empty body", async () => {
+    const httpFetch = mockPreflightFetch({ status: 200, headers: { get: () => "image/png" }, arrayBuffer: async () => new ArrayBuffer(0) });
+    const result = await preflightCheckMedia("https://rookcareers.com/social/featured/x.png", { httpFetch });
+    assert.strictEqual(result.ok, false);
+    assert.ok(result.reason.includes("empty"));
+  });
+  await asyncTest("preflightCheckMedia fails on invalid PNG signature bytes (correct content-type, corrupt/wrong body)", async () => {
+    const httpFetch = mockPreflightFetch({ status: 200, headers: { get: () => "image/png" }, arrayBuffer: async () => Buffer.from("not a real png file").buffer });
+    const result = await preflightCheckMedia("https://rookcareers.com/social/featured/x.png", { httpFetch });
+    assert.strictEqual(result.ok, false);
+    assert.ok(result.reason.includes("signature"));
+  });
+
+  console.log("\n=== The preflight gate blocks BOTH channels entirely on failure, and records a retry-safe history row ===");
+  await asyncTest("if preflight fails, no Buffer call is made to either platform, and a failure row is recorded", async () => {
+    const config = loadConfig({
+      SUPABASE_URL: "x", SUPABASE_SERVICE_ROLE_KEY: "x", SUPABASE_ANON_KEY: "x", SOCIAL_SPACING_HMAC_SECRET: SECRET,
+      BUFFER_ACCESS_TOKEN: "x", BUFFER_ROOK_LINKEDIN_CHANNEL_ID: "li-page-1", BUFFER_ROOK_FACEBOOK_CHANNEL_ID: "fb-page-1",
+    });
+    const job = baseJob();
+    const history = [];
+    const supabaseAdmin = makeMockSupabase({ jobs: [job], employers: [{ company_name: "Acme Diagnostics" }], history });
+    const supabaseAnon = makeMockSupabase({ jobs: [job] });
+    const fakeListAllChannels = async () => [LINKEDIN_PAGE, FACEBOOK_PAGE];
+    let bufferCalled = false;
+    const fakeCreatePost = async () => { bufferCalled = true; };
+
+    const result = await runControlledLiveTest(config, { confirmLive: true }, {
+      supabaseAdmin, supabaseAnon, listAllChannels: fakeListAllChannels, createPost: fakeCreatePost,
+      preflightCheckMedia: async () => ({ ok: false, reason: "Media URL returned Content-Type \"text/html\", expected image/png" }),
+      writeGraphicFile: async () => ({ absolutePath: "/tmp/fake.png", publicUrl: "https://rookcareers.com/social/featured/fake.png" }),
+      verifyWrittenFile: async () => {},
+    });
+
+    assert.strictEqual(result.ok, false);
+    assert.strictEqual(result.stage, "media_preflight");
+    assert.strictEqual(bufferCalled, false, "must never call Buffer for either channel if preflight fails");
+    assert.strictEqual(history.length, 1, "a failure row must still be recorded");
+    assert.strictEqual(history[0].facebook_status, "failed");
+    assert.strictEqual(history[0].linkedin_status, "failed");
+    assert.ok(history[0].failure_reason.includes("Media preflight failed"));
+  });
+
+  console.log("\n=== Retrying a failed run after correction is safe — the unique run_key updates the existing row instead of blocking ===");
+  await asyncTest("a job that failed on both platforms can be retried, successfully publishing on the second attempt, updating (not duplicating) the history row", async () => {
+    const config = loadConfig({
+      SUPABASE_URL: "x", SUPABASE_SERVICE_ROLE_KEY: "x", SUPABASE_ANON_KEY: "x", SOCIAL_SPACING_HMAC_SECRET: SECRET,
+      BUFFER_ACCESS_TOKEN: "x", BUFFER_ROOK_LINKEDIN_CHANNEL_ID: "li-page-1", BUFFER_ROOK_FACEBOOK_CHANNEL_ID: "fb-page-1",
+    });
+    const job = baseJob();
+    const history = [];
+    const supabaseAdmin = makeMockSupabase({ jobs: [job], employers: [{ company_name: "Acme Diagnostics" }], history });
+    const supabaseAnon = makeMockSupabase({ jobs: [job] });
+    const fakeListAllChannels = async () => [LINKEDIN_PAGE, FACEBOOK_PAGE];
+
+    // First attempt: preflight fails (the exact reported scenario) —
+    // nothing published, one failure row recorded.
+    const firstAttempt = await runControlledLiveTest(config, { confirmLive: true }, {
+      supabaseAdmin, supabaseAnon, listAllChannels: fakeListAllChannels,
+      createPost: async () => { throw new Error("should never be called on first attempt"); },
+      preflightCheckMedia: async () => ({ ok: false, reason: "Image could not be read from its URL" }),
+      writeGraphicFile: async () => ({ absolutePath: "/tmp/fake.png", publicUrl: "https://rookcareers.com/social/featured/fake.png" }),
+      verifyWrittenFile: async () => {},
+    });
+    assert.strictEqual(firstAttempt.ok, false);
+    assert.strictEqual(history.length, 1, "exactly one row after the first failed attempt");
+
+    // Second attempt (simulating a retry after fixing the underlying
+    // media issue): preflight now passes, both platforms succeed.
+    const calls = [];
+    const secondAttempt = await runControlledLiveTest(config, { confirmLive: true }, {
+      supabaseAdmin, supabaseAnon, listAllChannels: fakeListAllChannels,
+      createPost: async (token, opts) => { calls.push(opts); return { id: `update-${calls.length}`, status: "sent" }; },
+      preflightCheckMedia: async () => ({ ok: true }),
+      writeGraphicFile: async () => ({ absolutePath: "/tmp/fake.png", publicUrl: "https://rookcareers.com/social/featured/fake.png" }),
+      verifyWrittenFile: async () => {},
+    });
+
+    assert.strictEqual(secondAttempt.ok, true, "the retry must succeed once the underlying media problem is fixed — the run_key must not permanently block it");
+    assert.strictEqual(calls.length, 2, "both platforms attempted on retry, since neither succeeded on the failed first attempt");
+    assert.strictEqual(history.length, 1, "the SAME row must be updated in place, never duplicated, even across a failed-then-successful retry");
+    assert.strictEqual(history[0].facebook_status, "sent");
+    assert.strictEqual(history[0].linkedin_status, "sent");
   });
 
   console.log("\n=== Controlled live test: duplicate-publication prevention ===");
@@ -401,7 +559,7 @@ async function run() {
     const fakeCreatePost = async (token, opts) => { bufferCalls.push(opts); return { id: "new-update-1", status: "sent" }; };
 
     const result = await runControlledLiveTest(config, { confirmLive: true }, {
-      supabaseAdmin, supabaseAnon, listAllChannels: fakeListAllChannels, createPost: fakeCreatePost,
+      supabaseAdmin, supabaseAnon, listAllChannels: fakeListAllChannels, createPost: fakeCreatePost, preflightCheckMedia: async () => ({ ok: true }),
       writeGraphicFile: async () => ({ absolutePath: "/tmp/fake.png", publicUrl: "https://x/fake.png" }),
       verifyWrittenFile: async () => {},
     });
@@ -440,7 +598,7 @@ async function run() {
     const fakeCreatePost = async () => { bufferCalled = true; };
 
     const result = await runControlledLiveTest(config, { confirmLive: true }, {
-      supabaseAdmin, supabaseAnon, listAllChannels: fakeListAllChannels, createPost: fakeCreatePost,
+      supabaseAdmin, supabaseAnon, listAllChannels: fakeListAllChannels, createPost: fakeCreatePost, preflightCheckMedia: async () => ({ ok: true }),
     });
 
     assert.strictEqual(result.ok, false);
