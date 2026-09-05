@@ -173,14 +173,19 @@ const FACT_ICONS = {
 // unreadable at feed size.
 function buildFactList(candidate) {
   const facts = [];
+  // Direct instruction: location and category are always prioritized
+  // first (guaranteed in the grid whenever present, never crowded out
+  // by other optional facts), then compensation, then work
+  // arrangement (especially valuable when Remote), then employment
+  // type last.
   const locationText = candidate.territory_display || candidate.location_display;
   if (locationText) facts.push({ icon: "pin", main: locationText });
-  if (candidate.compensation_display) facts.push({ icon: "dollar", main: candidate.compensation_display });
   if (candidate.category) facts.push({ icon: "tag", main: candidate.category });
-  if (candidate.employment_type) facts.push({ icon: "briefcase", main: candidate.employment_type });
+  if (candidate.compensation_display) facts.push({ icon: "dollar", main: candidate.compensation_display });
   if (candidate.work_arrangement) {
     facts.push({ icon: "chart", main: WORK_ARRANGEMENT_LABELS[candidate.work_arrangement] || candidate.work_arrangement });
   }
+  if (candidate.employment_type) facts.push({ icon: "briefcase", main: candidate.employment_type });
   return facts.slice(0, 4);
 }
 
@@ -226,7 +231,6 @@ function buildMiddleSectionSvg(candidate) {
   });
   const BASE_ROW_HEIGHT = 104; // enough for the icon + one line of fact text
   const EXTRA_HEIGHT_PER_LINE = 40; // additional height per extra wrapped line, generalizes to any count
-  const ROW_HEIGHT_COMPRESSION_MAX = 16; // per row, absorbed by the title-overflow lever below
   const gridRows = Math.ceil(preparedFacts.length / 2);
   const rowMaxLines = [];
   for (let row = 0; row < gridRows; row++) {
@@ -234,14 +238,34 @@ function buildMiddleSectionSvg(candidate) {
     rowMaxLines.push(Math.max(1, ...rowFacts.map((f) => f.mainLines.length)));
   }
   const rowDefaultHeights = rowMaxLines.map((lines) => BASE_ROW_HEIGHT + (lines - 1) * EXTRA_HEIGHT_PER_LINE);
+  // How much taller the grid is than if every row were single-line —
+  // this is real, necessary height (not padding), but it still needs
+  // to be accounted for in the overall budget below.
+  const factGridExtraHeight = rowDefaultHeights.reduce((sum, h) => sum + (h - BASE_ROW_HEIGHT), 0);
 
-  // ---- Reflow budget for a long/wrapped title: unchanged mechanism
-  // from the approved design — gaps compress first, then row height,
-  // so the fixed final-details line stays anchored and nothing is
-  // ever cut or overlapped, no matter how long a real title is. ----
+  // ---- Hook typography: +25% (was 25px). Fitted BEFORE the
+  // compression budget below is decided — direct fix for a confirmed
+  // bug: a short title combined with a long wrapped fact AND a
+  // multi-line hook was pushing the final details bar completely off
+  // the visible 621px canvas (computed y > 621), because compression
+  // previously only ever triggered off title overflow, never
+  // fact-grid or hook overflow. ----
+  const SUMMARY_ICON_RADIUS = 32; // was 27 (+~18%)
+  const fittedSummary = summary ? fitSummaryText(summary, 850 - 148) : { lines: [], fontSize: 31 };
+  const summaryLines = fittedSummary.lines;
+  const summaryFontSize = fittedSummary.fontSize;
+  const summaryLineHeight = summaryFontSize * 1.32;
+  const hookExtraHeight = summary ? (summaryLines.length - 1) * summaryLineHeight : 0;
+
+  // ---- Reflow budget: direct fix — now accounts for title overflow,
+  // fact-grid overflow (multi-line facts), AND hook overflow together,
+  // not title alone. Gaps compress first, then row height, then (a
+  // new third lever) the hook's own line spacing, so the fixed
+  // final-details line always stays within the visible canvas no
+  // matter which combination of content is unusually long. ----
   const compressibleGaps = { subtitleToDivider1: 35, divider1ToGrid: 37, divider2ToSummary: 30 };
   const minGaps = { subtitleToDivider1: 10, divider1ToGrid: 12, divider2ToSummary: 10 };
-  let remaining = titleExtraHeight;
+  let remaining = titleExtraHeight + factGridExtraHeight + hookExtraHeight;
   const gap = {};
   for (const key of Object.keys(compressibleGaps)) {
     const available = compressibleGaps[key] - minGaps[key];
@@ -250,11 +274,26 @@ function buildMiddleSectionSvg(candidate) {
     remaining -= reduction;
   }
 
+  // Second lever: row-height compression. Ceiling raised (was 16) —
+  // a multi-line row has real slack in its wrapped-line spacing that
+  // a single-line row doesn't, so it can absorb more.
+  const ROW_HEIGHT_COMPRESSION_MAX = 32;
   let rowHeightReductionPerRow = 0;
   if (remaining > 0 && gridRows > 0) {
     rowHeightReductionPerRow = Math.min(ROW_HEIGHT_COMPRESSION_MAX, Math.ceil(remaining / gridRows));
     remaining -= rowHeightReductionPerRow * gridRows;
   }
+
+  // Third lever: compress the hook's own line spacing, only if gap +
+  // row compression together still weren't enough (an unusually long
+  // title AND long facts AND a multi-line hook, all at once).
+  let summaryLineHeightReduction = 0;
+  if (remaining > 0 && summary && summaryLines.length > 1) {
+    const maxReduction = summaryLineHeight * 0.3;
+    summaryLineHeightReduction = Math.min(maxReduction, remaining / (summaryLines.length - 1));
+    remaining -= summaryLineHeightReduction * (summaryLines.length - 1);
+  }
+  const compressedSummaryLineHeight = summaryLineHeight - summaryLineHeightReduction;
 
   const titleBaselineY = 145;
   const subtitleY = titleBaselineY + 35 + titleExtraHeight;
@@ -272,16 +311,17 @@ function buildMiddleSectionSvg(candidate) {
 
   const divider2Y = gridRows > 0 ? gridBottomY + 33 : gridTopY;
   const summaryTopY = divider2Y + gap.divider2ToSummary;
+  const summaryBlockBottomY = summary ? summaryTopY + SUMMARY_ICON_RADIUS + (summaryLines.length - 1) * compressedSummaryLineHeight : divider2Y;
 
-  // ---- Hook typography: +25% (was 25px) ----
-  const SUMMARY_ICON_RADIUS = 32; // was 27 (+~18%)
-  const fittedSummary = summary ? fitSummaryText(summary, 850 - 148) : { lines: [], fontSize: 31 };
-  const summaryLines = fittedSummary.lines;
-  const summaryFontSize = fittedSummary.fontSize;
-  const summaryLineHeight = summaryFontSize * 1.32;
-  const summaryBlockBottomY = summary ? summaryTopY + SUMMARY_ICON_RADIUS + (summaryLines.length - 1) * summaryLineHeight : divider2Y;
-
-  const finalLineY = Math.max(547, summaryBlockBottomY + 20);
+  // Direct instruction: the employer-details bar must always remain
+  // visible, never pushed into the fixed bottom graphic. MAX_FINAL_LINE_Y
+  // is a hard ceiling (bar height 35px, kept within the card's own
+  // y=596 bottom edge) — a genuine last-resort clamp on top of the
+  // three compression levers above, so even a combination of content
+  // extreme enough to exhaust all of them still cannot push the bar
+  // off the visible canvas the way it previously could.
+  const MAX_FINAL_LINE_Y = 555;
+  const finalLineY = Math.min(MAX_FINAL_LINE_Y, Math.max(547, summaryBlockBottomY + 20));
 
   // Fact text is vertically centered as a whole block around the
   // icon's middle, generalizing correctly to 1, 2, 3+ wrapped lines
@@ -309,7 +349,7 @@ function buildMiddleSectionSvg(candidate) {
     <line x1="67" y1="${divider2Y}" x2="957" y2="${divider2Y}" stroke="#c8d9e9" stroke-width="2"/>
     <circle cx="${67 + SUMMARY_ICON_RADIUS}" cy="${summaryTopY + SUMMARY_ICON_RADIUS}" r="${SUMMARY_ICON_RADIUS}" fill="#0878ef"/>
     <path d="M${67 + SUMMARY_ICON_RADIUS - 13} ${summaryTopY + SUMMARY_ICON_RADIUS}l11 11 21-23" fill="none" stroke="#fff" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
-    <text x="${67 + SUMMARY_ICON_RADIUS * 2 + 22}" y="${summaryTopY + SUMMARY_ICON_RADIUS * 0.65}" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="${summaryFontSize}" fill="#062650">${tspans(summaryLines, 67 + SUMMARY_ICON_RADIUS * 2 + 22, summaryTopY + SUMMARY_ICON_RADIUS * 0.65, summaryLineHeight)}</text>` : "";
+    <text x="${67 + SUMMARY_ICON_RADIUS * 2 + 22}" y="${summaryTopY + SUMMARY_ICON_RADIUS * 0.65}" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="${summaryFontSize}" fill="#062650">${tspans(summaryLines, 67 + SUMMARY_ICON_RADIUS * 2 + 22, summaryTopY + SUMMARY_ICON_RADIUS * 0.65, compressedSummaryLineHeight)}</text>` : "";
 
   const svg = String.raw`<svg xmlns="http://www.w3.org/2000/svg" width="${MIDDLE_WIDTH}" height="${MIDDLE_HEIGHT}" viewBox="0 0 ${MIDDLE_WIDTH} ${MIDDLE_HEIGHT}">
   <defs>

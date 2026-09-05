@@ -294,40 +294,20 @@ function generateHookFromAiAnalysis(job) {
 }
 
 function generateSocialSafeHook(job) {
-  // Direct instruction: "Full-Time," category, location, compensation,
-  // and work arrangement must never BE the hook by themselves — all of
-  // them are already shown as their own separate grid facts, so
-  // restating one alone adds no real information. A genuine anchor
-  // (something derived from stored ai_analysis data, or experience
-  // years) is required first; compensation/work arrangement may only
-  // ever supplement an anchor that's already there, never stand in
-  // for one. "Full-Time" itself is never used at all, in any position.
-  const parts = [];
-
+  // Direct instruction: the hook must contain ONLY the meaningful
+  // hook — never compensation, employment type, location, category,
+  // or work arrangement appended on top, since all of those are
+  // already shown as their own separate fact cells. Repeating them
+  // here is pure redundancy, not real additional content. A genuine
+  // anchor (ai_analysis-derived content, or experience years as a
+  // fallback) is required; nothing is ever appended to it.
   const aiHook = generateHookFromAiAnalysis(job);
-  if (aiHook) {
-    parts.push(aiHook);
-  } else if (job.experience_min_years != null) {
-    parts.push(`${job.experience_min_years}+ yrs experience`);
-  }
-
-  if (parts.length === 0) {
-    // No genuine anchor available — compensation/remote status alone
-    // are never sufficient. Excluded rather than posted with a hollow
-    // restatement of an already-displayed fact.
-    return null;
-  }
-
-  if (job.compensation_text && String(job.compensation_text).trim()) {
-    parts.push(String(job.compensation_text).trim());
-  } else if (job.salary_min != null && job.salary_max != null) {
-    parts.push(`$${Number(job.salary_min).toLocaleString()}–$${Number(job.salary_max).toLocaleString()}`);
-  }
-
-  if (job.remote_status === "remote") parts.push("Remote");
-  else if (job.remote_status === "hybrid") parts.push("Hybrid");
-
-  return parts.slice(0, 3).join(" · "); // short — this is a hook, not a summary
+  if (aiHook) return aiHook;
+  if (job.experience_min_years != null) return `${job.experience_min_years}+ yrs experience`;
+  // No genuine anchor available — compensation/remote status alone
+  // are never sufficient to stand in as the hook. Excluded rather
+  // than posted with a hollow restatement of an already-displayed fact.
+  return null;
 }
 
 function containsEmployerIdentity(text, companyName) {

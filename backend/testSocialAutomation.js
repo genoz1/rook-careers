@@ -470,9 +470,13 @@ async function run() {
     const hook = generateSocialSafeHook(job);
     assert.ok(!hook.includes("should-never-appear"));
   });
-  test("compensation MAY supplement a hook that already has a genuine anchor (experience years or ai_analysis content)", () => {
+  test("compensation is NEVER appended to the hook, even when a genuine anchor is present — it's already its own fact cell", () => {
     const job = baseJob({ compensation_text: "$90,000 - $120,000", employment_type: null, remote_status: null, experience_min_years: 4, ai_analysis: aiAnalysis() });
-    assert.strictEqual(generateSocialSafeHook(job), "4+ yrs experience · $90,000 - $120,000");
+    assert.strictEqual(generateSocialSafeHook(job), "4+ yrs experience", "the hook must contain ONLY the anchor — never a supplementary compensation clause");
+  });
+  test("work arrangement (remote/hybrid) is NEVER appended to the hook either, for the same reason", () => {
+    const job = baseJob({ compensation_text: null, salary_min: null, salary_max: null, employment_type: null, remote_status: "remote", experience_min_years: 4, ai_analysis: aiAnalysis() });
+    assert.strictEqual(generateSocialSafeHook(job), "4+ yrs experience");
   });
 
   console.log("\n=== Title sanitization: strips a demonstrable employer/product suffix for public display only ===");
@@ -756,6 +760,120 @@ async function run() {
     const candidate = { title: "Associate Territory Manager", location_display: "Cleveland, OH", category: "Healthcare SaaS", social_safe_hook: null };
     const svg = buildMiddleSectionSvg(candidate);
     assert.ok(!svg.includes("opportunity."), "must never synthesize a generic '{category} opportunity.' sentence when no real hook exists");
+  });
+
+  console.log("\n=== REGRESSION: job category is mandatory and always renders when available ===");
+  test("category always appears in the fact grid — was previously missing due to a category-mapping mismatch, now guaranteed whenever normalizeCategoryForSocial produces a value", () => {
+    const candidate = buildCandidateResponse(baseJob({
+      ai_analysis: aiAnalysis({ required_industries: ["Medical Device"] }),
+    }), SECRET);
+    assert.strictEqual(candidate.category, "Medical Device");
+    const svg = buildMiddleSectionSvg(candidate);
+    assert.ok(svg.includes("Medical Device"), "category must render in the graphic whenever present");
+  });
+  test("a longer category value still renders completely, even when it wraps across multiple tspans", () => {
+    const candidate = buildCandidateResponse(baseJob({
+      ai_analysis: aiAnalysis({ required_industries: ["Veterinary/Animal Health"] }),
+    }), SECRET);
+    const svg = buildMiddleSectionSvg(candidate);
+    // Checked as two substrings rather than one contiguous string,
+    // since a category this long legitimately wraps across separate
+    // <tspan> elements — the same non-bug encountered earlier with a
+    // wrapped title. Both parts must still be present somewhere.
+    assert.ok(svg.includes("Veterinary/Animal") && svg.includes("Health"), "the full category text must be present even when wrapped");
+  });
+  test("category still renders even when 4 other optional facts are also present, thanks to the new priority order", () => {
+    const candidate = buildCandidateResponse(baseJob({
+      compensation_text: "$90,000", employment_type: "Full-Time", remote_status: "field",
+      ai_analysis: aiAnalysis({ required_industries: ["Medical Device"] }),
+    }), SECRET);
+    assert.ok(candidate.category, "sanity check — category is present in the data");
+    const facts = require("./socialGraphic").buildFactList(candidate);
+    assert.ok(facts.some((f) => f.main === candidate.category), "category must be included in the 4 selected fact cells, never crowded out");
+  });
+  test("fact priority order is location, category, compensation, work arrangement, employment type", () => {
+    const candidate = {
+      location_display: "Cleveland, OH", category: "Medical Device", compensation_display: "$90,000",
+      work_arrangement: "remote", employment_type: "Full-Time",
+    };
+    const facts = require("./socialGraphic").buildFactList(candidate);
+    assert.deepStrictEqual(facts.map((f) => f.main), ["Cleveland, OH", "Medical Device", "$90,000", "Remote"], "with 5 candidates and only 4 slots, employment_type (lowest priority) must be the one dropped");
+  });
+
+  console.log("\n=== REGRESSION: the factual hook never repeats a fact already shown in the grid ===");
+  test("generateSocialSafeHook never appends compensation, work arrangement, or employment type — confirmed for a job with all three present", () => {
+    const job = baseJob({
+      compensation_text: "$90,000 - $120,000", employment_type: "Full-Time", remote_status: "remote", experience_min_years: 4,
+      ai_analysis: aiAnalysis(),
+    });
+    const hook = generateSocialSafeHook(job);
+    assert.strictEqual(hook, "4+ yrs experience");
+    assert.ok(!hook.includes("$90,000"), "must never repeat the compensation fact");
+    assert.ok(!hook.toLowerCase().includes("remote"), "must never repeat the work arrangement fact");
+    assert.ok(!hook.includes("Full-Time"), "must never repeat the employment type fact");
+  });
+  test("the rendered graphic's hook text never duplicates any of the fact cells actually displayed alongside it", () => {
+    const candidate = buildCandidateResponse(baseJob({
+      compensation_text: "$90,000 - $120,000", employment_type: "Full-Time", remote_status: "remote",
+      ai_analysis: aiAnalysis({ required_customer_types: ["Hospitals"], specialty_requirements: ["in-service training"] }),
+    }), SECRET);
+    const facts = require("./socialGraphic").buildFactList(candidate);
+    for (const fact of facts) {
+      assert.ok(!candidate.social_safe_hook.includes(fact.main), `hook must not repeat displayed fact "${fact.main}"`);
+    }
+  });
+
+  console.log("\n=== REGRESSION: the employer-details bar always renders, regardless of content length ===");
+  test("the 'See the employer and complete job details on ROOK' bar is present even for a long title + long facts + long hook combined", () => {
+    // Direct regression for a real, confirmed bug: this exact
+    // combination previously computed a bar position (finalLineY)
+    // past the visible 621px canvas entirely, silently disappearing
+    // even though the text was present in the SVG source.
+    const candidate = {
+      title: "Senior Regional Key Account Manager, Diagnostics and Laboratory Portfolio",
+      territory_display: "Texas, Oklahoma, Arkansas, Louisiana, and New Mexico",
+      category: "Diagnostics/Laboratory", compensation_display: "$85,000 - $110,000",
+      work_arrangement: "remote", employment_type: "Full-Time",
+      social_safe_hook: "Support laboratory partner relationships and specimen logistics compliance training",
+    };
+    const svg = buildMiddleSectionSvg(candidate);
+    assert.ok(svg.includes("See the employer and complete job details on ROOK"));
+    const match = svg.match(/<rect x="68" y="([\d.]+)" width="888"/);
+    assert.ok(match, "the bar rect must be present in the markup");
+    const finalLineY = parseFloat(match[1]);
+    assert.ok(finalLineY + 35 <= 621, `bar (at y=${finalLineY}, height 35) must stay within the visible 621px canvas`);
+    assert.ok(finalLineY + 35 <= 596, `bar must stay within the card's own bottom edge (y=596), not just the outer canvas`);
+  });
+  await asyncTest("the same extreme combination still produces a valid, correctly-sized PNG with no rendering error", async () => {
+    const candidate = {
+      title: "Senior Regional Key Account Manager, Diagnostics and Laboratory Portfolio",
+      territory_display: "Texas, Oklahoma, Arkansas, Louisiana, and New Mexico",
+      category: "Diagnostics/Laboratory", compensation_display: "$85,000 - $110,000",
+      work_arrangement: "remote", employment_type: "Full-Time",
+      social_safe_hook: "Support laboratory partner relationships and specimen logistics compliance training",
+    };
+    const buffer = await renderFeaturedJobGraphic(candidate);
+    const meta = await require("sharp")(buffer).metadata();
+    assert.strictEqual(meta.width, 1024);
+    assert.strictEqual(meta.height, 1536);
+  });
+
+  console.log("\n=== Sample-fixture internal consistency (item 8: all sample data must describe the same mock job) ===");
+  test("a representative no-compensation sample fixture is internally consistent — title, category, and hook all describe the same role", () => {
+    const candidate = buildCandidateResponse(baseJob({
+      title_original: "Clinical Applications Specialist", location_raw: "Massachusetts - Boston",
+      compensation_text: null, salary_min: null, salary_max: null, employment_type: null, remote_status: null,
+      ai_analysis: { required_industries: ["Healthcare SaaS"], preferred_industries: [], product_categories: [], required_customer_types: ["Hospital Systems"], specialty_requirements: ["clinical workflow onboarding"] },
+    }), SECRET);
+    assert.strictEqual(candidate.category, "Healthcare SaaS");
+    assert.strictEqual(candidate.location_display, "Boston, MA");
+    assert.strictEqual(candidate.social_safe_hook, "Support hospital system relationships and clinical workflow onboarding");
+    // Internal consistency check: the hook's subject matter (hospital
+    // systems, clinical workflows) plausibly belongs to the same
+    // Healthcare SaaS / Clinical Applications role the title and
+    // category describe — not an unrelated mismatch (e.g. a "surgical
+    // instrument" hook on a software-sales title).
+    assert.ok(candidate.social_safe_hook.toLowerCase().includes("clinical") || candidate.social_safe_hook.toLowerCase().includes("hospital"), "hook content should plausibly relate to the stated category/title");
   });
 
   console.log("\n=== REGRESSION: secondary labels removed (direct instruction — they added clutter) ===");
