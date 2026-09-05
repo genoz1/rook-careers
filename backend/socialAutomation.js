@@ -218,6 +218,53 @@ function buildBrandedTermList(employerCompanyNames = [], additionalTerms = []) {
 // the safety comes from what this function is given, not from
 // scrubbing something after the fact. No LLM involved in this pass.
 // =================================================================
+// Very narrow, low-risk transform used only for hook phrasing below —
+// strips a trailing "s" for simple plurals ("Hospitals" -> "Hospital")
+// so a stored customer-type value reads naturally in a sentence. Not
+// a general-purpose linguistic tool; deliberately conservative (only
+// fires on a plain trailing "s" on a long-enough word) so it never
+// mangles a word it doesn't recognize.
+function singularizeForHook(word) {
+  const trimmed = String(word || "").trim();
+  if (/s$/i.test(trimmed) && trimmed.length > 3) return trimmed.slice(0, -1);
+  return trimmed;
+}
+
+// Direct instruction: a factual hook may also be derived
+// deterministically from stored ai_analysis fields (sales_motion,
+// required_customer_types, specialty_requirements) — the same fields
+// backend/matching.js already treats as real, extracted-not-invented
+// data (see backend/ai/jobAnalysis.js's own "Extract ONLY what the
+// posting actually states" instruction). This only ever recombines
+// values already present in that stored data into a short sentence
+// template — it never adds a claim, qualification, benefit, or
+// employer detail that wasn't already there.
+function generateHookFromAiAnalysis(job) {
+  const ai = job.ai_analysis;
+  if (!ai || typeof ai !== "object") return null;
+
+  const customerType = Array.isArray(ai.required_customer_types) && ai.required_customer_types.length > 0
+    ? String(ai.required_customer_types[0]).trim() : null;
+  const specialty = Array.isArray(ai.specialty_requirements) && ai.specialty_requirements.length > 0
+    ? String(ai.specialty_requirements[0]).trim() : null;
+  const motion = Array.isArray(ai.sales_motion) && ai.sales_motion.length > 0
+    ? String(ai.sales_motion[0]).trim() : null;
+
+  if (customerType && specialty) {
+    return `Support ${singularizeForHook(customerType).toLowerCase()} relationships and ${specialty.toLowerCase()}`;
+  }
+  if (customerType) {
+    return `Support ${singularizeForHook(customerType).toLowerCase()} relationships`;
+  }
+  if (specialty) {
+    return `Focus on ${specialty.toLowerCase()}`;
+  }
+  if (motion) {
+    return `${motion} sales role`;
+  }
+  return null;
+}
+
 function generateSocialSafeHook(job) {
   const parts = [];
 
@@ -236,8 +283,13 @@ function generateSocialSafeHook(job) {
     parts.push(`${job.experience_min_years}+ yrs experience`);
   }
 
-  if (parts.length === 0) return null;
-  return parts.slice(0, 3).join(" · "); // short — this is a hook, not a summary
+  if (parts.length > 0) return parts.slice(0, 3).join(" · "); // short — this is a hook, not a summary
+
+  // Nothing in the primary allowlist (compensation/remote/employment/
+  // experience) — try the stored ai_analysis fields before giving up.
+  // Direct instruction: if neither path yields a safe hook, the job
+  // is excluded rather than posted with an invented one.
+  return generateHookFromAiAnalysis(job);
 }
 
 function containsEmployerIdentity(text, companyName) {
@@ -376,19 +428,21 @@ function evaluateEligibility(job, { freshnessWindowDays, now = new Date(), expec
 
   if (!isSociallyComplete(job)) reasonCodes.push("incomplete_fields");
 
-  // Direct instruction: require enough verified data to populate at
-  // least four useful middle-panel facts without invented content —
-  // a job that's technically "complete" (title+location+category)
-  // but has nothing else can still be too thin for a genuinely
-  // featured-quality post. This is a real, additional bar beyond
-  // isSociallyComplete's minimum.
-  const factCount = countAvailableFacts(job);
-  if (factCount < 4) reasonCodes.push("insufficient_display_facts");
+  // Direct instruction: compensation, employment type, and work
+  // arrangement are weighted ranking bonuses (see computeRichnessScore
+  // and scoreAndSortCandidates), never hard requirements — a
+  // genuinely eligible job must not be rejected just for lacking one
+  // or more of these. The only hard content-completeness bar remains
+  // isSociallyComplete's title + normalized location + approved
+  // category above.
 
-  // Direct instruction: a factual hook, derived only from stored
-  // listing data, is now required — not best-effort. If nothing
-  // verified supports one, the job is excluded rather than posted
-  // with an empty hook section.
+  // A factual hook, derived only from stored listing data, IS still
+  // required — either from the primary allowlist (compensation/
+  // remote/employment/experience) or, when that yields nothing, from
+  // stored ai_analysis fields (sales_motion, required_customer_types,
+  // specialty_requirements — see generateHookFromAiAnalysis). If
+  // neither path produces a safe hook, the job is excluded rather
+  // than posted with an empty hook section.
   const hook = generateSocialSafeHook(job);
   if (!hook) reasonCodes.push("no_factual_hook");
 
@@ -456,6 +510,7 @@ function scoreAndSortCandidates(jobs, {
         spacingKey,
         category,
         richness: computeRichnessScore(job),
+        fieldCount: countAvailableFacts(job),
         neverFeatured: !previouslyFeaturedJobIds.has(job.id) ? 1 : 0,
         complete: isSociallyComplete(job) ? 1 : 0,
         preferredCategory: preferredCategories.includes(category) ? 1 : 0,
@@ -470,19 +525,26 @@ function scoreAndSortCandidates(jobs, {
       // (compensation, employment type, work arrangement, a factual
       // hook) — this now dominates the ranking, ahead of freshness.
       if (b.richness !== a.richness) return b.richness - a.richness;
-      // 2. never previously featured
+      // 2. Direct instruction: among otherwise-similar candidates,
+      // prefer the one with the greatest number of verified display
+      // fields overall (location/category are always present once
+      // eligible, so this mainly differentiates on the same optional
+      // fields richness already weighs, plus acts as a finer-grained
+      // tiebreaker within a richness tier).
+      if (b.fieldCount !== a.fieldCount) return b.fieldCount - a.fieldCount;
+      // 3. never previously featured
       if (b.neverFeatured !== a.neverFeatured) return b.neverFeatured - a.neverFeatured;
-      // 3. listing completeness
+      // 4. listing completeness
       if (b.complete !== a.complete) return b.complete - a.complete;
-      // 4. preferred category and territory quality
+      // 5. preferred category and territory quality
       const aPref = a.preferredCategory + a.preferredTerritory;
       const bPref = b.preferredCategory + b.preferredTerritory;
       if (bPref !== aPref) return bPref - aPref;
-      // 5. category variation
+      // 6. category variation
       if (b.categoryVaried !== a.categoryVaried) return b.categoryVaried - a.categoryVaried;
-      // 6. employer spacing
+      // 7. employer spacing
       if (b.employerSpaced !== a.employerSpaced) return b.employerSpaced - a.employerSpaced;
-      // 7. freshness — direct instruction: freshness remains important
+      // 8. freshness — direct instruction: freshness remains important
       // but must not outweigh content completeness and presentation
       // quality, so it's now the LAST tiebreaker, not the first.
       if (b.lastSeenAtMs !== a.lastSeenAtMs) return b.lastSeenAtMs - a.lastSeenAtMs;
@@ -572,6 +634,7 @@ module.exports = {
   dedupeLocationAgainstTitle,
   countAvailableFacts,
   computeRichnessScore,
+  generateHookFromAiAnalysis,
   evaluateSocialEligibilityForIngestion,
   safeEvaluateSocialEligibilityForIngestion,
   computeContentVersion,

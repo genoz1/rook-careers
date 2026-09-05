@@ -23,6 +23,7 @@ const {
   dedupeLocationAgainstTitle,
   countAvailableFacts,
   computeRichnessScore,
+  generateHookFromAiAnalysis,
   evaluateSocialEligibilityForIngestion,
   safeEvaluateSocialEligibilityForIngestion,
   computeContentVersion,
@@ -382,19 +383,26 @@ async function run() {
     assert.strictEqual(ranked.length, 2); // doesn't throw, doesn't drop anything
   });
 
-  console.log("\n=== Minimum display-quality bar: at least 4 useful facts, required ===");
-  test("a job with only title+location+category (3 facts) is rejected as too thin, even though it's 'complete'", () => {
-    const job = baseJob({ compensation_text: null, salary_min: null, salary_max: null, employment_type: null, remote_status: null });
-    assert.strictEqual(isSociallyComplete(job), true, "sanity check: still passes the older, looser completeness bar");
-    assert.strictEqual(countAvailableFacts(job), 2, "location + category only — employment_type and remote_status and compensation are all missing");
+  console.log("\n=== Compensation, employment type, and work arrangement are ranking bonuses, NOT hard requirements ===");
+  test("a job missing compensation, employment type, AND work arrangement is still ELIGIBLE if it has a hook from another source", () => {
+    const job = baseJob({ compensation_text: null, salary_min: null, salary_max: null, employment_type: null, remote_status: null, experience_min_years: 3 });
+    assert.strictEqual(isSociallyComplete(job), true);
     const result = evaluateEligibility(job, { now: NOW });
-    assert.strictEqual(result.eligible, false);
-    assert.ok(result.reason_codes.includes("insufficient_display_facts"));
+    assert.strictEqual(result.eligible, true, "must NOT be rejected merely for lacking these three optional fields — direct correction from the previous, too-strict version");
+    assert.ok(!result.reason_codes.includes("insufficient_display_facts"), "this rejection reason no longer exists at all");
   });
-  test("a job with exactly 4 available facts passes the minimum bar", () => {
-    const job = baseJob({ compensation_text: "$80,000", employment_type: "Full-Time", remote_status: null });
-    assert.strictEqual(countAvailableFacts(job), 4, "location, category, compensation, employment_type — remote_status is the only one missing");
-    assert.ok(!evaluateEligibility(job, { now: NOW }).reason_codes.includes("insufficient_display_facts"));
+  test("scoreAndSortCandidates still ranks a richer candidate above a thinner one — the preference is a ranking bonus, not a gate", () => {
+    const rich = baseJob({ id: "rich", employer_id: "employer-A" });
+    const thin = baseJob({ id: "thin", employer_id: "employer-B", compensation_text: null, salary_min: null, salary_max: null, employment_type: null, remote_status: null, experience_min_years: 3 });
+    const ranked = scoreAndSortCandidates([thin, rich], { spacingSecret: SECRET });
+    assert.strictEqual(ranked[0].id, "rich", "richer candidate still ranks first — just via scoring, not elimination of the thinner one");
+    assert.strictEqual(ranked.length, 2, "the thinner candidate must still be present in the ranked list, not excluded");
+  });
+  test("fieldCount scoring prefers the candidate with more verified display fields, all else equal", () => {
+    const moreFields = baseJob({ id: "more", employer_id: "employer-A", compensation_text: "$90,000", employment_type: "Full-Time", remote_status: "field" });
+    const fewerFields = baseJob({ id: "fewer", employer_id: "employer-B", compensation_text: null, salary_min: null, salary_max: null, employment_type: null, remote_status: null, experience_min_years: 3 });
+    const ranked = scoreAndSortCandidates([fewerFields, moreFields], { spacingSecret: SECRET });
+    assert.strictEqual(ranked[0].id, "more");
   });
 
   console.log("\n=== A factual hook is now required, not best-effort ===");
@@ -408,6 +416,53 @@ async function run() {
     const job = baseJob({ compensation_text: null, salary_min: null, salary_max: null, remote_status: null, employment_type: null, experience_min_years: 5 });
     assert.ok(generateSocialSafeHook(job));
     assert.ok(!evaluateEligibility(job, { now: NOW }).reason_codes.includes("no_factual_hook"));
+  });
+
+  console.log("\n=== Hook fallback: derived from stored ai_analysis fields when the primary allowlist yields nothing ===");
+  test("generateHookFromAiAnalysis builds a hook from required_customer_types + specialty_requirements alone", () => {
+    const job = baseJob({
+      compensation_text: null, salary_min: null, salary_max: null, remote_status: null, employment_type: null, experience_min_years: null,
+      ai_analysis: aiAnalysis({ required_customer_types: ["Veterinary Clinics"], specialty_requirements: ["surgical consultations"] }),
+    });
+    assert.strictEqual(generateHookFromAiAnalysis(job), "Support veterinary clinic relationships and surgical consultations");
+    assert.strictEqual(generateSocialSafeHook(job), "Support veterinary clinic relationships and surgical consultations", "the full function must fall through to this when the primary allowlist is empty");
+  });
+  test("a job with NO primary-allowlist fields but a real ai_analysis-derived hook is now eligible (previously would have been rejected before this correction)", () => {
+    const job = baseJob({
+      compensation_text: null, salary_min: null, salary_max: null, remote_status: null, employment_type: null, experience_min_years: null,
+      ai_analysis: aiAnalysis({ sales_motion: ["Territory Development"] }),
+    });
+    assert.strictEqual(generateSocialSafeHook(job), "Territory Development sales role");
+    assert.strictEqual(evaluateEligibility(job, { now: NOW }).eligible, true);
+  });
+  test("the ai_analysis-derived hook is still subject to the same employer-identity and branded-term redaction as any other hook", () => {
+    const job = baseJob({
+      compensation_text: null, salary_min: null, salary_max: null, remote_status: null, employment_type: null, experience_min_years: null,
+      company_name: "Acme Diagnostics",
+      ai_analysis: aiAnalysis({ required_customer_types: ["Acme Diagnostics accounts"] }),
+    });
+    const result = evaluateEligibility(job, { now: NOW });
+    assert.ok(result.reason_codes.includes("redaction_failed"), "an employer name leaking into stored ai_analysis text must still be caught");
+  });
+  test("PRODUCTION-SHAPED: an Associate Territory Manager record with only ai_analysis-derived facts produces the exact expected hook", () => {
+    // Shaped after the previously validated real production record —
+    // no compensation, employment type, or remote_status verified at
+    // all, only what the AI job-analysis step actually extracted from
+    // the real posting text.
+    const associateTerritoryManagerJob = baseJob({
+      id: "prod-shaped-job", title_original: "Associate Territory Manager", location_raw: "USA OH - Cleveland", territory: null,
+      compensation_text: null, salary_min: null, salary_max: null, employment_type: null, remote_status: null, experience_min_years: null,
+      ai_analysis: {
+        required_industries: ["Medical Device"], preferred_industries: [], product_categories: [],
+        required_customer_types: ["Hospitals"], specialty_requirements: ["in-service training"], sales_motion: ["Territory Development"],
+      },
+    });
+    const candidate = buildCandidateResponse(associateTerritoryManagerJob, SECRET);
+    assert.strictEqual(candidate.social_safe_hook, "Support hospital relationships and in-service training");
+    assert.strictEqual(candidate.location_display, "Cleveland, OH", "location normalization must also apply to this production-shaped record");
+    assert.strictEqual(candidate.title, "Associate Territory Manager", "title passed through unchanged");
+    const result = evaluateEligibility(associateTerritoryManagerJob, { now: NOW });
+    assert.strictEqual(result.eligible, true, "must be genuinely eligible despite having none of the three optional bonus fields");
   });
 
   console.log("\n=== Location normalization: 'USA OH - Cleveland' -> 'Cleveland, OH' ===");
