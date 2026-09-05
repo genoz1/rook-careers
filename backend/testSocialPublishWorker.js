@@ -14,6 +14,7 @@ const {
 } = require("./socialPublishWorker");
 const { computeJobFingerprint } = require("./socialAutomation");
 const { preflightCheckMedia } = require("./socialMediaPreflight");
+const { uploadGraphicToStorage, buildObjectPath, ensureBucketExists, BUCKET_NAME } = require("./socialMediaStorage");
 
 let passCount = 0, failCount = 0;
 function test(name, fn) {
@@ -84,7 +85,21 @@ function makeMockSupabase({ jobs = [], employers = [], history = [] } = {}) {
     };
     return builder;
   }
-  return { from: table };
+
+  // Minimal mock of the Supabase Storage namespace, matching the
+  // exact calls backend/socialMediaStorage.js makes — used whenever a
+  // test doesn't explicitly inject its own uploadGraphicToStorage.
+  const storageObjects = {};
+  const storage = {
+    listBuckets: async () => ({ data: [{ name: "social-creatives" }], error: null }),
+    createBucket: async () => ({ data: { name: "social-creatives" }, error: null }),
+    from: (bucket) => ({
+      upload: async (path, buffer, opts) => { storageObjects[`${bucket}/${path}`] = { buffer, contentType: opts?.contentType }; return { data: { path }, error: null }; },
+      getPublicUrl: (path) => ({ data: { publicUrl: `https://fake-project.supabase.co/storage/v1/object/public/${bucket}/${path}` } }),
+    }),
+  };
+
+  return { from: table, storage };
 }
 
 async function run() {
@@ -396,6 +411,100 @@ async function run() {
     assert.ok(result.results.linkedin.bufferPostId);
     assert.strictEqual(result.historyRecorded, true);
     assert.ok(!JSON.stringify(result).toLowerCase().includes("acme"), "employer name must never appear anywhere in the result");
+  });
+
+  console.log("\n=== Supabase Storage media hosting: replaces container-local files entirely ===");
+
+  function makeMockStorageClient({ bucketAlreadyExists = true, createBucketError = null, uploadError = null } = {}) {
+    const uploadedObjects = {};
+    return {
+      storage: {
+        listBuckets: async () => ({ data: bucketAlreadyExists ? [{ name: BUCKET_NAME }] : [], error: null }),
+        createBucket: async (name, opts) => {
+          if (createBucketError) return { data: null, error: { message: createBucketError } };
+          return { data: { name, ...opts }, error: null };
+        },
+        from: (bucket) => ({
+          upload: async (path, buffer, opts) => {
+            if (uploadError) return { data: null, error: { message: uploadError } };
+            uploadedObjects[path] = { buffer, opts };
+            return { data: { path }, error: null };
+          },
+          getPublicUrl: (path) => ({ data: { publicUrl: `https://fake-project.supabase.co/storage/v1/object/public/${bucket}/${path}` } }),
+        }),
+      },
+      _uploadedObjects: uploadedObjects,
+    };
+  }
+
+  test("buildObjectPath never includes an employer name — it isn't even given one to work with", () => {
+    const path = buildObjectPath({ dateStr: "2026-09-05", slot: "live-test", jobId: "job-123", contentVersion: "abc123" });
+    assert.strictEqual(path, "2026-09-05/live-test-job-123-abc123.png");
+  });
+  test("buildObjectPath rejects unsafe path segments (traversal attempt)", () => {
+    assert.throws(() => buildObjectPath({ dateStr: "2026-09-05", slot: "live-test", jobId: "../../etc/passwd", contentVersion: "abc123" }), /Unsafe job_id/);
+  });
+
+  await asyncTest("ensureBucketExists is a no-op when the bucket already exists", async () => {
+    const client = makeMockStorageClient({ bucketAlreadyExists: true });
+    let createCalled = false;
+    client.storage.createBucket = async () => { createCalled = true; return { data: null, error: null }; };
+    await ensureBucketExists(client);
+    assert.strictEqual(createCalled, false, "must not attempt to create a bucket that's already there");
+  });
+  await asyncTest("ensureBucketExists creates the bucket, configured public and PNG-only, when missing", async () => {
+    const client = makeMockStorageClient({ bucketAlreadyExists: false });
+    let capturedOpts = null;
+    client.storage.createBucket = async (name, opts) => { capturedOpts = opts; return { data: { name }, error: null }; };
+    await ensureBucketExists(client);
+    assert.strictEqual(capturedOpts.public, true);
+    assert.deepStrictEqual(capturedOpts.allowedMimeTypes, ["image/png"]);
+  });
+  await asyncTest("ensureBucketExists treats a concurrent 'already exists' creation error as success, not a failure", async () => {
+    const client = makeMockStorageClient({ bucketAlreadyExists: false, createBucketError: "Bucket already exists" });
+    await assert.doesNotReject(() => ensureBucketExists(client));
+  });
+  await asyncTest("ensureBucketExists throws a clear error for a genuine creation failure", async () => {
+    const client = makeMockStorageClient({ bucketAlreadyExists: false, createBucketError: "Insufficient permissions" });
+    await assert.rejects(() => ensureBucketExists(client), /Insufficient permissions/);
+  });
+
+  await asyncTest("uploadGraphicToStorage uploads with contentType image/png and returns a real public URL", async () => {
+    const client = makeMockStorageClient();
+    const buffer = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+    const result = await uploadGraphicToStorage(client, { dateStr: "2026-09-05", slot: "live-test", jobId: "job-123", contentVersion: "abc123", buffer });
+    assert.strictEqual(client._uploadedObjects["2026-09-05/live-test-job-123-abc123.png"].opts.contentType, "image/png");
+    assert.strictEqual(result.publicUrl, "https://fake-project.supabase.co/storage/v1/object/public/social-creatives/2026-09-05/live-test-job-123-abc123.png");
+    assert.ok(!result.publicUrl.includes("localhost") && !result.publicUrl.includes("127.0.0.1"), "must be a real external URL, not a local address");
+  });
+  await asyncTest("uploadGraphicToStorage throws a clear error on upload failure, rather than silently continuing", async () => {
+    const client = makeMockStorageClient({ uploadError: "Payload too large" });
+    const buffer = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+    await assert.rejects(() => uploadGraphicToStorage(client, { dateStr: "2026-09-05", slot: "live-test", jobId: "job-123", contentVersion: "abc123", buffer }), /Payload too large/);
+  });
+  await asyncTest("uploadGraphicToStorage rejects an empty buffer before ever calling Storage", async () => {
+    const client = makeMockStorageClient();
+    await assert.rejects(() => uploadGraphicToStorage(client, { dateStr: "2026-09-05", slot: "live-test", jobId: "job-123", contentVersion: "abc123", buffer: Buffer.alloc(0) }), /empty or invalid/);
+  });
+  await asyncTest("uploadGraphicToStorage's public URL is stable and non-expiring — no signature or expiry parameters", async () => {
+    const client = makeMockStorageClient();
+    const buffer = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+    const result = await uploadGraphicToStorage(client, { dateStr: "2026-09-05", slot: "live-test", jobId: "job-123", contentVersion: "abc123", buffer });
+    assert.ok(!result.publicUrl.includes("token="), "must use getPublicUrl, never a signed/expiring URL");
+    assert.ok(!result.publicUrl.includes("Expires="));
+  });
+  test("cross-instance-safety: socialMediaStorage.js has no dependency on the local filesystem at all", () => {
+    const fs = require("fs");
+    const source = fs.readFileSync(require.resolve("./socialMediaStorage"), "utf8");
+    assert.ok(!/require\((["'])fs\1\)/.test(source), "must never require the 'fs' module — hosting must not depend on which replica happens to handle a given request");
+  });
+
+  console.log("\n=== The full worker flow uses Storage upload, never local-file write ===");
+  test("socialPublishWorker.js no longer references the old local-file storage module at all", () => {
+    const fs = require("fs");
+    const source = fs.readFileSync(require.resolve("./socialPublishWorker"), "utf8");
+    assert.ok(!source.includes("socialGraphicStorage"), "must not fall back to container-local media hosting");
+    assert.ok(source.includes("socialMediaStorage"), "must use the new Storage-based hosting module");
   });
 
   console.log("\n=== Facebook createPost includes the required metadata; LinkedIn is left unchanged ===");

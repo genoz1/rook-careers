@@ -31,7 +31,7 @@ const { identifyRookChannels } = require("./socialChannels");
 const { buildPostCopy } = require("./socialPostCopy");
 const { preflightCheckMedia } = require("./socialMediaPreflight");
 const { renderFeaturedJobGraphic } = require("./socialGraphic");
-const { writeGraphicFile, verifyWrittenFile } = require("./socialGraphicStorage");
+const { uploadGraphicToStorage } = require("./socialMediaStorage");
 
 const JOB_COLUMNS = "id, employer_id, source_job_id, title_original, location_raw, territory, ai_analysis, compensation_text, salary_min, salary_max, employment_type, remote_status, experience_min_years, company_name, status, moderation_status, social_eligible, expires_at, last_seen_at";
 
@@ -165,15 +165,17 @@ async function runValidationOnly(config, deps = {}) {
 
   const graphicBuffer = await renderFeaturedJobGraphic(candidate);
   const dateStr = new Date().toISOString().slice(0, 10);
-  const written = await (deps.writeGraphicFile || writeGraphicFile)({
+  // Direct instruction: never fall back to container-local media —
+  // the graphic is uploaded to Supabase Storage, external to any
+  // single app replica, rather than written to local disk at all.
+  const uploaded = await (deps.uploadGraphicToStorage || uploadGraphicToStorage)(supabaseAdmin, {
     dateStr, slot: "validate", jobId: topJob.id, contentVersion: candidate.content_version, buffer: graphicBuffer,
   });
-  await (deps.verifyWrittenFile || verifyWrittenFile)(written.absolutePath);
 
   // Informational here (this mode never contacts Buffer regardless) —
   // surfaces a real media-accessibility problem before the operator
   // ever attempts the live test, rather than only discovering it then.
-  const mediaPreflight = await (deps.preflightCheckMedia || preflightCheckMedia)(written.publicUrl);
+  const mediaPreflight = await (deps.preflightCheckMedia || preflightCheckMedia)(uploaded.publicUrl);
 
   const postCopy = buildPostCopy(candidate);
 
@@ -182,7 +184,7 @@ async function runValidationOnly(config, deps = {}) {
     jobId: topJob.id,
     candidate,
     validation,
-    graphicUrl: written.publicUrl,
+    graphicUrl: uploaded.publicUrl,
     mediaPreflight,
     postCopy,
     sentToBuffer: false,
@@ -241,10 +243,12 @@ async function runControlledLiveTest(config, { confirmLive } = {}, deps = {}) {
 
   const graphicBuffer = await renderFeaturedJobGraphic(candidate);
   const dateStr = new Date().toISOString().slice(0, 10);
-  const written = await (deps.writeGraphicFile || writeGraphicFile)({
+  // Direct instruction: never fall back to container-local media —
+  // the graphic is uploaded to Supabase Storage, external to any
+  // single app replica, rather than written to local disk at all.
+  const uploaded = await (deps.uploadGraphicToStorage || uploadGraphicToStorage)(supabaseAdmin, {
     dateStr, slot: "live-test", jobId: topJob.id, contentVersion: candidate.content_version, buffer: graphicBuffer,
   });
-  await (deps.verifyWrittenFile || verifyWrittenFile)(written.absolutePath);
 
   // Direct instruction: a real preflight fetch of the exact public URL
   // — the same way Buffer itself will fetch it — before contacting
@@ -253,7 +257,7 @@ async function runControlledLiveTest(config, { confirmLive } = {}, deps = {}) {
   // upsert-on-run_key path used below for a normal outcome) so a
   // retry after fixing the underlying media problem updates this same
   // row instead of finding nothing to work from.
-  const mediaPreflight = await (deps.preflightCheckMedia || preflightCheckMedia)(written.publicUrl);
+  const mediaPreflight = await (deps.preflightCheckMedia || preflightCheckMedia)(uploaded.publicUrl);
   if (!mediaPreflight.ok) {
     const failureRow = buildHistoryRow({
       runKey: `LIVE-TEST-${topJob.id}`,
@@ -266,7 +270,7 @@ async function runControlledLiveTest(config, { confirmLive } = {}, deps = {}) {
       scheduledFor: new Date().toISOString(),
       facebook: { channelId: channels.facebook.id, status: "failed" },
       linkedin: { channelId: channels.linkedin.id, status: "failed" },
-      creativeUrl: written.publicUrl,
+      creativeUrl: uploaded.publicUrl,
       captionVersion: "v1",
       selectedAt: new Date().toISOString(),
       validatedAt: new Date().toISOString(),
@@ -278,7 +282,7 @@ async function runControlledLiveTest(config, { confirmLive } = {}, deps = {}) {
       stage: "media_preflight",
       jobId: topJob.id,
       reason: mediaPreflight.reason,
-      graphicUrl: written.publicUrl,
+      graphicUrl: uploaded.publicUrl,
       historyRecorded: !preflightHistoryError,
     };
   }
@@ -289,7 +293,7 @@ async function runControlledLiveTest(config, { confirmLive } = {}, deps = {}) {
   if (!alreadyPosted.facebook) {
     try {
       const post = await createPostFn(config.bufferAccessToken, {
-        channelId: channels.facebook.id, text: postCopy, photoUrl: written.publicUrl, mode: "shareNow",
+        channelId: channels.facebook.id, text: postCopy, photoUrl: uploaded.publicUrl, mode: "shareNow",
         // Direct fix: Buffer's schema requires this field for Facebook
         // (FacebookPostMetadataInput.type: PostTypeFacebook!,
         // non-nullable) — its absence is exactly the reported
@@ -310,7 +314,7 @@ async function runControlledLiveTest(config, { confirmLive } = {}, deps = {}) {
       // Facebook's does) — left exactly as before, no metadata added,
       // per direct instruction to keep it unchanged unless required.
       const post = await createPostFn(config.bufferAccessToken, {
-        channelId: channels.linkedin.id, text: postCopy, photoUrl: written.publicUrl, mode: "shareNow",
+        channelId: channels.linkedin.id, text: postCopy, photoUrl: uploaded.publicUrl, mode: "shareNow",
       });
       results.linkedin = { status: "sent", bufferPostId: post?.id || null, channelId: channels.linkedin.id };
     } catch (err) {
@@ -331,7 +335,7 @@ async function runControlledLiveTest(config, { confirmLive } = {}, deps = {}) {
     scheduledFor: new Date().toISOString(),
     facebook: { channelId: channels.facebook.id, bufferPostId: results.facebook.bufferPostId || null, status: results.facebook.status === "sent" ? "sent" : results.facebook.status },
     linkedin: { channelId: channels.linkedin.id, bufferPostId: results.linkedin.bufferPostId || null, status: results.linkedin.status === "sent" ? "sent" : results.linkedin.status },
-    creativeUrl: written.publicUrl,
+    creativeUrl: uploaded.publicUrl,
     captionVersion: "v1",
     selectedAt: new Date().toISOString(),
     validatedAt: new Date().toISOString(),
@@ -346,7 +350,7 @@ async function runControlledLiveTest(config, { confirmLive } = {}, deps = {}) {
     candidate,
     channels: { linkedin: channels.linkedin, facebook: channels.facebook },
     postCopy,
-    graphicUrl: written.publicUrl,
+    graphicUrl: uploaded.publicUrl,
     results,
     historyRecorded: !historyError,
     historyError: historyError?.message || null,
