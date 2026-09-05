@@ -107,12 +107,48 @@ function wrapFactText(text, fontSize, maxWidth, maxLines = 2) {
   return lines;
 }
 
+// Direct fix for a real overflow bug found while rendering samples:
+// allowing wrapFactText to wrap indefinitely (to avoid truncating a
+// long value like a 5-state territory) let a single fact grow to 3-4
+// lines, which pushed the rest of the card past the fixed panel
+// height into the bottom image. Modeled directly on fitTitle's proven
+// approach: shrink the font first to stay within 2 lines, and only
+// wrap further as a last resort for a genuinely extreme value — never
+// truncate, but prefer a smaller readable font over an unbounded
+// number of lines.
+function fitFactText(text, maxWidth) {
+  const MAX_FONT = 30;
+  const MIN_FONT = 22;
+  const PREFERRED_MAX_LINES = 2;
+  for (let fontSize = MAX_FONT; fontSize >= MIN_FONT; fontSize -= 1) {
+    const lines = wrapFactText(text, fontSize, maxWidth, 4);
+    if (lines.length <= PREFERRED_MAX_LINES) return { lines, fontSize };
+  }
+  return { lines: wrapFactText(text, MIN_FONT, maxWidth, 4), fontSize: MIN_FONT };
+}
+
+// Same principle as fitFactText, applied to the hook/summary line —
+// direct fix for a truncation bug found while rendering final
+// samples: a hook with a compensation clause appended (see
+// generateSocialSafeHook in socialAutomation.js) was long enough to
+// hit the old flat-font 2-line cap and get cut off with "…". Shrinks
+// the font first, only wraps further as a last resort.
+function fitSummaryText(text, maxWidth) {
+  const MAX_FONT = 31;
+  const MIN_FONT = 23;
+  const PREFERRED_MAX_LINES = 2;
+  for (let fontSize = MAX_FONT; fontSize >= MIN_FONT; fontSize -= 1) {
+    const lines = wrapFactText(text, fontSize, maxWidth, 3);
+    if (lines.length <= PREFERRED_MAX_LINES) return { lines, fontSize };
+  }
+  return { lines: wrapFactText(text, MIN_FONT, maxWidth, 3), fontSize: MIN_FONT };
+}
+
 function tspans(lines, x, startY, lineHeight) {
   return lines.map((l, i) => `<tspan x="${x}" y="${startY + i * lineHeight}">${escapeXml(l)}</tspan>`).join("");
 }
 
 const WORK_ARRANGEMENT_LABELS = { field: "Field Sales", remote: "Remote", hybrid: "Hybrid", onsite: "On-Site" };
-const WORK_ARRANGEMENT_ADJECTIVES = { field: "Field-based", remote: "Remote", hybrid: "Hybrid", onsite: "On-site" };
 
 // Exact icon path data from the approved template — unchanged.
 const FACT_ICONS = {
@@ -131,72 +167,78 @@ const FACT_ICONS = {
 // Direct instruction: only these fields, and only when present. This
 // priority order decides which 4 facts occupy the grid's 4 slots when
 // more than 4 are available (compensation, when verified, is
-// prioritized into the grid over work arrangement, which is still
-// reflected in the factual summary line below if present).
+// prioritized into the grid over work arrangement). Secondary labels
+// ("Regional opportunity," "Medical sales category," etc.) have been
+// removed entirely — direct instruction: they added clutter and were
+// unreadable at feed size.
 function buildFactList(candidate) {
   const facts = [];
   const locationText = candidate.territory_display || candidate.location_display;
-  if (locationText) facts.push({ icon: "pin", main: locationText, sub: "Regional opportunity" });
-  if (candidate.compensation_display) facts.push({ icon: "dollar", main: candidate.compensation_display, sub: "Verified compensation" });
-  if (candidate.category) facts.push({ icon: "tag", main: candidate.category, sub: "Medical sales category" });
-  if (candidate.employment_type) facts.push({ icon: "briefcase", main: candidate.employment_type, sub: "Employment type" });
+  if (locationText) facts.push({ icon: "pin", main: locationText });
+  if (candidate.compensation_display) facts.push({ icon: "dollar", main: candidate.compensation_display });
+  if (candidate.category) facts.push({ icon: "tag", main: candidate.category });
+  if (candidate.employment_type) facts.push({ icon: "briefcase", main: candidate.employment_type });
   if (candidate.work_arrangement) {
-    facts.push({ icon: "chart", main: WORK_ARRANGEMENT_LABELS[candidate.work_arrangement] || candidate.work_arrangement, sub: "Work arrangement" });
+    facts.push({ icon: "chart", main: WORK_ARRANGEMENT_LABELS[candidate.work_arrangement] || candidate.work_arrangement });
   }
   return facts.slice(0, 4);
 }
 
-// Deterministic, template-based sentence built ONLY from fields
-// already verified elsewhere on the card (work arrangement + category)
-// — no free text, no invented claims. Returns null (section omitted
-// entirely, not a placeholder) if neither field is available.
-function buildFactualSummary(candidate) {
-  const adjective = WORK_ARRANGEMENT_ADJECTIVES[candidate.work_arrangement] || null;
-  if (adjective && candidate.category) return `${adjective} ${candidate.category} opportunity.`;
-  if (candidate.category) return `${candidate.category} opportunity.`;
-  return null;
-}
-
-async function renderMiddleSection(candidate) {
+function buildMiddleSectionSvg(candidate) {
   const facts = buildFactList(candidate);
-  const summary = buildFactualSummary(candidate);
+  // Direct fix for the reported bug: the graphic must display the
+  // ACTUAL verified candidate.social_safe_hook — the same
+  // allowlist-only, redaction-checked value everywhere else in the
+  // system relies on — never a separately-generated generic sentence.
+  // There was previously a second, redundant sentence-builder living
+  // only in this file that ignored social_safe_hook entirely; it has
+  // been removed rather than patched, so there is only ever one
+  // source of truth for what the hook says.
+  const summary = candidate.social_safe_hook || null;
 
   // ---- Title: fits on one line when possible (matching the approved
   // single-line design), only wraps for titles too long even at the
-  // minimum font. ---
+  // minimum font. Unchanged from the approved title-fitting logic. ---
   const titleMaxWidth = 820 - 213; // employer-lock box starts at x=820; title area is x=213 to there
   const { lines: titleLines, fontSize: titleFontSize } = fitTitle(candidate.title, titleMaxWidth);
   const titleLineHeight = titleFontSize * 0.9;
   const titleExtraHeight = (titleLines.length - 1) * titleLineHeight;
 
-  // Pre-wrap every fact's main text and determine grid row count FIRST
-  // — needed before computing how much row-height compression slack
-  // is available for a long title.
-  const factCellWidth = 448 - 76 - 20;
-  const preparedFacts = facts.map((fact) => ({
-    ...fact,
-    mainLines: wrapFactText(fact.main, 23, factCellWidth, 2),
-  }));
-  const SINGLE_LINE_ROW_HEIGHT_DEFAULT = 90;
-  const TWO_LINE_ROW_HEIGHT_DEFAULT = 116;
-  const SINGLE_LINE_ROW_HEIGHT_MIN = 74;
-  const TWO_LINE_ROW_HEIGHT_MIN = 96;
+  // ---- Fact grid: larger icons and text (direct instruction — +30%
+  // fact typography, icons large enough to read at mobile feed width),
+  // and a simpler single-line-per-cell layout now that secondary
+  // labels are gone. ----
+  const FACT_FONT_SIZE = 30; // was 23 (~+30%) — the preferred/default size; fitFactText below may shrink it per-fact for an unusually long value
+  const FACT_ICON_RADIUS = 36; // was 30 (+20%, sized for mobile-feed legibility)
+  const FACT_ICON_SCALE = FACT_ICON_RADIUS / 30; // icon path data assumes a 60x60 box (r=30)
+  const FACT_TEXT_X = FACT_ICON_RADIUS * 2 + 14; // icon diameter + gap
+
+  const factCellWidth = 448 - FACT_TEXT_X - 20;
+  // Direct fix for a real overflow bug found while rendering samples:
+  // a long multi-state territory at a flat 30px font needed 3-4 lines,
+  // pushing the whole card past its fixed height into the bottom
+  // image. fitFactText tries the full 30px font first and only
+  // shrinks (down to 22px) to stay within 2 lines — never truncates,
+  // but prefers a smaller readable font over unbounded wrapping.
+  const preparedFacts = facts.map((fact) => {
+    const fitted = fitFactText(fact.main, factCellWidth);
+    return { ...fact, mainLines: fitted.lines, fontSize: fitted.fontSize };
+  });
+  const BASE_ROW_HEIGHT = 104; // enough for the icon + one line of fact text
+  const EXTRA_HEIGHT_PER_LINE = 40; // additional height per extra wrapped line, generalizes to any count
+  const ROW_HEIGHT_COMPRESSION_MAX = 16; // per row, absorbed by the title-overflow lever below
   const gridRows = Math.ceil(preparedFacts.length / 2);
-  const rowIsWrapped = [];
+  const rowMaxLines = [];
   for (let row = 0; row < gridRows; row++) {
     const rowFacts = preparedFacts.slice(row * 2, row * 2 + 2);
-    rowIsWrapped.push(rowFacts.some((f) => f.mainLines.length > 1));
+    rowMaxLines.push(Math.max(1, ...rowFacts.map((f) => f.mainLines.length)));
   }
+  const rowDefaultHeights = rowMaxLines.map((lines) => BASE_ROW_HEIGHT + (lines - 1) * EXTRA_HEIGHT_PER_LINE);
 
-  // ---- Reflow budget for a long/wrapped title: direct instruction —
-  // never truncate, so a very long title may need several lines. Two
-  // compressible levers absorb that extra height so the fixed
-  // final-details line always stays anchored at its approved position
-  // (y=547) and the card's overall structure never changes: first the
-  // gaps between sections compress toward a safe minimum, then (only
-  // if a title is long enough that gap compression alone isn't
-  // enough) row height compresses too. Both floors keep every element
-  // legible and non-overlapping even in the extreme case. ----
+  // ---- Reflow budget for a long/wrapped title: unchanged mechanism
+  // from the approved design — gaps compress first, then row height,
+  // so the fixed final-details line stays anchored and nothing is
+  // ever cut or overlapped, no matter how long a real title is. ----
   const compressibleGaps = { subtitleToDivider1: 35, divider1ToGrid: 37, divider2ToSummary: 30 };
   const minGaps = { subtitleToDivider1: 10, divider1ToGrid: 12, divider2ToSummary: 10 };
   let remaining = titleExtraHeight;
@@ -208,57 +250,42 @@ async function renderMiddleSection(candidate) {
     remaining -= reduction;
   }
 
-  // Second lever: row-height compression, only engaged if gap
-  // compression alone didn't absorb everything (an unusually long
-  // title combined with a full, wrapped-fact grid).
   let rowHeightReductionPerRow = 0;
   if (remaining > 0 && gridRows > 0) {
-    const maxReductionPerRow = Math.min(
-      SINGLE_LINE_ROW_HEIGHT_DEFAULT - SINGLE_LINE_ROW_HEIGHT_MIN,
-      TWO_LINE_ROW_HEIGHT_DEFAULT - TWO_LINE_ROW_HEIGHT_MIN
-    );
-    rowHeightReductionPerRow = Math.min(maxReductionPerRow, Math.ceil(remaining / gridRows));
+    rowHeightReductionPerRow = Math.min(ROW_HEIGHT_COMPRESSION_MAX, Math.ceil(remaining / gridRows));
     remaining -= rowHeightReductionPerRow * gridRows;
   }
-  // If anything is still left over after both levers (a genuinely
-  // extreme title, e.g. several times longer than any real job title),
-  // the layout below simply extends slightly past the usual final-line
-  // position rather than clipping or overlapping anything — a taller
-  // middle panel in that rare case is preferable to ever cutting the
-  // verified title.
 
   const titleBaselineY = 145;
   const subtitleY = titleBaselineY + 35 + titleExtraHeight;
   const divider1Y = subtitleY + gap.subtitleToDivider1;
   const gridTopY = divider1Y + gap.divider1ToGrid;
 
-  const rowHeights = rowIsWrapped.map((wrapped) =>
-    (wrapped ? TWO_LINE_ROW_HEIGHT_DEFAULT : SINGLE_LINE_ROW_HEIGHT_DEFAULT) - rowHeightReductionPerRow
-  );
+  const rowHeights = rowDefaultHeights.map((h) => h - rowHeightReductionPerRow);
   const rowStartY = [];
   let cursorY = gridTopY;
   for (let row = 0; row < gridRows; row++) {
     rowStartY.push(cursorY);
     cursorY += rowHeights[row];
   }
-  // Bottom of the last row's actual content (60px circle height),
-  // not the full row slot — matches the approved template's exact
-  // "circle height, not full slot" gap treatment before the divider.
-  const gridBottomY = gridRows > 0 ? rowStartY[gridRows - 1] + 60 : gridTopY;
+  const gridBottomY = gridRows > 0 ? rowStartY[gridRows - 1] + FACT_ICON_RADIUS * 2 : gridTopY;
 
   const divider2Y = gridRows > 0 ? gridBottomY + 33 : gridTopY;
   const summaryTopY = divider2Y + gap.divider2ToSummary;
-  const summaryLines = summary ? wrapFactText(summary, 25, 850 - 148, 2) : [];
-  const summaryBlockBottomY = summary ? summaryTopY + 27 + (summaryLines.length - 1) * 33 : divider2Y;
 
-  // Final details line stays anchored at the approved absolute
-  // position for every realistic case (the compression above is
-  // sized to comfortably cover even a deliberately extreme stress-
-  // test title) — this is a safety net, not the normal path, so
-  // content is never allowed to overlap it in the rare case the
-  // compression budget above is fully exhausted.
+  // ---- Hook typography: +25% (was 25px) ----
+  const SUMMARY_ICON_RADIUS = 32; // was 27 (+~18%)
+  const fittedSummary = summary ? fitSummaryText(summary, 850 - 148) : { lines: [], fontSize: 31 };
+  const summaryLines = fittedSummary.lines;
+  const summaryFontSize = fittedSummary.fontSize;
+  const summaryLineHeight = summaryFontSize * 1.32;
+  const summaryBlockBottomY = summary ? summaryTopY + SUMMARY_ICON_RADIUS + (summaryLines.length - 1) * summaryLineHeight : divider2Y;
+
   const finalLineY = Math.max(547, summaryBlockBottomY + 20);
 
+  // Fact text is vertically centered as a whole block around the
+  // icon's middle, generalizing correctly to 1, 2, 3+ wrapped lines
+  // rather than only handling exactly 1 or 2 as explicit cases.
   let gridSvg = "";
   preparedFacts.forEach((fact, i) => {
     const col = i % 2;
@@ -266,24 +293,23 @@ async function renderMiddleSection(candidate) {
     const gx = 75 + col * 448;
     const gy = rowStartY[row];
     const mainLines = fact.mainLines;
-    // Sub-label offset now properly clears a wrapped 2-line main
-    // text (was a fixed 46 regardless of actual wrapped line height,
-    // which is what caused the overlap).
-    const subLabelY = mainLines.length > 1 ? 20 + (mainLines.length - 1) * 24 + 24 : 52;
+    const factLineHeight = fact.fontSize * 1.15;
+    const iconCenterY = FACT_ICON_RADIUS;
+    const textBlockHeight = (mainLines.length - 1) * factLineHeight;
+    const firstLineY = iconCenterY - textBlockHeight / 2 + fact.fontSize * 0.35;
     gridSvg += `
     <g transform="translate(${gx} ${gy})">
-      <circle cx="30" cy="30" r="30" fill="#e8f4ff"/>
-      ${FACT_ICONS[fact.icon]}
-      <text x="76" y="${mainLines.length > 1 ? 20 : 26}" class="fact">${tspans(mainLines, 76, mainLines.length > 1 ? 20 : 26, 24)}</text>
-      <text x="76" y="${subLabelY}" class="factSub">${escapeXml(fact.sub)}</text>
+      <circle cx="${FACT_ICON_RADIUS}" cy="${FACT_ICON_RADIUS}" r="${FACT_ICON_RADIUS}" fill="#e8f4ff"/>
+      <g transform="scale(${FACT_ICON_SCALE})">${FACT_ICONS[fact.icon]}</g>
+      <text x="${FACT_TEXT_X}" y="${firstLineY}" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="${fact.fontSize}" fill="#062650">${tspans(mainLines, FACT_TEXT_X, firstLineY, factLineHeight)}</text>
     </g>`;
   });
 
   const summarySvg = summary ? `
     <line x1="67" y1="${divider2Y}" x2="957" y2="${divider2Y}" stroke="#c8d9e9" stroke-width="2"/>
-    <circle cx="102" cy="${summaryTopY + 27}" r="27" fill="#0878ef"/>
-    <path d="M89 ${summaryTopY + 27}l9 9 18-20" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
-    <text x="148" y="${summaryTopY + 21}" class="sans navy" font-size="25" font-weight="700">${tspans(summaryLines, 148, summaryTopY + 21, 33)}</text>` : "";
+    <circle cx="${67 + SUMMARY_ICON_RADIUS}" cy="${summaryTopY + SUMMARY_ICON_RADIUS}" r="${SUMMARY_ICON_RADIUS}" fill="#0878ef"/>
+    <path d="M${67 + SUMMARY_ICON_RADIUS - 13} ${summaryTopY + SUMMARY_ICON_RADIUS}l11 11 21-23" fill="none" stroke="#fff" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="${67 + SUMMARY_ICON_RADIUS * 2 + 22}" y="${summaryTopY + SUMMARY_ICON_RADIUS * 0.65}" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="${summaryFontSize}" fill="#062650">${tspans(summaryLines, 67 + SUMMARY_ICON_RADIUS * 2 + 22, summaryTopY + SUMMARY_ICON_RADIUS * 0.65, summaryLineHeight)}</text>` : "";
 
   const svg = String.raw`<svg xmlns="http://www.w3.org/2000/svg" width="${MIDDLE_WIDTH}" height="${MIDDLE_HEIGHT}" viewBox="0 0 ${MIDDLE_WIDTH} ${MIDDLE_HEIGHT}">
   <defs>
@@ -303,8 +329,6 @@ async function renderMiddleSection(candidate) {
       .navy { fill: #062650; }
       .muted { fill: #3d5d80; }
       .label { font: 700 18px Arial, Helvetica, sans-serif; letter-spacing: .8px; fill: #0b65d8; }
-      .fact { font: 700 23px Arial, Helvetica, sans-serif; fill: #062650; }
-      .factSub { font: 500 18px Arial, Helvetica, sans-serif; fill: #476684; }
     </style>
   </defs>
 
@@ -328,13 +352,13 @@ async function renderMiddleSection(candidate) {
   <!-- Subtitle (fixed copy, not job-specific data) -->
   <text x="214" y="${subtitleY}" class="sans muted" font-size="21" font-weight="600">A current opportunity selected from ROOK</text>
 
-  <!-- Employer lock (fixed, always present, never job-specific) -->
-  <rect x="820" y="42" width="145" height="142" rx="17" fill="#e4f3ff" stroke="#c7e6fb"/>
-  <rect x="873" y="75" width="39" height="34" rx="5" fill="#073869"/>
-  <path d="M881 77v-8a12 12 0 0 1 24 0v8" fill="none" stroke="#073869" stroke-width="6"/>
-  <circle cx="892.5" cy="91" r="4" fill="#fff"/>
-  <text x="892" y="130" text-anchor="middle" class="sans navy" font-size="15" font-weight="800">SEE THE EMPLOYER</text>
-  <text x="892" y="151" text-anchor="middle" class="sans navy" font-size="15" font-weight="800">ON ROOK</text>
+  <!-- Employer lock — enlarged (+~15%) for mobile-feed readability, direct instruction (fixed content, always present, never job-specific) -->
+  <rect x="812" y="38" width="161" height="158" rx="19" fill="#e4f3ff" stroke="#c7e6fb"/>
+  <rect x="871" y="75" width="44" height="38" rx="6" fill="#073869"/>
+  <path d="M880 77v-9a13.5 13.5 0 0 1 27 0v9" fill="none" stroke="#073869" stroke-width="6.5"/>
+  <circle cx="893" cy="93" r="4.5" fill="#fff"/>
+  <text x="893" y="142" text-anchor="middle" class="sans navy" font-size="17" font-weight="800">SEE THE EMPLOYER</text>
+  <text x="893" y="166" text-anchor="middle" class="sans navy" font-size="17" font-weight="800">ON ROOK</text>
 
   <line x1="67" y1="${divider1Y}" x2="957" y2="${divider1Y}" stroke="#d7e5f3" stroke-width="2"/>
 
@@ -347,6 +371,11 @@ async function renderMiddleSection(candidate) {
   <text x="512" y="${finalLineY + 24}" text-anchor="middle" class="sans" font-size="19" font-weight="700" fill="#0758b7">See the employer and complete job details on ROOK</text>
 </svg>`;
 
+  return svg;
+}
+
+async function renderMiddleSection(candidate) {
+  const svg = buildMiddleSectionSvg(candidate);
   return getSharp()(Buffer.from(svg)).png().toBuffer();
 }
 
@@ -382,8 +411,8 @@ async function renderFeaturedJobGraphic(candidate) {
 module.exports = {
   renderFeaturedJobGraphic,
   renderMiddleSection,
+  buildMiddleSectionSvg,
   buildFactList,
-  buildFactualSummary,
   fitTitle,
   wrapFactText,
   FINAL_WIDTH,

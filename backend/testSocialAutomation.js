@@ -30,6 +30,7 @@ const {
   computeContentVersion,
   computeEmployerSpacingKey,
   computeJobFingerprint,
+  computeJobFingerprintForJob,
   buildBrandedTermList,
   generateSocialSafeHook,
   containsEmployerIdentity,
@@ -44,7 +45,8 @@ const {
   computeScheduledForUtc,
   buildHistoryRow,
 } = require("./socialAutomation");
-const { renderFeaturedJobGraphic, wrapFactText } = require("./socialGraphic");
+const { renderFeaturedJobGraphic, buildMiddleSectionSvg, wrapFactText } = require("./socialGraphic");
+const { buildPostCopy } = require("./socialPostCopy");
 const { buildGraphicPaths, writeGraphicFile, verifyWrittenFile, cleanupOldGraphics } = require("./socialGraphicStorage");
 
 let passCount = 0;
@@ -319,26 +321,47 @@ async function run() {
     assert.strictEqual(ranked[0].id, "job-other");
   });
 
-  console.log("\n=== Permanent duplicate prevention via deletion-proof fingerprint ===");
-  test("job_fingerprint is stable for the same employer+source_job_id and non-reversible", () => {
-    const fp1 = computeJobFingerprint("employer-1", "src-123", SECRET);
-    const fp2 = computeJobFingerprint("employer-1", "src-123", SECRET);
+  console.log("\n=== Permanent duplicate prevention via content-based fingerprint (catches cross-source duplicates) ===");
+  test("job_fingerprint is stable for the same employer+title+location and non-reversible", () => {
+    const fp1 = computeJobFingerprint("employer-1", "Territory Sales Manager", "Cleveland, OH", SECRET);
+    const fp2 = computeJobFingerprint("employer-1", "Territory Sales Manager", "Cleveland, OH", SECRET);
     assert.strictEqual(fp1, fp2);
-    assert.ok(!fp1.includes("employer-1") && !fp1.includes("src-123"));
+    assert.ok(!fp1.includes("employer-1") && !fp1.toLowerCase().includes("cleveland"));
   });
-  test("deleted-and-reimported duplicate: a job re-ingested with a BRAND NEW jobs.id but the SAME employer+source_job_id produces the SAME fingerprint", () => {
-    // Simulates exactly what backend/archiveOldJobs.js's 90-day
-    // permanent deletion followed by the employer relisting the same
-    // role would produce: a new UUID, same underlying posting.
-    const originalJob = baseJob({ id: "old-uuid-deleted", employer_id: "employer-1", source_job_id: "src-123" });
-    const reimportedJob = baseJob({ id: "new-uuid-after-reimport", employer_id: "employer-1", source_job_id: "src-123" });
-    const fpOriginal = computeJobFingerprint(originalJob.employer_id, originalJob.source_job_id, SECRET);
-    const fpReimported = computeJobFingerprint(reimportedJob.employer_id, reimportedJob.source_job_id, SECRET);
-    assert.strictEqual(fpOriginal, fpReimported, "the two rows must fingerprint identically despite having different jobs.id values, so permanent dedup survives the deletion+reimport cycle");
+  test("deleted-and-reimported duplicate: a job re-ingested with a BRAND NEW jobs.id and a NEW source_job_id, but the same real title+location, still produces the SAME fingerprint", () => {
+    // Simulates backend/archiveOldJobs.js's 90-day permanent deletion
+    // followed by the employer relisting the same real role — a new
+    // UUID AND typically a new ATS requisition number too, but the
+    // same actual opportunity.
+    const originalJob = baseJob({ id: "old-uuid-deleted", employer_id: "employer-1", source_job_id: "src-123", title_original: "Territory Sales Manager", location_raw: "Cleveland, OH" });
+    const reimportedJob = baseJob({ id: "new-uuid-after-reimport", employer_id: "employer-1", source_job_id: "src-999-different-requisition", title_original: "Territory Sales Manager", location_raw: "Cleveland, OH" });
+    assert.strictEqual(computeJobFingerprintForJob(originalJob, SECRET), computeJobFingerprintForJob(reimportedJob, SECRET), "must fingerprint identically despite different job ID AND different source_job_id, since the real title+location are the same");
   });
-  test("a genuinely different posting from the same employer (different source_job_id) produces a DIFFERENT fingerprint", () => {
-    const fp1 = computeJobFingerprint("employer-1", "src-123", SECRET);
-    const fp2 = computeJobFingerprint("employer-1", "src-999", SECRET);
+  test("CROSS-SOURCE DUPLICATE (direct instruction): the same employer posting the identical role/location under a completely different source_job_id is now correctly caught as the same opportunity", () => {
+    // This is exactly the gap the old (employer_id, source_job_id)
+    // fingerprint could never catch: two genuinely separate ATS
+    // listings (different source_job_id, different jobs.id) for what
+    // is really the same featured opportunity.
+    const listingA = baseJob({ id: "job-a", employer_id: "employer-1", source_job_id: "ats-listing-111", title_original: "Territory Sales Manager", location_raw: "Cleveland, OH" });
+    const listingB = baseJob({ id: "job-b", employer_id: "employer-1", source_job_id: "ats-listing-222-completely-different", title_original: "Territory Sales Manager", location_raw: "Cleveland, OH" });
+    assert.strictEqual(computeJobFingerprintForJob(listingA, SECRET), computeJobFingerprintForJob(listingB, SECRET), "must be treated as the same featured opportunity");
+  });
+  test("normalized location matching means differently-formatted but equivalent locations still collide correctly", () => {
+    // "USA OH - Cleveland" and "Cleveland, OH" are the same real place
+    // — normalizeLocationForSocial already reconciles this, and the
+    // fingerprint must benefit from that same normalization.
+    const listingA = baseJob({ id: "job-a", employer_id: "employer-1", source_job_id: "src-1", title_original: "Territory Sales Manager", location_raw: "USA OH - Cleveland" });
+    const listingB = baseJob({ id: "job-b", employer_id: "employer-1", source_job_id: "src-2", title_original: "Territory Sales Manager", location_raw: "Cleveland, OH" });
+    assert.strictEqual(computeJobFingerprintForJob(listingA, SECRET), computeJobFingerprintForJob(listingB, SECRET));
+  });
+  test("a genuinely different role at the same employer (different title) produces a DIFFERENT fingerprint", () => {
+    const fp1 = computeJobFingerprint("employer-1", "Territory Sales Manager", "Cleveland, OH", SECRET);
+    const fp2 = computeJobFingerprint("employer-1", "Key Account Manager", "Cleveland, OH", SECRET);
+    assert.notStrictEqual(fp1, fp2);
+  });
+  test("the same role title at a genuinely different location produces a DIFFERENT fingerprint", () => {
+    const fp1 = computeJobFingerprint("employer-1", "Territory Sales Manager", "Cleveland, OH", SECRET);
+    const fp2 = computeJobFingerprint("employer-1", "Territory Sales Manager", "Boston, MA", SECRET);
     assert.notStrictEqual(fp1, fp2);
   });
   test("a previously-featured job ranks below an equally-fresh never-featured one, but is still selectable if it's the only option", () => {
@@ -366,7 +389,7 @@ async function run() {
     assert.throws(() => computeEmployerSpacingKey("employer-A", null), /SOCIAL_SPACING_HMAC_SECRET/);
   });
   test("computeJobFingerprint also refuses to run without a real secret configured", () => {
-    assert.throws(() => computeJobFingerprint("employer-A", "src-1", null), /SOCIAL_SPACING_HMAC_SECRET/);
+    assert.throws(() => computeJobFingerprint("employer-A", "Territory Sales Manager", "Cleveland, OH", null), /SOCIAL_SPACING_HMAC_SECRET/);
   });
 
   console.log("\n=== Category variation (now genuinely implemented, not a stub) ===");
@@ -712,7 +735,115 @@ async function run() {
     assert.ok(typeof brokenGraphic.renderFeaturedJobGraphic === "function");
   });
 
-  console.log("\n=== Graphic filename collision and retention behavior ===");
+  console.log("\n=== REGRESSION: the actual verified social_safe_hook reaches both the graphic and the post copy ===");
+  test("buildMiddleSectionSvg displays the real candidate.social_safe_hook, never a separately-generated generic sentence", () => {
+    // Direct regression test for the reported bug: the live test
+    // produced the hook 'Focus on Clinical Operations,' but the
+    // graphic incorrectly showed 'Healthcare SaaS opportunity' — a
+    // completely different, separately-generated sentence that
+    // ignored social_safe_hook entirely.
+    const candidate = { title: "Associate Territory Manager", location_display: "Cleveland, OH", category: "Healthcare SaaS", social_safe_hook: "Focus on Clinical Operations" };
+    const svg = buildMiddleSectionSvg(candidate);
+    assert.ok(svg.includes("Focus on Clinical Operations"), "the real hook must appear in the rendered graphic");
+    assert.ok(!svg.includes("Healthcare SaaS opportunity"), "the old, incorrect generic sentence must never appear");
+  });
+  test("the same real hook also appears in the Buffer post copy, not a different sentence", () => {
+    const candidate = { title: "Associate Territory Manager", location_display: "Cleveland, OH", category: "Healthcare SaaS", social_safe_hook: "Focus on Clinical Operations", public_url: "https://rookcareers.com/jobs/abc" };
+    const copy = buildPostCopy(candidate);
+    assert.ok(copy.includes("Focus on Clinical Operations"), "post copy must include the same verified hook shown in the graphic");
+  });
+  test("a candidate with no hook simply omits the hook section from the graphic — never falls back to a generic sentence", () => {
+    const candidate = { title: "Associate Territory Manager", location_display: "Cleveland, OH", category: "Healthcare SaaS", social_safe_hook: null };
+    const svg = buildMiddleSectionSvg(candidate);
+    assert.ok(!svg.includes("opportunity."), "must never synthesize a generic '{category} opportunity.' sentence when no real hook exists");
+  });
+
+  console.log("\n=== REGRESSION: secondary labels removed (direct instruction — they added clutter) ===");
+  test("the rendered graphic never includes the removed secondary labels", () => {
+    const candidate = {
+      title: "Territory Sales Manager", location_display: "Cleveland, OH", category: "Medical Device",
+      compensation_display: "$90,000 - $120,000", employment_type: "Full-Time", work_arrangement: "field",
+      social_safe_hook: "Focus on capital equipment sales cycles",
+    };
+    const svg = buildMiddleSectionSvg(candidate);
+    for (const removedLabel of ["Regional opportunity", "Medical sales category", "Employment type", "Verified compensation", "Work arrangement"]) {
+      assert.ok(!svg.includes(removedLabel), `removed secondary label must not appear: "${removedLabel}"`);
+    }
+  });
+  test("buildFactList itself no longer attaches any 'sub' label field to a fact", () => {
+    const facts = require("./socialGraphic").buildFactList({ location_display: "Cleveland, OH", category: "Medical Device", compensation_display: "$90,000", employment_type: "Full-Time", work_arrangement: "field" });
+    for (const fact of facts) {
+      assert.strictEqual(fact.sub, undefined, "facts must no longer carry a secondary label at all");
+    }
+  });
+
+  console.log("\n=== REGRESSION: employer-safe title output in the actual rendered graphic ===");
+  test("the rendered graphic shows the sanitized title (employer suffix stripped), never the raw stored title with the employer name attached", () => {
+    const candidate = buildCandidateResponse(baseJob({ title_original: "Sales Manager - Acme Diagnostics", company_name: "Acme Diagnostics" }), SECRET);
+    assert.strictEqual(candidate.title, "Sales Manager");
+    const svg = buildMiddleSectionSvg(candidate);
+    assert.ok(svg.includes("Sales Manager"));
+    assert.ok(!svg.includes("Acme Diagnostics"), "the employer name must never appear in the rendered graphic markup");
+  });
+
+  console.log("\n=== REGRESSION: long-title fitting still never truncates or uses ellipses, at the new typography ===");
+  test("an extremely long title still renders completely across multiple lines, with zero ellipsis anywhere in the output", () => {
+    const candidate = buildCandidateResponse(baseJob({
+      title_original: "Senior Regional Territory Sales Manager, Medical Device and Diagnostics Portfolio Sales, Southeast United States Including Florida Georgia Alabama and the Carolinas",
+    }), SECRET);
+    const svg = buildMiddleSectionSvg(candidate);
+    assert.ok(!svg.includes("…"), "title text must never be truncated with an ellipsis, regardless of length");
+    assert.ok(svg.includes("Carolinas"), "the full title, including its final word, must be present — nothing dropped");
+  });
+  test("a long multi-value fact (e.g. a 5-state territory) also never truncates with an ellipsis — reflows via smaller font/more lines instead", () => {
+    // Direct regression for a real bug found while building this fix:
+    // a long territory was originally cut off with '…' at the larger
+    // fact font size before fitFactText was added.
+    const candidate = { title: "Key Account Manager", territory_display: "Texas, Oklahoma, Arkansas, Louisiana, and New Mexico", category: "Diagnostics/Laboratory" };
+    const svg = buildMiddleSectionSvg(candidate);
+    assert.ok(!svg.includes("…"), "a long fact value must never be truncated with an ellipsis");
+    assert.ok(svg.includes("New Mexico"), "the full fact value must be present");
+  });
+
+  console.log("\n=== REGRESSION: missing compensation still renders cleanly at the new typography ===");
+  test("a candidate with no compensation data renders a complete, valid graphic with no compensation fact shown", () => {
+    const candidate = buildCandidateResponse(baseJob({ compensation_text: null, salary_min: null, salary_max: null }), SECRET);
+    const svg = buildMiddleSectionSvg(candidate);
+    assert.ok(!svg.includes("undefined") && !svg.includes("null"), "a missing field must never leak a literal 'undefined'/'null' into the markup");
+  });
+  await asyncTest("a candidate with no compensation still produces a valid, correctly-sized PNG", async () => {
+    const candidate = buildCandidateResponse(baseJob({ compensation_text: null, salary_min: null, salary_max: null }), SECRET);
+    const buffer = await renderFeaturedJobGraphic(candidate);
+    const meta = await require("sharp")(buffer).metadata();
+    assert.strictEqual(meta.width, 1024);
+    assert.strictEqual(meta.height, 1536);
+  });
+
+  test("a hook long enough to include a supplementary compensation clause never truncates with an ellipsis — shrinks font instead", () => {
+    // Direct regression for a real bug found while rendering final
+    // samples: a hook with compensation appended (see
+    // generateSocialSafeHook's supplementary-clause behavior) was long
+    // enough to hit the hook section's old flat-font 2-line cap and
+    // get cut off with "…".
+    const candidate = { title: "Territory Sales Manager", social_safe_hook: "Support veterinary clinic relationships and in-service training · $85,000 - $110,000" };
+    const svg = buildMiddleSectionSvg(candidate);
+    assert.ok(!svg.includes("…"), "a long hook must never be truncated with an ellipsis");
+    assert.ok(svg.includes("$110,000"), "the full hook, including its final clause, must be present");
+  });
+
+
+  test("fact typography increased by ~30% (23px -> 30px)", () => {
+    const candidate = { title: "Test", location_display: "Cleveland, OH", category: "Medical Device" };
+    const svg = buildMiddleSectionSvg(candidate);
+    assert.ok(svg.includes('font-size="30"'), "fact text must render at the new ~30% larger size");
+  });
+  test("hook typography increased by ~25% (25px -> 31px)", () => {
+    const candidate = { title: "Test", social_safe_hook: "Focus on Clinical Operations" };
+    const svg = buildMiddleSectionSvg(candidate);
+    assert.ok(svg.includes('font-size="31"'), "hook text must render at the new ~25% larger size");
+  });
+
+
   await asyncTest("buildGraphicPaths rejects unsafe path segments (traversal attempt)", async () => {
     assert.throws(() => buildGraphicPaths({ dateStr: "2026-09-05", slot: "am", jobId: "../../etc/passwd", contentVersion: "abc123" }), /Unsafe job_id/);
   });
@@ -761,7 +892,7 @@ async function run() {
   test("buildHistoryRow can represent Facebook succeeding while LinkedIn fails, independently, and includes job_fingerprint", () => {
     const row = buildHistoryRow({
       runKey: "2026-09-05-AM", slot: "am", jobId: "job-1",
-      jobFingerprint: computeJobFingerprint("employer-1", "src-123", SECRET),
+      jobFingerprint: computeJobFingerprint("employer-1", "Territory Sales Manager", "Cleveland, OH", SECRET),
       contentVersion: "abc123", employerSpacingKey: computeEmployerSpacingKey("employer-1", SECRET),
       category: "Medical Device", scheduledFor: computeScheduledForUtc("2026-09-05", "am"),
       facebook: { channelId: "fb-1", bufferPostId: "buf-fb-1", status: "sent" },

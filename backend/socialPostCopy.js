@@ -11,6 +11,14 @@ function buildPostCopy(candidate) {
   const detailParts = [locationText, candidate.category, candidate.compensation_display].filter(Boolean);
   if (detailParts.length > 0) lines.push(detailParts.join(" · "));
 
+  // Direct instruction: the same factual hook shown in the graphic
+  // belongs in the post copy too, naturally, so the accompanying text
+  // gives a real reason to click — not a second, different sentence,
+  // the exact same already-verified, already-redaction-checked value.
+  if (candidate.social_safe_hook) {
+    lines.push(candidate.social_safe_hook);
+  }
+
   lines.push("");
   lines.push("See the employer and complete job details on ROOK.");
   lines.push("Start your 3-day free trial:");

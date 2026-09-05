@@ -182,10 +182,38 @@ function computeEmployerSpacingKey(employerId, secret) {
 // on (onConflict: "employer_id,source_job_id"). Non-reversible, same
 // reasoning as the employer spacing key.
 // =================================================================
-function computeJobFingerprint(employerId, sourceJobId, secret) {
-  if (!employerId || !sourceJobId) return null;
+// Direct instruction: improve duplicate protection to treat jobs with
+// the same employer, normalized public title, and normalized location
+// as the same featured opportunity even with different job IDs or
+// source_job_ids — e.g. an employer re-listing an identical role under
+// a second ATS requisition number. The previous version of this
+// fingerprint was based on (employer_id, source_job_id), which could
+// never catch that case since two separate listings of the same real
+// opportunity have two different source_job_ids by definition. Content
+// identity is the more correct basis for "is this the same
+// opportunity," and it still handles the original case this was built
+// for (backend/archiveOldJobs.js permanently deleting a closed job
+// after 90 days) just as well: a genuine re-import of the same role
+// has the same title and location, so the fingerprint still matches.
+function computeJobFingerprint(employerId, normalizedTitle, normalizedLocation, secret) {
+  if (!employerId || !normalizedTitle) return null;
   if (!secret) throw new Error("SOCIAL_SPACING_HMAC_SECRET is not configured — refusing to compute a job fingerprint without it");
-  return crypto.createHmac("sha256", secret).update(`${employerId}|${sourceJobId}`).digest("hex");
+  const contentKey = `${String(normalizedTitle).trim().toLowerCase()}|${String(normalizedLocation || "").trim().toLowerCase()}`;
+  return crypto.createHmac("sha256", secret).update(`${employerId}|${contentKey}`).digest("hex");
+}
+
+// Convenience wrapper: derives the same normalized title/location the
+// public candidate display itself uses (sanitizeTitleForSocial +
+// normalizeLocationForSocial), so a raw job row and the candidate
+// built from it always fingerprint identically. Uses the location
+// BEFORE dedupeLocationAgainstTitle's display-only nulling — two
+// listings with the same real title+location must fingerprint the
+// same regardless of whether the graphic later hides a redundant
+// location field for display purposes.
+function computeJobFingerprintForJob(job, secret) {
+  const normalizedTitle = sanitizeTitleForSocial(job.title_original, job.company_name);
+  const normalizedLocation = job.territory || normalizeLocationForSocial(job.location_raw);
+  return computeJobFingerprint(job.employer_id, normalizedTitle, normalizedLocation, secret);
 }
 
 // =================================================================
@@ -714,6 +742,7 @@ module.exports = {
   computeContentVersion,
   computeEmployerSpacingKey,
   computeJobFingerprint,
+  computeJobFingerprintForJob,
   buildBrandedTermList,
   generateSocialSafeHook,
   containsEmployerIdentity,

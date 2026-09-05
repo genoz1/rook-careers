@@ -20,7 +20,7 @@ const {
   evaluateEligibility,
   scoreAndSortCandidates,
   buildCandidateResponse,
-  computeJobFingerprint,
+  computeJobFingerprintForJob,
   computeEmployerSpacingKey,
   buildBrandedTermList,
   buildHistoryRow,
@@ -93,7 +93,7 @@ async function selectTopCandidate(supabaseAdmin, config) {
 
   const previouslyFeaturedJobIds = new Set(
     eligibleJobs
-      .filter((job) => allHistory.some((r) => r.job_fingerprint === computeJobFingerprint(job.employer_id, job.source_job_id, config.spacingSecret)))
+      .filter((job) => allHistory.some((r) => r.job_fingerprint === computeJobFingerprintForJob(job, config.spacingSecret)))
       .map((job) => job.id)
   );
   const recentEmployerSpacingKeys = new Set(allHistory.map((r) => r.employer_spacing_key).filter(Boolean));
@@ -230,7 +230,7 @@ async function runControlledLiveTest(config, { confirmLive } = {}, deps = {}) {
     return { ok: false, stage: "final_pre_publish_check", jobId: topJob.id, reasonCodes: validation.reason_codes };
   }
 
-  const fingerprint = computeJobFingerprint(topJob.employer_id, topJob.source_job_id, config.spacingSecret);
+  const fingerprint = computeJobFingerprintForJob(topJob, config.spacingSecret);
   const { data: existingHistory } = await supabaseAdmin
     .from("social_post_history")
     .select("facebook_status, linkedin_status, facebook_buffer_post_id, linkedin_buffer_post_id")

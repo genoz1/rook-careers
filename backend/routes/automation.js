@@ -21,7 +21,7 @@ const {
   evaluateEligibility,
   scoreAndSortCandidates,
   buildCandidateResponse,
-  computeJobFingerprint,
+  computeJobFingerprintForJob,
   buildBrandedTermList,
 } = require("../socialAutomation");
 
@@ -178,7 +178,7 @@ router.get("/automation/social-jobs/candidates", requireConfig, rateLimit, requi
     // deleted-and-reimported duplicate entirely.
     const previouslyFeaturedJobIds = new Set(
       eligibleJobs
-        .filter((job) => previouslyFeaturedFingerprints.has(computeJobFingerprint(job.employer_id, job.source_job_id, process.env.SOCIAL_SPACING_HMAC_SECRET)))
+        .filter((job) => previouslyFeaturedFingerprints.has(computeJobFingerprintForJob(job, process.env.SOCIAL_SPACING_HMAC_SECRET)))
         .map((job) => job.id)
     );
 

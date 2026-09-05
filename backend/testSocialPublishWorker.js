@@ -12,7 +12,7 @@ const { getOrganizations, listChannelsForOrganization, listAllChannels, createPo
 const {
   loadConfig, requireConfigKeys, discoverChannels, runValidationOnly, runControlledLiveTest,
 } = require("./socialPublishWorker");
-const { computeJobFingerprint } = require("./socialAutomation");
+const { computeJobFingerprintForJob } = require("./socialAutomation");
 const { preflightCheckMedia } = require("./socialMediaPreflight");
 const { uploadGraphicToStorage, buildObjectPath, ensureBucketExists, BUCKET_NAME } = require("./socialMediaStorage");
 
@@ -659,7 +659,7 @@ async function run() {
       BUFFER_ACCESS_TOKEN: "x", BUFFER_ROOK_LINKEDIN_CHANNEL_ID: "li-page-1", BUFFER_ROOK_FACEBOOK_CHANNEL_ID: "fb-page-1",
     });
     const job = baseJob();
-    const fingerprint = computeJobFingerprint(job.employer_id, job.source_job_id, SECRET);
+    const fingerprint = computeJobFingerprintForJob(job, SECRET);
     const existingRow = { run_key: `LIVE-TEST-${job.id}`, job_fingerprint: fingerprint, facebook_status: null, linkedin_status: "sent", linkedin_buffer_post_id: "already-posted-1" };
     const supabaseAdmin = makeMockSupabase({ jobs: [job], employers: [{ company_name: "Acme Diagnostics" }], history: [existingRow] });
     const supabaseAnon = makeMockSupabase({ jobs: [job] });
