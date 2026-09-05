@@ -8,6 +8,7 @@
 const assert = require("assert");
 const { identifyRookChannels } = require("./socialChannels");
 const { buildPostCopy } = require("./socialPostCopy");
+const { getOrganizations, listChannelsForOrganization, listAllChannels, createPost, BUFFER_API_ENDPOINT } = require("./socialBuffer");
 const {
   loadConfig, requireConfigKeys, discoverChannels, runValidationOnly, runControlledLiveTest,
 } = require("./socialPublishWorker");
@@ -26,10 +27,13 @@ async function asyncTest(name, fn) {
 const SECRET = "test-hmac-secret";
 const NOW = new Date();
 
-const LINKEDIN_PAGE = { id: "li-page-1", service: "linkedin", service_type: "page", formatted_username: "ROOK Careers" };
-const LINKEDIN_PERSONAL = { id: "li-personal-1", service: "linkedin", service_type: "profile", formatted_username: "Gene Zentko" };
-const FACEBOOK_PAGE = { id: "fb-page-1", service: "facebook", service_type: "page", formatted_username: "ROOK Careers" };
-const TWITTER_UNRELATED = { id: "tw-1", service: "twitter", service_type: "page", formatted_username: "Some Other Account" };
+// Real GraphQL Channel shape: id, name, service — verified against
+// Buffer's own current docs. No personal-vs-page field exists in this
+// API (see the note above identifyRookChannels in socialChannels.js).
+const LINKEDIN_PAGE = { id: "li-page-1", service: "linkedin", name: "ROOK Careers" };
+const LINKEDIN_PERSONAL_LOOKING = { id: "li-personal-1", service: "linkedin", name: "Gene Zentko" };
+const FACEBOOK_PAGE = { id: "fb-page-1", service: "facebook", name: "ROOK Careers" };
+const TWITTER_UNRELATED = { id: "tw-1", service: "twitter", name: "Some Other Account" };
 
 function baseJob(overrides = {}) {
   return {
@@ -74,17 +78,34 @@ async function run() {
   console.log("\n=== Channel identification: rejects personal profiles, ambiguity, missing config ===");
 
   test("correctly identifies both ROOK business pages when configured IDs match", () => {
-    const profiles = [LINKEDIN_PAGE, FACEBOOK_PAGE, LINKEDIN_PERSONAL, TWITTER_UNRELATED];
+    const profiles = [LINKEDIN_PAGE, FACEBOOK_PAGE, LINKEDIN_PERSONAL_LOOKING, TWITTER_UNRELATED];
     const result = identifyRookChannels(profiles, { linkedinChannelId: "li-page-1", facebookChannelId: "fb-page-1" });
     assert.strictEqual(result.ok, true);
     assert.strictEqual(result.linkedin.id, "li-page-1");
     assert.strictEqual(result.facebook.id, "fb-page-1");
   });
-  test("rejects a personal LinkedIn profile even if explicitly configured", () => {
-    const profiles = [LINKEDIN_PERSONAL, FACEBOOK_PAGE];
+  // Direct finding, verified against Buffer's own current GraphQL
+  // docs: the Channel type exposes only id/name/service — there is no
+  // personal-vs-business-Page field in this API at all. This means a
+  // channel that happens to be a personal LinkedIn profile, if its ID
+  // were explicitly (mis)configured as BUFFER_ROOK_LINKEDIN_CHANNEL_ID,
+  // cannot be distinguished from a business Page by this code — the
+  // API gives us nothing to check. The real, remaining safeguard is
+  // human verification at configuration time: `npm run
+  // social:discover-channels` prints each channel's readable `name`
+  // (e.g. "ROOK Careers" vs. "Gene Zentko") specifically so a person
+  // can visually confirm before ever setting the ID, not something
+  // this code can enforce after the fact for this specific case.
+  test("a channel matching the configured ID and correct service is accepted — Buffer's API provides no field to detect a personal profile beyond this", () => {
+    const profiles = [LINKEDIN_PERSONAL_LOOKING, FACEBOOK_PAGE];
     const result = identifyRookChannels(profiles, { linkedinChannelId: "li-personal-1", facebookChannelId: "fb-page-1" });
+    assert.strictEqual(result.ok, true, "documents the real, current limitation rather than asserting a protection that doesn't exist in this API");
+  });
+  test("service-type matching IS still enforced — a channel of the wrong platform is always rejected regardless of its ID being configured", () => {
+    const result = identifyRookChannels([LINKEDIN_PAGE, FACEBOOK_PAGE], { linkedinChannelId: "fb-page-1", facebookChannelId: "li-page-1" });
     assert.strictEqual(result.ok, false);
-    assert.ok(result.errors.some((e) => e.includes("personal profile")));
+    assert.ok(result.errors.some((e) => e.includes("not a LinkedIn channel")));
+    assert.ok(result.errors.some((e) => e.includes("not a Facebook channel")));
   });
   test("rejects an unrelated/non-ROOK channel service mismatch", () => {
     const profiles = [TWITTER_UNRELATED, FACEBOOK_PAGE];
@@ -108,7 +129,90 @@ async function run() {
     assert.ok(result.errors.some((e) => e.includes("No Buffer channel found")));
   });
 
-  console.log("\n=== Post copy: no employer name, always includes trial CTA and direct link ===");
+  console.log("\n=== Buffer client: every request goes to the current GraphQL API, never the legacy REST API ===");
+  const LEGACY_STRINGS = ["api.bufferapp.com", "/1/profiles.json", "/updates/create.json", "/profiles.json", "/updates/"];
+
+  function assertNeverLegacy(capturedUrl, capturedBody) {
+    assert.strictEqual(capturedUrl, BUFFER_API_ENDPOINT, `must call exactly ${BUFFER_API_ENDPOINT}, never a legacy per-resource URL`);
+    assert.strictEqual(capturedUrl, "https://api.buffer.com");
+    for (const bad of LEGACY_STRINGS) {
+      assert.ok(!capturedUrl.includes(bad), `URL must never contain legacy path/host fragment: ${bad}`);
+      if (capturedBody) assert.ok(!capturedBody.includes(bad), `request body must never reference legacy fragment: ${bad}`);
+    }
+  }
+
+  function mockFetch(responseData) {
+    let captured = { url: null, method: null, body: null, headers: null };
+    const httpFetch = async (url, options) => {
+      captured = { url, method: options.method, body: options.body, headers: options.headers };
+      return { ok: true, status: 200, text: async () => JSON.stringify({ data: responseData }) };
+    };
+    return { httpFetch, getCaptured: () => captured };
+  }
+
+  await asyncTest("getOrganizations calls only the current GraphQL endpoint with a POST + Bearer auth", async () => {
+    const { httpFetch, getCaptured } = mockFetch({ account: { organizations: [{ id: "org-1", name: "ROOK" }] } });
+    const orgs = await getOrganizations("fake-token", { httpFetch });
+    const captured = getCaptured();
+    assertNeverLegacy(captured.url, captured.body);
+    assert.strictEqual(captured.method, "POST");
+    assert.strictEqual(captured.headers.Authorization, "Bearer fake-token");
+    assert.strictEqual(captured.headers["Content-Type"], "application/json");
+    assert.ok(captured.body.includes("organizations"), "must actually query account.organizations");
+    assert.strictEqual(orgs[0].id, "org-1");
+  });
+
+  await asyncTest("listChannelsForOrganization queries channels(input: {organizationId}) on the current endpoint", async () => {
+    const { httpFetch, getCaptured } = mockFetch({ channels: [{ id: "ch-1", name: "ROOK Careers", service: "linkedin" }] });
+    const channels = await listChannelsForOrganization("fake-token", "org-1", { httpFetch });
+    const captured = getCaptured();
+    assertNeverLegacy(captured.url, captured.body);
+    assert.ok(captured.body.includes("channels"));
+    assert.ok(JSON.parse(captured.body).variables.organizationId === "org-1");
+    assert.strictEqual(channels[0].id, "ch-1");
+  });
+
+  await asyncTest("listAllChannels performs the required organizations-then-channels sequence, never a direct legacy profiles call", async () => {
+    let callCount = 0;
+    const httpFetch = async (url, options) => {
+      callCount++;
+      const body = JSON.parse(options.body);
+      assert.strictEqual(url, BUFFER_API_ENDPOINT);
+      if (body.query.includes("organizations")) {
+        return { ok: true, status: 200, text: async () => JSON.stringify({ data: { account: { organizations: [{ id: "org-1", name: "ROOK" }] } } }) };
+      }
+      return { ok: true, status: 200, text: async () => JSON.stringify({ data: { channels: [{ id: "ch-1", name: "ROOK Careers", service: "linkedin" }] } }) };
+    };
+    const channels = await listAllChannels("fake-token", { httpFetch });
+    assert.strictEqual(callCount, 2, "one call for organizations, one for channels — the documented required sequence");
+    assert.strictEqual(channels[0].organizationId, "org-1");
+  });
+
+  await asyncTest("createPost sends a createPost mutation with mode: shareNow and an image asset, on the current endpoint", async () => {
+    const { httpFetch, getCaptured } = mockFetch({ createPost: { post: { id: "post-1", status: "sent" } } });
+    const post = await createPost("fake-token", { channelId: "ch-1", text: "Hello", photoUrl: "https://rookcareers.com/social/x.png", mode: "shareNow" }, { httpFetch });
+    const captured = getCaptured();
+    assertNeverLegacy(captured.url, captured.body);
+    assert.ok(captured.body.includes("createPost"));
+    assert.ok(captured.body.includes("shareNow"));
+    assert.ok(!captured.body.includes("profile_ids"), "must never use the legacy REST parameter name");
+    assert.ok(!captured.body.includes('"now"'), "must never use the legacy REST now:true parameter");
+    const parsedInput = JSON.parse(captured.body).variables.input;
+    assert.strictEqual(parsedInput.assets[0].image.url, "https://rookcareers.com/social/x.png");
+    assert.strictEqual(post.id, "post-1");
+  });
+
+  await asyncTest("createPost surfaces a MutationError (normal HTTP 200 business-logic failure) as a thrown error, not a silent success", async () => {
+    const httpFetch = async () => ({ ok: true, status: 200, text: async () => JSON.stringify({ data: { createPost: { message: "Channel not found" } } }) });
+    await assert.rejects(() => createPost("fake-token", { channelId: "bad-id", text: "x" }, { httpFetch }), /Channel not found/);
+  });
+
+  await asyncTest("a top-level GraphQL error (bad auth, bad query) is thrown, never swallowed", async () => {
+    const httpFetch = async () => ({ ok: true, status: 200, text: async () => JSON.stringify({ errors: [{ message: "Public API tokens are not accepted" }] }) });
+    await assert.rejects(() => getOrganizations("fake-token", { httpFetch }), /Public API tokens are not accepted/);
+  });
+
+
   test("post copy never includes the employer name and always includes the trial line + link", () => {
     const candidate = { title: "Territory Sales Manager", location_display: "Atlanta, GA", category: "Medical Device", compensation_display: "$90,000 - $120,000", public_url: "https://rookcareers.com/jobs/job-1" };
     const copy = buildPostCopy(candidate);
@@ -138,8 +242,8 @@ async function run() {
   await asyncTest("discoverChannels output never includes the access token, even indirectly", async () => {
     const config = loadConfig({ BUFFER_ACCESS_TOKEN: "super-secret-value-12345" });
     let capturedToken = null;
-    const fakeListProfiles = async (token) => { capturedToken = token; return [LINKEDIN_PAGE, FACEBOOK_PAGE]; };
-    const result = await discoverChannels(config, { listProfiles: fakeListProfiles });
+    const fakeListAllChannels = async (token) => { capturedToken = token; return [LINKEDIN_PAGE, FACEBOOK_PAGE]; };
+    const result = await discoverChannels(config, { listAllChannels: fakeListAllChannels });
     assert.strictEqual(capturedToken, "super-secret-value-12345", "the real function does receive the token to authenticate");
     assert.ok(!JSON.stringify(result).includes("super-secret-value-12345"), "but the token must never appear in what's returned/displayed");
   });
@@ -154,12 +258,12 @@ async function run() {
     const supabaseAdmin = makeMockSupabase({ jobs: [job], employers: [{ company_name: "Acme Diagnostics" }] });
     const supabaseAnon = makeMockSupabase({ jobs: [job] });
     let bufferWasCalled = false;
-    const fakeCreateUpdate = async () => { bufferWasCalled = true; };
+    const fakeCreatePost = async () => { bufferWasCalled = true; };
     const fakeWriteGraphicFile = async () => ({ absolutePath: "/tmp/fake.png", publicUrl: "https://rookcareers.com/social/featured/fake.png" });
     const fakeVerifyWrittenFile = async () => {};
 
     const result = await runValidationOnly(config, {
-      supabaseAdmin, supabaseAnon, createUpdate: fakeCreateUpdate,
+      supabaseAdmin, supabaseAnon, createPost: fakeCreatePost,
       writeGraphicFile: fakeWriteGraphicFile, verifyWrittenFile: fakeVerifyWrittenFile,
     });
 
@@ -187,15 +291,18 @@ async function run() {
   await asyncTest("stops at channel_identification stage before ever selecting a job, if channels are misconfigured", async () => {
     const config = loadConfig({
       SUPABASE_URL: "x", SUPABASE_SERVICE_ROLE_KEY: "x", SUPABASE_ANON_KEY: "x", SOCIAL_SPACING_HMAC_SECRET: SECRET,
-      BUFFER_ACCESS_TOKEN: "x", BUFFER_ROOK_LINKEDIN_CHANNEL_ID: "li-personal-1", BUFFER_ROOK_FACEBOOK_CHANNEL_ID: "fb-page-1",
+      BUFFER_ACCESS_TOKEN: "x", BUFFER_ROOK_LINKEDIN_CHANNEL_ID: "tw-1", BUFFER_ROOK_FACEBOOK_CHANNEL_ID: "fb-page-1",
     });
     let jobQueried = false;
     const supabaseAdmin = makeMockSupabase({ jobs: [] });
     const originalFrom = supabaseAdmin.from;
     supabaseAdmin.from = (name) => { if (name === "jobs") jobQueried = true; return originalFrom(name); };
-    const fakeListProfiles = async () => [LINKEDIN_PERSONAL, FACEBOOK_PAGE];
+    // tw-1 is a Twitter channel — still a genuine service mismatch even
+    // with the personal-profile heuristic removed (see the note above
+    // identifyRookChannels in socialChannels.js).
+    const fakeListAllChannels = async () => [TWITTER_UNRELATED, FACEBOOK_PAGE];
 
-    const result = await runControlledLiveTest(config, { confirmLive: true }, { supabaseAdmin, supabaseAnon: makeMockSupabase({}), listProfiles: fakeListProfiles });
+    const result = await runControlledLiveTest(config, { confirmLive: true }, { supabaseAdmin, supabaseAnon: makeMockSupabase({}), listAllChannels: fakeListAllChannels });
     assert.strictEqual(result.ok, false);
     assert.strictEqual(result.stage, "channel_identification");
     assert.strictEqual(jobQueried, false, "must never select/touch a real job if channel config is unsafe");
@@ -210,14 +317,14 @@ async function run() {
     const job = baseJob();
     const supabaseAdmin = makeMockSupabase({ jobs: [job], employers: [{ company_name: "Acme Diagnostics" }], history: [] });
     const supabaseAnon = makeMockSupabase({ jobs: [job] });
-    const fakeListProfiles = async () => [LINKEDIN_PAGE, FACEBOOK_PAGE];
+    const fakeListAllChannels = async () => [LINKEDIN_PAGE, FACEBOOK_PAGE];
     const bufferCalls = [];
-    const fakeCreateUpdate = async (token, opts) => { bufferCalls.push(opts); return { updates: [{ id: `update-${bufferCalls.length}` }] }; };
+    const fakeCreatePost = async (token, opts) => { bufferCalls.push(opts); return { id: `update-${bufferCalls.length}`, status: "sent" }; };
     const fakeWriteGraphicFile = async () => ({ absolutePath: "/tmp/fake.png", publicUrl: "https://rookcareers.com/social/featured/fake.png" });
     const fakeVerifyWrittenFile = async () => {};
 
     const result = await runControlledLiveTest(config, { confirmLive: true }, {
-      supabaseAdmin, supabaseAnon, listProfiles: fakeListProfiles, createUpdate: fakeCreateUpdate,
+      supabaseAdmin, supabaseAnon, listAllChannels: fakeListAllChannels, createPost: fakeCreatePost,
       writeGraphicFile: fakeWriteGraphicFile, verifyWrittenFile: fakeVerifyWrittenFile,
     });
 
@@ -242,12 +349,12 @@ async function run() {
     const existingRow = { run_key: `LIVE-TEST-${job.id}`, job_fingerprint: fingerprint, facebook_status: null, linkedin_status: "sent", linkedin_buffer_post_id: "already-posted-1" };
     const supabaseAdmin = makeMockSupabase({ jobs: [job], employers: [{ company_name: "Acme Diagnostics" }], history: [existingRow] });
     const supabaseAnon = makeMockSupabase({ jobs: [job] });
-    const fakeListProfiles = async () => [LINKEDIN_PAGE, FACEBOOK_PAGE];
+    const fakeListAllChannels = async () => [LINKEDIN_PAGE, FACEBOOK_PAGE];
     const bufferCalls = [];
-    const fakeCreateUpdate = async (token, opts) => { bufferCalls.push(opts); return { updates: [{ id: "new-update-1" }] }; };
+    const fakeCreatePost = async (token, opts) => { bufferCalls.push(opts); return { id: "new-update-1", status: "sent" }; };
 
     const result = await runControlledLiveTest(config, { confirmLive: true }, {
-      supabaseAdmin, supabaseAnon, listProfiles: fakeListProfiles, createUpdate: fakeCreateUpdate,
+      supabaseAdmin, supabaseAnon, listAllChannels: fakeListAllChannels, createPost: fakeCreatePost,
       writeGraphicFile: async () => ({ absolutePath: "/tmp/fake.png", publicUrl: "https://x/fake.png" }),
       verifyWrittenFile: async () => {},
     });
@@ -281,12 +388,12 @@ async function run() {
       return builder;
     };
     const supabaseAnon = makeMockSupabase({ jobs });
-    const fakeListProfiles = async () => [LINKEDIN_PAGE, FACEBOOK_PAGE];
+    const fakeListAllChannels = async () => [LINKEDIN_PAGE, FACEBOOK_PAGE];
     let bufferCalled = false;
-    const fakeCreateUpdate = async () => { bufferCalled = true; };
+    const fakeCreatePost = async () => { bufferCalled = true; };
 
     const result = await runControlledLiveTest(config, { confirmLive: true }, {
-      supabaseAdmin, supabaseAnon, listProfiles: fakeListProfiles, createUpdate: fakeCreateUpdate,
+      supabaseAdmin, supabaseAnon, listAllChannels: fakeListAllChannels, createPost: fakeCreatePost,
     });
 
     assert.strictEqual(result.ok, false);

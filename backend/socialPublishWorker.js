@@ -26,7 +26,7 @@ const {
   buildHistoryRow,
   computeRunKey,
 } = require("./socialAutomation");
-const { listProfiles, createUpdate } = require("./socialBuffer");
+const { listAllChannels, createPost } = require("./socialBuffer");
 const { identifyRookChannels } = require("./socialChannels");
 const { buildPostCopy } = require("./socialPostCopy");
 const { renderFeaturedJobGraphic } = require("./socialGraphic");
@@ -138,13 +138,14 @@ async function validateJobFresh(supabaseAdmin, supabaseAnon, jobId, config, expe
 }
 
 async function discoverChannels(config, deps = {}) {
-  const listProfilesFn = deps.listProfiles || listProfiles;
+  const listAllChannelsFn = deps.listAllChannels || listAllChannels;
   requireConfigKeys(config, ["bufferAccessToken"]);
-  const profiles = await listProfilesFn(config.bufferAccessToken);
-  return profiles.map((p) => ({
-    id: p.id,
-    service: p.service || null,
-    displayName: p.formatted_username || p.service_username || p.username || "(unknown)",
+  const channels = await listAllChannelsFn(config.bufferAccessToken);
+  return channels.map((c) => ({
+    id: c.id,
+    service: c.service || null,
+    displayName: c.name || "(unknown)",
+    organizationId: c.organizationId || null,
   }));
 }
 
@@ -188,16 +189,16 @@ async function runControlledLiveTest(config, { confirmLive } = {}, deps = {}) {
 
   const supabaseAdmin = deps.supabaseAdmin || createClient(config.supabaseUrl, config.supabaseServiceRoleKey);
   const supabaseAnon = deps.supabaseAnon || createClient(config.supabaseUrl, config.supabaseAnonKey);
-  const listProfilesFn = deps.listProfiles || listProfiles;
-  const createUpdateFn = deps.createUpdate || createUpdate;
+  const listAllChannelsFn = deps.listAllChannels || listAllChannels;
+  const createPostFn = deps.createPost || createPost;
 
   requireConfigKeys(config, [
     "supabaseUrl", "supabaseServiceRoleKey", "supabaseAnonKey", "spacingSecret",
     "bufferAccessToken", "linkedinChannelId", "facebookChannelId",
   ]);
 
-  const profiles = await listProfilesFn(config.bufferAccessToken);
-  const channels = identifyRookChannels(profiles, {
+  const availableChannels = await listAllChannelsFn(config.bufferAccessToken);
+  const channels = identifyRookChannels(availableChannels, {
     linkedinChannelId: config.linkedinChannelId,
     facebookChannelId: config.facebookChannelId,
   });
@@ -243,10 +244,10 @@ async function runControlledLiveTest(config, { confirmLive } = {}, deps = {}) {
 
   if (!alreadyPosted.facebook) {
     try {
-      const res = await createUpdateFn(config.bufferAccessToken, {
-        profileIds: [channels.facebook.id], text: postCopy, photoUrl: written.publicUrl, now: true,
+      const post = await createPostFn(config.bufferAccessToken, {
+        channelId: channels.facebook.id, text: postCopy, photoUrl: written.publicUrl, mode: "shareNow",
       });
-      results.facebook = { status: "sent", bufferPostId: res?.updates?.[0]?.id || res?.id || null, channelId: channels.facebook.id };
+      results.facebook = { status: "sent", bufferPostId: post?.id || null, channelId: channels.facebook.id };
     } catch (err) {
       results.facebook = { status: "failed", error: err.message, channelId: channels.facebook.id };
     }
@@ -256,10 +257,10 @@ async function runControlledLiveTest(config, { confirmLive } = {}, deps = {}) {
 
   if (!alreadyPosted.linkedin) {
     try {
-      const res = await createUpdateFn(config.bufferAccessToken, {
-        profileIds: [channels.linkedin.id], text: postCopy, photoUrl: written.publicUrl, now: true,
+      const post = await createPostFn(config.bufferAccessToken, {
+        channelId: channels.linkedin.id, text: postCopy, photoUrl: written.publicUrl, mode: "shareNow",
       });
-      results.linkedin = { status: "sent", bufferPostId: res?.updates?.[0]?.id || res?.id || null, channelId: channels.linkedin.id };
+      results.linkedin = { status: "sent", bufferPostId: post?.id || null, channelId: channels.linkedin.id };
     } catch (err) {
       results.linkedin = { status: "failed", error: err.message, channelId: channels.linkedin.id };
     }

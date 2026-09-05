@@ -6,37 +6,37 @@
 // truth, this module's job is to validate that configuration against
 // what Buffer actually reports, not to discover channels on its own.
 
-// Buffer's profile objects don't always expose a clean "is this a
-// personal profile vs. a business Page" flag identically across every
-// platform, so this is a best-effort secondary check — the actual
-// safety guarantee is that only a channel matching one of the two
-// explicitly configured IDs is ever used at all, regardless of what
-// this heuristic concludes.
-function looksLikePersonalProfile(profile) {
-  const serviceType = String(profile?.service_type || "").toLowerCase();
-  if (serviceType && serviceType !== "page" && serviceType !== "company") return true;
-  return false;
-}
+// NOTE: Buffer's current GraphQL Channel type exposes only id, name,
+// and service (verified against developers.buffer.com/guides/data-
+// model.md) — there is no personal-vs-business-Page field in this
+// API to check. The real, defensible safeguard here is exactly what
+// direct instruction called for in the first place: a channel is only
+// ever used if its ID exactly matches the explicitly configured
+// BUFFER_ROOK_LINKEDIN_CHANNEL_ID / BUFFER_ROOK_FACEBOOK_CHANNEL_ID —
+// there is no name-matching or type-guessing anywhere in this module,
+// so a personal profile can only ever be used if someone deliberately
+// configures its ID, which is a configuration-time human decision this
+// code cannot see into, not something to paper over with a heuristic
+// checking a field the API doesn't actually provide.
 
-function describeChannel(profile) {
-  if (!profile) return null;
+function describeChannel(channel) {
+  if (!channel) return null;
   return {
-    id: profile.id,
-    service: profile.service || null,
-    displayName: profile.formatted_username || profile.service_username || profile.username || "(unknown)",
-    avatar: profile.avatar || null,
+    id: channel.id,
+    service: channel.service || null,
+    displayName: channel.name || "(unknown)",
   };
 }
 
 /**
- * Given the full list of Buffer profiles and the two configured
- * channel IDs, returns exactly which two profiles to use, or a clear
+ * Given the full list of Buffer channels and the two configured
+ * channel IDs, returns exactly which two channels to use, or a clear
  * list of errors if configuration is missing, ambiguous, or points at
- * something that doesn't look like the intended platform/page.
+ * the wrong platform.
  */
-function identifyRookChannels(profiles, { linkedinChannelId, facebookChannelId }) {
+function identifyRookChannels(channels, { linkedinChannelId, facebookChannelId }) {
   const errors = [];
-  const byId = new Map((profiles || []).map((p) => [String(p.id), p]));
+  const byId = new Map((channels || []).map((c) => [String(c.id), c]));
 
   if (!linkedinChannelId) errors.push("BUFFER_ROOK_LINKEDIN_CHANNEL_ID is not configured");
   if (!facebookChannelId) errors.push("BUFFER_ROOK_FACEBOOK_CHANNEL_ID is not configured");
@@ -51,13 +51,8 @@ function identifyRookChannels(profiles, { linkedinChannelId, facebookChannelId }
     linkedin = byId.get(String(linkedinChannelId)) || null;
     if (!linkedin) {
       errors.push(`No Buffer channel found matching BUFFER_ROOK_LINKEDIN_CHANNEL_ID (${linkedinChannelId})`);
-    } else {
-      if (String(linkedin.service || "").toLowerCase() !== "linkedin") {
-        errors.push(`Channel configured as BUFFER_ROOK_LINKEDIN_CHANNEL_ID is not a LinkedIn channel (service: ${linkedin.service})`);
-      }
-      if (looksLikePersonalProfile(linkedin)) {
-        errors.push("Channel configured as BUFFER_ROOK_LINKEDIN_CHANNEL_ID does not appear to be a business Page — refusing to post to what may be a personal profile");
-      }
+    } else if (String(linkedin.service || "").toLowerCase() !== "linkedin") {
+      errors.push(`Channel configured as BUFFER_ROOK_LINKEDIN_CHANNEL_ID is not a LinkedIn channel (service: ${linkedin.service})`);
     }
   }
 
@@ -65,13 +60,8 @@ function identifyRookChannels(profiles, { linkedinChannelId, facebookChannelId }
     facebook = byId.get(String(facebookChannelId)) || null;
     if (!facebook) {
       errors.push(`No Buffer channel found matching BUFFER_ROOK_FACEBOOK_CHANNEL_ID (${facebookChannelId})`);
-    } else {
-      if (String(facebook.service || "").toLowerCase() !== "facebook") {
-        errors.push(`Channel configured as BUFFER_ROOK_FACEBOOK_CHANNEL_ID is not a Facebook channel (service: ${facebook.service})`);
-      }
-      if (looksLikePersonalProfile(facebook)) {
-        errors.push("Channel configured as BUFFER_ROOK_FACEBOOK_CHANNEL_ID does not appear to be a business Page — refusing to post to what may be a personal profile");
-      }
+    } else if (String(facebook.service || "").toLowerCase() !== "facebook") {
+      errors.push(`Channel configured as BUFFER_ROOK_FACEBOOK_CHANNEL_ID is not a Facebook channel (service: ${facebook.service})`);
     }
   }
 
@@ -83,4 +73,4 @@ function identifyRookChannels(profiles, { linkedinChannelId, facebookChannelId }
   };
 }
 
-module.exports = { identifyRookChannels, describeChannel, looksLikePersonalProfile };
+module.exports = { identifyRookChannels, describeChannel };

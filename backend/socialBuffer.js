@@ -1,90 +1,182 @@
-// Thin wrapper around Buffer's official REST API (v1,
-// https://api.bufferapp.com/1) — the current, documented API surface
-// as of this writing. OAuth2 bearer token auth. No other Buffer
-// functionality is used or needed for this system.
+// Wrapper around Buffer's CURRENT GraphQL API (https://api.buffer.com)
+// — the legacy REST API (api.bufferapp.com/1/) no longer accepts
+// personal API keys and is not used anywhere in this file. Every
+// shape here (query/mutation text, field names, error handling) is
+// taken directly from Buffer's own current developer documentation
+// (developers.buffer.com), not guessed:
+//   - account.organizations: developers.buffer.com/guides/data-model.md
+//   - channels(input: {organizationId}): developers.buffer.com/guides/your-first-post.md
+//   - createPost + assets: developers.buffer.com/guides/hosting-media.md
+//   - mode: shareNow for immediate posting: developers.buffer.com/guides/rest-migration.md
+//   - posts() query for retrieval: developers.buffer.com/guides/posts-and-scheduling.md
 //
-// Deliberately dependency-injectable (an httpFetch function can be
-// passed in) so the publishing worker's logic is testable without any
-// real network call — the default is Node's native fetch (Node 18+).
+// Single POST endpoint, single Content-Type, single auth header — no
+// per-resource URLs, unlike the old REST API. Dependency-injectable
+// httpFetch so this is fully testable without any real network call.
 
-const BUFFER_API_BASE = "https://api.bufferapp.com/1";
+const BUFFER_API_ENDPOINT = "https://api.buffer.com";
 
-async function bufferRequest(accessToken, method, path, body, { httpFetch = fetch } = {}) {
+async function bufferGraphQLRequest(accessToken, query, variables, { httpFetch = fetch } = {}) {
   if (!accessToken) {
     throw new Error("BUFFER_ACCESS_TOKEN is not configured — refusing to call the Buffer API without it");
   }
-  const res = await httpFetch(`${BUFFER_API_BASE}${path}`, {
-    method,
+  const res = await httpFetch(BUFFER_API_ENDPOINT, {
+    method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
       Accept: "application/json",
     },
-    body: body ? JSON.stringify(body) : undefined,
+    body: JSON.stringify({ query, variables: variables || {} }),
   });
 
   const text = await res.text();
-  let data;
+  let payload;
   try {
-    data = text ? JSON.parse(text) : {};
+    payload = text ? JSON.parse(text) : {};
   } catch {
-    data = { raw: text };
+    throw new Error(`Buffer API returned a non-JSON response (HTTP ${res.status})`);
   }
 
   if (!res.ok) {
-    // Buffer's error responses put a human-readable message in
-    // `.error` or `.message` — surfaced without ever including the
-    // access token itself (it's never present in a response body,
-    // but this is deliberate defense-in-depth: only known-safe fields
-    // are included in the thrown error).
-    const message = data?.error || data?.message || `Buffer API error (HTTP ${res.status})`;
-    const err = new Error(message);
-    err.status = res.status;
-    err.bufferResponse = data;
+    throw new Error(`Buffer API error (HTTP ${res.status}): ${payload?.errors?.[0]?.message || text || "unknown error"}`);
+  }
+  // Top-level GraphQL errors (bad query, auth failure, etc.) — distinct
+  // from a MutationError, which is a normal, successful HTTP 200
+  // response representing a business-logic failure (see createPost
+  // below for that case).
+  if (Array.isArray(payload.errors) && payload.errors.length > 0) {
+    throw new Error(payload.errors.map((e) => e.message).join("; "));
+  }
+  return payload.data;
+}
+
+/**
+ * Retrieves every organization on this account. Required first step —
+ * channels can't be listed without an organizationId.
+ */
+async function getOrganizations(accessToken, opts) {
+  const query = `
+    query GetOrganizations {
+      account {
+        organizations {
+          id
+          name
+        }
+      }
+    }`;
+  const data = await bufferGraphQLRequest(accessToken, query, {}, opts);
+  return data?.account?.organizations || [];
+}
+
+/**
+ * Lists every channel (connected social profile) for one organization.
+ */
+async function listChannelsForOrganization(accessToken, organizationId, opts) {
+  const query = `
+    query GetChannels($organizationId: String!) {
+      channels(input: { organizationId: $organizationId }) {
+        id
+        name
+        service
+      }
+    }`;
+  const data = await bufferGraphQLRequest(accessToken, query, { organizationId }, opts);
+  return (data?.channels || []).map((c) => ({ ...c, organizationId }));
+}
+
+/**
+ * Convenience: every channel across every organization on this
+ * account — the actual channel-discovery primitive the worker uses,
+ * since most accounts have exactly one organization but this handles
+ * more than one correctly too.
+ */
+async function listAllChannels(accessToken, opts) {
+  const organizations = await getOrganizations(accessToken, opts);
+  const allChannels = [];
+  for (const org of organizations) {
+    const channels = await listChannelsForOrganization(accessToken, org.id, opts);
+    allChannels.push(...channels);
+  }
+  return allChannels;
+}
+
+/**
+ * Creates and immediately publishes a post to a single channel.
+ * mode: "shareNow" is the documented GraphQL equivalent of the old
+ * REST API's `now: true` parameter. One call per channel — the
+ * GraphQL API takes a single channelId, not an array of profile IDs
+ * like the old REST API did.
+ */
+async function createPost(accessToken, { channelId, text, photoUrl, mode = "shareNow", dueAt }, opts) {
+  if (!channelId) throw new Error("createPost requires a channelId");
+  const query = `
+    mutation CreatePost($input: CreatePostInput!) {
+      createPost(input: $input) {
+        ... on PostActionSuccess {
+          post {
+            id
+            text
+            status
+            dueAt
+          }
+        }
+        ... on MutationError {
+          message
+        }
+      }
+    }`;
+  const input = { text, channelId, schedulingType: "automatic", mode };
+  if (photoUrl) input.assets = [{ image: { url: photoUrl } }];
+  if (mode === "customScheduled" && dueAt) input.dueAt = dueAt;
+
+  const data = await bufferGraphQLRequest(accessToken, query, { input }, opts);
+  const result = data?.createPost;
+
+  // MutationError is a NORMAL, successful HTTP 200 response
+  // representing a business-logic failure (invalid channel, queue
+  // full, media fetch failure, etc.) — distinct from the top-level
+  // GraphQL errors already handled in bufferGraphQLRequest above.
+  if (result?.message && !result.post) {
+    const err = new Error(result.message);
+    err.isMutationError = true;
     throw err;
   }
-  return data;
+  return result?.post;
 }
 
 /**
- * Lists every profile (channel) connected to this Buffer account —
- * the safe channel-discovery primitive. Each profile includes id,
- * service (platform: 'linkedin', 'facebook', etc.), and a display
- * name — never the access token itself.
+ * Looks up posts for an organization, optionally filtered by channel
+ * — used to check a specific post's current status. Buffer's GraphQL
+ * API does not expose a single-post-by-ID query in its documented
+ * examples; this queries the list and finds the matching id, which is
+ * the same approach Buffer's own docs show for "sent posts" lookups.
  */
-async function listProfiles(accessToken, opts) {
-  const data = await bufferRequest(accessToken, "GET", "/profiles.json", null, opts);
-  return Array.isArray(data) ? data : [];
+async function findPostById(accessToken, organizationId, postId, opts) {
+  const query = `
+    query GetPosts($organizationId: String!) {
+      posts(first: 50, input: { organizationId: $organizationId }) {
+        edges {
+          node {
+            id
+            text
+            status
+            dueAt
+            channelId
+          }
+        }
+      }
+    }`;
+  const data = await bufferGraphQLRequest(accessToken, query, { organizationId }, opts);
+  const edges = data?.posts?.edges || [];
+  return edges.map((e) => e.node).find((p) => p.id === postId) || null;
 }
 
-async function getProfile(accessToken, profileId, opts) {
-  return bufferRequest(accessToken, "GET", `/profiles/${encodeURIComponent(profileId)}.json`, null, opts);
-}
-
-/**
- * Creates a new Buffer update (post). Buffer fetches the image from
- * the given public HTTPS URL itself — no binary upload from this
- * process, which is why the graphic must already be written to a
- * stable public URL (see backend/socialGraphicStorage.js) before this
- * is called.
- */
-async function createUpdate(accessToken, { profileIds, text, photoUrl, now = true, scheduledAt }, opts) {
-  if (!Array.isArray(profileIds) || profileIds.length === 0) {
-    throw new Error("createUpdate requires at least one profile ID");
-  }
-  const body = {
-    profile_ids: profileIds,
-    text,
-    now,
-  };
-  if (photoUrl) body.media = { photo: photoUrl, thumbnail: photoUrl };
-  if (!now && scheduledAt) body.scheduled_at = scheduledAt;
-
-  return bufferRequest(accessToken, "POST", "/updates/create.json", body, opts);
-}
-
-async function getUpdate(accessToken, updateId, opts) {
-  return bufferRequest(accessToken, "GET", `/updates/${encodeURIComponent(updateId)}.json`, null, opts);
-}
-
-module.exports = { BUFFER_API_BASE, listProfiles, getProfile, createUpdate, getUpdate };
+module.exports = {
+  BUFFER_API_ENDPOINT,
+  getOrganizations,
+  listChannelsForOrganization,
+  listAllChannels,
+  createPost,
+  findPostById,
+};
