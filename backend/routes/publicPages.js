@@ -12,6 +12,7 @@
 
 const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
+const { getTrialPeriodDays } = require("../routes/stripe");
 
 const router = express.Router();
 
@@ -193,8 +194,18 @@ router.get("/jobs/:id", async (req, res, next) => {
     employmentType: "FULL_TIME",
   };
 
+  const trialDays = getTrialPeriodDays();
+  const ctaBlock = trialDays > 0
+    ? `<div style="color:#fff; font-size:15px; font-weight:700; margin-bottom:2px;">${trialDays} days free, then $29/month</div>
+      <div style="color:#B9C4DB; font-size:13px; font-weight:600; margin-bottom:18px;">Cancel anytime.</div>
+      <a href="/rook-login.html" class="btn btn-primary">Start Your ${trialDays}-Day Free Trial</a>
+      <div style="color:#8B96AB; font-size:12px; margin-top:10px;">$0 today. Full ROOK access during your trial.</div>`
+    : `<div style="color:#fff; font-size:15px; font-weight:700; margin-bottom:18px;">$29/month · Cancel anytime</div>
+      <a href="/rook-login.html" class="btn btn-primary">Get Started</a>
+      <div style="color:#8B96AB; font-size:12px; margin-top:10px;">One membership. Full ROOK access.</div>`;
+
   const bodyHtml = `
-    <div style="background:rgba(20,99,255,0.08); color:var(--royal); display:inline-flex; align-items:center; gap:6px; font-size:12.5px; font-weight:600; padding:6px 12px; border-radius:999px; margin-bottom:16px;">🔒 Employer revealed with ROOK membership</div>
+    <div style="background:rgba(20,99,255,0.08); color:var(--royal); display:inline-flex; align-items:center; gap:6px; font-size:12.5px; font-weight:600; padding:6px 12px; border-radius:999px; margin-bottom:16px;">🔒 Employer revealed with ROOK access</div>
     <h1 style="font-size:28px; margin-bottom:10px;">${escapeHtml(title)}</h1>
     <div style="font-size:14.5px; color:var(--muted); margin-bottom:24px;">${escapeHtml(job.location_raw || "")}${comp ? " · " + escapeHtml(comp) : ""}${job.date_posted ? " · Posted " + escapeHtml(job.date_posted) : ""}</div>
     <div style="background:#fff; border:1px solid var(--border); border-radius:var(--radius); padding:24px; margin-bottom:24px; font-size:14.5px; line-height:1.7; color:var(--navy);">
@@ -204,9 +215,7 @@ router.get("/jobs/:id", async (req, res, next) => {
     <div style="background:var(--navy); border-radius:var(--radius); padding:28px 24px; text-align:center;">
       <h3 style="color:#fff; font-size:19px; margin-bottom:8px;">Ready to see who's hiring?</h3>
       <p style="color:#B9C4DB; font-size:13.5px; margin-bottom:14px;">See the employer, apply directly, and get this job — and every other opportunity — scored against your experience.</p>
-      <div style="color:#fff; font-size:15px; font-weight:700; margin-bottom:18px;">$29/month · Cancel anytime</div>
-      <a href="/rook-login.html" class="btn btn-primary">Get Started</a>
-      <div style="color:#8B96AB; font-size:12px; margin-top:10px;">One membership. Full ROOK access.</div>
+      ${ctaBlock}
     </div>
     <div style="text-align:center; margin-top:20px;"><a href="/rook-browse.html" style="color:var(--royal); font-size:13px; font-weight:600;">← Back to all open roles</a></div>
   `;
@@ -266,6 +275,16 @@ router.get("/jobs/category/:slug", async (req, res, next) => {
 
   const otherCategories = Object.entries(CATEGORIES).filter(([slug]) => slug !== req.params.slug);
 
+  const trialDays = getTrialPeriodDays();
+  const ctaBlock = trialDays > 0
+    ? `<div style="color:#fff; font-size:15px; font-weight:700; margin-bottom:2px;">${trialDays} days free, then $29/month</div>
+      <div style="color:#B9C4DB; font-size:13px; font-weight:600; margin-bottom:18px;">Cancel anytime.</div>
+      <a href="/rook-login.html" class="btn btn-primary">Start Your ${trialDays}-Day Free Trial</a>
+      <div style="color:#8B96AB; font-size:12px; margin-top:10px;">$0 today. Full ROOK access during your trial.</div>`
+    : `<div style="color:#fff; font-size:15px; font-weight:700; margin-bottom:18px;">$29/month · Cancel anytime</div>
+      <a href="/rook-login.html" class="btn btn-primary">Get Started</a>
+      <div style="color:#8B96AB; font-size:12px; margin-top:10px;">One membership. Full ROOK access.</div>`;
+
   const bodyHtml = `
     <h1 style="font-size:28px; margin-bottom:10px;">${escapeHtml(category.label)}</h1>
     <p style="color:var(--muted); font-size:14.5px; margin-bottom:28px;">${jobRows.length} real, currently open role${jobRows.length === 1 ? "" : "s"} — pulled directly from employer career sites, not a stale aggregator.</p>
@@ -281,9 +300,7 @@ router.get("/jobs/category/:slug", async (req, res, next) => {
     <div style="background:var(--navy); border-radius:var(--radius); padding:28px 24px; text-align:center; margin-top:32px;">
       <h3 style="color:#fff; font-size:19px; margin-bottom:8px;">Ready to see who's hiring?</h3>
       <p style="color:#B9C4DB; font-size:13.5px; margin-bottom:14px;">See the employer, apply directly, and get every role scored against your experience.</p>
-      <div style="color:#fff; font-size:15px; font-weight:700; margin-bottom:18px;">$29/month · Cancel anytime</div>
-      <a href="/rook-login.html" class="btn btn-primary">Get Started</a>
-      <div style="color:#8B96AB; font-size:12px; margin-top:10px;">One membership. Full ROOK access.</div>
+      ${ctaBlock}
     </div>
     <div style="margin-top:36px;">
       <div style="font-size:12.5px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.02em; margin-bottom:12px;">Browse other categories</div>
