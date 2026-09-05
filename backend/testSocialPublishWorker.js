@@ -11,6 +11,7 @@ const { buildPostCopy } = require("./socialPostCopy");
 const { getOrganizations, listChannelsForOrganization, listAllChannels, createPost, findPostById, BUFFER_API_ENDPOINT } = require("./socialBuffer");
 const {
   loadConfig, requireConfigKeys, discoverChannels, runValidationOnly, runControlledLiveTest,
+  runScheduledSlot, getSchedulerStatus,
 } = require("./socialPublishWorker");
 const { computeJobFingerprintForJob } = require("./socialAutomation");
 const { preflightCheckMedia } = require("./socialMediaPreflight");
@@ -57,6 +58,7 @@ function makeMockSupabase({ jobs = [], employers = [], history = [] } = {}) {
     const builder = {
       select: () => builder,
       eq: (col, val) => { filters.push((row) => row[col] === val); return builder; },
+      neq: (col, val) => { filters.push((row) => row[col] !== val); return builder; },
       in: (col, vals) => { filters.push((row) => vals.includes(row[col])); return builder; },
       order: () => builder,
       limit: () => builder,
@@ -713,6 +715,221 @@ async function run() {
     assert.strictEqual(result.ok, false);
     assert.ok(["initial_validation", "final_pre_publish_check"].includes(result.stage));
     assert.strictEqual(bufferCalled, false, "must never call Buffer once validation has failed at any stage");
+  });
+
+  console.log("\n=== Recurring automation: disabled state sends nothing ===");
+  await asyncTest("SOCIAL_AUTOMATION_ENABLED unset (missing) results in a no-op — no candidate selection, no Buffer call, no history write", async () => {
+    const config = loadConfig({ BUFFER_ACCESS_TOKEN: "x", BUFFER_ROOK_LINKEDIN_CHANNEL_ID: "li-page-1", BUFFER_ROOK_FACEBOOK_CHANNEL_ID: "fb-page-1" });
+    let jobQueried = false;
+    const supabaseAdmin = makeMockSupabase({});
+    const originalFrom = supabaseAdmin.from;
+    supabaseAdmin.from = (name) => { if (name === "jobs") jobQueried = true; return originalFrom(name); };
+    const result = await runScheduledSlot("am", "2026-09-05", config, { supabaseAdmin });
+    assert.strictEqual(result.ok, false);
+    assert.strictEqual(result.stage, "disabled");
+    assert.strictEqual(jobQueried, false, "must never touch job data when disabled");
+  });
+  await asyncTest("SOCIAL_AUTOMATION_ENABLED='false' explicitly also results in a no-op", async () => {
+    const config = loadConfig({ SOCIAL_AUTOMATION_ENABLED: "false", BUFFER_ACCESS_TOKEN: "x", BUFFER_ROOK_LINKEDIN_CHANNEL_ID: "li-page-1", BUFFER_ROOK_FACEBOOK_CHANNEL_ID: "fb-page-1" });
+    const result = await runScheduledSlot("am", "2026-09-05", config, { supabaseAdmin: makeMockSupabase({}) });
+    assert.strictEqual(result.ok, false);
+    assert.strictEqual(result.stage, "disabled");
+  });
+
+  console.log("\n=== Recurring automation: duplicate scheduler triggers are idempotent ===");
+  await asyncTest("a second dispatch for the same run_key (simulating a duplicate trigger or restart) does not re-post — treated as already completed", async () => {
+    const config = loadConfig({
+      SOCIAL_AUTOMATION_ENABLED: "true", SUPABASE_URL: "x", SUPABASE_SERVICE_ROLE_KEY: "x", SUPABASE_ANON_KEY: "x", SOCIAL_SPACING_HMAC_SECRET: SECRET,
+      BUFFER_ACCESS_TOKEN: "x", BUFFER_ROOK_LINKEDIN_CHANNEL_ID: "li-page-1", BUFFER_ROOK_FACEBOOK_CHANNEL_ID: "fb-page-1",
+    });
+    const job = baseJob();
+    const history = [];
+    const supabaseAdmin = makeMockSupabase({ jobs: [job], employers: [{ company_name: "Acme Diagnostics" }], history });
+    const supabaseAnon = makeMockSupabase({ jobs: [job] });
+    const fakeListAllChannels = async () => [LINKEDIN_PAGE, FACEBOOK_PAGE];
+    let bufferCallCount = 0;
+    const fakeCreatePost = async () => { bufferCallCount++; return { id: `update-${bufferCallCount}`, status: "scheduled" }; };
+    const deps = {
+      supabaseAdmin, supabaseAnon, listAllChannels: fakeListAllChannels, createPost: fakeCreatePost,
+      preflightCheckMedia: async () => ({ ok: true }),
+      uploadGraphicToStorage: async () => ({ publicUrl: "https://x/fake.png" }),
+    };
+
+    const first = await runScheduledSlot("am", "2026-09-05", config, deps);
+    assert.strictEqual(first.ok, true);
+    assert.strictEqual(bufferCallCount, 2, "first dispatch posts to both platforms");
+
+    const second = await runScheduledSlot("am", "2026-09-05", config, deps);
+    assert.strictEqual(second.ok, true);
+    assert.strictEqual(second.stage, "already_completed");
+    assert.strictEqual(bufferCallCount, 2, "the duplicate trigger must not call Buffer again at all");
+    assert.strictEqual(history.length, 1, "must never create a second history row for the same run_key");
+  });
+
+  console.log("\n=== Recurring automation: AM/PM separation — the PM job must differ from the morning's job ===");
+  await asyncTest("the PM run excludes the exact job the AM run selected that same day", async () => {
+    const config = loadConfig({
+      SOCIAL_AUTOMATION_ENABLED: "true", SUPABASE_URL: "x", SUPABASE_SERVICE_ROLE_KEY: "x", SUPABASE_ANON_KEY: "x", SOCIAL_SPACING_HMAC_SECRET: SECRET,
+      BUFFER_ACCESS_TOKEN: "x", BUFFER_ROOK_LINKEDIN_CHANNEL_ID: "li-page-1", BUFFER_ROOK_FACEBOOK_CHANNEL_ID: "fb-page-1",
+    });
+    const jobA = baseJob({ id: "job-a", employer_id: "employer-A", source_job_id: "src-a", title_original: "Territory Sales Manager A" });
+    const jobB = baseJob({ id: "job-b", employer_id: "employer-B", source_job_id: "src-b", title_original: "Territory Sales Manager B" });
+    const history = [];
+    const supabaseAdmin = makeMockSupabase({ jobs: [jobA, jobB], employers: [{ company_name: "Acme Diagnostics" }], history });
+    const supabaseAnon = makeMockSupabase({ jobs: [jobA, jobB] });
+    const fakeListAllChannels = async () => [LINKEDIN_PAGE, FACEBOOK_PAGE];
+    const fakeCreatePost = async () => ({ id: "update-1", status: "scheduled" });
+    const deps = {
+      supabaseAdmin, supabaseAnon, listAllChannels: fakeListAllChannels, createPost: fakeCreatePost,
+      preflightCheckMedia: async () => ({ ok: true }),
+      uploadGraphicToStorage: async () => ({ publicUrl: "https://x/fake.png" }),
+    };
+
+    const amResult = await runScheduledSlot("am", "2026-09-05", config, deps);
+    assert.strictEqual(amResult.ok, true);
+    const amJobId = amResult.jobId;
+
+    const pmResult = await runScheduledSlot("pm", "2026-09-05", config, deps);
+    assert.strictEqual(pmResult.ok, true);
+    assert.notStrictEqual(pmResult.jobId, amJobId, "the PM job must be different from the AM job");
+  });
+
+  console.log("\n=== Recurring automation: candidate fallback on final-validation failure ===");
+  await asyncTest("if the top-ranked candidate fails final validation, the next eligible candidate is used automatically", async () => {
+    const config = loadConfig({
+      SOCIAL_AUTOMATION_ENABLED: "true", SUPABASE_URL: "x", SUPABASE_SERVICE_ROLE_KEY: "x", SUPABASE_ANON_KEY: "x", SOCIAL_SPACING_HMAC_SECRET: SECRET,
+      BUFFER_ACCESS_TOKEN: "x", BUFFER_ROOK_LINKEDIN_CHANNEL_ID: "li-page-1", BUFFER_ROOK_FACEBOOK_CHANNEL_ID: "fb-page-1",
+    });
+    // jobBad looks eligible at selection time (fresher, so ranks
+    // first) but is closed by the time it's re-fetched for final
+    // validation — simulating a real race between selection and
+    // final-check. jobGood is a genuinely valid fallback.
+    const jobBad = baseJob({ id: "job-bad", employer_id: "employer-A", source_job_id: "src-bad", last_seen_at: NOW.toISOString() });
+    const jobGood = baseJob({ id: "job-good", employer_id: "employer-B", source_job_id: "src-good", last_seen_at: new Date(NOW.getTime() - 60 * 1000).toISOString() });
+    const jobs = [jobBad, jobGood];
+    const supabaseAdmin = makeMockSupabase({ jobs, employers: [{ company_name: "Acme Diagnostics" }], history: [] });
+    let jobBadFetchCount = 0;
+    const originalFrom = supabaseAdmin.from;
+    supabaseAdmin.from = (name) => {
+      const builder = originalFrom(name);
+      if (name === "jobs") {
+        const originalMaybeSingle = builder.maybeSingle;
+        builder.maybeSingle = async () => {
+          const result = await originalMaybeSingle();
+          if (result.data && result.data.id === "job-bad") {
+            jobBadFetchCount++;
+            return { data: { ...result.data, status: "closed" }, error: null }; // always closed on fresh re-fetch
+          }
+          return result;
+        };
+      }
+      return builder;
+    };
+    const supabaseAnon = makeMockSupabase({ jobs });
+    const fakeListAllChannels = async () => [LINKEDIN_PAGE, FACEBOOK_PAGE];
+    const fakeCreatePost = async () => ({ id: "update-1", status: "scheduled" });
+
+    const result = await runScheduledSlot("am", "2026-09-05", config, {
+      supabaseAdmin, supabaseAnon, listAllChannels: fakeListAllChannels, createPost: fakeCreatePost,
+      preflightCheckMedia: async () => ({ ok: true }),
+      uploadGraphicToStorage: async () => ({ publicUrl: "https://x/fake.png" }),
+    });
+
+    assert.strictEqual(result.ok, true);
+    assert.strictEqual(result.jobId, "job-good", "must fall through to the next eligible candidate");
+    assert.strictEqual(result.skippedCandidates.length, 1);
+    assert.strictEqual(result.skippedCandidates[0].jobId, "job-bad");
+    assert.ok(jobBadFetchCount >= 1, "sanity check — the bad candidate was actually re-validated, not just skipped blindly");
+  });
+  await asyncTest("if every candidate fails final validation, the run reports no_valid_candidate rather than posting anything", async () => {
+    const config = loadConfig({
+      SOCIAL_AUTOMATION_ENABLED: "true", SUPABASE_URL: "x", SUPABASE_SERVICE_ROLE_KEY: "x", SUPABASE_ANON_KEY: "x", SOCIAL_SPACING_HMAC_SECRET: SECRET,
+      BUFFER_ACCESS_TOKEN: "x", BUFFER_ROOK_LINKEDIN_CHANNEL_ID: "li-page-1", BUFFER_ROOK_FACEBOOK_CHANNEL_ID: "fb-page-1",
+    });
+    const job = baseJob({ id: "job-only" });
+    const supabaseAdmin = makeMockSupabase({ jobs: [job], employers: [{ company_name: "Acme Diagnostics" }], history: [] });
+    const originalFrom = supabaseAdmin.from;
+    supabaseAdmin.from = (name) => {
+      const builder = originalFrom(name);
+      if (name === "jobs") {
+        const originalMaybeSingle = builder.maybeSingle;
+        builder.maybeSingle = async () => {
+          const result = await originalMaybeSingle();
+          return result.data ? { data: { ...result.data, status: "closed" }, error: null } : result;
+        };
+      }
+      return builder;
+    };
+    const supabaseAnon = makeMockSupabase({ jobs: [job] });
+    let bufferCalled = false;
+    const result = await runScheduledSlot("am", "2026-09-05", config, {
+      supabaseAdmin, supabaseAnon, listAllChannels: async () => [LINKEDIN_PAGE, FACEBOOK_PAGE],
+      createPost: async () => { bufferCalled = true; },
+    });
+    assert.strictEqual(result.ok, false);
+    assert.strictEqual(result.stage, "no_valid_candidate");
+    assert.strictEqual(bufferCalled, false);
+  });
+
+  console.log("\n=== Recurring automation: partial-platform retry ===");
+  await asyncTest("if Facebook failed but LinkedIn succeeded, a re-dispatch of the same run_key retries only Facebook", async () => {
+    const config = loadConfig({
+      SOCIAL_AUTOMATION_ENABLED: "true", SUPABASE_URL: "x", SUPABASE_SERVICE_ROLE_KEY: "x", SUPABASE_ANON_KEY: "x", SOCIAL_SPACING_HMAC_SECRET: SECRET,
+      BUFFER_ACCESS_TOKEN: "x", BUFFER_ROOK_LINKEDIN_CHANNEL_ID: "li-page-1", BUFFER_ROOK_FACEBOOK_CHANNEL_ID: "fb-page-1",
+    });
+    const job = baseJob();
+    const history = [];
+    const supabaseAdmin = makeMockSupabase({ jobs: [job], employers: [{ company_name: "Acme Diagnostics" }], history });
+    const supabaseAnon = makeMockSupabase({ jobs: [job] });
+    const fakeListAllChannels = async () => [LINKEDIN_PAGE, FACEBOOK_PAGE];
+    let facebookAttempts = 0, linkedinAttempts = 0;
+    const flakyCreatePost = async (token, opts) => {
+      if (opts.channelId === "fb-page-1") { facebookAttempts++; throw new Error("Facebook temporarily unavailable"); }
+      linkedinAttempts++;
+      return { id: "li-update-1", status: "scheduled" };
+    };
+    const deps = {
+      supabaseAdmin, supabaseAnon, listAllChannels: fakeListAllChannels, createPost: flakyCreatePost,
+      preflightCheckMedia: async () => ({ ok: true }),
+      uploadGraphicToStorage: async () => ({ publicUrl: "https://x/fake.png" }),
+    };
+
+    const first = await runScheduledSlot("am", "2026-09-05", config, deps);
+    assert.strictEqual(first.ok, false, "overall run is not fully successful while one platform failed");
+    assert.strictEqual(first.results.facebook.status, "failed");
+    assert.strictEqual(first.results.linkedin.status, "scheduled");
+    assert.strictEqual(facebookAttempts, 1);
+    assert.strictEqual(linkedinAttempts, 1);
+
+    // Retry: Facebook now succeeds.
+    const reliableCreatePost = async (token, opts) => {
+      if (opts.channelId === "fb-page-1") { facebookAttempts++; return { id: "fb-update-1", status: "scheduled" }; }
+      linkedinAttempts++;
+      return { id: "li-update-2", status: "scheduled" };
+    };
+    const second = await runScheduledSlot("am", "2026-09-05", config, { ...deps, createPost: reliableCreatePost });
+    assert.strictEqual(second.ok, true);
+    assert.strictEqual(second.results.facebook.status, "scheduled");
+    assert.strictEqual(facebookAttempts, 2, "Facebook retried exactly once more");
+    assert.strictEqual(linkedinAttempts, 1, "LinkedIn must NOT be re-posted — it already succeeded");
+    assert.strictEqual(history.length, 1, "still one row, updated in place");
+  });
+
+  console.log("\n=== Recurring automation: scheduler status reporting ===");
+  await asyncTest("getSchedulerStatus reports enabled/disabled, timezone, next runs, and last-run results without any secret", async () => {
+    const config = loadConfig({ SOCIAL_AUTOMATION_ENABLED: "true", BUFFER_ACCESS_TOKEN: "super-secret-value" });
+    const history = [
+      { run_key: "2026-09-04-am", slot: "am", facebook_status: "scheduled", linkedin_status: "scheduled", scheduled_for: "2026-09-04T13:00:00Z", failure_reason: null },
+      { run_key: "2026-09-04-pm", slot: "pm", facebook_status: "failed", linkedin_status: "scheduled", scheduled_for: "2026-09-04T21:00:00Z", failure_reason: "Facebook error" },
+    ];
+    const supabaseAdmin = makeMockSupabase({ history });
+    const status = await getSchedulerStatus(config, { supabaseAdmin });
+    assert.strictEqual(status.enabled, true);
+    assert.strictEqual(status.timezone, "America/New_York");
+    assert.ok(status.nextAmRun && status.nextPmRun);
+    assert.strictEqual(status.lastAmRun.runKey, "2026-09-04-am");
+    assert.strictEqual(status.lastPmRun.facebookStatus, "failed");
+    assert.ok(!JSON.stringify(status).includes("super-secret-value"), "must never include the access token or any secret");
   });
 
   console.log(`\n${passCount} passed, ${failCount} failed\n`);

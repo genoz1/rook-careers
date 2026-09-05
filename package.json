@@ -17,7 +17,10 @@
     "social:discover-channels": "node backend/socialPublishWorker.js discover",
     "social:validate-only": "node backend/socialPublishWorker.js validate",
     "social:live-test": "node backend/socialPublishWorker.js live-test --confirm-live",
-    "test-social-publish-worker": "node backend/testSocialPublishWorker.js"
+    "test-social-publish-worker": "node backend/testSocialPublishWorker.js",
+    "test-social-scheduler": "node backend/testSocialScheduler.js",
+    "social:scheduled-dispatch": "node backend/socialPublishWorker.js scheduled-dispatch",
+    "social:scheduler-status": "node backend/socialPublishWorker.js scheduler-status"
   },
   "engines": {
     "node": ">=18.0.0"
