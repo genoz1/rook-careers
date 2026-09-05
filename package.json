@@ -12,18 +12,24 @@
     "precompute-scores": "node backend/precomputeScores.js",
     "archive-old-jobs": "node backend/archiveOldJobs.js",
     "test-trial-flow": "node backend/testTrialFlow.js",
-    "test-resume-achievements": "node backend/testResumeAchievements.js"
+    "test-resume-achievements": "node backend/testResumeAchievements.js",
+    "test-social-automation": "node backend/testSocialAutomation.js",
+    "social:discover-channels": "node backend/socialPublishWorker.js discover",
+    "social:validate-only": "node backend/socialPublishWorker.js validate",
+    "social:live-test": "node backend/socialPublishWorker.js live-test --confirm-live",
+    "test-social-publish-worker": "node backend/testSocialPublishWorker.js"
   },
   "engines": {
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "express": "^4.19.2",
-    "dotenv": "^16.4.5",
     "@supabase/supabase-js": "^2.45.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "mammoth": "^1.8.0",
     "multer": "^1.4.5-lts.1",
-    "stripe": "^16.8.0",
     "pdf-parse": "^1.1.1",
-    "mammoth": "^1.8.0"
+    "sharp": "^0.35.4",
+    "stripe": "^16.8.0"
   }
 }

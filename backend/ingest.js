@@ -10,6 +10,7 @@
 require("dotenv").config();
 const { createClient } = require("@supabase/supabase-js");
 const { mentionsNonUsCountry } = require("./matching");
+const { safeEvaluateSocialEligibilityForIngestion } = require("./socialAutomation");
 const { fetchGreenhouseJobs, normalizeGreenhouseJob } = require("./adapters/greenhouse");
 const { fetchLeverJobs, normalizeLeverJob } = require("./adapters/lever");
 const { fetchAshbyJobs, normalizeAshbyJob } = require("./adapters/ashby");
@@ -118,6 +119,17 @@ async function ingestEmployer(employer) {
   let nonUsSkippedCount = 0;
   let aiAnalyzedThisRun = 0;
 
+  // Pre-fetched once per employer, not per job — social_eligible needs
+  // to know whether a PRIOR run already analyzed this specific job,
+  // since the AI analysis step itself only happens after the upsert
+  // below (and only for jobs under this run's per-employer cap).
+  const { data: existingAnalysisRows } = await supabase
+    .from("jobs")
+    .select("source_job_id, ai_analysis")
+    .eq("employer_id", employer.id)
+    .not("ai_analysis", "is", null);
+  const existingAiAnalysisBySourceId = new Map((existingAnalysisRows || []).map((r) => [r.source_job_id, r.ai_analysis]));
+
   // Cap how many NEW AI analyses (job analysis + embedding) happen per
   // employer per run. Some employers post hundreds of relevant jobs
   // (Abbott alone had 559 in one run) — without a cap, a single massive
@@ -173,7 +185,18 @@ async function ingestEmployer(employer) {
     const { data: upsertedRow, error } = await supabase
       .from("jobs")
       .upsert(
-        { ...job, last_seen_at: new Date().toISOString() },
+        // social_eligible is re-evaluated on EVERY ingestion pass (not
+        // set once at creation) — a job that becomes incomplete, loses
+        // its category mapping, or switches source_type is correctly
+        // re-assessed every time it's re-seen. See
+        // backend/socialAutomation.js's evaluateSocialEligibilityForIngestion
+        // for the exact, documented rules. Uses whatever ai_analysis
+        // already exists on this row (from a PRIOR run, via
+        // onConflict's merge) — a brand-new job with no analysis yet
+        // correctly comes back false here; see the follow-up update
+        // right after analysis completes below for how it becomes
+        // eligible the same run once that analysis exists.
+        { ...job, last_seen_at: new Date().toISOString(), social_eligible: safeEvaluateSocialEligibilityForIngestion({ ...job, ai_analysis: existingAiAnalysisBySourceId.get(job.source_job_id) || null }) },
         { onConflict: "employer_id,source_job_id" }
       )
       .select()
@@ -202,7 +225,13 @@ async function ingestEmployer(employer) {
       }
       try {
         const analysis = await analyzeJob(upsertedRow.title_original, upsertedRow.description_text);
-        await supabase.from("jobs").update({ ai_analysis: analysis }).eq("id", upsertedRow.id);
+        // Re-evaluated now that a real category mapping may exist for
+        // the first time — without this, a brand-new job would stay
+        // social_eligible=false until an entire separate re-ingestion
+        // run re-upserts it, even though it's fully analyzable right
+        // now, this run.
+        const nowEligible = safeEvaluateSocialEligibilityForIngestion({ ...upsertedRow, ai_analysis: analysis });
+        await supabase.from("jobs").update({ ai_analysis: analysis, social_eligible: nowEligible }).eq("id", upsertedRow.id);
       } catch (err) {
         console.error(`  AI analysis failed for "${job.title_original}": ${err.message}`);
       }

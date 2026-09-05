@@ -436,3 +436,104 @@ alter table candidate_profiles add column if not exists utm_medium text;
 alter table candidate_profiles add column if not exists utm_campaign text;
 alter table candidate_profiles add column if not exists utm_term text;
 alter table candidate_profiles add column if not exists utm_content text;
+
+-- Twice-daily social posting automation (2026-09): foundations only —
+-- candidate feed, final-validation, and permanent posting history.
+-- The Buffer publishing worker itself is a separate, later piece of
+-- work; these are the safe building blocks it will call into.
+--
+-- Minimal new columns by design: last_verified_at, content_version,
+-- and employer_spacing_key are all computed at request time from
+-- existing data (last_seen_at, a hash of the current mutable fields,
+-- and an HMAC of employer_id) rather than stored — see
+-- backend/socialAutomation.js for exactly how. Only two genuinely new
+-- concepts need real columns:
+alter table jobs add column if not exists social_eligible boolean default false;
+  -- Explicit opt-in, default false — a job is never eligible for
+  -- social promotion just by existing. Something (a future admin
+  -- action or a deliberate ingestion-time rule) must set this true.
+alter table jobs add column if not exists expires_at timestamptz;
+  -- Nullable, no writer populates this yet (most ATS sources never
+  -- provide an explicit closing date) — present now so the API and
+  -- validation logic have a real field to check/return rather than
+  -- needing a later schema change once an expiration source exists.
+
+create table if not exists social_post_history (
+  id uuid primary key default gen_random_uuid(),
+  run_key text not null,                 -- 'YYYY-MM-DD-AM' / 'YYYY-MM-DD-PM' — idempotency key for an entire run
+  slot text not null check (slot in ('am', 'pm')),
+  job_id uuid references jobs(id) on delete set null,
+  -- job_id ALONE is not sufficient for permanent duplicate prevention:
+  -- backend/archiveOldJobs.js permanently DELETES jobs 90+ days after
+  -- they close, and ON DELETE SET NULL means job_id on an old history
+  -- row becomes null at that point — a uniqueness constraint keyed on
+  -- job_id would then let a deleted-and-later-reimported posting (the
+  -- employer relists the same role; a brief feed hiccup that comes
+  -- back under a new row) be featured again, since a NEW jobs.id gets
+  -- generated on re-ingestion. job_fingerprint is a stable, non-
+  -- reversible HMAC of (employer_id, source_job_id) — the same pair
+  -- ingest.js's own upsert already treats as "this exact posting"
+  -- (onConflict: "employer_id,source_job_id") — computed once at
+  -- selection time and stored permanently here, independent of
+  -- whether the jobs row itself still exists. This is what the
+  -- uniqueness constraints below are actually keyed on.
+  job_fingerprint text not null,
+  job_content_version text not null,     -- hash of the job's mutable fields at the moment it was selected — see backend/socialAutomation.js
+  employer_spacing_key text not null,    -- non-reversible HMAC of employer_id, never the employer_id itself
+  category text,
+  scheduled_for timestamptz not null,
+  facebook_channel_id text,
+  facebook_buffer_post_id text,
+  facebook_status text,
+  linkedin_channel_id text,
+  linkedin_buffer_post_id text,
+  linkedin_status text,
+  creative_url text,
+  caption_version text,
+  selected_at timestamptz,
+  validated_at timestamptz,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  failure_reason text
+);
+
+-- One row per run, full stop — the actual idempotency guarantee the
+-- publishing worker will rely on to make a retry safe.
+create unique index if not exists social_post_history_run_key_unique
+  on social_post_history (run_key);
+
+-- A given underlying posting (by fingerprint, not by the mutable
+-- jobs.id) can be successfully posted to a given platform at most
+-- once, permanently — including across a delete-and-reimport cycle.
+-- This is what "posting history must be permanent and must not be
+-- inferred solely from Buffer's current queue" means in practice:
+-- even if Buffer's own queue is cleared, cancelled, or expires, or the
+-- underlying jobs row is archived 90 days later, this table is still
+-- the source of truth for "has this exact posting already been
+-- featured." Scoped to success/scheduled outcomes only (partial
+-- index) — a failed attempt must not permanently block ever trying
+-- that posting again.
+create unique index if not exists social_post_history_facebook_fingerprint_unique
+  on social_post_history (job_fingerprint)
+  where facebook_status in ('scheduled', 'sent');
+create unique index if not exists social_post_history_linkedin_fingerprint_unique
+  on social_post_history (job_fingerprint)
+  where linkedin_status in ('scheduled', 'sent');
+
+create index if not exists social_post_history_employer_spacing_idx
+  on social_post_history (employer_spacing_key, scheduled_for);
+create index if not exists social_post_history_slot_idx
+  on social_post_history (slot, scheduled_for);
+create index if not exists social_post_history_category_idx
+  on social_post_history (category, scheduled_for);
+
+-- No customer-facing reason for this table to be readable or writable
+-- by anon or authenticated clients at all — it's exclusively read and
+-- written by the automation backend via the service_role key, which
+-- bypasses RLS by design. Enabling RLS with ZERO permissive policies
+-- for any other role means an anon/authenticated request (e.g.
+-- someone querying Supabase directly with the public anon key, the
+-- same class of gap already found and fixed on the jobs table above)
+-- gets zero rows and zero write access, full stop — there is no
+-- policy to accidentally get wrong here, because there is no policy.
+alter table social_post_history enable row level security;
