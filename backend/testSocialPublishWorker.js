@@ -8,7 +8,7 @@
 const assert = require("assert");
 const { identifyRookChannels } = require("./socialChannels");
 const { buildPostCopy } = require("./socialPostCopy");
-const { getOrganizations, listChannelsForOrganization, listAllChannels, createPost, BUFFER_API_ENDPOINT } = require("./socialBuffer");
+const { getOrganizations, listChannelsForOrganization, listAllChannels, createPost, findPostById, BUFFER_API_ENDPOINT } = require("./socialBuffer");
 const {
   loadConfig, requireConfigKeys, discoverChannels, runValidationOnly, runControlledLiveTest,
 } = require("./socialPublishWorker");
@@ -127,6 +127,53 @@ async function run() {
     const result = identifyRookChannels([LINKEDIN_PAGE, FACEBOOK_PAGE], { linkedinChannelId: "nonexistent-id", facebookChannelId: "fb-page-1" });
     assert.strictEqual(result.ok, false);
     assert.ok(result.errors.some((e) => e.includes("No Buffer channel found")));
+  });
+
+  console.log("\n=== GraphQL variable types must match Buffer's real custom scalars, not generic String ===");
+  console.log("        Verified against Buffer's own schema reference (developers.buffer.com/types/OrganizationId.html):");
+  console.log("        organization/channel/post identifiers are dedicated custom scalars (OrganizationId, ChannelId,");
+  console.log("        PostId, ...), NOT the generic String scalar — declaring $organizationId: String! is exactly");
+  console.log("        the production error this fixes: 'used in position expecting type OrganizationId!'.");
+
+  await asyncTest("listChannelsForOrganization declares $organizationId as OrganizationId!, not String!", async () => {
+    const { httpFetch, getCaptured } = mockFetch({ channels: [] });
+    await listChannelsForOrganization("fake-token", "org-1", { httpFetch });
+    const query = JSON.parse(getCaptured().body).query;
+    assert.ok(query.includes("$organizationId: OrganizationId!"), "must declare the exact Buffer-specific scalar type");
+    assert.ok(!query.includes("$organizationId: String!"), "must never use the generic String scalar for this variable — this is the exact bug that was reported");
+  });
+
+  await asyncTest("findPostById declares $organizationId as OrganizationId!, not String!", async () => {
+    const { httpFetch, getCaptured } = mockFetch({ posts: { edges: [] } });
+    await findPostById("fake-token", "org-1", "post-1", { httpFetch });
+    const query = JSON.parse(getCaptured().body).query;
+    assert.ok(query.includes("$organizationId: OrganizationId!"));
+    assert.ok(!query.includes("$organizationId: String!"));
+  });
+
+  test("audit: no GraphQL operation anywhere in socialBuffer.js declares an id-named variable with the generic String scalar", () => {
+    const fs = require("fs");
+    const source = fs.readFileSync(require.resolve("./socialBuffer"), "utf8");
+    // Matches any $xyzId: String! declaration — the exact shape of bug
+    // this whole test exists to catch, wherever it might appear now
+    // or be reintroduced later.
+    const badDeclarations = source.match(/\$\w*[Ii]d\w*\s*:\s*String!/g);
+    assert.strictEqual(badDeclarations, null, `found an id-named variable still typed as the generic String scalar: ${JSON.stringify(badDeclarations)}`);
+  });
+
+  test("audit: every explicitly-declared GraphQL variable in socialBuffer.js uses a real Buffer scalar or input-object type", () => {
+    const fs = require("fs");
+    const source = fs.readFileSync(require.resolve("./socialBuffer"), "utf8");
+    // Buffer's real custom scalars (developers.buffer.com/types/) plus
+    // legitimate input-object type names actually used in this file —
+    // anything outside this list on an id-shaped variable would be
+    // exactly as wrong as the reported bug.
+    const KNOWN_GOOD_TYPES = ["OrganizationId", "ChannelId", "PostId", "CreatePostInput"];
+    const declarations = [...source.matchAll(/\$(\w+)\s*:\s*(\w+)!/g)];
+    assert.ok(declarations.length >= 3, "sanity check — expected to find the known declarations in this file");
+    for (const [, varName, typeName] of declarations) {
+      assert.ok(KNOWN_GOOD_TYPES.includes(typeName), `variable $${varName} declared with type ${typeName}! — not a recognized Buffer scalar or input type`);
+    }
   });
 
   console.log("\n=== Buffer client: every request goes to the current GraphQL API, never the legacy REST API ===");

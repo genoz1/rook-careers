@@ -74,7 +74,7 @@ async function getOrganizations(accessToken, opts) {
  */
 async function listChannelsForOrganization(accessToken, organizationId, opts) {
   const query = `
-    query GetChannels($organizationId: String!) {
+    query GetChannels($organizationId: OrganizationId!) {
       channels(input: { organizationId: $organizationId }) {
         id
         name
@@ -154,7 +154,7 @@ async function createPost(accessToken, { channelId, text, photoUrl, mode = "shar
  */
 async function findPostById(accessToken, organizationId, postId, opts) {
   const query = `
-    query GetPosts($organizationId: String!) {
+    query GetPosts($organizationId: OrganizationId!) {
       posts(first: 50, input: { organizationId: $organizationId }) {
         edges {
           node {
