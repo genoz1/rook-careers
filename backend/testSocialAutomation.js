@@ -19,6 +19,10 @@ const path = require("path");
 const fs = require("fs/promises");
 const {
   normalizeCategoryForSocial,
+  normalizeLocationForSocial,
+  dedupeLocationAgainstTitle,
+  countAvailableFacts,
+  computeRichnessScore,
   evaluateSocialEligibilityForIngestion,
   safeEvaluateSocialEligibilityForIngestion,
   computeContentVersion,
@@ -378,7 +382,99 @@ async function run() {
     assert.strictEqual(ranked.length, 2); // doesn't throw, doesn't drop anything
   });
 
-  console.log("\n=== Missing compensation ===");
+  console.log("\n=== Minimum display-quality bar: at least 4 useful facts, required ===");
+  test("a job with only title+location+category (3 facts) is rejected as too thin, even though it's 'complete'", () => {
+    const job = baseJob({ compensation_text: null, salary_min: null, salary_max: null, employment_type: null, remote_status: null });
+    assert.strictEqual(isSociallyComplete(job), true, "sanity check: still passes the older, looser completeness bar");
+    assert.strictEqual(countAvailableFacts(job), 2, "location + category only — employment_type and remote_status and compensation are all missing");
+    const result = evaluateEligibility(job, { now: NOW });
+    assert.strictEqual(result.eligible, false);
+    assert.ok(result.reason_codes.includes("insufficient_display_facts"));
+  });
+  test("a job with exactly 4 available facts passes the minimum bar", () => {
+    const job = baseJob({ compensation_text: "$80,000", employment_type: "Full-Time", remote_status: null });
+    assert.strictEqual(countAvailableFacts(job), 4, "location, category, compensation, employment_type — remote_status is the only one missing");
+    assert.ok(!evaluateEligibility(job, { now: NOW }).reason_codes.includes("insufficient_display_facts"));
+  });
+
+  console.log("\n=== A factual hook is now required, not best-effort ===");
+  test("a job with nothing to build a hook from is excluded, even if otherwise complete", () => {
+    const job = baseJob({ compensation_text: null, salary_min: null, salary_max: null, remote_status: null, employment_type: null, experience_min_years: null });
+    assert.strictEqual(generateSocialSafeHook(job), null, "sanity check — no hook-supporting field present");
+    const result = evaluateEligibility(job, { now: NOW });
+    assert.ok(result.reason_codes.includes("no_factual_hook"));
+  });
+  test("a job with at least one hook-supporting field (e.g. experience years alone) passes the hook requirement", () => {
+    const job = baseJob({ compensation_text: null, salary_min: null, salary_max: null, remote_status: null, employment_type: null, experience_min_years: 5 });
+    assert.ok(generateSocialSafeHook(job));
+    assert.ok(!evaluateEligibility(job, { now: NOW }).reason_codes.includes("no_factual_hook"));
+  });
+
+  console.log("\n=== Location normalization: 'USA OH - Cleveland' -> 'Cleveland, OH' ===");
+  test("normalizes the exact reported ATS export pattern", () => {
+    assert.strictEqual(normalizeLocationForSocial("USA OH - Cleveland"), "Cleveland, OH");
+  });
+  test("normalizes the 'US' (no trailing A) variant the same way", () => {
+    assert.strictEqual(normalizeLocationForSocial("US TX - Austin"), "Austin, TX");
+  });
+  test("a city with multiple words normalizes correctly", () => {
+    assert.strictEqual(normalizeLocationForSocial("USA NC - Winston Salem"), "Winston Salem, NC");
+  });
+  test("an already-correct 'City, ST' string is left unchanged", () => {
+    assert.strictEqual(normalizeLocationForSocial("Cleveland, OH"), "Cleveland, OH");
+  });
+  test("a location string that doesn't match the known pattern is returned unchanged, not guessed at", () => {
+    assert.strictEqual(normalizeLocationForSocial("Remote - Nationwide"), "Remote - Nationwide");
+  });
+  test("null/empty location passes through unchanged", () => {
+    assert.strictEqual(normalizeLocationForSocial(null), null);
+    assert.strictEqual(normalizeLocationForSocial(""), "");
+  });
+  test("buildCandidateResponse applies location normalization to location_display", () => {
+    const job = baseJob({ location_raw: "USA OH - Cleveland", title_original: "Territory Sales Manager" });
+    const candidate = buildCandidateResponse(job, SECRET);
+    assert.strictEqual(candidate.location_display, "Cleveland, OH");
+  });
+
+  console.log("\n=== Avoid duplicating the location when the title already ends with the same city ===");
+  test("dedupeLocationAgainstTitle omits the location when the title already ends with that city", () => {
+    assert.strictEqual(dedupeLocationAgainstTitle("Territory Sales Manager - Cleveland", "Cleveland, OH"), null);
+  });
+  test("dedupeLocationAgainstTitle keeps the location when the title does NOT end with that city", () => {
+    assert.strictEqual(dedupeLocationAgainstTitle("Territory Sales Manager", "Cleveland, OH"), "Cleveland, OH");
+  });
+  test("the underlying title itself is NEVER rewritten by dedup — only whether the separate location fact is shown", () => {
+    const job = baseJob({ title_original: "Territory Sales Manager - Cleveland", location_raw: "USA OH - Cleveland" });
+    const candidate = buildCandidateResponse(job, SECRET);
+    assert.strictEqual(candidate.title, "Territory Sales Manager - Cleveland", "title must be passed through completely unchanged");
+    assert.strictEqual(candidate.location_display, null, "but the redundant separate location fact is omitted");
+  });
+  test("dedup is case-insensitive and tolerant of trailing whitespace", () => {
+    assert.strictEqual(dedupeLocationAgainstTitle("Territory Manager - CLEVELAND  ", "Cleveland, OH"), null);
+  });
+
+  console.log("\n=== Richness scoring: strongly prefers compensation, employment type, work arrangement, and a hook ===");
+  test("computeRichnessScore counts exactly the four called-out fields, 0 to 4", () => {
+    assert.strictEqual(computeRichnessScore(baseJob()), 4, "the standard fixture has all four");
+    assert.strictEqual(computeRichnessScore(baseJob({ compensation_text: null, salary_min: null, salary_max: null, employment_type: null, remote_status: null, experience_min_years: null })), 0);
+  });
+  test("a richer but slightly older candidate outranks a fresher but thinner one — freshness no longer dominates", () => {
+    const richButOlder = baseJob({ id: "rich-job", employer_id: "employer-A", last_seen_at: new Date(NOW.getTime() - 2 * DAY).toISOString() });
+    const freshButThin = baseJob({
+      id: "thin-job", employer_id: "employer-B", last_seen_at: NOW.toISOString(),
+      compensation_text: null, salary_min: null, salary_max: null, employment_type: null, remote_status: null,
+    });
+    const ranked = scoreAndSortCandidates([freshButThin, richButOlder], { spacingSecret: SECRET });
+    assert.strictEqual(ranked[0].id, "rich-job", "richness must now outrank raw freshness");
+  });
+  test("between two equally rich candidates, the fresher one still wins — freshness matters, just last", () => {
+    const older = baseJob({ id: "older-job", employer_id: "employer-A", last_seen_at: new Date(NOW.getTime() - 2 * DAY).toISOString() });
+    const fresher = baseJob({ id: "fresher-job", employer_id: "employer-B", last_seen_at: NOW.toISOString() });
+    const ranked = scoreAndSortCandidates([older, fresher], { spacingSecret: SECRET });
+    assert.strictEqual(ranked[0].id, "fresher-job");
+  });
+
+
   test("a job with no compensation data still builds a valid response, with compensation_display null", () => {
     const response = buildCandidateResponse(baseJob({ compensation_text: null, salary_min: null, salary_max: null }), SECRET);
     assert.strictEqual(response.compensation_display, null);

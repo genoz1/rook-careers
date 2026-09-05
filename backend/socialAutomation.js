@@ -266,6 +266,72 @@ function isSociallyComplete(job) {
 }
 
 // =================================================================
+// Location normalization — direct instruction: "USA OH - Cleveland"
+// style ATS exports (country + state code + dash + city) must render
+// as "Cleveland, OH". Only reformats a recognized pattern; anything
+// that doesn't match is returned unchanged rather than guessed at.
+// =================================================================
+function normalizeLocationForSocial(locationRaw) {
+  if (!locationRaw) return locationRaw;
+  const text = String(locationRaw).trim();
+  const match = text.match(/^(?:USA|US)\s+([A-Za-z]{2})\s*-\s*(.+)$/);
+  if (match) {
+    const state = match[1].toUpperCase();
+    const city = match[2].trim();
+    if (city) return `${city}, ${state}`;
+  }
+  return text;
+}
+
+// Direct instruction: avoid duplicating the location in both the
+// title and location field when the title already ends with the same
+// city — but never materially rewrite the underlying role name. This
+// only ever decides whether to ALSO surface a separate location fact;
+// it never touches job.title_original itself, which is passed through
+// completely unchanged everywhere.
+function dedupeLocationAgainstTitle(title, locationDisplay) {
+  if (!title || !locationDisplay) return locationDisplay;
+  const cityPart = String(locationDisplay).split(",")[0].trim().toLowerCase();
+  const titleLower = String(title).trim().toLowerCase();
+  if (cityPart && titleLower.endsWith(cityPart)) {
+    return null; // redundant — the title already conveys this; the graphic's existing reflow rules cleanly omit a null field
+  }
+  return locationDisplay;
+}
+
+// =================================================================
+// Fact-count and richness — direct instruction: require enough
+// verified data to populate at least four useful middle-panel facts,
+// and strongly prefer candidates with compensation, employment type,
+// work arrangement, and a factual hook, all specifically. These are
+// the same fields backend/socialGraphic.js's fact grid draws from
+// (see buildFactList there) — this just counts them here, at
+// selection time, without importing the graphic module itself.
+// =================================================================
+function countAvailableFacts(job) {
+  let count = 0;
+  if (job.location_raw || job.territory) count++;
+  if (normalizeCategoryForSocial(job)) count++;
+  if (job.compensation_text || (job.salary_min && job.salary_max)) count++;
+  if (job.employment_type) count++;
+  if (job.remote_status) count++;
+  return count;
+}
+
+// Counts specifically the four fields direct instruction calls out —
+// a narrower, stronger signal than the general fact count above, used
+// to drive the "strongly prefer" ranking rather than the pass/fail gate.
+function computeRichnessScore(job) {
+  let score = 0;
+  if (job.compensation_text || (job.salary_min && job.salary_max)) score++;
+  if (job.employment_type) score++;
+  if (job.remote_status) score++;
+  if (generateSocialSafeHook(job)) score++;
+  return score;
+}
+
+
+// =================================================================
 // Active-job predicate — ONE definition, used everywhere (candidate
 // feed's pre-filter, final validation, and public_url_valid's
 // baseline). This is not a guess: it's proven identical to the real
@@ -310,6 +376,22 @@ function evaluateEligibility(job, { freshnessWindowDays, now = new Date(), expec
 
   if (!isSociallyComplete(job)) reasonCodes.push("incomplete_fields");
 
+  // Direct instruction: require enough verified data to populate at
+  // least four useful middle-panel facts without invented content —
+  // a job that's technically "complete" (title+location+category)
+  // but has nothing else can still be too thin for a genuinely
+  // featured-quality post. This is a real, additional bar beyond
+  // isSociallyComplete's minimum.
+  const factCount = countAvailableFacts(job);
+  if (factCount < 4) reasonCodes.push("insufficient_display_facts");
+
+  // Direct instruction: a factual hook, derived only from stored
+  // listing data, is now required — not best-effort. If nothing
+  // verified supports one, the job is excluded rather than posted
+  // with an empty hook section.
+  const hook = generateSocialSafeHook(job);
+  if (!hook) reasonCodes.push("no_factual_hook");
+
   // last_seen_at genuinely proves re-verification, not just "row
   // exists": backend/ingest.js sets it to the current timestamp only
   // inside the per-job loop that runs over jobs just freshly fetched
@@ -332,7 +414,6 @@ function evaluateEligibility(job, { freshnessWindowDays, now = new Date(), expec
   const contentUnchanged = !expectedContentVersion || expectedContentVersion === currentContentVersion;
   if (!contentUnchanged) reasonCodes.push("content_changed");
 
-  const hook = generateSocialSafeHook(job);
   const redactionOk =
     !containsEmployerIdentity(hook, job.company_name) &&
     !containsEmployerIdentity(job.title_original, job.company_name) &&
@@ -374,34 +455,37 @@ function scoreAndSortCandidates(jobs, {
         job,
         spacingKey,
         category,
+        richness: computeRichnessScore(job),
         neverFeatured: !previouslyFeaturedJobIds.has(job.id) ? 1 : 0,
         complete: isSociallyComplete(job) ? 1 : 0,
         preferredCategory: preferredCategories.includes(category) ? 1 : 0,
         preferredTerritory: preferredTerritories.includes(job.territory) ? 1 : 0,
-        hasVerifiedComp: (job.compensation_text || (job.salary_min && job.salary_max)) ? 1 : 0,
         categoryVaried: (category && !recentCategories.includes(category)) ? 1 : 0,
         employerSpaced: (spacingKey && !recentEmployerSpacingKeys.has(spacingKey)) ? 1 : 0,
         lastSeenAtMs: job.last_seen_at ? new Date(job.last_seen_at).getTime() : 0,
       };
     })
     .sort((a, b) => {
-      // 2. most recent last_verified_at
-      if (b.lastSeenAtMs !== a.lastSeenAtMs) return b.lastSeenAtMs - a.lastSeenAtMs;
-      // 3. never previously featured
+      // 1. Direct instruction: strongly prefer richer candidates
+      // (compensation, employment type, work arrangement, a factual
+      // hook) — this now dominates the ranking, ahead of freshness.
+      if (b.richness !== a.richness) return b.richness - a.richness;
+      // 2. never previously featured
       if (b.neverFeatured !== a.neverFeatured) return b.neverFeatured - a.neverFeatured;
-      // 4. listing completeness
+      // 3. listing completeness
       if (b.complete !== a.complete) return b.complete - a.complete;
-      // 5. preferred category and territory quality
+      // 4. preferred category and territory quality
       const aPref = a.preferredCategory + a.preferredTerritory;
       const bPref = b.preferredCategory + b.preferredTerritory;
       if (bPref !== aPref) return bPref - aPref;
-      // 6. verified compensation availability
-      if (b.hasVerifiedComp !== a.hasVerifiedComp) return b.hasVerifiedComp - a.hasVerifiedComp;
-      // 7. category variation — genuinely implemented now (recentCategories,
-      //    populated by the caller from permanent history), not a stub.
+      // 5. category variation
       if (b.categoryVaried !== a.categoryVaried) return b.categoryVaried - a.categoryVaried;
-      // 8. employer spacing
+      // 6. employer spacing
       if (b.employerSpaced !== a.employerSpaced) return b.employerSpaced - a.employerSpaced;
+      // 7. freshness — direct instruction: freshness remains important
+      // but must not outweigh content completeness and presentation
+      // quality, so it's now the LAST tiebreaker, not the first.
+      if (b.lastSeenAtMs !== a.lastSeenAtMs) return b.lastSeenAtMs - a.lastSeenAtMs;
       return 0;
     });
 
@@ -409,11 +493,13 @@ function scoreAndSortCandidates(jobs, {
 }
 
 function buildCandidateResponse(job, spacingSecret) {
+  const normalizedLocation = normalizeLocationForSocial(job.location_raw);
+  const dedupedLocation = dedupeLocationAgainstTitle(job.title_original, normalizedLocation);
   return {
     job_id: job.id,
     public_url: `https://rookcareers.com/jobs/${job.id}`,
-    title: job.title_original,
-    location_display: job.location_raw || null,
+    title: job.title_original, // never rewritten, regardless of any location normalization/dedup applied below
+    location_display: dedupedLocation,
     territory_display: job.territory || null,
     category: normalizeCategoryForSocial(job),
     compensation_display: (job.compensation_text || (job.salary_min && job.salary_max))
@@ -482,6 +568,10 @@ function buildHistoryRow({ runKey, slot, jobId, jobFingerprint, contentVersion, 
 module.exports = {
   APPROVED_SOCIAL_CATEGORIES,
   normalizeCategoryForSocial,
+  normalizeLocationForSocial,
+  dedupeLocationAgainstTitle,
+  countAvailableFacts,
+  computeRichnessScore,
   evaluateSocialEligibilityForIngestion,
   safeEvaluateSocialEligibilityForIngestion,
   computeContentVersion,
