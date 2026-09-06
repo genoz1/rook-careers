@@ -161,9 +161,13 @@ async function discoverChannels(config, deps = {}) {
 }
 
 async function runValidationOnly(config, deps = {}) {
+  // Validate config BEFORE createClient() — if a key is missing,
+  // createClient() throws a cryptic internal "supabaseKey is required"
+  // with no indication of which variable is absent. requireConfigKeys
+  // must run first so the error names the missing variable.
+  requireConfigKeys(config, ["supabaseUrl", "supabaseServiceRoleKey", "supabaseAnonKey", "spacingSecret"]);
   const supabaseAdmin = deps.supabaseAdmin || createClient(config.supabaseUrl, config.supabaseServiceRoleKey);
   const supabaseAnon = deps.supabaseAnon || createClient(config.supabaseUrl, config.supabaseAnonKey);
-  requireConfigKeys(config, ["supabaseUrl", "supabaseServiceRoleKey", "supabaseAnonKey", "spacingSecret"]);
 
   const { topJob } = await selectTopCandidate(supabaseAdmin, config);
   const candidate = buildCandidateResponse(topJob, config.spacingSecret);
@@ -206,15 +210,16 @@ async function runControlledLiveTest(config, { confirmLive } = {}, deps = {}) {
     throw new Error("Refusing to publish live — the --confirm-live flag was not provided");
   }
 
-  const supabaseAdmin = deps.supabaseAdmin || createClient(config.supabaseUrl, config.supabaseServiceRoleKey);
-  const supabaseAnon = deps.supabaseAnon || createClient(config.supabaseUrl, config.supabaseAnonKey);
-  const listAllChannelsFn = deps.listAllChannels || listAllChannels;
-  const createPostFn = deps.createPost || createPost;
-
+  // Validate config BEFORE createClient() — same reason as
+  // runValidationOnly: a missing key must be named clearly.
   requireConfigKeys(config, [
     "supabaseUrl", "supabaseServiceRoleKey", "supabaseAnonKey", "spacingSecret",
     "bufferAccessToken", "linkedinChannelId", "facebookChannelId",
   ]);
+  const supabaseAdmin = deps.supabaseAdmin || createClient(config.supabaseUrl, config.supabaseServiceRoleKey);
+  const supabaseAnon = deps.supabaseAnon || createClient(config.supabaseUrl, config.supabaseAnonKey);
+  const listAllChannelsFn = deps.listAllChannels || listAllChannels;
+  const createPostFn = deps.createPost || createPost;
 
   const availableChannels = await listAllChannelsFn(config.bufferAccessToken);
   const channels = identifyRookChannels(availableChannels, {
@@ -397,15 +402,24 @@ async function runScheduledSlot(slot, dateStr, config, deps = {}) {
     return { ok: false, stage: "disabled", slot, dateStr };
   }
 
-  const supabaseAdmin = deps.supabaseAdmin || createClient(config.supabaseUrl, config.supabaseServiceRoleKey);
-  const supabaseAnon = deps.supabaseAnon || createClient(config.supabaseUrl, config.supabaseAnonKey);
-  const listAllChannelsFn = deps.listAllChannels || listAllChannels;
-  const createPostFn = deps.createPost || createPost;
-
+  // Validate config BEFORE createClient(). The Supabase client library
+  // throws its own internal "supabaseKey is required" when passed an
+  // undefined key — with no indication of which env var is absent.
+  // requireConfigKeys must run first so the DO job log names the exact
+  // missing variable (e.g. "Missing required configuration: supabaseAnonKey")
+  // rather than surfacing an opaque library-internal error.
+  // Note: supabaseAnonKey (SUPABASE_ANON_KEY) is intentionally required
+  // here — it is used by provePublicUrlValid() to confirm the job is
+  // publicly accessible under the same RLS policy as the real public
+  // page, not bypassed by service-role privileges.
   requireConfigKeys(config, [
     "supabaseUrl", "supabaseServiceRoleKey", "supabaseAnonKey", "spacingSecret",
     "bufferAccessToken", "linkedinChannelId", "facebookChannelId",
   ]);
+  const supabaseAdmin = deps.supabaseAdmin || createClient(config.supabaseUrl, config.supabaseServiceRoleKey);
+  const supabaseAnon = deps.supabaseAnon || createClient(config.supabaseUrl, config.supabaseAnonKey);
+  const listAllChannelsFn = deps.listAllChannels || listAllChannels;
+  const createPostFn = deps.createPost || createPost;
 
   const runKey = computeRunKey(dateStr, slot);
 
@@ -539,6 +553,7 @@ async function runScheduledSlot(slot, dateStr, config, deps = {}) {
       });
       results.facebook = { status: "scheduled", bufferPostId: post?.id || null, channelId: channels.facebook.id };
     } catch (err) {
+      console.error(`[Buffer] Facebook post failed for run_key=${runKey}: ${err.message}`);
       results.facebook = { status: "failed", error: err.message, channelId: channels.facebook.id };
     }
   } else {
@@ -553,6 +568,7 @@ async function runScheduledSlot(slot, dateStr, config, deps = {}) {
       });
       results.linkedin = { status: "scheduled", bufferPostId: post?.id || null, channelId: channels.linkedin.id };
     } catch (err) {
+      console.error(`[Buffer] LinkedIn post failed for run_key=${runKey}: ${err.message}`);
       results.linkedin = { status: "failed", error: err.message, channelId: channels.linkedin.id };
     }
   } else {
@@ -670,11 +686,58 @@ if (require.main === module) {
             process.exit(1);
           }
         }
+      } else if (command === "dry-run-dispatch") {
+        // Safe out-of-window test — runs the full scheduled-dispatch
+        // logic (config check, candidate selection, validation, graphic
+        // render) but does NOT call Buffer and does NOT write to
+        // social_post_history. No duplicate risk; safe to run any time.
+        // Usage:
+        //   node backend/socialPublishWorker.js dry-run-dispatch --slot am
+        //   node backend/socialPublishWorker.js dry-run-dispatch --slot pm
+        const slotArg = rest.find((_, i) => rest[i - 1] === "--slot") || rest[rest.indexOf("--slot") + 1];
+        if (!["am", "pm"].includes(slotArg)) {
+          console.error("Usage: dry-run-dispatch --slot am|pm");
+          process.exit(1);
+        }
+        // requireConfigKeys validates all env vars before touching anything
+        requireConfigKeys(config, [
+          "supabaseUrl", "supabaseServiceRoleKey", "supabaseAnonKey", "spacingSecret",
+          "bufferAccessToken", "linkedinChannelId", "facebookChannelId",
+        ]);
+        const supabaseAdmin = createClient(config.supabaseUrl, config.supabaseServiceRoleKey);
+        const supabaseAnon = createClient(config.supabaseUrl, config.supabaseAnonKey);
+        const fakeDateStr = new Date().toLocaleDateString("sv-SE", { timeZone: "America/New_York" });
+        const fakeRunKey = `DRY-RUN-${fakeDateStr}-${slotArg.toUpperCase()}`;
+        console.log(`\n[dry-run-dispatch] slot=${slotArg} date=${fakeDateStr} runKey=${fakeRunKey}`);
+        console.log("[dry-run-dispatch] No Buffer calls. No database writes. Safe at any time.\n");
+        const { rankedJobs } = await selectTopCandidate(supabaseAdmin, config);
+        const skippedCandidates = [];
+        let candidate = null, topJob = null;
+        for (const job of rankedJobs) {
+          const attemptCandidate = buildCandidateResponse(job, config.spacingSecret);
+          const attemptValidation = await validateJobFresh(supabaseAdmin, supabaseAnon, job.id, config, attemptCandidate.content_version);
+          if (attemptValidation.eligible) { candidate = attemptCandidate; topJob = job; break; }
+          skippedCandidates.push({ jobId: job.id, reasonCodes: attemptValidation.reason_codes });
+        }
+        if (!candidate) {
+          console.log(JSON.stringify({ ok: false, stage: "no_valid_candidate", slotArg, fakeDateStr, skippedCandidates }, null, 2));
+          process.exit(0);
+        }
+        const graphicBuffer = await renderFeaturedJobGraphic(candidate);
+        console.log(JSON.stringify({
+          ok: true, stage: "dry_run_complete", slot: slotArg, dateStr: fakeDateStr,
+          runKey: fakeRunKey, jobId: topJob.id,
+          title: topJob.title_original, company: topJob.company_name,
+          category: candidate.category, contentVersion: candidate.content_version,
+          graphicBytes: graphicBuffer?.length || 0,
+          skippedCandidates,
+          note: "Buffer was NOT called. social_post_history was NOT written.",
+        }, null, 2));
       } else if (command === "scheduler-status") {
         const status = await getSchedulerStatus(config);
         console.log(JSON.stringify(status, null, 2));
       } else {
-        console.log("Usage: node backend/socialPublishWorker.js <discover|validate|live-test|scheduled-dispatch|scheduler-status> [--confirm-live]");
+        console.log("Usage: node backend/socialPublishWorker.js <discover|validate|live-test|dry-run-dispatch|scheduled-dispatch|scheduler-status> [--confirm-live] [--slot am|pm]");
         process.exit(1);
       }
     } catch (err) {
