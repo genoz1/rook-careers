@@ -84,6 +84,16 @@
   // path that ever sends the browser back to this same page, so there
   // is no redirect loop to avoid creating.
   async function routeAfterVerification() {
+    // If the confirmation link came from the new onboarding-v2 flow
+    // (signUp was called with emailRedirectTo ending in ?ob=v2), route
+    // back to that flow so it can restore the draft and show the
+    // résumé re-select step. The existing onboarding-v1 flow is unchanged.
+    const isV2 = new URLSearchParams(window.location.search).get('ob') === 'v2';
+    if (isV2) {
+      window.location.href = 'rook-onboarding-v2.html?ob=v2_return';
+      return;
+    }
+
     try {
       const res = await rookApiFetch('/profile');
       const profile = res.ok ? await res.json() : null;

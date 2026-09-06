@@ -107,7 +107,7 @@ console.log("\n=== REGRESSION: homepage hero trial CTA ===");
 test("the homepage hero's primary CTA is the exact requested trial wording and opens signup mode directly", () => {
   const src = readPublic("index.html");
   assert.ok(src.includes(">START YOUR 3-DAY FREE TRIAL<"), "must use the exact requested CTA text");
-  assert.ok(src.includes('href="rook-login.html?mode=signup" class="btn btn-primary"'), "the primary CTA must open Create Account directly via the stable mode=signup URL");
+  assert.ok(src.includes('href="rook-onboarding-v2.html" class="btn btn-primary"'), "the primary CTA must point to rook-onboarding-v2.html (Stage 2 entry flow)");
   assert.ok(src.includes("Medical sales jobs only") && src.includes("Cancel anytime"), "supporting line must be present in the hero");
 });
 test("the old 'Find My Matches' hero CTA text and its plain (login-tab) destination are both gone", () => {

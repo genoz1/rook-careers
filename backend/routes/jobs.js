@@ -22,7 +22,7 @@
 const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
 const { scoreJob, mentionsNonUsCountry, hasFullAccess } = require("../matching");
-const { scoreAndStoreForCandidate } = require("../scoring/precompute");
+const { scoreAndStoreForCandidate, fetchActiveJobs } = require("../scoring/precompute");
 const { distanceMiles, geocodeZip } = require("../geocoding");
 const { sendEmail } = require("../email/resend");
 
@@ -1187,5 +1187,132 @@ router.get("/saved-jobs", requireConfig, requireAuth, loadCandidateId, async (re
 // imports that directly.
 router.scrubCompanyNameFromText = scrubCompanyNameFromText;
 router.redactForNonSubscriber = redactForNonSubscriber;
+
+// GET /api/onboarding/match-preview
+// Returns a safe count and top scores for the locked-results screen
+// shown at the end of onboarding, before the candidate starts their trial.
+//
+// Security:
+//   - Requires authentication (requireAuth).
+//   - Reads profile from the database — does NOT trust query parameters
+//     for industry, experience, territory, or any other scoring input.
+//   - Returns only: { count, top_matches[], scoring_status }
+//   - Never returns job IDs, titles, employer names, descriptions, or URLs.
+//
+// Performance:
+//   - scoreJob() is pure in-memory Haversine + JSON math — no external
+//     API calls (confirmed: distanceMiles is a pure Haversine function;
+//     scoreJob() has no AI/embedding calls of its own).
+//   - fetchActiveJobs() issues ~17 sequential Supabase queries (150 jobs/page
+//     × 17 pages for ~2,500 active jobs). Estimated DB-fetch time: 1–3 s.
+//   - scoreJob() on ~2,500 jobs: <50 ms (6,000 calls in ~240 ms per the
+//     benchmark comment in jobs.js; 2,500 is less than half that).
+//   - Total endpoint budget: ~1.5–3.5 s (dominated by DB fetch).
+//   - fetchActiveJobs() on repeated calls returns the SAME rows; there is
+//     no caching inside it. The cache below prevents redundant fetches.
+//
+// Protection against repeated calls:
+//   - previewCache: per-user result cache with 5-minute TTL. Handles
+//     double-clicks, page refreshes, multiple tabs, and browser retries.
+//   - previewInFlight: per-user in-flight deduplication. If two requests
+//     arrive for the same user simultaneously, the second waits for the
+//     first's Promise to resolve rather than starting a parallel scoring run.
+//
+// Count meaning:
+//   - All active+approved jobs that scoreJob() assigns a non-null score > 0,
+//     after filtering out non-US postings. No minimum score floor is applied —
+//     the unlocked dashboard has none either (same eligible-job population).
+//   - Wording: "We ranked N current medical sales opportunities for you."
+//     Not "N match your preferences" — all ranked, not all perfect matches.
+//
+// Display badge logic:
+//   - Mirrors rook-dashboard.html's card renderer exactly:
+//       excellent_match === true  → "Excellent Match"
+//       otherwise                 → engine recommendation string directly
+//   - Engine recommendations: "Strong Match" (≥90%), "Apply" (≥80%),
+//     "Stretch Apply" (≥70%), "Skip" (<70%).
+//   - The 75% threshold in the dashboard's STAT CARDS and tab filters is a
+//     count grouping only — it is NOT applied to individual card labels here
+//     or in the unlocked dashboard card renderer. Using it as a card label
+//     would create a discrepancy where the same score shows different labels
+//     in locked vs. unlocked views.
+const PREVIEW_CACHE_TTL_MS  = 5 * 60 * 1000; // 5 minutes
+const previewCache    = new Map(); // userId → { result, expiresAt }
+const previewInFlight = new Map(); // userId → Promise
+
+router.get("/onboarding/match-preview", requireConfig, requireAuth, async (req, res) => {
+  const userId = req.user.id;
+
+  // ── 1. Cache hit ────────────────────────────────────────────────────
+  const cached = previewCache.get(userId);
+  if (cached && Date.now() < cached.expiresAt) {
+    return res.json({ ...cached.result, from_cache: true });
+  }
+
+  // ── 2. In-flight deduplication ──────────────────────────────────────
+  // If a scoring run for this user is already in progress (e.g., two tabs
+  // submitted at the same moment), wait for the existing Promise instead
+  // of starting a parallel one.
+  if (previewInFlight.has(userId)) {
+    try {
+      const result = await previewInFlight.get(userId);
+      return res.json({ ...result, from_cache: true });
+    } catch {
+      return res.status(500).json({ error: "Could not calculate your matches right now. Please try again.", scoring_complete: false });
+    }
+  }
+
+  // ── 3. Load profile ─────────────────────────────────────────────────
+  const { data: profile, error: profileError } = await supabaseAdmin
+    .from("candidate_profiles")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (profileError) return res.status(500).json({ error: profileError.message });
+  if (!profile) return res.status(404).json({ error: "Profile not found. Complete onboarding first." });
+
+  // ── 4. Live scoring (awaited, not fire-and-forget) ──────────────────
+  const scoringPromise = (async () => {
+    const activeJobs = await fetchActiveJobs(supabaseAdmin);
+
+    const scored = activeJobs
+      .filter((job) => !mentionsNonUsCountry(job.location_raw, job.job_lng, job.title_original))
+      .map((job) => ({ score: scoreJob(job, profile), jobId: job.id }))
+      .filter((r) => r.score.overall_score != null && r.score.overall_score > 0)
+      .sort((a, b) => b.score.overall_score - a.score.overall_score);
+
+    const count = scored.length;
+
+    // Top 3 scores — no job IDs, titles, employer names, descriptions, or URLs.
+    const topThree = scored.slice(0, 3).map((r) => ({
+      overall_score:   Math.round(r.score.overall_score),
+      excellent_match: Boolean(r.score.excellent_match),
+      // The engine's own recommendation string — the front end derives the
+      // display label from excellent_match first, then falls back to this,
+      // exactly as the dashboard's card renderer does.
+      recommendation:  r.score.recommendation || null,
+    }));
+
+    return { count, top_matches: topThree, scoring_complete: true };
+  })();
+
+  previewInFlight.set(userId, scoringPromise);
+
+  try {
+    const result = await scoringPromise;
+    // Cache for 5 minutes — covers double-clicks, refreshes, multiple tabs.
+    previewCache.set(userId, { result, expiresAt: Date.now() + PREVIEW_CACHE_TTL_MS });
+    res.json(result);
+  } catch (err) {
+    console.error(`[onboarding/match-preview] scoring failed for user ${userId}: ${err.message}`);
+    res.status(500).json({
+      error: "Could not calculate your matches right now. Please try again.",
+      scoring_complete: false,
+    });
+  } finally {
+    previewInFlight.delete(userId);
+  }
+});
 
 module.exports = router;
