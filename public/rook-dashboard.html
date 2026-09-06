@@ -329,7 +329,37 @@
       </label>
     </div>
 
-    <div id="jobListLoading" style="text-align:center; padding:60px 20px; color:#5B6B85; font-size:14px;">Loading your matches…</div>
+    <div id="jobListLoading" aria-live="polite">
+      <div class="skeleton-row" style="display:flex; gap:16px; align-items:center; padding:18px; border:1px solid #E4E9F2; border-radius:12px; margin-bottom:12px;">
+        <div class="skel-shimmer" style="width:56px; height:56px; border-radius:50%; flex-shrink:0;"></div>
+        <div style="flex:1; min-width:0;">
+          <div class="skel-shimmer" style="height:16px; width:55%; border-radius:4px; margin-bottom:10px;"></div>
+          <div class="skel-shimmer" style="height:12px; width:75%; border-radius:4px; margin-bottom:10px;"></div>
+          <div class="skel-shimmer" style="height:11px; width:40%; border-radius:4px;"></div>
+        </div>
+      </div>
+      <div class="skeleton-row" style="display:flex; gap:16px; align-items:center; padding:18px; border:1px solid #E4E9F2; border-radius:12px; margin-bottom:12px;">
+        <div class="skel-shimmer" style="width:56px; height:56px; border-radius:50%; flex-shrink:0;"></div>
+        <div style="flex:1; min-width:0;">
+          <div class="skel-shimmer" style="height:16px; width:48%; border-radius:4px; margin-bottom:10px;"></div>
+          <div class="skel-shimmer" style="height:12px; width:65%; border-radius:4px; margin-bottom:10px;"></div>
+          <div class="skel-shimmer" style="height:11px; width:35%; border-radius:4px;"></div>
+        </div>
+      </div>
+      <div class="skeleton-row" style="display:flex; gap:16px; align-items:center; padding:18px; border:1px solid #E4E9F2; border-radius:12px; margin-bottom:12px;">
+        <div class="skel-shimmer" style="width:56px; height:56px; border-radius:50%; flex-shrink:0;"></div>
+        <div style="flex:1; min-width:0;">
+          <div class="skel-shimmer" style="height:16px; width:60%; border-radius:4px; margin-bottom:10px;"></div>
+          <div class="skel-shimmer" style="height:12px; width:70%; border-radius:4px; margin-bottom:10px;"></div>
+          <div class="skel-shimmer" style="height:11px; width:38%; border-radius:4px;"></div>
+        </div>
+      </div>
+      <div style="text-align:center; padding:8px 20px 4px; color:#5B6B85; font-size:13px;">Finding your best matches…</div>
+      <style>
+        .skel-shimmer{background:linear-gradient(90deg,#EAEEF5 25%,#F4F6FA 37%,#EAEEF5 63%); background-size:400% 100%; animation:skelShimmer 1.4s ease infinite;}
+        @keyframes skelShimmer{0%{background-position:100% 50%;}100%{background-position:0 50%;}}
+      </style>
+    </div>
 
     <div class="job-list" id="jobList" data-demo="true" style="display:none;">
 
@@ -860,7 +890,7 @@
     // ladder — see backend/matching.js's excellent_match determination
     // (stricter than overall_score >= 85 alone; it also requires every
     // category to clear its bar).
-    const REC_COLORS = { 'Strong Apply': '#00806E', 'Apply': '#1463FF', 'Stretch Apply': '#B98900', 'Skip': '#8B96AB' };
+    const REC_COLORS = { 'Strong Match': '#00806E', 'Apply': '#1463FF', 'Stretch Apply': '#B98900', 'Skip': '#8B96AB' };
     const recColor = match?.excellent_match ? '#7C3AED' : (REC_COLORS[match?.recommendation] || '#8B96AB');
     const recLabel = match?.excellent_match ? 'Excellent Match' : match?.recommendation;
     const recBadge = recLabel

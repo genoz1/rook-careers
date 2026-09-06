@@ -2,7 +2,7 @@
 // into the three-score model Gene's spec called for: Candidate Fit
 // ("can you do this job"), Preference Fit ("does this match what you
 // said you want"), and an Overall Recommendation combining both, plus a
-// four-bucket recommendation label (Strong Apply / Apply / Stretch Apply
+// four-bucket recommendation label (Strong Match / Apply / Stretch Apply
 // / Skip).
 //
 // Factor-to-score assignment:
@@ -293,7 +293,7 @@ function cosineSimilarity(a, b) {
 
 function recommendationForScore(score) {
   if (score == null) return null;
-  if (score >= 90) return "Strong Apply";
+  if (score >= 90) return "Strong Match";
   if (score >= 80) return "Apply";
   if (score >= 70) return "Stretch Apply";
   return "Skip";
@@ -308,7 +308,7 @@ function recommendationForScore(score) {
  *   candidate_fit: number|null,
  *   preference_fit: number|null,
  *   overall_score: number|null,
- *   recommendation: "Strong Apply"|"Apply"|"Stretch Apply"|"Skip"|null,
+ *   recommendation: "Strong Match"|"Apply"|"Stretch Apply"|"Skip"|null,
  *   reasons: string[],
  *   concerns: string[],
  *   confidence: "high"|"medium"|"low",
@@ -787,7 +787,17 @@ function scoreJob(job, profile) {
       const matchedMotion = findOverlap(jobMotion, resumeMotion);
       if (matchedMotion) {
         candScore += 10;
-        reasons.push(`Your ${matchedMotion} sales experience matches this role's style`);
+        // Direct fix for a real, confirmed bug: several sales_motion
+        // controlled-vocabulary values (Direct Sales, Inside Sales,
+        // Outside Sales, Enterprise Sales, Consultative Sales,
+        // Channel/Distributor Sales — see resumeAnalysis.js's own
+        // documented vocabulary) already end in the word "Sales,"
+        // so unconditionally appending "sales" here produced literal
+        // "Direct Sales sales experience" duplication.
+        const motionAlreadyEndsInSales = /sales$/i.test(matchedMotion);
+        reasons.push(motionAlreadyEndsInSales
+          ? `Your ${matchedMotion} experience matches this role's style`
+          : `Your ${matchedMotion} sales experience matches this role's style`);
       } else {
         candScore += 4;
       }

@@ -89,6 +89,7 @@
   .avatar{width:32px; height:32px; border-radius:50%; background:linear-gradient(135deg,var(--royal),var(--teal)); display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:#fff;}
 
   .layout{max-width:1320px; margin:0 auto; padding:32px 24px 80px; display:grid; grid-template-columns:260px 1fr; gap:28px; align-items:start;}
+  .filters-column{min-width:0;}
 
   .filters{background:#fff; border-radius:var(--radius); padding:22px; box-shadow:0 2px 10px -4px rgba(11,29,58,0.08);}
   .filters h3{font-size:14px; font-weight:700; margin-bottom:16px;}
@@ -139,13 +140,33 @@
   .pagination a{width:34px; height:34px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:600; background:#fff; box-shadow:0 2px 8px -4px rgba(11,29,58,0.1);}
   .pagination a.active{background:var(--navy); color:#fff;}
 
+  /* Toggle button lives inside main (injected by JS) — never in the grid */
+  .mobile-filters-toggle{
+    display:none; align-items:center; justify-content:space-between; gap:10px;
+    width:100%; background:#fff; border:1px solid var(--border); border-radius:12px;
+    padding:13px 16px; font-size:14px; font-weight:700; color:var(--navy);
+    margin-bottom:14px; box-shadow:0 2px 8px -4px rgba(11,29,58,0.08); cursor:pointer;
+  }
+  .mobile-filters-toggle .badge{
+    background:var(--royal); color:#fff; font-size:11.5px; font-weight:700;
+    padding:2px 9px; border-radius:99px; margin-left:8px;
+  }
+
   @media(max-width:900px){
     .layout{grid-template-columns:1fr;}
+    /* On mobile the toggle button lives inside <main> (not in the grid),
+       and the filters aside is display:none. The .filters-column wrapper
+       is hidden entirely so it takes no grid row and creates no blank gap. */
+    .filters-column{display:none;}
+    .filters-column.mobile-open-parent{display:block;}
     .job-row{grid-template-columns:1fr; text-align:left;}
     .job-actions{flex-direction:row; align-items:center; flex-wrap:wrap;}
     .jtag-extra{display:none;}
     .tag-row.expanded .jtag-extra{display:inline-block;}
     .jtag-toggle{display:inline-block;}
+    .filters{display:none;}
+    .filters.mobile-open{display:block;}
+    .mobile-filters-toggle{display:flex;}
   }
 .spinner {
   width: 32px; height: 32px; margin: 0 auto 12px;
@@ -193,7 +214,8 @@
   </aside>
 
   <div class="layout">
-    <aside class="filters">
+  <div class="filters-column">
+    <aside class="filters" id="filtersPanel">
     <h3>Filters</h3>
     <div class="filter-group">
       <label>Keyword</label>
@@ -245,6 +267,7 @@
     </div>
     <a href="#" class="clear-link" onclick="clearAllFilters(); return false;">Clear all filters</a>
   </aside>
+  </div><!-- /.filters-column -->
 
   <main>
     <div class="results-head">
@@ -602,8 +625,62 @@
   let lastFilteredJobs = [];
   const RESULTS_PER_PAGE = 20;
 
+  function activeFilterCount() {
+    let count = 0;
+    if (document.getElementById('filterKeyword').value.trim()) count++;
+    if (!document.getElementById('showRecruiterFilter').checked) count++;
+    if (document.getElementById('remoteOnlyFilter').checked) count++;
+    count += document.querySelectorAll('.filter-industry:checked').length;
+    count += document.querySelectorAll('.filter-travel:checked').length;
+    if (Number(document.getElementById('filterMatchScore').value) > 0) count++;
+    if (Number(document.getElementById('filterComp').value) > 0) count++;
+    return count;
+  }
+
+  // Direct fix: filter state must remain obvious even while the panel
+  // is collapsed on mobile — a badge on the toggle button shows how
+  // many filters are currently active, updated every time a filter
+  // changes (applyFiltersAndRender already runs on every filter's
+  // onchange/oninput).
+  function updateMobileFiltersBadge() {
+    const badge = document.getElementById('mobileFiltersBadge');
+    if (!badge) return;
+    const count = activeFilterCount();
+    badge.textContent = String(count);
+    badge.style.display = count > 0 ? 'inline-block' : 'none';
+  }
+
+  function toggleMobileFilters() {
+    const panel = document.getElementById('filtersPanel');
+    const chevron = document.getElementById('mobileFiltersChevron');
+    const col = document.querySelector('.filters-column');
+    const isOpen = !panel.classList.contains('mobile-open');
+    panel.classList.toggle('mobile-open', isOpen);
+    if (col) col.classList.toggle('mobile-open-parent', isOpen);
+    chevron.textContent = isOpen ? '▴' : '▾';
+  }
+
+  // Insert the mobile-only toggle button as the first child of <main>
+  // so it lives entirely outside the .layout CSS grid. Buttons inside
+  // the grid were stretching to grid-row height regardless of
+  // display:none on the aside beside them; being outside the grid
+  // means the button takes only its natural height (~44px) and the
+  // results start immediately below it with no blank gap.
+  (function injectMobileToggle() {
+    const main = document.querySelector('main');
+    if (!main) return;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.id = 'mobileFiltersToggle';
+    btn.className = 'mobile-filters-toggle';
+    btn.onclick = toggleMobileFilters;
+    btn.innerHTML = '<span>🔎 Filters<span class="badge" id="mobileFiltersBadge" style="display:none;">0</span></span><span id="mobileFiltersChevron">▾</span>';
+    main.insertBefore(btn, main.firstChild);
+  })();
+
   function applyFiltersAndRender() {
     currentPage = 1; // any filter/sort change starts back at page 1
+    updateMobileFiltersBadge();
     const keyword = document.getElementById('filterKeyword').value.trim().toLowerCase();
     const remoteOnly = document.getElementById('remoteOnlyFilter').checked;
     const selectedIndustries = Array.from(document.querySelectorAll('.filter-industry:checked')).map((el) => el.value.toLowerCase());
@@ -894,8 +971,7 @@
   function friendlySourceLabel(sourceType) {
     if (sourceType === 'recruiter_posted') return 'Posted by Recruiter';
     if (sourceType === 'agency_aggregated') return 'Staffing Agency';
-    if (sourceType === 'manual' || sourceType === 'custom') return 'Company Career Site';
-    return 'Company Career Site';
+    return "Verified on the employer's career site";
   }
 
   function escapeHtml(str) {

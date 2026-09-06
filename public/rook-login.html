@@ -106,8 +106,14 @@
   </div>
 
   <div id="panelSignup" style="display:none;">
-    <h2>Create your account</h2>
-    <div class="sub">Takes about a minute — you'll build your profile next.</div>
+    <h2>Start your 3-day free trial</h2>
+    <div class="sub">Create your profile to see employers, complete job details, and personalized ROOK matches.</div>
+    <ul style="font-size:13.5px; color:var(--muted); line-height:1.9; margin:0 0 20px; padding-left:20px;">
+      <li>Medical sales jobs only</li>
+      <li>Opportunities from 237+ employer career sites</li>
+      <li>Three days of full ROOK access</li>
+      <li>Cancel anytime</li>
+    </ul>
     <div class="field"><label>Email</label><input type="email" id="signupEmail" autocomplete="email" required></div>
     <div class="field"><label>Password</label>
       <div class="pw-wrap">
@@ -121,7 +127,7 @@
         <button type="button" class="pw-toggle" onclick="togglePasswordVisibility('signupPasswordConfirm', this)" aria-label="Show password">👁</button>
       </div>
     </div>
-    <button class="btn" id="signupBtn" onclick="handleSignUp()">Create Account</button>
+    <button class="btn" id="signupBtn" onclick="handleSignUp()">CREATE ACCOUNT &amp; START FREE TRIAL</button>
   </div>
 
   <!-- Direct instruction: after signup, the user must see an
@@ -147,6 +153,19 @@
 <script src="rook-config.js"></script>
 <script src="rook-auth.js"></script>
 <script>
+  // Direct instruction: every "Start Your 3-Day Free Trial" CTA opens
+  // Create Account directly via a stable URL (?mode=signup), and that
+  // state must survive a refresh or someone opening the link directly
+  // — so, unlike the verified=1 handler below, this does NOT strip the
+  // query param from the URL afterward. Placed before any Supabase-
+  // dependent code below: switching tabs needs no Supabase client at
+  // all, so it shouldn't be vulnerable to that CDN script failing to
+  // load for any reason (slow network, ad-blocker, brief outage) —
+  // confirmed as a real failure mode while testing this exact page.
+  if (new URLSearchParams(window.location.search).get('mode') === 'signup') {
+    switchTab('signup');
+  }
+
   const configured = window.ROOK_CONFIG.SUPABASE_URL !== "YOUR_SUPABASE_PROJECT_URL";
   if (!configured) document.getElementById('configWarning').style.display = 'block';
 

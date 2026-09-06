@@ -33,7 +33,7 @@
     text.textContent = `Try ROOK Free for ${days} Day${days === 1 ? '' : 's'} — Full Access. Then $29/month. Cancel Anytime.`;
 
     const cta = document.createElement('a');
-    cta.href = 'rook-login.html';
+    cta.href = 'rook-login.html?mode=signup';
     cta.textContent = 'Start Free Trial';
     cta.style.cssText = 'background:#1463FF; color:#fff; padding:6px 16px; border-radius:999px; font-size:12.5px; font-weight:700; text-decoration:none; white-space:nowrap;';
 

@@ -20,7 +20,8 @@
     "test-social-publish-worker": "node backend/testSocialPublishWorker.js",
     "test-social-scheduler": "node backend/testSocialScheduler.js",
     "social:scheduled-dispatch": "node backend/socialPublishWorker.js scheduled-dispatch",
-    "social:scheduler-status": "node backend/socialPublishWorker.js scheduler-status"
+    "social:scheduler-status": "node backend/socialPublishWorker.js scheduler-status",
+    "test-ui-copy": "node backend/testUiCopy.js"
   },
   "engines": {
     "node": ">=18.0.0"

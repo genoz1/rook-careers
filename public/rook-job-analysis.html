@@ -301,6 +301,17 @@ function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+// Direct instruction: technical source labels like "Sourced via
+// workday" don't communicate a customer benefit. Same categorization
+// rook-search.html's friendlySourceLabel already established, so the
+// wording is consistent everywhere it appears rather than a second,
+// differently-worded version of the same idea.
+function friendlySourceLabel(sourceType) {
+  if (sourceType === 'recruiter_posted') return 'Posted by Recruiter';
+  if (sourceType === 'agency_aggregated') return 'Staffing Agency';
+  return "Verified on the employer's career site";
+}
+
 function showLinkedInPopover(company, title) {
   const searchUrl = (keywords) => `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(keywords)}`;
   // LinkedIn's Boolean search gives OR the LOWEST precedence, with
@@ -373,7 +384,7 @@ function renderJob(job) {
 
   const chips = [];
   if (job.date_posted) chips.push(job.date_posted.startsWith('Posted') ? job.date_posted : 'Posted ' + job.date_posted);
-  if (job.source_type) chips.push('Sourced via ' + job.source_type);
+  if (job.source_type) chips.push(friendlySourceLabel(job.source_type));
   if (match.confidence) chips.push('Confidence: ' + match.confidence);
   document.getElementById('jobMetaChips').innerHTML = chips.map((c) => `<span class="meta-chip">${escapeHtml(c)}</span>`).join('');
 

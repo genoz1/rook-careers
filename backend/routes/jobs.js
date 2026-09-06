@@ -98,6 +98,7 @@ async function loadCandidateId(req, res, next) {
 // job_embedding, kept as one shared constant so every listing query
 // gets the fix, not just the one that happened to get reported.
 const JOB_LIST_COLUMNS = "id, source_job_id, employer_id, source_type, source_url, application_url, title_original, title_normalized, company_name, description_html, description_text, ai_analysis, location_raw, job_lat, job_lng, city, state, region, territory, remote_status, employment_type, category, subcategory, industry, product_type, sales_type, experience_min_years, experience_max_years, salary_min, salary_max, compensation_text, travel_percentage, overnight_travel, required_skills, preferred_skills, required_experience, preferred_experience, degree_required, certifications, date_posted, first_seen_at, last_seen_at, status, source_verified, moderation_status, recruiter_name, recruiter_email, recruiter_company, recruiter_contact_method, recruiter_id, created_at, updated_at";
+const JOB_LIST_COLUMNS_NO_DESCRIPTION = JOB_LIST_COLUMNS.split(", ").filter((c) => c !== "description_html" && c !== "description_text").join(", ");
 
 function attachDistance(job, profile) {
   const hasCoords = profile?.home_lat != null && profile?.home_lng != null && job.job_lat != null && job.job_lng != null;
@@ -240,6 +241,29 @@ function redactForNonSubscriber(job) {
 function redactForAnonymous(job) {
   const withCompanyRedacted = redactForNonSubscriber(job);
   const { match, ...rest } = withCompanyRedacted;
+  return rest;
+}
+
+// PERFORMANCE (2026-09, investigated per direct audit finding —
+// dashboard matches stuck on "Loading" for 25+ seconds): scoreJob()
+// itself reads job.description_text for its own scoring logic (see
+// backend/matching.js), so description_text must stay in the SELECT
+// query and can't be dropped there. But no frontend consumer of this
+// endpoint's response ever reads description_text, description_html,
+// or description_preview from a LIST result — confirmed by checking
+// every page that calls GET /jobs (rook-dashboard.html,
+// rook-browse.html, rook-job-analysis.html use none of them; the
+// separate GET /jobs/:id route serves the job-detail page instead,
+// with its own independent query, untouched by this). For a full
+// dashboard load that's up to 300 jobs' worth of full HTML+text
+// descriptions - often several KB each - serialized into JSON,
+// transferred over the wire, and parsed by the browser for content
+// that is then simply never rendered. This strips those three fields
+// from the response AFTER scoring has already used them, so match
+// scores, reasons, and ranking are entirely unaffected - only the
+// unused payload size changes.
+function stripUnusedDescriptionFields(job) {
+  const { description_html, description_text, description_preview, ...rest } = job;
   return rest;
 }
 
@@ -386,7 +410,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
       const { data: fallbackJobs, error: fallbackError } = await fallbackQuery;
       if (fallbackError) return res.status(500).json({ error: fallbackError.message });
       const usOnly = (fallbackJobs || []).filter((job) => !mentionsNonUsCountry(job.location_raw, job.job_lng, job.title_original));
-      return res.json({ jobs: usOnly.map(redactForAnonymous), total_count: totalCount || 0, explored_location: false });
+      return res.json({ jobs: usOnly.map(redactForAnonymous).map(stripUnusedDescriptionFields), total_count: totalCount || 0, explored_location: false });
     }
 
     const EXPLORE_RADIUS_MILES = 300; // same constant as the authenticated explore path below — one radius, not two to keep in sync
@@ -443,7 +467,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
       match: job.match,
     }));
 
-    return res.json({ jobs: results.map(redactForAnonymous), total_count: totalCount || 0, explored_location: true });
+    return res.json({ jobs: results.map(redactForAnonymous).map(stripUnusedDescriptionFields), total_count: totalCount || 0, explored_location: true });
   }
 
   const { data: profile } = await supabaseAdmin
@@ -455,7 +479,11 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
   if (!profile) {
     // No profile yet at all (onboarding not completed) — nothing to
     // score against. Same as before: fall back to the plain job list.
-    let query = supabaseAnon.from("jobs").select(JOB_LIST_COLUMNS).eq("status", "active").eq("moderation_status", "approved").order("date_posted", { ascending: false }).limit(Number(limit));
+    // No scoreJob() call happens in this branch at all, so unlike the
+    // scored branches below, description_text isn't even needed in
+    // the query here — excluded directly rather than fetched and
+    // stripped afterward.
+    let query = supabaseAnon.from("jobs").select(JOB_LIST_COLUMNS_NO_DESCRIPTION).eq("status", "active").eq("moderation_status", "approved").order("date_posted", { ascending: false }).limit(Number(limit));
     if (industry) query = query.eq("industry", industry);
     if (state) query = query.eq("state", state);
     const { data } = await query;
@@ -583,7 +611,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     }));
 
     return res.json({
-      jobs: hasFullAccess(profile) ? results : results.map(redactForNonSubscriber),
+      jobs: (hasFullAccess(profile) ? results : results.map(redactForNonSubscriber)).map(stripUnusedDescriptionFields),
       scoring_in_progress: false,
       explored_location: true,
       _debug_marker: "EXPLORE_BRANCH_v1_WITH_NOCOORDS_MERGE",
@@ -646,7 +674,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
   }));
 
   return res.json({
-    jobs: hasFullAccess(profile) ? results : results.map(redactForNonSubscriber),
+    jobs: (hasFullAccess(profile) ? results : results.map(redactForNonSubscriber)).map(stripUnusedDescriptionFields),
     scoring_in_progress: false,
     _debug_marker: "NO_NEAR_LOCATION_FALLBACK_v1",
   });
