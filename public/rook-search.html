@@ -88,7 +88,7 @@
 
   .avatar{width:32px; height:32px; border-radius:50%; background:linear-gradient(135deg,var(--royal),var(--teal)); display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:#fff;}
 
-  .layout{max-width:1320px; margin:0 auto; padding:32px 24px 80px; display:grid; grid-template-columns:260px 1fr; gap:28px; align-items:start;}
+  .layout{max-width:1320px; margin:0 auto; padding:32px 24px 80px; display:grid; grid-template-columns:260px minmax(0,1fr); gap:28px; align-items:start;}
   .filters-column{min-width:0;}
 
   .filters{background:#fff; border-radius:var(--radius); padding:22px; box-shadow:0 2px 10px -4px rgba(11,29,58,0.08);}
@@ -153,14 +153,30 @@
   }
 
   @media(max-width:900px){
-    .layout{grid-template-columns:1fr;}
+    /* minmax(0,1fr): the default 1fr is minmax(auto,1fr) which expands
+       the grid track to honour the minimum content size of its children —
+       the production overflow root cause. minmax(0,1fr) allows the
+       track to shrink so content wraps rather than expanding the viewport. */
+    .layout{grid-template-columns:minmax(0,1fr); padding-left:16px; padding-right:16px;}
+    main{min-width:0; overflow:hidden; width:100%;}
     /* On mobile the toggle button lives inside <main> (not in the grid),
        and the filters aside is display:none. The .filters-column wrapper
        is hidden entirely so it takes no grid row and creates no blank gap. */
     .filters-column{display:none;}
     .filters-column.mobile-open-parent{display:block;}
-    .job-row{grid-template-columns:1fr; text-align:left;}
-    .job-actions{flex-direction:row; align-items:center; flex-wrap:wrap;}
+    /* Job card: score-ring is col 1 (auto = 56px), job-info is col 2.
+       job-actions must span BOTH columns (grid-column:1/-1) — without
+       this, job-actions goes into col 1, auto-expands to 249px, and
+       squeezes job-info down to ~39px. */
+    .job-row{grid-template-columns:auto minmax(0,1fr); text-align:left;}
+    .job-actions{grid-column:1 / -1; width:100%; flex-direction:row; align-items:center; flex-wrap:wrap;}
+    .job-info{min-width:0; overflow-wrap:break-word; word-break:break-word;}
+    .job-info h4{overflow-wrap:break-word; word-break:break-word;}
+    .job-info .company{overflow-wrap:break-word; word-break:break-word;}
+    .job-meta-line{overflow-wrap:break-word; word-break:break-word; white-space:normal;}
+    .tag-row{flex-wrap:wrap;}
+    .results-head{flex-wrap:wrap; gap:8px;}
+    .sort-row{flex-wrap:wrap;}
     .jtag-extra{display:none;}
     .tag-row.expanded .jtag-extra{display:inline-block;}
     .jtag-toggle{display:inline-block;}
@@ -295,7 +311,7 @@
           <h4>Territory Sales Manager</h4>
           <div class="company">IDEXX — Orlando / Tampa, FL · $110K–$150K OTE</div>
           <div class="tag-row"><span class="jtag">Veterinary Diagnostics</span><span class="jtag">Full-time</span><span class="jtag">50% Travel</span></div>
-          <div class="job-meta-line">Posted 1 day ago · Sourced via employer career page · <span style="color:#00806E; font-weight:600;"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="3" style="vertical-align:-1px;"><path d="M5 13l4 4L19 7"/></svg> Verified 2 hours ago</span></div>
+          <div class="job-meta-line">Posted 1 day ago · Verified on the employer's career site · <span style="color:#00806E; font-weight:600;"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="3" style="vertical-align:-1px;"><path d="M5 13l4 4L19 7"/></svg> Verified 2 hours ago</span></div>
         </div>
         <div class="job-actions">
           <span class="match-level ml-excellent">Excellent Match</span>
@@ -309,7 +325,7 @@
           <h4>Diagnostic Account Executive</h4>
           <div class="company">Example Diagnostics — Orlando, FL · $95K–$120K + Commission</div>
           <div class="tag-row"><span class="jtag">Diagnostics</span><span class="jtag">Full-time</span><span class="jtag">Territory Sales</span></div>
-          <div class="job-meta-line">Posted 2 days ago · Sourced via employer career page · <span style="color:#00806E; font-weight:600;"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="3" style="vertical-align:-1px;"><path d="M5 13l4 4L19 7"/></svg> Verified 3 hours ago</span></div>
+          <div class="job-meta-line">Posted 2 days ago · Verified on the employer's career site · <span style="color:#00806E; font-weight:600;"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="3" style="vertical-align:-1px;"><path d="M5 13l4 4L19 7"/></svg> Verified 3 hours ago</span></div>
         </div>
         <div class="job-actions">
           <span class="match-level ml-excellent">Excellent Match</span>
@@ -323,7 +339,7 @@
           <h4>Veterinary Territory Manager</h4>
           <div class="company">Covetrus — Jacksonville, FL · $100K–$130K OTE</div>
           <div class="tag-row"><span class="jtag">Veterinary / Animal Health</span><span class="jtag">Full-time</span></div>
-          <div class="job-meta-line">Posted 4 days ago · Sourced via job feed · <span style="color:#00806E; font-weight:600;"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="3" style="vertical-align:-1px;"><path d="M5 13l4 4L19 7"/></svg> Verified 6 hours ago</span></div>
+          <div class="job-meta-line">Posted 4 days ago · Staffing Agency · <span style="color:#00806E; font-weight:600;"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="3" style="vertical-align:-1px;"><path d="M5 13l4 4L19 7"/></svg> Verified 6 hours ago</span></div>
         </div>
         <div class="job-actions">
           <span class="match-level ml-excellent">Excellent Match</span>
@@ -337,7 +353,7 @@
           <h4>Capital Equipment Specialist</h4>
           <div class="company">Midmark — Tampa, FL · $90K–$115K + Commission</div>
           <div class="tag-row"><span class="jtag">Capital Equipment</span><span class="jtag">Full-time</span></div>
-          <div class="job-meta-line">Posted 6 days ago · Sourced via employer career page · <span style="color:#00806E; font-weight:600;"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="3" style="vertical-align:-1px;"><path d="M5 13l4 4L19 7"/></svg> Verified 5 hours ago</span></div>
+          <div class="job-meta-line">Posted 6 days ago · Verified on the employer's career site · <span style="color:#00806E; font-weight:600;"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="3" style="vertical-align:-1px;"><path d="M5 13l4 4L19 7"/></svg> Verified 5 hours ago</span></div>
         </div>
         <div class="job-actions">
           <span class="match-level ml-strong">Strong Match</span>
@@ -351,7 +367,7 @@
           <h4>Regional Account Manager</h4>
           <div class="company">Antech Diagnostics — Ocala, FL · $95K–$125K OTE</div>
           <div class="tag-row"><span class="jtag">Diagnostics</span><span class="jtag">Full-time</span><span class="jtag">Remote</span></div>
-          <div class="job-meta-line">Posted 1 week ago · Sourced via job feed · <span style="color:#00806E; font-weight:600;"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="3" style="vertical-align:-1px;"><path d="M5 13l4 4L19 7"/></svg> Verified 1 day ago</span></div>
+          <div class="job-meta-line">Posted 1 week ago · Staffing Agency · <span style="color:#00806E; font-weight:600;"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="3" style="vertical-align:-1px;"><path d="M5 13l4 4L19 7"/></svg> Verified 1 day ago</span></div>
         </div>
         <div class="job-actions">
           <span class="match-level ml-strong">Strong Match</span>
@@ -951,7 +967,7 @@
           <div class="company">${companyLine}</div>
           ${nearDistance}
           ${tags ? `<div class="tag-row">${tags}${expandToggle}</div>` : ''}
-          <div class="job-meta-line">${job.date_posted ? 'Posted ' + escapeHtml(new Date(job.date_posted).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })) : ''} · Sourced via ${escapeHtml(friendlySourceLabel(job.source_type))}</div>
+          <div class="job-meta-line">${job.date_posted ? 'Posted ' + escapeHtml(new Date(job.date_posted).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })) : ''} · ${escapeHtml(friendlySourceLabel(job.source_type))}</div>
         </div>
         <div class="job-actions">
           <span class="match-level ${level.cls}">${level.label}</span>

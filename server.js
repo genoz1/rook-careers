@@ -45,7 +45,17 @@ app.use("/api", require("./backend/routes/automation"));
 app.use("/", require("./backend/routes/publicPages"));
 
 // Static frontend (the UI prototype pages).
-app.use(express.static(path.join(__dirname, "public")));
+// HTML files must revalidate on every request — no stale cached
+// layouts served after a deployment. JS/CSS/images can be cached
+// safely since they're content-addressed by filename.
+app.use(express.static(path.join(__dirname, "public"), {
+  setHeaders(res, filePath) {
+    if (filePath.endsWith(".html")) {
+      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+      res.setHeader("Pragma", "no-cache");
+    }
+  },
+}));
 
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
