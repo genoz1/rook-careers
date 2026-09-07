@@ -338,7 +338,7 @@
     <div class="scorehero" id="mobileScoreboard">
       <div class="big" id="mobileJobCount">—</div>
       <h2>opportunities ranked for you</h2>
-      <p id="mobileJobSub">Loading your matches…</p>
+      <p id="mobileJobSub">Your ranked opportunities.</p>
     </div>
     <div class="stat-grid">
       <div class="stat-card"><div class="num" id="statNewMatches">—</div><div class="lbl">New Matches Today</div></div>
@@ -719,6 +719,17 @@
 
     document.getElementById('greetingSubtitle').textContent =
       `We found ${jobs.length} opportunit${jobs.length === 1 ? 'y' : 'ies'} matching your career profile.`;
+
+    // Mobile scorehero — populated here with the same real count used above.
+    // Subtitle is neutral: "Your ranked opportunities." — we do not claim
+    // these are "new since your last visit" because that would require
+    // reliable last-visit timestamps and first_seen_at filtering, which
+    // this endpoint does not provide. The per-day new-match count is already
+    // shown accurately in the stat card above via /new-matches-today-count.
+    const mobileCount = document.getElementById('mobileJobCount');
+    const mobileSub   = document.getElementById('mobileJobSub');
+    if (mobileCount) mobileCount.textContent = jobs.length;
+    if (mobileSub)   mobileSub.textContent   = 'Your ranked opportunities.';
   }
 
   // Shared by applyRecruiterToggle's sort and renderRealJobRow's card
