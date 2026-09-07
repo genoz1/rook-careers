@@ -1,0 +1,1098 @@
+/*
+  rook-mobile.css — ROOK mobile redesign, v2
+  All rules inside @media(max-width:880px). Desktop untouched.
+  Matches dist/styles.css from the approved ZIP specification.
+*/
+
+/* ── Reset visible on mobile ──────────────────────────────────── */
+@media(max-width:880px){
+  :root{
+    --rm-navy:#062d55; --rm-blue:#0877d1; --rm-green:#53c878;
+    --rm-ink:#10243a; --rm-muted:#637589;
+    --rm-line:#dce7f0; --rm-cloud:#f3f8fc;
+  }
+  body{ background:#f7fbfe; overflow-x:hidden;
+        font-family:Inter,ui-sans-serif,-apple-system,sans-serif; }
+
+  /* ── Compact public header ─────────────────────────────────── */
+  header.nav{
+    background:#fff !important;
+    border-bottom:1px solid #eaf1f6 !important;
+    box-shadow:none !important; height:64px !important;
+    position:sticky !important; top:0 !important; z-index:50 !important;
+  }
+  header.nav .nav-inner,
+  header.nav > div:first-child{
+    height:64px !important; padding:0 20px !important;
+    max-width:none !important; margin:0 !important;
+    display:flex !important; align-items:center !important;
+    justify-content:space-between !important;
+  }
+  header.nav nav.links, header.nav .nav-cta,
+  header.nav .nav-actions,
+  .topbar .nav-actions,
+  header.nav .mobile-menu-btn,
+  .mobile-menu, #mobileMenu{ display:none !important; }
+  header.nav .logo, .topbar .logo{
+    color:#062d55 !important; font-size:17px !important;
+    font-weight:900 !important; letter-spacing:.08em !important;
+    display:flex !important; align-items:center !important; gap:9px !important;
+  }
+  header.nav .logo img, .topbar .logo img{
+    width:35px !important; height:35px !important;
+    border-radius:10px !important; object-fit:cover !important;
+  }
+  header.nav .logo-text{ font-size:17px !important; }
+  .topbar{ background:#fff !important;
+    border-bottom:1px solid #eaf1f6 !important;
+    height:64px !important; padding:0 20px !important;
+    display:flex !important; align-items:center !important;
+    justify-content:space-between !important; }
+
+  /* ── Trial bar ─────────────────────────────────────────────── */
+  .trialbar,[class*="trial-bar"]{
+    background:#062d55 !important; color:#fff !important;
+    padding:9px 15px !important; font-size:11px !important;
+    display:flex !important; align-items:center !important;
+    justify-content:center !important; gap:8px !important;
+  }
+  .trialbar strong{ color:#9ff0b5 !important; }
+  .trialbar a{ font-weight:850 !important;
+    text-decoration:underline !important;
+    text-underline-offset:2px !important; color:#fff !important; }
+
+  /* ── Hamburger ─────────────────────────────────────────────── */
+  .rm-hamburger{
+    display:grid; place-items:center;
+    width:42px; height:42px;
+    border:1px solid #dce7f0; border-radius:13px;
+    background:#f3f8fc; color:#062d55;
+    font-size:22px; text-decoration:none; flex-shrink:0;
+  }
+
+  /* ── Section padding ───────────────────────────────────────── */
+  .wrap,.page-body,.container,.container-wide{ padding-left:20px !important; padding-right:20px !important; max-width:none !important; }
+
+  /* ── Public primary button ─────────────────────────────────── */
+  .rm-btn-primary,.rm-primary{
+    display:flex !important; align-items:center !important; justify-content:center !important;
+    min-height:54px !important; width:100% !important;
+    border:0 !important; border-radius:15px !important; padding:14px 18px !important;
+    background:linear-gradient(105deg,#062d55,#0877d1) !important;
+    color:#fff !important; font-weight:850 !important; font-size:16px !important;
+    box-shadow:0 11px 25px rgba(8,78,137,.22) !important;
+    text-decoration:none !important; cursor:pointer !important;
+    font-family:Inter,ui-sans-serif,sans-serif !important;
+  }
+  .rm-btn-secondary{
+    display:flex !important; align-items:center !important; justify-content:center !important;
+    min-height:50px !important; width:100% !important;
+    border:1.5px solid #bdd5e6 !important; border-radius:15px !important; padding:13px 18px !important;
+    background:#fff !important; color:#062d55 !important; font-weight:820 !important;
+    text-decoration:none !important; cursor:pointer !important;
+    font-family:Inter,ui-sans-serif,sans-serif !important;
+  }
+  .rm-stack{ display:grid !important; gap:10px !important; }
+  .rm-trust{ text-align:center !important; color:#637589 !important; font-size:11px !important; margin-top:12px !important; }
+
+  /* ── Homepage hero ─────────────────────────────────────────── */
+  .hero{ padding-top:24px !important;
+    background:radial-gradient(circle at 95% 0,#e1f5ff 0,transparent 37%),linear-gradient(165deg,#fff,#f2fbf5) !important; }
+  .hero-grid{ grid-template-columns:1fr !important; }
+  .hero-text{ padding:24px 20px 20px !important; }
+  h1.hero-h{ font-size:32px !important; }
+  .hero-sub{ font-size:15px !important; margin:12px 0 18px !important; }
+  .hero-photo-wrap{ min-height:220px !important; }
+  .hero-actions{ flex-direction:column !important; gap:10px !important; }
+  .hero-actions .btn{
+    width:100% !important; min-height:54px !important;
+    justify-content:center !important; border-radius:15px !important;
+    font-size:15px !important; font-weight:850 !important;
+  }
+  .hero-actions .btn-primary{
+    background:linear-gradient(105deg,#062d55,#0877d1) !important;
+    box-shadow:0 11px 25px rgba(8,78,137,.22) !important;
+  }
+  .trustrow{ grid-template-columns:1fr 1fr !important; padding:16px 20px 28px !important; gap:16px !important; }
+  .stats-row{ grid-template-columns:1fr 1fr !important; border-top:none !important; padding:0 20px 24px !important; gap:12px !important; }
+  .stat-item{ border-left:none !important; border:1px solid #dce7f0 !important; border-radius:17px !important; padding:14px !important; background:#fff !important; text-align:center !important; }
+  .rm-pills{ display:flex !important; flex-wrap:wrap !important; gap:7px !important; margin-bottom:18px !important; }
+  .rm-pill{ background:#f3f8fc !important; border-radius:99px !important; padding:7px 10px !important; color:#062d55 !important; font-size:11px !important; font-weight:800 !important; }
+  .rm-hero-art{ margin:22px 0 0 !important; background:linear-gradient(145deg,#eaf7ff,#edfbee) !important; border-radius:24px !important; padding:17px !important; }
+  /* Sticky CTA for public pages */
+  .rm-sticky-cta{
+    position:sticky !important; bottom:0 !important;
+    padding:12px 20px calc(12px + env(safe-area-inset-bottom)) !important;
+    background:linear-gradient(180deg,rgba(255,255,255,0),#fff 24%) !important; z-index:4 !important;
+  }
+
+  /* ── Card system ───────────────────────────────────────────── */
+  .rm-card{ border:1px solid #dce7f0 !important; border-radius:18px !important; padding:16px !important; background:#fff !important; }
+  .rm-cards{ display:grid !important; gap:10px !important; }
+  .rm-section-head{ margin-bottom:18px !important; }
+  .rm-section-head h2{ font-size:28px !important; line-height:1.08 !important; letter-spacing:-.035em !important; color:#062d55 !important; margin:0 0 9px !important; }
+  .rm-section-head p{ font-size:15px !important; line-height:1.5 !important; color:#637589 !important; margin:0 !important; }
+  .rm-eyebrow{ color:#0877d1 !important; font-weight:850 !important; letter-spacing:.13em !important; text-transform:uppercase !important; font-size:11px !important; margin-bottom:8px !important; }
+  .rm-cta-card{
+    border-radius:23px !important; background:linear-gradient(145deg,#062d55,#075991) !important;
+    color:#fff !important; padding:24px !important; box-shadow:0 16px 36px rgba(6,45,85,.2) !important;
+  }
+  .rm-cta-card h2{ font-size:29px !important; line-height:1.08 !important; margin:0 0 10px !important; }
+  .rm-cta-card p{ font-size:14px !important; line-height:1.5 !important; color:#dcedf8 !important; margin:0 0 18px !important; }
+
+  /* ── Browse: search + filter chips ────────────────────────── */
+  .searchbox,.rm-searchbox{
+    border:1px solid #dce7f0 !important; border-radius:18px !important; background:#fff !important;
+    padding:12px !important; box-shadow:0 12px 30px rgba(7,44,80,.08) !important;
+  }
+  .searchbox label,.rm-searchbox label{
+    display:block !important; font-size:10px !important; letter-spacing:.08em !important;
+    color:#637589 !important; font-weight:850 !important; margin:0 0 6px !important;
+  }
+  .rm-searchrow{ display:grid !important; grid-template-columns:1fr auto !important; gap:8px !important; }
+  .rm-searchrow input{ min-width:0 !important; border:1px solid #dce7f0 !important; border-radius:13px !important; padding:13px !important; }
+  .rm-searchrow button{ border:0 !important; border-radius:13px !important; background:#0877d1 !important; color:#fff !important; font-weight:850 !important; padding:0 15px !important; }
+  .rm-filterchips{ display:flex !important; gap:7px !important; overflow:auto !important; padding:14px 0 3px !important; scrollbar-width:none !important; }
+  .rm-filterchips::-webkit-scrollbar{ display:none !important; }
+  .rm-filterchips span{ white-space:nowrap !important; border:1px solid #dce7f0 !important; border-radius:99px !important; padding:8px 11px !important; font-size:11px !important; font-weight:750 !important; color:#062d55 !important; background:#fff !important; }
+  .rm-filterchips span.active{ background:#062d55 !important; color:#fff !important; border-color:#062d55 !important; }
+  /* Locked job cards */
+  .rm-locked{ filter:none !important; }
+  .rm-lockedname{ height:11px !important; background:#dce5ec !important; border-radius:8px !important; width:72% !important; margin-top:8px !important; }
+  .rm-lockedname.short{ width:46% !important; }
+
+  /* ── Companies: alphabet nav + summary ─────────────────────── */
+  .rm-alphabet{ display:flex !important; gap:6px !important; overflow:auto !important; padding:4px 0 13px !important; scrollbar-width:none !important; }
+  .rm-alphabet::-webkit-scrollbar{ display:none !important; }
+  .rm-alphabet span{ min-width:31px !important; height:31px !important; border-radius:10px !important; background:#f3f8fc !important; display:grid !important; place-items:center !important; font-size:11px !important; font-weight:850 !important; color:#062d55 !important; flex-shrink:0 !important; }
+  .rm-alphabet span.active{ background:#0877d1 !important; color:#fff !important; }
+  .rm-company-summary{
+    display:flex !important; align-items:center !important; gap:12px !important;
+    border-radius:19px !important; background:linear-gradient(135deg,#062d55,#075991) !important;
+    color:#fff !important; padding:18px !important; margin-bottom:18px !important;
+  }
+  .rm-company-summary strong{ font-size:37px !important; line-height:1 !important; }
+  .rm-company-summary span{ font-size:12px !important; color:#dcedf8 !important; line-height:1.3 !important; }
+  .rm-company-group{ margin-top:19px !important; }
+  .rm-company-group h2{ font-size:25px !important; color:#062d55 !important; margin:0 0 9px !important; }
+  .rm-company-list{ border:1px solid #dce7f0 !important; border-radius:18px !important; background:#fff !important; overflow:hidden !important; }
+  .rm-company-list div{ padding:13px 15px !important; border-bottom:1px solid #edf2f6 !important; font-size:14px !important; font-weight:700 !important; color:#29445f !important; }
+  .rm-company-list div:last-child{ border:0 !important; }
+
+  /* ── Pricing ───────────────────────────────────────────────── */
+  .rm-pricecard{
+    border:1px solid #cfe2ef !important; border-radius:24px !important; background:#f6fbff !important;
+    padding:20px !important; box-shadow:0 15px 36px rgba(7,44,80,.08) !important;
+    margin:0 20px !important;
+  }
+  .rm-plan{ font-size:12px !important; color:#0877d1 !important; font-weight:900 !important; letter-spacing:.12em !important; }
+  .rm-pricebig{ font-size:56px !important; line-height:1 !important; color:#062d55 !important; font-weight:900 !important; letter-spacing:-.055em !important; margin:12px 0 2px !important; }
+  .rm-pricebig small{ font-size:16px !important; color:#637589 !important; font-weight:650 !important; letter-spacing:0 !important; }
+  .rm-save{ font-size:12px !important; color:#27844b !important; font-weight:800 !important; margin-bottom:17px !important; }
+  .rm-benefits{ display:grid !important; gap:11px !important; margin:16px 0 20px !important; }
+  .rm-benefit{ display:flex !important; gap:9px !important; font-size:13px !important; line-height:1.35 !important; color:#344b60 !important; }
+  .rm-benefit b{ color:#27844b !important; }
+  .rm-faq{ border-bottom:1px solid #dce7f0 !important; padding:16px 0 !important; }
+  .rm-faq h3{ font-size:15px !important; color:#062d55 !important; margin:0 0 7px !important; }
+  .rm-faq p{ font-size:13px !important; line-height:1.45 !important; color:#637589 !important; margin:0 !important; }
+
+  /* ── About: flow + industries ──────────────────────────────── */
+  .rm-flow{
+    display:grid !important; grid-template-columns:1fr auto 1fr auto 1fr !important;
+    align-items:center !important; gap:5px !important; margin-top:17px !important;
+  }
+  .rm-flow div{ border-radius:14px !important; background:#fff !important; border:1px solid #dce7f0 !important; padding:13px 5px !important; text-align:center !important; font-size:11px !important; font-weight:800 !important; color:#062d55 !important; }
+  .rm-flow b{ color:#0877d1 !important; }
+  .rm-industries{ display:flex !important; flex-wrap:wrap !important; gap:8px !important; }
+  .rm-industries span{ border:1px solid #dce7f0 !important; border-radius:12px !important; background:#fff !important; padding:10px 12px !important; font-size:12px !important; font-weight:750 !important; color:#29445f !important; }
+  .rm-quote{ border-radius:22px !important; background:linear-gradient(145deg,#eff9ff,#f2fbf5) !important; padding:22px !important; }
+  .rm-quote blockquote{ font-size:18px !important; line-height:1.45 !important; color:#062d55 !important; font-weight:700 !important; margin:0 0 16px !important; }
+  .rm-founder{ display:flex !important; gap:11px !important; align-items:center !important; }
+  .rm-avatar{ width:44px !important; height:44px !important; border-radius:14px !important; background:linear-gradient(145deg,#062d55,#0877d1) !important; display:grid !important; place-items:center !important; color:#fff !important; font-weight:900 !important; }
+  .rm-founder b{ display:block !important; color:#062d55 !important; }
+  .rm-founder span{ font-size:12px !important; color:#637589 !important; }
+
+  /* ── Login form ────────────────────────────────────────────── */
+  .rm-login-tabs{
+    display:grid !important; grid-template-columns:1fr 1fr !important;
+    background:#eaf2f7 !important; border-radius:13px !important; padding:4px !important; margin-bottom:24px !important;
+  }
+  .rm-login-tabs span{ padding:11px !important; text-align:center !important; border-radius:10px !important; font-size:12px !important; font-weight:850 !important; color:#637589 !important; }
+  .rm-login-tabs .active{ background:#fff !important; color:#062d55 !important; box-shadow:0 4px 12px rgba(7,44,80,.08) !important; }
+  .rm-formcard{ border:1px solid #dce7f0 !important; border-radius:24px !important; background:#fff !important; padding:20px !important; box-shadow:0 16px 38px rgba(7,44,80,.11) !important; }
+  .rm-formcard label{ display:block !important; font-size:11px !important; letter-spacing:.06em !important; font-weight:850 !important; color:#587089 !important; margin:13px 0 6px !important; }
+  .rm-formcard input{ width:100% !important; height:51px !important; border:1.5px solid #dce7f0 !important; border-radius:14px !important; padding:0 14px !important; }
+  .rm-forgot{ text-align:right !important; color:#0877d1 !important; font-size:12px !important; font-weight:750 !important; margin-top:10px !important; }
+
+  /* ── Member: appnav ────────────────────────────────────────── */
+  .mobile-app-bar{
+    height:66px !important; padding:0 18px !important;
+    display:flex !important; align-items:center !important; justify-content:space-between !important;
+    background:#fff !important; border-bottom:1px solid #dce7f0 !important;
+    position:sticky !important; top:0 !important; z-index:100 !important;
+  }
+  .mobile-app-bar .logo, .mobile-app-bar .logo span{
+    color:#062d55 !important; gap:9px !important; font-size:17px !important;
+    letter-spacing:.08em !important; display:flex !important; align-items:center !important;
+  }
+  .mobile-app-bar .logo img{
+    height:35px !important; width:35px !important;
+    border-radius:10px !important; object-fit:cover !important;
+  }
+  .mobile-menu-btn{
+    width:38px !important; height:38px !important; border-radius:13px !important;
+    background:linear-gradient(145deg,#062d55,#0877d1) !important;
+    display:grid !important; place-items:center !important;
+    color:#fff !important; font-weight:900 !important;
+    border:0 !important; cursor:pointer !important; font-size:18px !important;
+    text-decoration:none !important;
+  }
+  .mobile-menu-btn svg{ color:#fff !important; }
+  .userdot{
+    width:38px !important; height:38px !important; border-radius:13px !important;
+    background:linear-gradient(145deg,#062d55,#0877d1) !important;
+    display:grid !important; place-items:center !important;
+    color:#fff !important; font-weight:900 !important;
+  }
+
+  /* ── Member: main content area ─────────────────────────────── */
+  .shell{ grid-template-columns:1fr !important; }
+  .sidebar, aside.sidebar{ display:none !important; }
+  .main, .app-page .main{
+    padding:23px 18px 88px !important; min-width:0 !important;
+    overflow:hidden !important; width:100% !important;
+  }
+
+  /* ── Dashboard: topline/greeting → hello style ─────────────── */
+  .topline{
+    display:flex !important; justify-content:space-between !important;
+    gap:12px !important; align-items:start !important; margin-bottom:18px !important;
+  }
+  .greeting h1, #greetingName{
+    font-size:29px !important; line-height:1.06 !important;
+    letter-spacing:-.04em !important; color:#062d55 !important; margin:0 0 5px !important;
+  }
+  .greeting p, #greetingSubtitle{
+    font-size:13px !important; color:#637589 !important; margin:0 !important;
+  }
+  /* Compact action buttons */
+  .top-actions{
+    display:flex !important; flex-direction:column !important;
+    align-items:flex-end !important; gap:6px !important; flex-shrink:0 !important;
+  }
+  .top-actions .btn{
+    font-size:11px !important; padding:7px 11px !important;
+    border-radius:10px !important; white-space:nowrap !important;
+    min-height:0 !important;
+  }
+  .top-actions .btn-primary{
+    background:linear-gradient(105deg,#062d55,#0877d1) !important;
+    color:#fff !important; border:0 !important;
+    box-shadow:0 4px 12px rgba(8,78,137,.22) !important;
+  }
+  .top-actions .btn-outline{
+    background:#fff !important; border:1px solid #dce7f0 !important;
+    color:#062d55 !important;
+  }
+
+  /* ── Dashboard: scorehero ──────────────────────────────────── */
+  .scorehero,.rm-scorehero{
+    border-radius:22px !important;
+    background:linear-gradient(135deg,#062d55,#075991) !important;
+    color:#fff !important; padding:20px !important;
+    position:relative !important; overflow:hidden !important; margin-bottom:11px !important;
+  }
+  .scorehero:after,.rm-scorehero:after{
+    content:"" !important; position:absolute !important;
+    width:130px !important; height:130px !important; border-radius:50% !important;
+    background:rgba(83,200,120,.17) !important; right:-38px !important; top:-43px !important;
+  }
+  .scorehero .big,.rm-scorehero .big,.scorehero-count{
+    font-size:48px !important; font-weight:900 !important; line-height:1 !important;
+    letter-spacing:-.05em !important; position:relative !important; z-index:1 !important;
+  }
+  .scorehero h2,.rm-scorehero h2,.scorehero-label{
+    font-size:19px !important; margin:7px 0 4px !important;
+    position:relative !important; z-index:1 !important; color:#fff !important;
+    font-weight:700 !important;
+  }
+  .scorehero p,.rm-scorehero p,.scorehero-sub{
+    font-size:12px !important; line-height:1.4 !important;
+    color:#dcedf8 !important; margin:0 !important;
+    position:relative !important; z-index:1 !important;
+  }
+
+  /* ── Dashboard: stat cards → compact 4-col mini stats ──────── */
+  .stat-grid{
+    display:grid !important;
+    grid-template-columns:repeat(4,1fr) !important;
+    gap:8px !important; margin:0 0 22px !important;
+  }
+  .stat-card{
+    border:1px solid #dce7f0 !important; border-radius:14px !important;
+    background:#fff !important; padding:11px 5px !important;
+    text-align:center !important; box-shadow:none !important;
+  }
+  .stat-card .num{
+    font-size:20px !important; font-weight:900 !important;
+    color:#062d55 !important; font-family:Inter,sans-serif !important;
+    letter-spacing:-.04em !important;
+  }
+  .stat-card .lbl{
+    font-size:8px !important; color:#637589 !important;
+    margin-top:2px !important; line-height:1.3 !important;
+  }
+  .stat-card.accent .num{ color:#0877d1 !important; }
+
+  /* ── Dashboard: panel head ─────────────────────────────────── */
+  .panel-head{
+    display:flex !important; align-items:end !important;
+    justify-content:space-between !important; gap:10px !important;
+    margin:20px 0 10px !important; flex-wrap:wrap !important;
+  }
+  .panel-head h2{ font-size:21px !important; color:#062d55 !important; margin:0 !important; }
+
+  /* ── Dashboard: filter chips ───────────────────────────────── */
+  .filter-row#tierFilters{
+    display:flex !important; gap:7px !important; overflow-x:auto !important;
+    scrollbar-width:none !important; padding-bottom:3px !important; flex-wrap:nowrap !important;
+  }
+  .filter-row#tierFilters::-webkit-scrollbar{ display:none !important; }
+  .filter-row#tierFilters .chip{
+    white-space:nowrap !important; flex-shrink:0 !important;
+    border:1px solid #dce7f0 !important; border-radius:99px !important;
+    padding:8px 11px !important; font-size:10px !important; font-weight:800 !important;
+    color:#47637c !important; background:#fff !important; cursor:pointer !important;
+  }
+  .filter-row#tierFilters .chip.active{
+    background:#062d55 !important; color:#fff !important; border-color:#062d55 !important;
+  }
+  /* Secondary controls compact */
+  [style*="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap"]{
+    flex-wrap:wrap !important; gap:6px !important; margin-bottom:10px !important;
+    font-size:11px !important;
+  }
+
+  /* ── Dashboard/Search: job rows → reference jobcard style ──── */
+  .job-row{
+    border:1px solid #dce7f0 !important; border-radius:18px !important;
+    background:#fff !important; padding:15px !important; margin-bottom:10px !important;
+    display:block !important;
+    /* override grid layout */
+    grid-template-columns:unset !important; gap:unset !important;
+    align-items:unset !important;
+  }
+  .job-row .score-ring{ display:none !important; }
+  .job-row .job-info{ min-width:0 !important; }
+  .job-row .job-info h4{
+    font-size:16px !important; line-height:1.2 !important;
+    color:#062d55 !important; margin:0 0 4px !important;
+    overflow-wrap:break-word !important; word-break:break-word !important;
+  }
+  .job-row .job-info .company{
+    font-size:12px !important; color:#47637c !important; font-weight:750 !important;
+    overflow-wrap:break-word !important;
+  }
+  /* Job top row: badge + save button */
+  .job-row .job-row-top,.job-row-top,.rm-jobcard-top{
+    display:flex !important; justify-content:space-between !important;
+    align-items:start !important; gap:10px !important; margin-bottom:0 !important;
+  }
+  /* Job meta tags */
+  .job-row .job-meta-line{
+    display:flex !important; flex-wrap:wrap !important; gap:6px !important;
+    margin-top:10px !important; white-space:normal !important;
+  }
+  .job-row .job-meta-line > *,.job-row .meta-tag{
+    background:#f3f8fc !important; border-radius:9px !important;
+    padding:6px 8px !important; font-size:10px !important; color:#47637c !important;
+  }
+  /* Job actions: flatten to inline tags */
+  .job-actions{ flex-wrap:wrap !important; gap:6px !important; margin-top:10px !important; }
+  .job-actions .reason-tag{
+    background:#f3f8fc !important; border-radius:9px !important;
+    padding:6px 8px !important; font-size:10px !important; color:#47637c !important;
+  }
+  /* Skeleton loading  */
+  .skeleton-row{
+    border:1px solid #dce7f0 !important; border-radius:18px !important;
+    margin-bottom:10px !important; padding:15px !important;
+  }
+
+  /* ── Search/Results: layout ────────────────────────────────── */
+  .layout{ grid-template-columns:minmax(0,1fr) !important; padding-left:18px !important; padding-right:18px !important; }
+  .filters-column{ display:none !important; }
+  .filters-column.mobile-open-parent{ display:block !important; }
+  main{ min-width:0 !important; overflow:hidden !important; width:100% !important; }
+  /* Results header */
+  .results-head{ flex-wrap:wrap !important; gap:8px !important; }
+  .sort-row{ flex-wrap:wrap !important; }
+  /* Filter toggle button */
+  .mobile-filters-toggle{ display:flex !important; margin-bottom:12px !important; }
+  /* Search filter bar */
+  .filterbar,.rm-filterbar{
+    display:flex !important; gap:7px !important; overflow-x:auto !important;
+    margin:0 -18px !important; padding:0 18px 13px !important;
+    scrollbar-width:none !important; white-space:nowrap !important;
+  }
+  .filterbar::-webkit-scrollbar{ display:none !important; }
+  .filterbar span,.rm-filterbar span{
+    white-space:nowrap !important; background:#fff !important;
+    border:1px solid #dce7f0 !important; border-radius:99px !important;
+    padding:8px 11px !important; font-size:10px !important; font-weight:800 !important; color:#47637c !important;
+  }
+  .filterbar span.active,.rm-filterbar span.active{
+    background:#062d55 !important; color:#fff !important; border-color:#062d55 !important;
+  }
+  .results-count{ font-size:12px !important; color:#637589 !important; margin-bottom:12px !important; }
+  .results-count b{ color:#062d55 !important; }
+
+  /* ── Job analysis: jobhero ─────────────────────────────────── */
+  .job-detail-header,.rm-jobhero{
+    background:linear-gradient(145deg,#eff9ff,#f2fbf5) !important;
+    border-bottom:1px solid #dce7f0 !important; padding:22px 18px !important;
+  }
+  .backline,.rm-backline{ font-size:12px !important; color:#0877d1 !important; font-weight:800 !important; margin-bottom:17px !important; display:block !important; }
+  .job-title,.rm-jobtitle{ font-size:28px !important; line-height:1.07 !important; letter-spacing:-.035em !important; color:#062d55 !important; margin:9px 0 6px !important; }
+  .rm-jobcompany{ font-size:14px !important; color:#47637c !important; font-weight:760 !important; }
+  .rm-jobfacts{ display:flex !important; flex-wrap:wrap !important; gap:7px !important; margin-top:13px !important; }
+  .rm-jobfact{
+    background:rgba(255,255,255,.88) !important; border:1px solid #d5e6f1 !important;
+    border-radius:10px !important; padding:7px 9px !important; font-size:10px !important; color:#47637c !important;
+  }
+  /* Match overview */
+  .match-overview,.rm-match-overview{
+    display:grid !important; grid-template-columns:auto 1fr !important;
+    gap:13px !important; align-items:center !important;
+    border:1px solid #dce7f0 !important; border-radius:19px !important;
+    background:#fff !important; padding:15px !important; margin-bottom:14px !important;
+  }
+  .score-ring,.rm-score-ring{
+    width:67px !important; height:67px !important; border-radius:50% !important;
+    display:grid !important; place-items:center !important;
+  }
+  .score-ring b{ font-size:17px !important; position:relative !important; z-index:1 !important; }
+  /* Breakdown bars */
+  .breakdown,.rm-breakdown{ display:grid !important; gap:8px !important; margin-top:12px !important; }
+  .fitrow,.rm-fitrow{ border:1px solid #dce7f0 !important; border-radius:14px !important; background:#fff !important; padding:12px !important; }
+  .fithead,.rm-fithead{ display:flex !important; justify-content:space-between !important; font-size:11px !important; font-weight:800 !important; color:#35516a !important; margin-bottom:7px !important; }
+  .fithead b,.rm-fithead b{ color:#27844b !important; }
+  .fitbar,.rm-fitbar{ height:7px !important; background:#e8eef3 !important; border-radius:99px !important; overflow:hidden !important; }
+  .fitbar i,.rm-fitbar i{ display:block !important; height:100% !important; background:linear-gradient(90deg,#0877d1,#53c878) !important; border-radius:99px !important; }
+  /* Apply dock */
+  .applydock,.rm-applydock,.apply-dock{
+    position:fixed !important; left:0 !important;
+    bottom:72px !important; /* above bottom nav */
+    width:100% !important;
+    padding:11px 18px calc(11px + env(safe-area-inset-bottom)) !important;
+    background:#fff !important; border-top:1px solid #dce7f0 !important;
+    display:grid !important; grid-template-columns:48px 1fr !important;
+    gap:9px !important; z-index:79 !important;
+  }
+  .applydock .primary,.apply-dock .primary,.rm-applydock .primary{
+    min-height:48px !important; border-radius:15px !important;
+  }
+  .applydock .savebtn,.apply-dock .savebtn,.rm-savebtn-small{
+    width:48px !important; height:48px !important;
+    border:1px solid #dce7f0 !important; background:#fff !important;
+    border-radius:13px !important; display:grid !important; place-items:center !important; font-size:18px !important;
+  }
+  /* Extra bottom pad on job detail */
+  .job-detail-body,.job-analysis-body{ padding-bottom:140px !important; }
+
+  /* ── Saved jobs ────────────────────────────────────────────── */
+  .status-tabs,.rm-status-tabs{
+    display:grid !important; grid-template-columns:repeat(3,1fr) !important;
+    gap:6px !important; background:#eaf2f7 !important; border-radius:13px !important;
+    padding:4px !important; margin:13px 0 !important;
+  }
+  .status-tab,.rm-status-tab{
+    text-align:center !important; padding:9px 3px !important; border-radius:10px !important;
+    font-size:10px !important; font-weight:850 !important; color:#637589 !important; cursor:pointer !important;
+  }
+  .status-tab.active,.rm-status-tab.active{
+    background:#fff !important; color:#062d55 !important;
+    box-shadow:0 4px 12px rgba(7,44,80,.08) !important;
+  }
+  .statusline,.rm-statusline{
+    display:flex !important; align-items:center !important; justify-content:space-between !important;
+    margin-top:12px !important; padding-top:11px !important; border-top:1px solid #edf2f6 !important;
+  }
+  .statusline span,.rm-statusline span{ font-size:10px !important; color:#637589 !important; }
+  .statusselect,.rm-statusselect{
+    border:0 !important; border-radius:10px !important; background:#eff8ff !important;
+    color:#0877d1 !important; font-size:10px !important; font-weight:850 !important; padding:7px 9px !important;
+  }
+
+  /* ── Settings/Profile ──────────────────────────────────────── */
+  /* Hide sidebar + restructure */
+  .settings-sidebar,[class*="settings-nav"],[class*="settings-tabs"]{
+    display:none !important;
+  }
+  .settings-shell,.settings-layout{
+    grid-template-columns:1fr !important; gap:0 !important;
+  }
+  .settings-main,.settings-content,.profile-main{
+    padding:0 !important; max-width:none !important;
+  }
+  /* Profile top */
+  .rm-profiletop{ text-align:center !important; margin-bottom:19px !important; }
+  .rm-profileavatar{
+    width:72px !important; height:72px !important; border-radius:22px !important;
+    margin:0 auto 10px !important;
+    background:linear-gradient(145deg,#062d55,#0877d1) !important;
+    display:grid !important; place-items:center !important; color:#fff !important;
+    font-size:25px !important; font-weight:900 !important;
+  }
+  .rm-profiletop h1{ font-size:25px !important; color:#062d55 !important; margin:0 0 4px !important; }
+  .rm-profiletop p{ font-size:12px !important; color:#637589 !important; margin:0 !important; }
+  /* Resume card */
+  .rm-resumeok{
+    border-radius:17px !important; background:#f1faf4 !important;
+    border:1px solid #d3eedc !important; padding:15px !important;
+    display:flex !important; gap:11px !important; align-items:center !important; margin-bottom:16px !important;
+  }
+  .rm-resumeok .icon{
+    margin:0 !important; width:43px !important; height:43px !important;
+    border-radius:13px !important; background:#dff5e6 !important;
+    color:#27844b !important; display:grid !important; place-items:center !important; flex-shrink:0 !important;
+    font-size:20px !important;
+  }
+  .rm-resumeok h3{ font-size:14px !important; margin:0 0 3px !important; color:#062d55 !important; }
+  .rm-resumeok p{ font-size:10px !important; margin:0 !important; color:#637589 !important; }
+  /* Setting rows */
+  .rm-settings{ display:grid !important; gap:10px !important; margin-bottom:20px !important; }
+  .rm-setting{
+    border:1px solid #dce7f0 !important; border-radius:17px !important; background:#fff !important;
+    padding:15px !important; display:flex !important; justify-content:space-between !important;
+    gap:12px !important; align-items:center !important;
+  }
+  .rm-setting h3{ font-size:14px !important; color:#062d55 !important; margin:0 0 3px !important; }
+  .rm-setting p{ font-size:10px !important; color:#637589 !important; margin:0 !important; }
+  .rm-setting b{ color:#0877d1 !important; font-size:18px !important; }
+  .rm-section-label{ font-size:21px !important; color:#062d55 !important; margin:20px 0 10px !important; display:flex !important; align-items:center !important; justify-content:space-between !important; }
+  .rm-section-label a{ font-size:11px !important; color:#0877d1 !important; font-weight:850 !important; }
+  .rm-member-badge{
+    display:inline-block !important; white-space:nowrap !important;
+    border-radius:99px !important; background:#eaf8ee !important; color:#27844b !important;
+    padding:7px 10px !important; font-size:10px !important; font-weight:900 !important; margin-top:9px !important;
+  }
+
+  /* ── Bottom nav ────────────────────────────────────────────── */
+  .rm-bottomnav{
+    position:fixed !important; left:0 !important; bottom:0 !important;
+    width:100% !important; height:72px !important;
+    padding:7px 11px calc(7px + env(safe-area-inset-bottom)) !important;
+    background:rgba(255,255,255,.97) !important; border-top:1px solid #dce7f0 !important;
+    display:grid !important; grid-template-columns:repeat(4,1fr) !important; z-index:80 !important;
+    backdrop-filter:blur(8px) !important;
+  }
+  .rm-bottomnav a{
+    text-align:center !important; font-size:9px !important; color:#637589 !important;
+    font-weight:750 !important; display:grid !important; place-items:center !important;
+    gap:2px !important; text-decoration:none !important;
+  }
+  .rm-bottomnav a span{ font-size:20px !important; line-height:1 !important; display:block !important; }
+  .rm-bottomnav a.rm-active{ color:#0877d1 !important; }
+
+  /* ── Footer ────────────────────────────────────────────────── */
+  footer,.rm-footer{
+    padding:30px 20px !important; background:#041f3b !important; color:#d8e8f4 !important;
+  }
+  .footer-links,.footerlinks{ display:grid !important; grid-template-columns:1fr 1fr !important; gap:10px 20px !important; margin:19px 0 !important; }
+  .footer-links a,.footerlinks a{ font-size:12px !important; color:#a9bfd0 !important; }
+  .copyright,.rm-copyright{ border-top:1px solid rgba(255,255,255,.14) !important; padding-top:14px !important; font-size:10px !important; color:#8ca6ba !important; }
+}
+
+/* Show/hide helpers (outside media query so they're always scoped) */
+.rm-hamburger{ display:none; }
+.rm-bottomnav{ display:none; }
+@media(max-width:880px){
+  .rm-hamburger{ display:grid; }
+  .rm-bottomnav{ display:grid; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   COMPACT INTRO SECTIONS (added pass 3)
+   Goal: primary action + beginning of content visible at 390×844
+   without scroll. Text stays ≥15px and readable; only padding
+   and overly-long copy paragraphs are restrained.
+   ══════════════════════════════════════════════════════════════ */
+@media(max-width:880px){
+
+  /* ── Homepage hero ──────────────────────────────────────── */
+  .hero{ padding-top:16px !important; }
+  .hero-text{ padding:16px 20px 12px !important; }
+  h1.hero-h{ font-size:26px !important; line-height:1.1 !important; margin-bottom:10px !important; }
+  /* Clip the long hero sub-paragraph to 2 lines — text stays 15px */
+  .hero-sub{
+    font-size:15px !important; line-height:1.45 !important;
+    margin:0 0 14px !important;
+  }
+  .hero-actions{ gap:8px !important; margin-bottom:6px !important; }
+  .hero-actions .btn{ min-height:50px !important; font-size:14px !important; }
+  /* Trust line tight */
+  .trust-text,.hero-trust{ font-size:11px !important; margin:0 0 6px !important; }
+  /* Photo — compact below CTAs */
+  .hero-photo-wrap{ min-height:160px !important; }
+  /* Hide trust row (four-icon grid) and stats from first viewport;
+     they appear as you scroll into the value-prop section */
+  .trustrow{ display:none !important; }
+
+  /* ── Browse hero ────────────────────────────────────────── */
+  /* Dark navy topbar section already has heading + search.
+     Reduce its padding so search is in the first viewport. */
+  .hero-section,.browse-hero,.page-hero,
+  [class*="page-hero"],[class*="browse-header"]{
+    padding:20px 20px 16px !important;
+  }
+  /* Clip intro paragraph to 2 lines */
+  .hero-section p,.browse-hero p,.page-hero p,
+  [class*="page-hero"] > p,[class*="browse-header"] > p{
+    font-size:15px !important; line-height:1.45 !important;
+    margin-bottom:12px !important;
+  }
+  /* Production browse: the dark topbar with heading + lead + searchbox */
+  .hero-wrap,.browse-top,
+  .section-hero,
+  section:first-of-type h1,
+  .content-hero{
+    padding-top:20px !important;
+    padding-bottom:16px !important;
+  }
+  /* Specifically target the big heading in the dark browse header */
+  .browse-title,.page-title,
+  .hero-section h1,.page-hero h1{
+    font-size:28px !important; line-height:1.08 !important;
+    margin-bottom:10px !important;
+  }
+
+  /* ── Companies hero ─────────────────────────────────────── */
+  /* The dark hero section that has the long description */
+  .companies-hero,
+  .page-section:first-of-type,
+  section.hero:first-of-type{
+    padding-top:20px !important;
+    padding-bottom:16px !important;
+  }
+  /* Clip paragraph */
+  .companies-intro p,
+  .companies-hero p{
+  }
+
+  /* ── About hero ─────────────────────────────────────────── */
+  .about-hero,.about-section:first-of-type,
+  .about-top{ padding:20px 20px 16px !important; }
+  .about-hero h1,.about-top h1{
+    font-size:28px !important; line-height:1.08 !important; margin-bottom:10px !important;
+  }
+  /* Clip the "ROOK was born from firsthand experience…" paragraph */
+  .about-hero > p,.about-top > p,.about-lead{
+    font-size:15px !important; line-height:1.45 !important;
+    margin-bottom:14px !important;
+  }
+
+  /* ── Pricing ────────────────────────────────────────────── */
+  /* Hero intro above the price card — reduce drastically */
+  .pricing-hero,.pricing-intro,.pricing-top{
+    padding:16px 20px 8px !important;
+  }
+  .pricing-hero h1,.pricing-intro h1,.pricing-top h1{
+    font-size:26px !important; line-height:1.1 !important; margin-bottom:8px !important;
+  }
+  /* Clip pricing intro description */
+  .pricing-hero > p,.pricing-intro > p,.pricing-top > p,.pricing-lead{
+    font-size:15px !important; line-height:1.45 !important;
+    margin-bottom:12px !important;
+  }
+  /* Price card — tighter top margin so it shows in the first viewport */
+  .plan-card,.price-card,.pricecard,.rm-pricecard{
+    margin-top:0 !important;
+    margin-left:0 !important; margin-right:0 !important;
+  }
+
+  /* ── Production page-specific selectors ─────────────────── */
+  /* rook-browse.html: its actual CSS classes */
+  /* The topbar IS the header. Content starts right below. */
+  /* Dark section that immediately follows the nav */
+  .section.tight.soft{ padding-top:20px !important; padding-bottom:16px !important; }
+  .title.medium{
+    font-size:26px !important; line-height:1.08 !important; margin-bottom:10px !important;
+  }
+  .title{ font-size:28px !important; line-height:1.08 !important; }
+  /* Clip .lead paragraphs in the first section */
+  section:first-of-type .lead,
+  .section:first-of-type .lead{
+    margin-bottom:12px !important;
+    font-size:15px !important;
+  }
+  /* rook-companies.html actual structure */
+  /* The dark "section.section.tight.soft" with company count */
+  /* Reduce its padding */
+  /* rook-pricing.html — its actual CSS class is .section.soft */
+  .section.soft{
+    padding-top:20px !important;
+    padding-bottom:16px !important;
+  }
+  /* Eyebrow above titles — tight margin */
+  .eyebrow{ margin-bottom:6px !important; }
+
+}
+
+/* ── Precise production-page overrides (pass 3 correction) ──── */
+@media(max-width:880px){
+
+  /* rook-browse.html: .hero is the dark navy intro section */
+  .hero{ padding:24px 20px 28px !important; }
+  .hero h1{
+    font-size:26px !important; line-height:1.1 !important; margin-bottom:10px !important;
+  }
+  .hero p{
+    font-size:15px !important; line-height:1.45 !important;
+    margin-bottom:0 !important;
+  }
+
+  /* rook-companies.html: The first .section.tight.soft (dark hero) */
+  /* Already targeted above via .section.tight.soft */
+
+  /* rook-about.html: hero section is .hero class too */
+  /* Already covered by the .hero rule above */
+
+  /* rook-pricing.html: the first section is .section.soft */
+  /* The .title and .lead selectors target it */
+
+  /* Homepage: more specific hero overrides to avoid collision with browse .hero */
+  /* The homepage .hero has a .hero-text child — browse's does not */
+  .hero:has(.hero-text){ padding:16px 0 0 !important; }
+  .hero:has(.hero-text) .hero-sub{
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   PASS 4 FIXES — contrast, clipping removal, dashboard, pricing
+   ══════════════════════════════════════════════════════════════ */
+@media(max-width:880px){
+
+  /* ── Fix 1a: Logo SPAN color — the inline color:#EDF3FF on logos
+     overrides CSS class selectors without !important on the element itself.
+     We need to target the span children directly with !important. ── */
+  /* Scoped only to the text span inside logo containers.
+     Using span (not *) so SVG currentColor and other children are unaffected.
+     !important is required because the span carries an inline color:#EDF3FF
+     on desktop pages — the !important overrides inline styles on mobile,
+     while desktop sees the inline color normally. */
+  header.nav .logo span,
+  .topbar .logo span,
+  .mobile-app-bar .logo span{
+    color:#062d55 !important;
+  }
+  /* Also normalize logo font-size to match the approved header typography */
+  header.nav .logo span,
+  .topbar .logo span{
+    font-size:17px !important;
+    letter-spacing:.08em !important;
+    font-weight:900 !important;
+    line-height:1.3 !important;
+  }
+
+  /* ── Fix 1b: Hero sections with rm-hero-light — light bg, navy text ── */
+  /* Applied to browse, companies, about via HTML class addition */
+  .rm-hero-light{
+    background:linear-gradient(145deg,#eff9ff,#f2fbf5) !important;
+    color:var(--rm-ink) !important;
+    padding:22px 20px 20px !important;
+    text-align:left !important;
+  }
+  .rm-hero-light .eyebrow-dark,
+  .rm-hero-light .hero-eyebrow{
+    color:var(--rm-blue) !important;
+    font-weight:850 !important;
+    letter-spacing:.13em !important;
+    text-transform:uppercase !important;
+    font-size:11px !important;
+    margin-bottom:8px !important;
+  }
+  .rm-hero-light h1{
+    color:#062d55 !important;
+    font-size:26px !important;
+    line-height:1.1 !important;
+    margin-bottom:10px !important;
+  }
+  .rm-hero-light p{
+    color:#637589 !important;
+    font-size:15px !important;
+    line-height:1.5 !important;
+    margin-bottom:14px !important;
+  }
+  /* Stat within light hero — companies page */
+  .rm-hero-light .stat-num,
+  .rm-hero-light .stat .stat-num{
+    color:#062d55 !important;
+    font-size:40px !important;
+    font-weight:900 !important;
+    letter-spacing:-.05em !important;
+    line-height:1 !important;
+    display:block !important;
+  }
+  .rm-hero-light .stat-label,
+  .rm-hero-light .stat .stat-label{
+    color:#637589 !important;
+    font-size:13px !important;
+    font-weight:700 !important;
+    display:block !important;
+    margin-top:3px !important;
+  }
+  .rm-hero-light .stat{
+    background:rgba(255,255,255,.8) !important;
+    border:1px solid #dce7f0 !important;
+    border-radius:17px !important;
+    padding:14px 18px !important;
+    display:inline-block !important;
+    margin-top:14px !important;
+  }
+
+  /* ── Fix 2: Compact section spacing without text clipping ──────── */
+  /* Now that copy is inherently short, we just need modest padding */
+  .section.tight.soft,
+  .section.soft{
+    padding-top:22px !important;
+    padding-bottom:20px !important;
+  }
+  .title.medium{
+    font-size:26px !important;
+    line-height:1.1 !important;
+    margin-bottom:10px !important;
+  }
+  .title{
+    font-size:28px !important;
+    line-height:1.08 !important;
+  }
+  .lead{
+    font-size:15px !important;
+    line-height:1.5 !important;
+    margin-bottom:16px !important;
+  }
+  /* Homepage hero: ensure CTA fits in first viewport */
+  .hero-text{ padding:20px 20px 16px !important; }
+  h1.hero-h{ font-size:27px !important; line-height:1.1 !important; }
+  .hero-sub{ font-size:15px !important; line-height:1.5 !important; margin:10px 0 16px !important; }
+  .hero-photo-wrap{ min-height:165px !important; }
+  .trustrow{ display:none !important; }
+
+  /* ── Fix 3a: Dashboard scorehero — CSS controls display (inline style removed) */
+  #mobileScoreboard{ display:none; }
+  /* The above is default for desktop. The media query below makes it mobile-visible. */
+
+  /* ── Fix 3b: Dashboard top-actions — single row, compact ──────── */
+  .top-actions{
+    display:flex !important;
+    flex-direction:row !important;
+    align-items:center !important;
+    gap:6px !important;
+    flex-shrink:0 !important;
+    flex-wrap:nowrap !important;
+  }
+  .top-actions .btn{
+    font-size:11px !important;
+    padding:7px 10px !important;
+    border-radius:10px !important;
+    white-space:nowrap !important;
+    min-height:0 !important;
+    height:34px !important;
+    display:inline-flex !important;
+    align-items:center !important;
+  }
+  .top-actions .btn-primary{
+    background:linear-gradient(105deg,#062d55,#0877d1) !important;
+    color:#fff !important; border:0 !important;
+  }
+  .top-actions .btn-outline{
+    background:#fff !important;
+    border:1px solid #dce7f0 !important;
+    color:#062d55 !important;
+  }
+
+  /* ── Fix 3c: Stat card labels — readable size ─────────────────── */
+  .stat-card .lbl{
+    font-size:9.5px !important;
+    color:#637589 !important;
+    margin-top:3px !important;
+    line-height:1.3 !important;
+  }
+  .stat-card .num{
+    font-size:18px !important;
+    font-weight:900 !important;
+    color:#062d55 !important;
+  }
+  .stat-card.accent .num{ color:#0877d1 !important; }
+
+  /* ── Fix 4: Pricing — trial elements visible and readable ──────── */
+  /* trialBanner already toggles via JS; ensure it looks right on mobile */
+  #trialBanner{
+    background:#eff8ff !important;
+    border:1px solid #bcd8f7 !important;
+    border-radius:13px !important;
+    padding:10px 16px !important;
+    margin:14px 0 !important;
+    text-align:center !important;
+    font-size:14px !important;
+    font-weight:700 !important;
+    color:#0877d1 !important;
+  }
+  /* renewalDisclosure */
+  #renewalDisclosure{
+    font-size:12px !important;
+    color:#637589 !important;
+    text-align:center !important;
+    margin-top:10px !important;
+    line-height:1.5 !important;
+  }
+  /* Mobile sticky CTA — matches main button wording via JS */
+  #rmPricingSticky{
+    padding:12px 20px calc(12px + env(safe-area-inset-bottom)) !important;
+    background:#fff !important;
+    border-top:1px solid #dce7f0 !important;
+    position:sticky !important;
+    bottom:0 !important;
+    z-index:50 !important;
+  }
+  #rmStickyBtn{
+    min-height:54px !important;
+    border-radius:15px !important;
+    background:linear-gradient(105deg,#062d55,#0877d1) !important;
+    color:#fff !important;
+    font-weight:850 !important;
+    font-size:15px !important;
+    border:0 !important;
+    box-shadow:0 11px 25px rgba(8,78,137,.22) !important;
+    width:100% !important;
+    display:flex !important;
+    align-items:center !important;
+    justify-content:center !important;
+    cursor:pointer !important;
+  }
+  #rmStickyDisclose{
+    font-size:11px !important;
+    color:#637589 !important;
+    text-align:center !important;
+    margin-top:6px !important;
+  }
+
+}
+
+/* ── Fix 3a continued: mobileScoreboard visible only on mobile ──── */
+@media(max-width:880px){
+  #mobileScoreboard{ display:block !important; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   PASS 4 FIXES — contrast, clipping removal, dashboard, pricing
+   ══════════════════════════════════════════════════════════════ */
+@media(max-width:880px){
+  header.nav .logo span,.topbar .logo span,.mobile-app-bar .logo span{color:#062d55!important;}
+  header.nav .logo span,.topbar .logo span{font-size:17px!important;letter-spacing:.08em!important;font-weight:900!important;line-height:1.3!important;}
+  .rm-hero-light{background:linear-gradient(145deg,#eff9ff,#f2fbf5)!important;color:#10243a!important;padding:22px 20px 20px!important;text-align:left!important;}
+  .rm-hero-light .eyebrow-dark,.rm-hero-light .hero-eyebrow{color:#0877d1!important;font-weight:850!important;letter-spacing:.13em!important;text-transform:uppercase!important;font-size:11px!important;margin-bottom:8px!important;}
+  .rm-hero-light h1{color:#062d55!important;font-size:26px!important;line-height:1.1!important;margin-bottom:10px!important;}
+  .rm-hero-light p{color:#637589!important;font-size:15px!important;line-height:1.5!important;margin-bottom:14px!important;}
+  .rm-hero-light .stat-num,.rm-hero-light .stat .stat-num{color:#062d55!important;font-size:40px!important;font-weight:900!important;letter-spacing:-.05em!important;line-height:1!important;display:block!important;}
+  .rm-hero-light .stat-label,.rm-hero-light .stat .stat-label{color:#637589!important;font-size:13px!important;font-weight:700!important;display:block!important;margin-top:3px!important;}
+  .rm-hero-light .stat,.rm-hero-light .stat{background:rgba(255,255,255,.8)!important;border:1px solid #dce7f0!important;border-radius:17px!important;padding:14px 18px!important;display:inline-block!important;margin-top:14px!important;}
+  .section.tight.soft,.section.soft{padding-top:22px!important;padding-bottom:20px!important;}
+  .title.medium{font-size:26px!important;line-height:1.1!important;margin-bottom:10px!important;}
+  .title{font-size:28px!important;line-height:1.08!important;}
+  .lead{font-size:15px!important;line-height:1.5!important;margin-bottom:16px!important;}
+  .hero-text{padding:20px 20px 16px!important;}
+  h1.hero-h{font-size:27px!important;line-height:1.1!important;}
+  .hero-sub{font-size:15px!important;line-height:1.5!important;margin:10px 0 16px!important;}
+  .hero-photo-wrap{min-height:165px!important;}
+  .trustrow{display:none!important;}
+  #mobileScoreboard{display:none;}
+  .top-actions{display:flex!important;flex-direction:row!important;align-items:center!important;gap:6px!important;flex-shrink:0!important;flex-wrap:nowrap!important;}
+  .top-actions .btn{font-size:11px!important;padding:7px 10px!important;border-radius:10px!important;white-space:nowrap!important;min-height:0!important;height:34px!important;display:inline-flex!important;align-items:center!important;}
+  .top-actions .btn-primary{background:linear-gradient(105deg,#062d55,#0877d1)!important;color:#fff!important;border:0!important;}
+  .top-actions .btn-outline{background:#fff!important;border:1px solid #dce7f0!important;color:#062d55!important;}
+  .stat-card .lbl{font-size:9.5px!important;color:#637589!important;margin-top:3px!important;line-height:1.3!important;}
+  .stat-card .num{font-size:18px!important;font-weight:900!important;color:#062d55!important;}
+  .stat-card.accent .num{color:#0877d1!important;}
+  #trialBanner{background:#eff8ff!important;border:1px solid #bcd8f7!important;border-radius:13px!important;padding:10px 16px!important;margin:14px 0!important;text-align:center!important;font-size:14px!important;font-weight:700!important;color:#0877d1!important;}
+  #renewalDisclosure{font-size:12px!important;color:#637589!important;text-align:center!important;margin-top:10px!important;line-height:1.5!important;}
+  #rmPricingSticky{
+    position:fixed !important;
+    bottom:0 !important;
+    left:0 !important;
+    width:100% !important;
+    padding:12px 20px calc(12px + env(safe-area-inset-bottom)) !important;
+    background:rgba(255,255,255,.97) !important;
+    border-top:1px solid #dce7f0 !important;
+    backdrop-filter:blur(8px) !important;
+    z-index:60 !important;
+  }
+  /* Add bottom padding so fixed CTA doesn't obscure FAQ content */
+  body:has(#rmPricingSticky){
+    padding-bottom:86px !important;
+  }
+  #rmStickyBtn{min-height:54px!important;border-radius:15px!important;background:linear-gradient(105deg,#062d55,#0877d1)!important;color:#fff!important;font-weight:850!important;font-size:15px!important;border:0!important;box-shadow:0 11px 25px rgba(8,78,137,.22)!important;width:100%!important;display:flex!important;align-items:center!important;justify-content:center!important;cursor:pointer!important;}
+  #rmStickyDisclose{font-size:11px!important;color:#637589!important;text-align:center!important;margin-top:6px!important;}
+}
+@media(max-width:880px){#mobileScoreboard{display:block!important;}}
+
+/* ══════════════════════════════════════════════════════════════
+   PASS 5 FIXES — spacing, selector safety
+   ══════════════════════════════════════════════════════════════ */
+@media(max-width:880px){
+  /* Companies hero: extra compact — short p + inline stat keeps list in viewport */
+  .rm-hero-light .stat{
+    display:flex !important;
+    align-items:center !important;
+    gap:10px !important;
+    background:rgba(255,255,255,.72) !important;
+    border:1px solid #dce7f0 !important;
+    border-radius:13px !important;
+    padding:10px 14px !important;
+    display:inline-flex !important;
+    margin-top:12px !important;
+  }
+  .rm-hero-light .stat .stat-num{
+    font-size:26px !important;
+    display:inline !important;
+    line-height:1 !important;
+  }
+  .rm-hero-light .stat .stat-label{
+    font-size:12px !important;
+    display:inline !important;
+    margin-top:0 !important;
+  }
+  /* Reduce the rm-hero-light top/bottom padding slightly for companies */
+  section.rm-hero-light{
+    padding:16px 20px 16px !important;
+  }
+
+  /* About page: reduce the large .pad section spacing on mobile */
+  section.pad,
+  .pad{
+    padding:28px 0 !important;
+  }
+  /* About hero already has rm-hero-light; tighten it too */
+  section.rm-hero-light{
+    padding:16px 20px 16px !important;
+  }
+
+  /* Pricing: ensure plan-list has appropriate top margin when button is first */
+  .plan-list{
+    margin-top:18px !important;
+    border-top:1px solid #dce7f0 !important;
+    padding-top:16px !important;
+  }
+  /* Ensure button stays full-width white text — verify no recolor from * rule */
+  .btn.btn-primary,
+  #subscribeBtn,
+  #rmStickyBtn,
+  .rm-btn-primary{
+    color:#fff !important;
+  }
+  /* Badge and pill text stays readable */
+  .badge, .pill, .rm-pill{
+    color:inherit;
+  }
+}

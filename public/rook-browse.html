@@ -122,15 +122,35 @@
     .job-actions{flex-direction:row; align-items:center; flex-wrap:wrap;}
     .zip-bar{padding:12px 14px;}
   }
+
+  @media(max-width:880px){
+    .topbar{background:#fff!important; border-bottom:1px solid #eaf1f6; padding:0 20px; height:64px; display:flex; align-items:center; justify-content:space-between;}
+    .topbar .logo{color:#062d55;}
+    .topbar .logo svg{display:none;}
+    .topbar .nav-actions{display:none;}
+    /* Search/filter area */
+    .search-section,.filter-section,.browse-header{padding:24px 20px 14px;}
+    .search-bar,.search-form,.search-box{flex-direction:column;}
+    .search-bar input{width:100%;}
+    /* Job grid → single column */
+    .jobs-grid,.job-grid,[class*="job-list"]{grid-template-columns:1fr!important;}
+    /* Filter chips */
+    .filter-chips,.filters-row{display:flex; overflow-x:auto; gap:7px; padding-bottom:3px; scrollbar-width:none; white-space:nowrap;}
+    /* Sticky CTA */
+    .cta-fixed,.sticky-cta{position:sticky; bottom:0; padding:12px 20px calc(12px + env(safe-area-inset-bottom)); background:linear-gradient(180deg,rgba(255,255,255,0),#fff 24%); z-index:4;}
+  }
+
 </style>
+<link rel="stylesheet" href="rook-mobile.css">
 </head>
 <body>
 
 <div class="topbar">
   <a href="index.html" class="logo" style="gap:8px;">
-    <img src="assets/rook-icon-192.png" alt="ROOK" style="height:28px; width:auto; display:block;">
+    <img src="assets/rook-logo.png" alt="ROOK" style="height:35px; width:35px; border-radius:10px; object-fit:cover; display:block;">
     ROOK
   </a>
+  <a href="rook-mobile-menu.html" class="rm-hamburger" aria-label="Menu">☰</a>
   <div class="nav-actions">
     <a href="index.html" class="btn btn-outline btn-sm">Back to Home</a>
     <a href="rook-login.html" class="btn btn-outline btn-sm">Log In</a>
@@ -138,11 +158,11 @@
   </div>
 </div>
 
-<div class="hero">
+<div class="hero rm-hero-light">
   <div class="hero-inner">
     <div class="hero-eyebrow">Real openings, updated continuously</div>
     <h1>Medical &amp; veterinary sales jobs, matched for you</h1>
-    <p>Every role below is pulled directly from an employer's own career site — not a stale aggregator. Sign up to see who's hiring and get your personal match score.</p>
+    <p>Pulled directly from employer career sites. Sign up to see who is hiring.</p>
   </div>
 </div>
 
@@ -456,5 +476,10 @@ s.parentNode.insertBefore(b, s);})(window.lintrk);
 <noscript>
 <img height="1" width="1" style="display:none;" alt="" src="https://px.ads.linkedin.com/collect/?pid=9629410&fmt=gif" />
 </noscript>
+
+<div class="rm-sticky-cta" id="rmBrowseSticky" style="display:none">
+  <a href="rook-onboarding-v2.html" class="rm-btn-primary">Get My Personalized Matches</a>
+  <div class="rm-trust">3-day free trial · Cancel anytime</div>
+</div>
 </body>
 </html>

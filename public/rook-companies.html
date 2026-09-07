@@ -76,30 +76,62 @@
     .hero h1{font-size:28px;}
     .list-section{padding:40px 0 56px;}
   }
+
+  #rmCompaniesSticky{display:none}
+  @media(max-width:880px){#rmCompaniesSticky{display:block}
+
+    header.nav{background:#fff; border-bottom:1px solid #eaf1f6;}
+    .nav-inner{height:64px; padding:0 20px; max-width:none;}
+    .logo{color:#062d55;}
+    nav.links,.nav-cta{display:none!important;}
+    /* Hero */
+    .hero-section,.page-hero,.companies-hero{padding:24px 20px 18px;}
+    .page-hero h1,.companies-hero h1,[class*="hero"] h1{font-size:30px;}
+    /* Company grid → list */
+    .companies-grid,.company-grid{grid-template-columns:1fr!important;}
+    /* Alphabet nav — horizontal scroll */
+    .alphabet-nav{display:flex; overflow-x:auto; gap:6px; padding:4px 20px 10px; scrollbar-width:none;}
+    .alphabet-nav a,span.alpha{min-width:31px;height:31px;border-radius:10px;background:#f3f8fc;display:grid;place-items:center;font-size:11px;font-weight:850;color:#062d55;flex-shrink:0;}
+    /* Count banner */
+    .count-banner,.company-summary{border-radius:19px;background:linear-gradient(135deg,#062d55,#075991);color:#fff;padding:18px 20px;margin:0 20px 18px;}
+    .count-banner strong{font-size:37px;}
+    .sticky-cta{position:sticky;bottom:0;padding:12px 20px calc(12px + env(safe-area-inset-bottom));background:linear-gradient(180deg,rgba(255,255,255,0),#fff 24%);z-index:4;}
+  }
+
+
+  @media(max-width:880px){
+    header.nav{ background:#fff!important; }
+    .nav-inner{ height:64px!important; max-width:none!important; padding:0 20px!important; }
+    .logo{ color:#062d55!important; }
+    nav.links,.nav-cta{ display:none!important; }
+  }
+
 </style>
+<link rel="stylesheet" href="rook-mobile.css">
 </head>
 <body>
 
 <header class="nav">
   <div class="nav-inner">
     <div class="logo" style="gap:8px;">
-      <img src="assets/rook-icon-192.png" alt="ROOK" style="height:32px; width:auto; display:block;"><span style="font-family:var(--font-display); font-weight:700; font-size:22px; letter-spacing:-0.02em; color:#EDF3FF; line-height:1;">ROOK</span>
+      <img src="assets/rook-logo.png" style="height:35px;width:35px;border-radius:10px;object-fit:cover;display:block;"><span style="font-family:var(--font-display); font-weight:700; font-size:22px; letter-spacing:-0.02em; color:#EDF3FF; line-height:1;">ROOK</span>
     </div>
     <div class="nav-cta">
       <a href="index.html" class="btn btn-outline">Back to Home</a>
       <a href="rook-onboarding-v2.html" class="btn btn-primary">Get Started</a>
     </div>
-  </div>
+    <a href="rook-mobile-menu.html" class="rm-hamburger" aria-label="Menu">☰</a>
+</div>
 </header>
 
-<section class="hero">
+<section class="hero rm-hero-light">
   <div class="wrap">
     <span class="eyebrow-dark">Direct Sourcing</span>
     <h1>The Employer Career Sites We Search Directly</h1>
-    <p>ROOK searches each of these companies' own career sites directly for medical, healthcare, veterinary, and related sales opportunities — not a job board aggregator. This list grows as ROOK adds more employers.</p>
+    <p>Searched directly — not through job boards. Growing weekly.</p>
     <div class="stat">
       <span class="stat-num">237</span>
-      <span class="stat-label">Employer Career Sites and Growing</span>
+      <span class="stat-label">Employer Career Sites</span>
     </div>
   </div>
 </section>
@@ -476,5 +508,9 @@ s.parentNode.insertBefore(b, s);})(window.lintrk);
 <noscript>
 <img height="1" width="1" style="display:none;" alt="" src="https://px.ads.linkedin.com/collect/?pid=9629410&fmt=gif" />
 </noscript>
+
+<div class="rm-sticky-cta" id="rmCompaniesSticky" style="display:none">
+  <a href="rook-onboarding-v2.html" class="rm-btn-primary">See Which Roles Match Me</a>
+</div>
 </body>
 </html>

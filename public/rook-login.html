@@ -67,12 +67,30 @@
   .pw-wrap input{width:100%; padding-right:40px; box-sizing:border-box;}
   .pw-toggle{position:absolute; right:10px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; padding:4px; color:#8B96AB; display:flex;}
   .pw-toggle:hover{color:#3D4A63;}
+
+  @media(max-width:880px){
+    body{background:radial-gradient(circle at 95% 0,#dff3ff 0,transparent 34%),linear-gradient(165deg,#fff,#f1fbf5);}
+    /* Card stays centered, add slight padding */
+    .login-wrap,.auth-wrap{padding:24px 20px;}
+    .logo{margin-bottom:24px;}
+    /* Form card */
+    .card,.form-card{border:1px solid #dce7f0; border-radius:24px; background:#fff; padding:20px; box-shadow:0 16px 38px rgba(7,44,80,.11);}
+    /* Tabs */
+    .tab-bar,.tabs{background:#eaf2f7; border-radius:13px; padding:4px; display:grid; grid-template-columns:1fr 1fr; margin-bottom:24px;}
+    .tab,.tabs span{padding:11px; text-align:center; border-radius:10px; font-size:12px; font-weight:850; color:#637589;}
+    .tab.active,.tabs .active{background:#fff; color:#062d55; box-shadow:0 4px 12px rgba(7,44,80,.08);}
+    /* Buttons */
+    .btn-primary,.btn{min-height:54px; border-radius:15px; width:100%; font-weight:850;}
+    .btn-primary{background:linear-gradient(105deg,#062d55,#0877d1); color:#fff; box-shadow:0 11px 25px rgba(8,78,137,.22); border:0;}
+  }
+
 </style>
+<link rel="stylesheet" href="rook-mobile.css">
 </head>
 <body>
 
 <div class="logo">
-  <img src="assets/rook-icon-192.png" alt="ROOK" style="height:46px; width:auto; display:block;">
+  <img src="assets/rook-logo.png" alt="ROOK" style="height:46px; width:auto; display:block;">
   <span style="font-family:var(--font-display); font-weight:700; font-size:36px; letter-spacing:-0.02em; color:var(--navy); line-height:1;">ROOK</span>
 </div>
 <a href="index.html" style="display:block; text-align:center; font-size:13px; font-weight:600; color:var(--muted, #5B6B85); margin-top:-16px; margin-bottom:24px;">← Back to Home</a>

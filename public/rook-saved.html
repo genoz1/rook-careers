@@ -143,17 +143,33 @@
   @media(max-width:900px){
     .job-grid{grid-template-columns:1fr;}
   }
+
+  /* ══ MEMBER MOBILE (max-width:880px) ════════════════════════ */
+  @media(max-width:880px){
+    /* Status tabs */
+    .status-tabs,.saved-tabs{display:grid; grid-template-columns:repeat(3,1fr); gap:6px; background:#eaf2f7; border-radius:13px; padding:4px; margin:13px 0;}
+    .status-tab,.saved-tab{text-align:center; padding:9px 3px; border-radius:10px; font-size:10px; font-weight:850; color:#637589;}
+    .status-tab.active,.saved-tab.active{background:#fff; color:#062d55; box-shadow:0 4px 12px rgba(7,44,80,.08);}
+    /* Job cards with status line */
+    .job-row,.saved-job-card{border:1px solid #dce7f0; border-radius:18px; background:#fff; padding:15px; margin-bottom:10px; display:block!important;}
+    .job-row .score-ring{display:none;}
+    .job-row h4,.saved-job-card h4{font-size:16px; color:#062d55; margin:9px 0 4px;}
+    .job-row .company{font-size:12px; color:#47637c; font-weight:750;}
+    .statusline,.status-line{display:flex; align-items:center; justify-content:space-between; margin-top:12px; padding-top:11px; border-top:1px solid #edf2f6;}
+    .statusline span,.status-line span{font-size:10px; color:#637589;}
+    .statusselect,.status-select{border:0; border-radius:10px; background:#eff8ff; color:#0877d1; font-size:10px; font-weight:850; padding:7px 9px;}
+  }
+
 </style>
+<link rel="stylesheet" href="rook-mobile.css">
 </head>
 <body>
 
 <div class="mobile-app-bar">
   <div class="logo" style="gap:8px;">
-    <img src="assets/rook-icon-192.png" alt="ROOK"><span style="font-family:var(--font-display); font-weight:700; letter-spacing:-0.02em; color:#EDF3FF; line-height:1;">ROOK</span>
+    <img src="assets/rook-logo.png" alt="ROOK" style="height:35px;width:35px;border-radius:10px;object-fit:cover;"><span style="font-family:var(--font-display); font-weight:700; letter-spacing:-0.02em; color:#EDF3FF; line-height:1;">ROOK</span>
   </div>
-  <button type="button" class="mobile-menu-btn" onclick="document.querySelector('.sidebar').classList.toggle('mobile-open')" aria-label="Menu">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-  </button>
+  <a href="rook-mobile-menu.html" class="mobile-menu-btn" aria-label="Menu" style="display:grid;place-items:center;width:38px;height:38px;border-radius:13px;background:linear-gradient(145deg,#062d55,#0877d1);color:#fff;font-size:18px;font-weight:900;text-decoration:none;">☰</a>
 </div>
 
 <div class="shell">
@@ -374,5 +390,11 @@ s.parentNode.insertBefore(b, s);})(window.lintrk);
 <noscript>
 <img height="1" width="1" style="display:none;" alt="" src="https://px.ads.linkedin.com/collect/?pid=9629410&fmt=gif" />
 </noscript>
+<nav class="rm-bottomnav">
+  <a href="rook-dashboard.html" class="rm-bn-item "><span>⌂</span>Home</a>
+  <a href="rook-search.html" class="rm-bn-item "><span>◎</span>Matches</a>
+  <a href="rook-saved.html" class="rm-bn-item rm-active"><span>♡</span>Saved</a>
+  <a href="rook-settings.html" class="rm-bn-item "><span>◉</span>Profile</a>
+</nav>
 </body>
 </html>

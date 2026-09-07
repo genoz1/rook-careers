@@ -170,7 +170,37 @@
     .container{grid-template-columns:1fr;}
     .job-header-top{flex-direction:column;}
   }
+
+  /* ══ MEMBER MOBILE (max-width:880px) ════════════════════════ */
+  @media(max-width:880px){
+    /* Job hero */
+    .job-detail-header,.job-header{background:linear-gradient(145deg,#eff9ff,#f2fbf5); border-bottom:1px solid #dce7f0; padding:22px 18px;}
+    .backline,.back-link{font-size:12px; color:#0877d1; font-weight:800; margin-bottom:17px; display:block;}
+    .job-title,.job-detail-header h1{font-size:28px; line-height:1.07; letter-spacing:-.035em; color:#062d55; margin:9px 0 6px;}
+    .job-company,.company-name{font-size:14px; color:#47637c; font-weight:760;}
+    .job-facts,.job-meta-pills{display:flex; flex-wrap:wrap; gap:7px; margin-top:13px;}
+    .job-fact,.job-meta-pill{background:rgba(255,255,255,.88); border:1px solid #d5e6f1; border-radius:10px; padding:7px 9px; font-size:10px; color:#47637c;}
+    /* Match overview */
+    .match-overview{display:grid; grid-template-columns:auto 1fr; gap:13px; align-items:center; border:1px solid #dce7f0; border-radius:19px; background:#fff; padding:15px; margin-bottom:14px;}
+    .score-ring{width:67px; height:67px; border-radius:50%; display:grid; place-items:center; position:relative;}
+    .score-ring b{font-size:17px; font-weight:900;}
+    /* Breakdown bars */
+    .breakdown,.match-breakdown{display:grid; gap:8px; margin-top:12px;}
+    .fitrow,.breakdown-row{border:1px solid #dce7f0; border-radius:14px; background:#fff; padding:12px;}
+    .fithead,.breakdown-header{display:flex; justify-content:space-between; font-size:11px; font-weight:800; color:#35516a; margin-bottom:7px;}
+    .fithead b,.breakdown-rating{color:#27844b;}
+    .fitbar,.breakdown-bar{height:7px; background:#e8eef3; border-radius:99px; overflow:hidden;}
+    .fitbar i,.breakdown-fill{display:block; height:100%; background:linear-gradient(90deg,#0877d1,#53c878); border-radius:99px;}
+    /* Apply dock — sticky bottom */
+    .apply-dock,.applydock{position:fixed; left:0; bottom:72px; width:100%; padding:11px 18px calc(11px + env(safe-area-inset-bottom)); background:#fff; border-top:1px solid #dce7f0; display:grid; grid-template-columns:48px 1fr; gap:9px; z-index:79;}
+    .apply-dock .primary,.applydock .primary{min-height:48px; border-radius:15px;}
+    .save-btn,.savebtn{width:48px; height:48px; border:1px solid #dce7f0; background:#fff; border-radius:13px; display:grid; place-items:center; font-size:18px;}
+    /* Extra bottom pad for content above apply dock */
+    .job-detail-body,.appmain{padding-bottom:140px!important;}
+  }
+
 </style>
+<link rel="stylesheet" href="rook-mobile.css">
 </head>
 <body>
 
@@ -191,11 +221,9 @@
 
 <div class="mobile-app-bar">
   <div class="logo" style="gap:8px;">
-    <img src="assets/rook-icon-192.png" alt="ROOK"><span style="font-family:var(--font-display); font-weight:700; letter-spacing:-0.02em; color:#EDF3FF; line-height:1;">ROOK</span>
+    <img src="assets/rook-logo.png" alt="ROOK" style="height:35px;width:35px;border-radius:10px;object-fit:cover;"><span style="font-family:var(--font-display); font-weight:700; letter-spacing:-0.02em; color:#EDF3FF; line-height:1;">ROOK</span>
   </div>
-  <button type="button" class="mobile-menu-btn" onclick="document.querySelector('.sidebar').classList.toggle('mobile-open')" aria-label="Menu">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-  </button>
+  <a href="rook-mobile-menu.html" class="mobile-menu-btn" aria-label="Menu" style="display:grid;place-items:center;width:38px;height:38px;border-radius:13px;background:linear-gradient(145deg,#062d55,#0877d1);color:#fff;font-size:18px;font-weight:900;text-decoration:none;">☰</a>
 </div>
 
 <div class="shell">
@@ -484,5 +512,11 @@ s.parentNode.insertBefore(b, s);})(window.lintrk);
 <noscript>
 <img height="1" width="1" style="display:none;" alt="" src="https://px.ads.linkedin.com/collect/?pid=9629410&fmt=gif" />
 </noscript>
+<nav class="rm-bottomnav">
+  <a href="rook-dashboard.html" class="rm-bn-item "><span>⌂</span>Home</a>
+  <a href="rook-search.html" class="rm-bn-item "><span>◎</span>Matches</a>
+  <a href="rook-saved.html" class="rm-bn-item "><span>♡</span>Saved</a>
+  <a href="rook-settings.html" class="rm-bn-item "><span>◉</span>Profile</a>
+</nav>
 </body>
 </html>

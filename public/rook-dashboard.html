@@ -234,7 +234,37 @@
   .profile-gate-card p{font-size:14.5px; color:var(--muted); line-height:1.5; margin-bottom:22px;}
   .profile-gate-card .btn-primary{display:inline-block; padding:12px 24px; border-radius:99px; font-weight:600; font-size:14.5px; text-decoration:none;}
   .profile-gate-card .dismiss{display:block; margin-top:14px; font-size:13px; color:var(--muted); text-decoration:underline; cursor:pointer; background:none; border:none;}
+
+  /* ══ MEMBER MOBILE (max-width:880px) ════════════════════════ */
+  @media(max-width:880px){
+    /* Score hero */
+    .scorehero[id="mobileScoreboard"]{display:none}
+    @media(max-width:880px){.scorehero[id="mobileScoreboard"]{display:block}}
+    .scorehero{border-radius:22px; background:linear-gradient(135deg,#062d55,#075991); color:#fff; padding:20px; position:relative; overflow:hidden; margin-bottom:11px;}
+    .scorehero:after{content:""; position:absolute; width:130px; height:130px; border-radius:50%; background:rgba(83,200,120,.17); right:-38px; top:-43px;}
+    .big,.scorehero-count{font-size:48px !important; font-weight:900; line-height:1; letter-spacing:-.05em; position:relative; z-index:1;}
+    .scorehero h2,.scorehero-label{font-size:19px !important; margin:7px 0 4px; position:relative; z-index:1; color:#fff;}
+    .scorehero p,.scorehero-sub{font-size:12px; line-height:1.4; color:#dcedf8; margin:0; position:relative; z-index:1;}
+    /* Mini stats */
+    .mini-stats,.stat-buckets{display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin:11px 0 22px;}
+    .mini-stat,.stat-bucket{border:1px solid #dce7f0; border-radius:14px; background:#fff; padding:11px 8px; text-align:center;}
+    .mini-stat b,.stat-bucket-count{display:block; font-size:20px; color:#062d55; font-weight:900;}
+    .mini-stat span,.stat-bucket-label{display:block; font-size:9px; color:#637589; margin-top:2px;}
+    /* List head */
+    .listhead,.section-head-row{display:flex; align-items:end; justify-content:space-between; gap:10px; margin:20px 0 10px;}
+    .listhead h2{font-size:21px; color:#062d55; margin:0;}
+    .listhead a,.see-all{font-size:11px; color:#0877d1; font-weight:850;}
+    /* Job cards */
+    .job-row{border:1px solid #dce7f0; border-radius:18px; background:#fff; padding:15px; margin-bottom:10px; display:block !important;}
+    .job-row .score-ring{display:none;}
+    .job-row .job-info h4{font-size:16px; color:#062d55; margin:0 0 4px; line-height:1.2;}
+    .job-row .company,.job-row .job-info .company{font-size:12px; color:#47637c; font-weight:750;}
+    .job-actions{display:flex; flex-wrap:wrap; gap:6px; margin-top:10px;}
+    .job-actions .reason-tag{background:#f3f8fc; border-radius:9px; padding:6px 8px; font-size:10px; color:#47637c;}
+  }
+
 </style>
+<link rel="stylesheet" href="rook-mobile.css">
 </head>
 <body>
 <div class="profile-gate-overlay" id="profileGateOverlay">
@@ -261,11 +291,9 @@
 </div>
 <div class="mobile-app-bar">
   <div class="logo" style="gap:8px;">
-    <img src="assets/rook-icon-192.png" alt="ROOK"><span style="font-family:var(--font-display); font-weight:700; letter-spacing:-0.02em; color:#EDF3FF; line-height:1;">ROOK</span>
+    <img src="assets/rook-logo.png" alt="ROOK" style="height:35px;width:35px;border-radius:10px;object-fit:cover;"><span style="font-family:var(--font-display); font-weight:700; letter-spacing:-0.02em; color:#EDF3FF; line-height:1;">ROOK</span>
   </div>
-  <button type="button" class="mobile-menu-btn" onclick="document.querySelector('.sidebar').classList.toggle('mobile-open')" aria-label="Menu">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-  </button>
+  <a href="rook-mobile-menu.html" class="mobile-menu-btn" aria-label="Menu" style="display:grid;place-items:center;width:38px;height:38px;border-radius:13px;background:linear-gradient(145deg,#062d55,#0877d1);color:#fff;font-size:18px;font-weight:900;text-decoration:none;">☰</a>
 </div>
 
 <div class="shell">
@@ -305,6 +333,13 @@
       </div>
     </div>
 
+
+    <!-- Mobile scorehero — shown only at max-width:880px via rook-mobile.css -->
+    <div class="scorehero" id="mobileScoreboard">
+      <div class="big" id="mobileJobCount">—</div>
+      <h2>opportunities ranked for you</h2>
+      <p id="mobileJobSub">Loading your matches…</p>
+    </div>
     <div class="stat-grid">
       <div class="stat-card"><div class="num" id="statNewMatches">—</div><div class="lbl">New Matches Today</div></div>
       <div class="stat-card accent"><div class="num" id="statExcellent">—</div><div class="lbl">Excellent Matches (85%+)</div></div>
@@ -1181,5 +1216,11 @@ s.parentNode.insertBefore(b, s);})(window.lintrk);
 <noscript>
 <img height="1" width="1" style="display:none;" alt="" src="https://px.ads.linkedin.com/collect/?pid=9629410&fmt=gif" />
 </noscript>
+<nav class="rm-bottomnav">
+  <a href="rook-dashboard.html" class="rm-bn-item rm-active"><span>⌂</span>Home</a>
+  <a href="rook-search.html" class="rm-bn-item "><span>◎</span>Matches</a>
+  <a href="rook-saved.html" class="rm-bn-item "><span>♡</span>Saved</a>
+  <a href="rook-settings.html" class="rm-bn-item "><span>◉</span>Profile</a>
+</nav>
 </body>
 </html>

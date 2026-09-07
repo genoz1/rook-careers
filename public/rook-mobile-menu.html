@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>ROOK — Menu</title>
+<link rel="icon" href="assets/favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="assets/rook-icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Inter,ui-sans-serif,-apple-system,sans-serif;background:#f7fbfe;min-height:100vh}
+  a{text-decoration:none;color:inherit}
+  :root{
+    --navy:#062d55;--blue:#0877d1;--green:#53c878;
+    --ink:#10243a;--muted:#637589;--line:#dce7f0;--cloud:#f3f8fc;
+  }
+  .page{width:100%;min-height:100vh;background:#fff}
+
+  /* ── Compact header ── */
+  .nav{
+    height:64px;padding:0 20px;
+    display:flex;align-items:center;justify-content:space-between;
+    border-bottom:1px solid #eaf1f6;background:rgba(255,255,255,.96);
+    position:sticky;top:0;z-index:5;
+  }
+  .brand{display:flex;align-items:center;gap:9px;font-weight:900;letter-spacing:.08em;color:var(--navy);font-size:17px}
+  .brand img{width:35px;height:35px;border-radius:10px;object-fit:cover}
+  .close-btn{
+    width:42px;height:42px;
+    border:1px solid var(--line);border-radius:13px;
+    background:var(--cloud);display:grid;place-items:center;
+    color:var(--navy);font-size:22px;cursor:pointer;
+    text-decoration:none;
+  }
+
+  /* ── Menu panel ── */
+  .menu-panel{
+    padding:26px 20px;
+    background:linear-gradient(165deg,#fff,#eef9ff);
+    min-height:calc(100vh - 64px);
+  }
+  .eyebrow{
+    color:var(--blue);font-weight:850;letter-spacing:.13em;
+    text-transform:uppercase;font-size:11px;margin-bottom:18px;
+  }
+  .navlink{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:17px 2px;border-bottom:1px solid var(--line);
+    font-size:18px;font-weight:800;color:var(--navy);
+  }
+  .navlink span{color:var(--blue)}
+
+  /* ── Primary button ── */
+  .primary{
+    display:flex;align-items:center;justify-content:center;
+    min-height:54px;width:100%;border:0;border-radius:15px;
+    padding:14px 18px;
+    background:linear-gradient(105deg,var(--navy),var(--blue));
+    color:#fff;font-weight:850;font-size:16px;
+    box-shadow:0 11px 25px rgba(8,78,137,.22);
+    cursor:pointer;margin-top:22px;
+    font-family:inherit;
+  }
+  .secondary{
+    display:flex;align-items:center;justify-content:center;
+    min-height:50px;width:100%;border:1.5px solid #bdd5e6;
+    border-radius:15px;padding:13px 18px;background:#fff;
+    color:var(--navy);font-weight:820;font-size:15px;
+    cursor:pointer;margin-top:10px;font-family:inherit;
+  }
+  .trust{text-align:center;color:var(--muted);font-size:11px;margin-top:14px}
+</style>
+</head>
+<body>
+<main class="page">
+  <header class="nav">
+    <a class="brand" href="index.html">
+      <img src="assets/rook-logo.png" alt="ROOK logo">ROOK
+    </a>
+    <!-- Close / back — uses browser history so it returns to the previous page -->
+    <a class="close-btn" href="javascript:history.back()" aria-label="Close menu">×</a>
+  </header>
+
+  <section class="menu-panel">
+    <div class="eyebrow">Explore ROOK</div>
+
+    <a class="navlink" href="rook-browse.html">Find Jobs <span>→</span></a>
+    <a class="navlink" href="rook-companies.html">Companies We Search <span>→</span></a>
+    <a class="navlink" href="rook-pricing.html">Pricing <span>→</span></a>
+    <a class="navlink" href="rook-about.html">About ROOK <span>→</span></a>
+    <a class="navlink" href="rook-employers.html">For Employers <span>→</span></a>
+
+    <a class="primary" href="rook-onboarding-v2.html">Find My Matches</a>
+    <a class="secondary" href="rook-login.html">Log In</a>
+
+    <div class="trust">Medical and veterinary sales only</div>
+  </section>
+</main>
+</body>
+</html>

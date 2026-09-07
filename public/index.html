@@ -415,14 +415,49 @@
     .split{padding:44px 0;}
     footer{padding:40px 0 24px;}
   }
+
+  /* ══ MOBILE OVERRIDES (max-width:880px) ══════════════════════ */
+  @media(max-width:880px){
+    /* Hero */
+    .hero{ padding-top:24px; background:radial-gradient(circle at 95% 0,#e1f5ff 0,transparent 37%),linear-gradient(165deg,#fff,#f2fbf5); }
+    .hero-grid{ grid-template-columns:1fr; gap:0; }
+    .hero-text{ padding:24px 20px 20px; }
+    h1.hero-h{ font-size:32px; }
+    .hero-sub{ font-size:15px; margin:12px 0 18px; }
+    .hero-photo-wrap{ min-height:220px; }
+    .hero-actions{ flex-direction:column; gap:10px; }
+    .hero-actions .btn{ width:100%; min-height:54px; justify-content:center; border-radius:15px; font-size:15px; font-weight:850; }
+    .hero-actions .btn-primary{ background:linear-gradient(105deg,#062d55,#0877d1); box-shadow:0 11px 25px rgba(8,78,137,.22); }
+    /* Stats */
+    .statrow-mobile{ display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:0 20px 24px; }
+    .trustrow{ grid-template-columns:1fr 1fr; padding:16px 20px 28px; gap:16px; }
+    .stats-row{ grid-template-columns:1fr 1fr; gap:12px; border-top:none; padding:0 20px 24px; }
+    .stat-item{ border-left:none; border:1px solid #dce7f0; border-radius:17px; padding:14px; background:rgba(255,255,255,.9); }
+    /* All content sections */
+    .section,.wrap{ padding-left:20px; padding-right:20px; max-width:none; }
+    /* Feature grid → single column */
+    .feature-grid,.trust-items,[class*="grid-"]{ grid-template-columns:1fr !important; }
+    /* Trial banner hidden behind rook-trial-banner.js */
+  }
+
+
+  @media(max-width:880px){
+    .mobile-menu-btn{display:none!important;}
+    .mobile-menu{display:none!important;}
+    header.nav .nav-inner{height:64px; display:flex; align-items:center; justify-content:space-between; padding:0 20px; max-width:none;}
+    header.nav{background:#fff!important;}
+    header.nav .logo .logo-text{color:var(--rm-navy)!important;}
+  }
+
 </style>
+<link rel="stylesheet" href="rook-mobile.css">
 </head>
 <body>
 
 <header class="nav">
   <div class="nav-inner">
     <div class="logo" style="gap:8px;">
-      <img src="assets/rook-icon-192.png" alt="ROOK" style="height:43px; width:auto; display:block;"><span class="logo-text" style="font-family:var(--font-display); font-weight:700; letter-spacing:-0.02em; color:#EDF3FF; line-height:1;">ROOK</span>
+      <img src="assets/rook-logo.png" alt="ROOK" style="height:35px; width:35px; border-radius:10px; object-fit:cover; display:block;"><span class="logo-text" style="font-family:var(--font-display); font-weight:700; letter-spacing:-0.02em; color:#EDF3FF; line-height:1;">ROOK</span>
     </div>
     <nav class="links">
       <a href="rook-browse.html">Find Jobs</a>
@@ -434,17 +469,12 @@
     <div class="nav-cta">
       <a href="rook-login.html" class="btn btn-ghost">Log In</a>
       <a href="rook-onboarding-v2.html" class="btn btn-primary">Get Started</a>
-      <!-- Real bug this fixes: nav.links (Find Jobs, For Job Seekers,
-           For Employers, Post a Job, About) was hidden below 960px with
-           no replacement at all — a mobile visitor's only way to reach
-           any of those pages was scrolling all the way to the footer.
-           This hamburger button only shows below 960px (see media
-           query above) and reveals the exact same links in a stacked
-           panel. -->
       <button type="button" class="mobile-menu-btn" onclick="document.getElementById('mobileMenu').classList.toggle('open')" aria-label="Menu">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
       </button>
     </div>
+    <!-- rm-hamburger: visible only on mobile (max-width:880px), links to mobile menu page -->
+    <a href="rook-mobile-menu.html" class="rm-hamburger" aria-label="Menu">☰</a>
   </div>
   <nav class="mobile-menu" id="mobileMenu">
     <a href="rook-browse.html">Find Jobs</a>
@@ -453,14 +483,14 @@
     <a href="rook-recruiter-login.html">Post a Job (Free)</a>
     <a href="rook-about.html">About</a>
   </nav>
-</header>
+  </header>
 
 <section class="hero">
   <div class="hero-grid">
     <div class="hero-text">
       <div class="eyebrow"><span class="dot"></span> Built exclusively for medical &amp; veterinary sales</div>
       <h1 class="hero-h">The right opportunity.<br>Expertly <span class="accent">matched.</span></h1>
-      <p class="hero-sub">ROOK continuously searches for medical sales jobs, pharmaceutical sales jobs, medical device sales jobs, and veterinary and animal health sales jobs — then matches the best ones to your experience, territory, compensation goals, and career path, so you spend less time searching and more time pursuing the right roles.</p>
+      <p class="hero-sub">ROOK continuously searches medical and veterinary sales jobs from employer career sites and ranks the best matches for your experience and goals.</p>
       <div style="margin-bottom:0;">
         <div class="hero-actions" style="margin-bottom:0;">
           <a href="rook-onboarding-v2.html" class="btn btn-primary" style="font-size:16px; padding:16px 30px; font-weight:700;">START YOUR 3-DAY FREE TRIAL</a>
@@ -806,6 +836,11 @@
   </div>
 </section>
 
+
+<div class="rm-sticky-cta" id="rmStickyCta" style="display:none">
+  <a href="rook-onboarding-v2.html" class="rm-btn-primary">Find My Matches</a>
+  <div class="rm-trust">Takes about 2 minutes · No payment yet</div>
+</div>
 <footer>
   <div class="wrap">
     <div class="footer-grid">

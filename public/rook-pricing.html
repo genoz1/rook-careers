@@ -85,27 +85,61 @@
     .hero h1{font-size:32px;}
     .plan-card{padding:32px 24px;}
   }
+
+  #rmPricingSticky{display:none}
+  @media(max-width:880px){#rmPricingSticky{display:block !important}
+
+    header.nav{background:#fff; border-bottom:1px solid #eaf1f6;}
+    .nav-inner{height:64px; padding:0 20px; max-width:none;}
+    .logo{color:#062d55;}
+    nav.links,.nav-cta{display:none!important;}
+    /* Pricing hero */
+    .pricing-hero,.page-hero{padding:28px 20px 20px; text-align:center;}
+    /* Price card */
+    .plan-card,.price-card,.pricecard{border:1px solid #cfe2ef; border-radius:24px; background:#f6fbff; padding:20px; margin:0 20px; box-shadow:0 15px 36px rgba(7,44,80,.08);}
+    .price-amount,.pricebig{font-size:56px; line-height:1; color:#062d55; font-weight:900; letter-spacing:-.055em;}
+    .plan-label{font-size:12px; color:#0877d1; font-weight:900; letter-spacing:.12em;}
+    /* CTA */
+    .cta-section{padding:24px 20px;}
+    .plan-cta,.cta-btn{min-height:54px; border-radius:15px; background:linear-gradient(105deg,#062d55,#0877d1); color:#fff; font-weight:850; width:100%; justify-content:center;}
+    /* FAQ */
+    .faq-section{padding:24px 20px;}
+    .faq-item{border-bottom:1px solid #dce7f0; padding:16px 0;}
+    .faq-item h3{font-size:15px; color:#062d55;}
+    .faq-item p{font-size:13px; color:#637589;}
+  }
+
+
+  @media(max-width:880px){
+    header.nav{ background:#fff!important; }
+    .nav-inner{ height:64px!important; max-width:none!important; padding:0 20px!important; }
+    .logo{ color:#062d55!important; }
+    nav.links,.nav-cta{ display:none!important; }
+  }
+
 </style>
+<link rel="stylesheet" href="rook-mobile.css">
 </head>
 <body>
 
 <header class="nav">
   <div class="nav-inner">
     <div class="logo" style="gap:8px;">
-      <img src="assets/rook-icon-192.png" alt="ROOK" style="height:43px; width:auto; display:block;"><span style="font-family:var(--font-display); font-weight:700; font-size:36px; letter-spacing:-0.02em; color:#EDF3FF; line-height:1;">ROOK</span>
+      <img src="assets/rook-logo.png" style="height:35px;width:35px;border-radius:10px;object-fit:cover;display:block;"><span style="font-family:var(--font-display); font-weight:700; font-size:36px; letter-spacing:-0.02em; color:#EDF3FF; line-height:1;">ROOK</span>
     </div>
     <div class="nav-cta">
       <a href="index.html" class="btn btn-outline">Back to Home</a>
       <a href="rook-onboarding-v2.html" class="btn btn-primary">Get Started</a>
     </div>
-  </div>
+    <a href="rook-mobile-menu.html" class="rm-hamburger" aria-label="Menu">☰</a>
+</div>
 </header>
 
 <section class="hero">
   <div class="wrap">
     <div class="eyebrow">Simple, Serious Pricing</div>
     <h1>One plan. Everything included.</h1>
-    <p>No crippled free tier. No per-feature upsells. Full access to matching, tailored résumés, and application tools from day one.</p>
+    <p>Full access to matching, résumés, and application tools from day one.</p>
   </div>
 </section>
 
@@ -123,7 +157,13 @@
          so a page that never gets this far (JS disabled, fetch fails)
          still shows the correct, safe default: no trial claim. -->
     <div id="trialBanner" style="display:none; background:#F0F7FF; border:1px solid #D6E7FF; border-radius:10px; padding:10px 16px; margin:14px 0; text-align:center; font-size:14px; font-weight:700; color:#1463FF;"></div>
-    <ul class="plan-list">
+    <!-- CTA is placed before the benefits list so it is visible in the
+         first viewport at mobile sizes together with the price and terms.
+         The pricing disclosure sits directly under the button as required. -->
+    <a href="#" class="btn btn-primary" id="subscribeBtn" onclick="handleSubscribe(event)">Get My Matches</a>
+    <div id="renewalDisclosure" style="display:none; font-size:12px; color:var(--muted, #5B6B85); text-align:center; margin-top:10px; line-height:1.5;"></div>
+    <div id="subscribeMsg" style="font-size:12.5px; color:#C23B3B; text-align:center; margin-top:10px;"></div>
+    <ul class="plan-list" style="margin-top:18px;">
       <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Unlimited AI-matched opportunities</li>
       <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Daily job discovery across trusted sources</li>
       <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Detailed match analysis for every role</li>
@@ -131,19 +171,6 @@
       <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Cover letters &amp; recruiter outreach messages</li>
       <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Interview prep &amp; application tracking</li>
     </ul>
-    <!-- Default text is the ORIGINAL $29-upfront wording — matches what
-         the page showed before the trial existed. JS below switches
-         this to the trial CTA only once the server confirms a trial is
-         actually active, so "no trial" is always the safe fallback,
-         never the other way around. -->
-    <a href="#" class="btn btn-primary" id="subscribeBtn" onclick="handleSubscribe(event)">Get My Matches</a>
-    <!-- Direct instruction: the automatic $29/month renewal must be
-         clear BEFORE the customer enters payment information — this
-         sits directly under the button, on our own page, before Stripe's
-         hosted checkout ever loads. Empty/hidden by default, same
-         safe-fallback pattern as the banner above. -->
-    <div id="renewalDisclosure" style="display:none; font-size:12px; color:var(--muted, #5B6B85); text-align:center; margin-top:10px; line-height:1.5;"></div>
-    <div id="subscribeMsg" style="font-size:12.5px; color:#C23B3B; text-align:center; margin-top:10px;"></div>
   </div>
 </div>
 
@@ -176,8 +203,20 @@
         const disclosure = document.getElementById('renewalDisclosure');
         disclosure.textContent = `$0 today. Then $29/month after your ${days}-day free trial. Cancel anytime.`;
         disclosure.style.display = 'block';
+        // Update mobile sticky CTA to agree with the main subscribe button
+        const rmBtn = document.getElementById('rmStickyBtn');
+        const rmDisclose = document.getElementById('rmStickyDisclose');
+        if (rmBtn) rmBtn.textContent = `Start Your ${days}-Day Free Trial`;
+        if (rmDisclose) rmDisclose.textContent = `$0 today · Then $29/month after ${days} days · Cancel anytime`;
+        // Also show a no-trial fallback when trial is off
         document.getElementById('faqTrialAnswer').textContent =
           `Yes. ROOK includes a ${days}-day free trial with full access. After the trial, the subscription is $29/month unless you cancel before the trial ends.`;
+      } else {
+        // No trial — update mobile sticky to agree with paid-only wording
+        const rmBtn = document.getElementById('rmStickyBtn');
+        const rmDisclose = document.getElementById('rmStickyDisclose');
+        if (rmBtn) rmBtn.textContent = 'Get Full Access — $29/month';
+        if (rmDisclose) rmDisclose.textContent = 'Cancel anytime';
       }
       // trialDays === 0 (or the request fails): leave the page exactly
       // as it was written above — "Get My Matches," no banner, no
@@ -268,5 +307,9 @@ s.parentNode.insertBefore(b, s);})(window.lintrk);
 <noscript>
 <img height="1" width="1" style="display:none;" alt="" src="https://px.ads.linkedin.com/collect/?pid=9629410&fmt=gif" />
 </noscript>
+<div class="rm-sticky-cta" id="rmPricingSticky">
+  <a href="#" class="rm-btn-primary" id="rmStickyBtn" onclick="handleSubscribe(event)">Get My Matches</a>
+  <div class="rm-trust" id="rmStickyDisclose"></div>
+</div>
 </body>
 </html>

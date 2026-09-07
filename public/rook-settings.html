@@ -127,17 +127,48 @@
 .exp-entry{border:1px solid var(--border); border-radius:12px; padding:18px; margin-bottom:14px; position:relative;}
 .exp-entry .remove{position:absolute; top:14px; right:16px; font-size:12px; color:var(--muted); font-weight:600; cursor:pointer;}
 .add-entry{display:inline-block; font-size:13px; font-weight:600; color:var(--royal); cursor:pointer; margin-bottom:16px;}
+
+  /* ══ MEMBER MOBILE (max-width:880px) ════════════════════════ */
+  @media(max-width:880px){
+    /* Profile top */
+    #mobileProfileTop{display:none}
+    @media(max-width:880px){#mobileProfileTop{display:block}}
+    .profile-top,.profiletop{text-align:center; margin-bottom:19px; padding:20px 18px 0;}
+    .profile-avatar,.profileavatar{width:72px; height:72px; border-radius:22px; margin:0 auto 10px; background:linear-gradient(145deg,#062d55,#0877d1); display:grid; place-items:center; color:#fff; font-size:25px; font-weight:900;}
+    .profile-name,.profiletop h1{font-size:25px; color:#062d55; margin:0 0 4px;}
+    .profile-subtitle,.profiletop p{font-size:12px; color:#637589; margin:0;}
+    /* Resume card */
+    .resume-card,.resumeok{border-radius:17px; background:#f1faf4; border:1px solid #d3eedc; padding:15px; display:flex; gap:11px; align-items:center; margin:0 0 16px;}
+    .resume-card .icon{margin:0; width:43px; height:43px; border-radius:13px; background:#dff5e6; color:#27844b; display:grid; place-items:center; font-size:20px; flex-shrink:0;}
+    .resume-card h3{font-size:14px; margin:0 0 3px; color:#062d55;}
+    .resume-card p{font-size:10px; margin:0; color:#637589;}
+    /* Settings list */
+    .settings-group,.settings{display:grid; gap:10px; margin-bottom:20px;}
+    .setting-row,.setting{border:1px solid #dce7f0; border-radius:17px; background:#fff; padding:15px; display:flex; justify-content:space-between; gap:12px; align-items:center;}
+    .setting-row h3,.setting h3{font-size:14px; color:#062d55; margin:0 0 3px;}
+    .setting-row p,.setting p{font-size:10px; color:#637589; margin:0;}
+    .setting-row .chevron,.setting b{color:#0877d1; font-size:18px;}
+    /* Section heads */
+    .section-label,.listhead h2{font-size:21px; color:#062d55; margin:20px 0 10px;}
+  }
+
+
+  @media(max-width:880px){
+    .settings-sidebar,.sidebar,.sidebar-nav,[class*="settings-nav"]{display:none!important;}
+    .settings-shell{grid-template-columns:1fr!important;}
+    .settings-main,.main-content{padding:18px!important;}
+  }
+
 </style>
+<link rel="stylesheet" href="rook-mobile.css">
 </head>
 <body>
 
 <div class="mobile-app-bar">
   <div class="logo" style="gap:8px;">
-    <img src="assets/rook-icon-192.png" alt="ROOK"><span style="font-family:var(--font-display); font-weight:700; letter-spacing:-0.02em; color:#EDF3FF; line-height:1;">ROOK</span>
+    <img src="assets/rook-logo.png" alt="ROOK" style="height:35px;width:35px;border-radius:10px;object-fit:cover;"><span style="font-family:var(--font-display); font-weight:700; letter-spacing:-0.02em; color:#EDF3FF; line-height:1;">ROOK</span>
   </div>
-  <button type="button" class="mobile-menu-btn" onclick="document.querySelector('.sidebar').classList.toggle('mobile-open')" aria-label="Menu">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-  </button>
+  <a href="rook-mobile-menu.html" class="mobile-menu-btn" aria-label="Menu" style="display:grid;place-items:center;width:38px;height:38px;border-radius:13px;background:linear-gradient(145deg,#062d55,#0877d1);color:#fff;font-size:18px;font-weight:900;text-decoration:none;">☰</a>
 </div>
 
 <div class="shell">
@@ -845,5 +876,11 @@ s.parentNode.insertBefore(b, s);})(window.lintrk);
 <noscript>
 <img height="1" width="1" style="display:none;" alt="" src="https://px.ads.linkedin.com/collect/?pid=9629410&fmt=gif" />
 </noscript>
+<nav class="rm-bottomnav">
+  <a href="rook-dashboard.html" class="rm-bn-item "><span>⌂</span>Home</a>
+  <a href="rook-search.html" class="rm-bn-item "><span>◎</span>Matches</a>
+  <a href="rook-saved.html" class="rm-bn-item "><span>♡</span>Saved</a>
+  <a href="rook-settings.html" class="rm-bn-item rm-active"><span>◉</span>Profile</a>
+</nav>
 </body>
 </html>
