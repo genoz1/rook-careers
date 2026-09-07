@@ -855,14 +855,30 @@
       if (e.key === 'Enter') { e.preventDefault(); submitZip(); }
     });
 
-    // After page load completes, re-sync the visible input in case the
-    // auto-fill (home_zip prefill + searchNearLocation auto-run) set a
-    // value after this function executed.
-    setTimeout(() => {
-      if (mainInput && mainInput.value && !mobileInput.value) {
-        mobileInput.value = mainInput.value;
-      }
-    }, 1500);
+    // After the injection completes, patch window.searchNearLocation so that
+    // EVERY invocation — including the automatic home_zip prefill that runs
+    // inside loadJobs() — syncs mobileZipInput.value before searching.
+    //
+    // Why this is needed: the home_zip prefill sets nearLocationInput.value
+    // programmatically (not via user interaction), so no 'input' event fires
+    // and the bidirectional listener above misses it. A setTimeout-based
+    // deferred sync is a race condition on slow connections where the profile
+    // fetch + jobs fetch together take longer than the fixed delay.
+    //
+    // This works because searchNearLocation is a top-level function in a
+    // non-module <script>, which puts it on window. Calls to searchNearLocation()
+    // inside the page's loadJobs() resolve via the global scope chain and
+    // therefore pick up this patched version.
+    if (typeof window.searchNearLocation === 'function') {
+      const _origSearch = window.searchNearLocation;
+      window.searchNearLocation = async function() {
+        // Sync the visible input from the canonical input before searching.
+        // This fires regardless of whether the value was set by the user or
+        // by programmatic assignment (e.g. home_zip prefill).
+        if (mainInput && mobileInput) mobileInput.value = mainInput.value;
+        return _origSearch.apply(this, arguments);
+      };
+    }
   })();
 
   function applyFiltersAndRender() {
