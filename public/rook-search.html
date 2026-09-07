@@ -1155,9 +1155,17 @@
     const expandToggle = extraCount > 0
       ? `<a href="#" class="jtag-toggle" onclick="this.closest('.tag-row').classList.toggle('expanded'); this.style.display='none'; return false;">+${extraCount} more</a>`
       : '';
-    const nearDistance = nearLocationCoords
-      ? `<div style="font-size:12px; color:var(--royal); font-weight:600; margin-top:4px;">${Math.round(distanceMilesClient(nearLocationCoords.lat, nearLocationCoords.lng, job.job_lat, job.job_lng))} miles from your search location</div>`
-      : '';
+    const nearDistance = (() => {
+      if (!nearLocationCoords) return '';
+      const dist = distanceMilesClient(
+        nearLocationCoords.lat, nearLocationCoords.lng,
+        job.job_lat, job.job_lng
+      );
+      // distanceMilesClient returns Infinity when job lat/lng are unavailable.
+      // Omit the line entirely rather than rendering "Infinity miles" or NaN.
+      if (!isFinite(dist)) return '';
+      return `<div style="font-size:12px; color:var(--royal); font-weight:600; margin-top:4px;">${Math.round(dist)} miles from your search location</div>`;
+    })();
 
     // Same treatment as the dashboard: recruiter-posted jobs get a
     // visibly distinct card (purple accent, badge) rather than blending

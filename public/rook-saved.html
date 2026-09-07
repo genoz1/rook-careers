@@ -322,7 +322,20 @@ let allSavedJobs = [];
     allSavedJobs = jobs;
     grid.innerHTML = jobs.map(renderSavedCard).join('');
   } catch (err) {
-    grid.innerHTML = `<div class="empty-hint">Could not load saved jobs (${escapeHtml(err.message)}). Showing example cards below — see ROOK-Setup-Guide.pdf.</div>`;
+    console.error('[saved-jobs] load failed:', err);
+    // Show a clean, user-facing error with a Retry action.
+    // No internal error details, no reference to ROOK-Setup-Guide.pdf,
+    // and no demo fallback — the demo fallback wording was incorrect
+    // (no demo cards exist in this page's HTML).
+    grid.innerHTML = `
+      <div class="empty-hint" style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:48px 20px;text-align:center;">
+        <div style="font-size:32px;">⚠️</div>
+        <div>
+          <strong style="display:block;margin-bottom:6px;color:var(--navy);">Unable to load saved jobs</strong>
+          <span style="color:var(--muted);font-size:14px;">Check your connection and try again.</span>
+        </div>
+        <button type="button" class="btn btn-outline" onclick="location.reload()">Retry</button>
+      </div>`;
   }
 })();
 
