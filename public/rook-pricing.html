@@ -87,6 +87,7 @@
   }
 
   #rmPricingSticky{display:none}
+  .price-subtext{display:none} /* hidden on desktop; shown only at max-width:880px below */
   @media(max-width:880px){#rmPricingSticky{display:block !important}
 
     header.nav{background:#fff; border-bottom:1px solid #eaf1f6;}
@@ -97,6 +98,8 @@
     .pricing-hero,.page-hero{padding:28px 20px 20px; text-align:center;}
     /* Price card */
     .plan-card,.price-card,.pricecard{border:1px solid #cfe2ef; border-radius:24px; background:#f6fbff; padding:20px; margin:0 20px; box-shadow:0 15px 36px rgba(7,44,80,.08);}
+    /* Secondary price context — mobile only */
+    .price-subtext{display:block; font-size:13.5px; font-weight:700; color:var(--royal,#1463FF); text-align:center; margin:2px 0 4px; letter-spacing:0;}
     .price-amount,.pricebig{font-size:56px; line-height:1; color:#062d55; font-weight:900; letter-spacing:-.055em;}
     .plan-label{font-size:12px; color:#0877d1; font-weight:900; letter-spacing:.12em;}
     /* CTA */
@@ -150,6 +153,10 @@
       <span class="price">$29</span>
       <span class="period">/ month</span>
     </div>
+    <!-- Mobile-only secondary context — always true for the $29/month plan.
+         Hidden on desktop via .price-subtext{display:none} below;
+         shown only at max-width:880px so the desktop card is unchanged. -->
+    <div class="price-subtext">Less than $1 a day</div>
     <div class="annual-note">or $249/year — save ~28%</div>
     <!-- Empty by default (no banner) — matches the original $29-upfront
          design exactly when the trial is off/unset. Only filled in by
@@ -197,8 +204,11 @@
       if (trialActive) {
         subscribeBtnDefaultText = `Start Your ${days}-Day Free Trial`;
         document.getElementById('subscribeBtn').textContent = subscribeBtnDefaultText;
+        // Correct singular for a one-day trial; compound-adjective form (N-day) is
+        // already correct English for any N and requires no change.
+        const dayWord = days === 1 ? 'day' : 'days';
         const banner = document.getElementById('trialBanner');
-        banner.textContent = `${days} days free, then $29/month. Cancel anytime.`;
+        banner.textContent = `${days} ${dayWord} free, then $29/month. Cancel anytime.`;
         banner.style.display = 'block';
         const disclosure = document.getElementById('renewalDisclosure');
         disclosure.textContent = `$0 today. Then $29/month after your ${days}-day free trial. Cancel anytime.`;
@@ -207,7 +217,7 @@
         const rmBtn = document.getElementById('rmStickyBtn');
         const rmDisclose = document.getElementById('rmStickyDisclose');
         if (rmBtn) rmBtn.textContent = `Start Your ${days}-Day Free Trial`;
-        if (rmDisclose) rmDisclose.textContent = `$0 today · Then $29/month after ${days} days · Cancel anytime`;
+        if (rmDisclose) rmDisclose.textContent = `$0 today · Then $29/month after ${days} ${dayWord} · Cancel anytime`;
         // Also show a no-trial fallback when trial is off
         document.getElementById('faqTrialAnswer').textContent =
           `Yes. ROOK includes a ${days}-day free trial with full access. After the trial, the subscription is $29/month unless you cancel before the trial ends.`;
