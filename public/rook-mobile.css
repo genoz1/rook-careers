@@ -1096,3 +1096,61 @@
     color:inherit;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   BOTTOM NAV IMPROVEMENTS — readable labels, active background
+   Appended; overrides the earlier .rm-bottomnav rules above.
+   ══════════════════════════════════════════════════════════════ */
+@media(max-width:880px){
+
+  /* Taller bar — room for 24px icon + 13px label + safe-area padding */
+  .rm-bottomnav{
+    height:76px !important;
+    padding:6px 8px calc(6px + env(safe-area-inset-bottom)) !important;
+    background:#fff !important;
+    border-top:1.5px solid #dce7f0 !important;
+    align-items:center !important;
+  }
+
+  /* Each tab item */
+  .rm-bottomnav a,
+  .rm-bottomnav .rm-bn-item{
+    display:flex !important;
+    flex-direction:column !important;
+    align-items:center !important;
+    justify-content:center !important;
+    gap:3px !important;
+    padding:6px 5px !important;
+    border-radius:12px !important;
+    font-size:12px !important;        /* was 9px */
+    font-weight:600 !important;
+    color:#637589 !important;
+    text-decoration:none !important;
+    transition:background .15s,color .15s !important;
+    min-height:56px !important;       /* comfortable touch target */
+    width:100% !important;
+    text-align:center !important;
+  }
+
+  /* Icon */
+  .rm-bottomnav a span,
+  .rm-bottomnav .rm-bn-item span{
+    font-size:22px !important;
+    line-height:1 !important;
+    display:block !important;
+  }
+
+  /* Active tab — pale-blue pill background, stronger navy-blue text */
+  .rm-bottomnav a.rm-active,
+  .rm-bottomnav .rm-bn-item.rm-active{
+    color:#0877d1 !important;
+    background:#eff8ff !important;
+    font-weight:700 !important;
+  }
+
+  /* Inactive tabs: slightly darker than before for better legibility */
+  .rm-bottomnav a:not(.rm-active),
+  .rm-bottomnav .rm-bn-item:not(.rm-active){
+    color:#47637c !important;
+  }
+}

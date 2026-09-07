@@ -2,102 +2,225 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
-<title>ROOK — Menu</title>
 <link rel="icon" href="assets/favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="assets/rook-icon-180.png">
+<title>ROOK — Menu</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<!-- Auth layer — needed to check session and call sign-out -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="rook-config.js"></script>
+<script src="rook-auth.js"></script>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:Inter,ui-sans-serif,-apple-system,sans-serif;background:#f7fbfe;min-height:100vh}
   a{text-decoration:none;color:inherit}
   :root{
-    --navy:#062d55;--blue:#0877d1;--green:#53c878;
-    --ink:#10243a;--muted:#637589;--line:#dce7f0;--cloud:#f3f8fc;
+    --navy:#062d55;--blue:#0877d1;--line:#dce7f0;--cloud:#f3f8fc;--muted:#637589;
   }
-  .page{width:100%;min-height:100vh;background:#fff}
 
-  /* ── Compact header ── */
+  /* ── Header ── */
   .nav{
     height:64px;padding:0 20px;
     display:flex;align-items:center;justify-content:space-between;
-    border-bottom:1px solid #eaf1f6;background:rgba(255,255,255,.96);
+    border-bottom:1px solid var(--line);background:#fff;
     position:sticky;top:0;z-index:5;
   }
   .brand{display:flex;align-items:center;gap:9px;font-weight:900;letter-spacing:.08em;color:var(--navy);font-size:17px}
   .brand img{width:35px;height:35px;border-radius:10px;object-fit:cover}
   .close-btn{
-    width:42px;height:42px;
-    border:1px solid var(--line);border-radius:13px;
+    width:42px;height:42px;border:1.5px solid var(--line);border-radius:13px;
     background:var(--cloud);display:grid;place-items:center;
-    color:var(--navy);font-size:22px;cursor:pointer;
-    text-decoration:none;
+    color:var(--navy);font-size:22px;cursor:pointer;line-height:1;
+    font-weight:400;
   }
 
-  /* ── Menu panel ── */
-  .menu-panel{
-    padding:26px 20px;
-    background:linear-gradient(165deg,#fff,#eef9ff);
-    min-height:calc(100vh - 64px);
+  /* ── Panels ── */
+  .menu-panel{padding:20px 20px 32px;background:linear-gradient(165deg,#fff,#eef9ff);min-height:calc(100vh - 64px)}
+
+  /* ── Section headings ── */
+  .section-label{
+    font-size:10px;font-weight:850;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--blue);margin:0 0 6px;
   }
-  .eyebrow{
-    color:var(--blue);font-weight:850;letter-spacing:.13em;
-    text-transform:uppercase;font-size:11px;margin-bottom:18px;
-  }
+  .section-label.secondary{ color:var(--muted);margin-top:28px; }
+
+  /* ── Member nav links ── */
   .navlink{
     display:flex;align-items:center;justify-content:space-between;
-    padding:17px 2px;border-bottom:1px solid var(--line);
+    padding:16px 2px;border-bottom:1px solid var(--line);
     font-size:18px;font-weight:800;color:var(--navy);
   }
-  .navlink span{color:var(--blue)}
+  .navlink .arrow{color:var(--blue);font-size:20px;font-weight:400}
+  .navlink.secondary{font-size:15px;font-weight:600;color:#47637c}
+  .navlink.secondary .arrow{font-size:16px;color:var(--muted)}
 
-  /* ── Primary button ── */
+  /* Sign-out styled distinctly — action, not destination */
+  .navlink.signout{color:#8b1c1c;border-bottom:none;margin-top:4px}
+  .navlink.signout .arrow{color:#c94444}
+
+  /* ── Divider ── */
+  .divider{height:1px;background:var(--line);margin:8px 0 0}
+
+  /* ── Public-only buttons ── */
   .primary{
     display:flex;align-items:center;justify-content:center;
-    min-height:54px;width:100%;border:0;border-radius:15px;
-    padding:14px 18px;
-    background:linear-gradient(105deg,var(--navy),var(--blue));
-    color:#fff;font-weight:850;font-size:16px;
-    box-shadow:0 11px 25px rgba(8,78,137,.22);
-    cursor:pointer;margin-top:22px;
-    font-family:inherit;
+    min-height:54px;width:100%;border:0;border-radius:15px;padding:14px 18px;
+    background:linear-gradient(105deg,var(--navy),var(--blue));color:#fff;
+    font-weight:850;font-size:16px;box-shadow:0 11px 25px rgba(8,78,137,.22);
+    cursor:pointer;margin-top:22px;font-family:inherit;
   }
-  .secondary{
+  .btn-secondary{
     display:flex;align-items:center;justify-content:center;
-    min-height:50px;width:100%;border:1.5px solid #bdd5e6;
-    border-radius:15px;padding:13px 18px;background:#fff;
-    color:var(--navy);font-weight:820;font-size:15px;
-    cursor:pointer;margin-top:10px;font-family:inherit;
+    min-height:50px;width:100%;border:1.5px solid #bdd5e6;border-radius:15px;
+    padding:13px 18px;background:#fff;color:var(--navy);font-weight:820;
+    font-size:15px;cursor:pointer;margin-top:10px;font-family:inherit;
   }
   .trust{text-align:center;color:var(--muted);font-size:11px;margin-top:14px}
+
+  /* ── Loading shimmer ── */
+  .loading-row{
+    height:52px;border-bottom:1px solid var(--line);
+    background:linear-gradient(90deg,#f0f4f8 25%,#e6ecf2 37%,#f0f4f8 63%);
+    background-size:400% 100%;animation:shimmer 1.4s ease infinite;
+    border-radius:4px;margin-bottom:2px;
+  }
+  @keyframes shimmer{0%{background-position:100% 50%}100%{background-position:0 50%}}
 </style>
 </head>
 <body>
-<main class="page">
-  <header class="nav">
-    <a class="brand" href="index.html">
-      <img src="assets/rook-logo.png" alt="ROOK logo">ROOK
-    </a>
-    <!-- Close / back — uses browser history so it returns to the previous page -->
-    <a class="close-btn" href="javascript:history.back()" aria-label="Close menu">×</a>
-  </header>
+<header class="nav">
+  <a class="brand" id="brandLink" href="index.html">
+    <img src="assets/rook-logo.png" alt="ROOK logo">ROOK
+  </a>
+  <button class="close-btn" id="closeBtn" aria-label="Close menu">×</button>
+</header>
 
-  <section class="menu-panel">
-    <div class="eyebrow">Explore ROOK</div>
+<!-- Loading state — shown briefly while session is checked -->
+<section class="menu-panel" id="loadingPanel">
+  <div class="loading-row"></div>
+  <div class="loading-row"></div>
+  <div class="loading-row"></div>
+  <div class="loading-row"></div>
+</section>
 
-    <a class="navlink" href="rook-browse.html">Find Jobs <span>→</span></a>
-    <a class="navlink" href="rook-companies.html">Companies We Search <span>→</span></a>
-    <a class="navlink" href="rook-pricing.html">Pricing <span>→</span></a>
-    <a class="navlink" href="rook-about.html">About ROOK <span>→</span></a>
-    <a class="navlink" href="rook-employers.html">For Employers <span>→</span></a>
+<!-- Member menu — shown when signed in -->
+<section class="menu-panel" id="memberPanel" style="display:none">
+  <div class="section-label">Your Account</div>
 
-    <a class="primary" href="rook-onboarding-v2.html">Find My Matches</a>
-    <a class="secondary" href="rook-login.html">Log In</a>
+  <a class="navlink" href="rook-dashboard.html">
+    Dashboard <span class="arrow">→</span>
+  </a>
+  <a class="navlink" href="rook-search.html">
+    My Matches <span class="arrow">→</span>
+  </a>
+  <a class="navlink" href="rook-saved.html">
+    Saved Jobs <span class="arrow">→</span>
+  </a>
+  <a class="navlink" href="rook-settings.html">
+    Profile &amp; Preferences <span class="arrow">→</span>
+  </a>
+  <a class="navlink" href="rook-settings.html">
+    Membership &amp; Billing <span class="arrow">→</span>
+  </a>
+  <a class="navlink signout" href="#" id="signOutBtn">
+    Sign Out <span class="arrow">→</span>
+  </a>
 
-    <div class="trust">Medical and veterinary sales only</div>
-  </section>
-</main>
+  <div class="divider"></div>
+  <div class="section-label secondary">Explore ROOK</div>
+
+  <a class="navlink secondary" href="rook-browse.html">
+    Find Jobs <span class="arrow">→</span>
+  </a>
+  <a class="navlink secondary" href="rook-companies.html">
+    Companies We Search <span class="arrow">→</span>
+  </a>
+  <a class="navlink secondary" href="rook-pricing.html">
+    Pricing <span class="arrow">→</span>
+  </a>
+  <a class="navlink secondary" href="rook-about.html">
+    About ROOK <span class="arrow">→</span>
+  </a>
+  <a class="navlink secondary" href="rook-employers.html">
+    For Employers <span class="arrow">→</span>
+  </a>
+</section>
+
+<!-- Public menu — shown when signed out -->
+<section class="menu-panel" id="publicPanel" style="display:none">
+  <div class="section-label">Explore ROOK</div>
+
+  <a class="navlink" href="rook-browse.html">Find Jobs <span class="arrow">→</span></a>
+  <a class="navlink" href="rook-companies.html">Companies We Search <span class="arrow">→</span></a>
+  <a class="navlink" href="rook-pricing.html">Pricing <span class="arrow">→</span></a>
+  <a class="navlink" href="rook-about.html">About ROOK <span class="arrow">→</span></a>
+  <a class="navlink" href="rook-employers.html">For Employers <span class="arrow">→</span></a>
+
+  <a class="primary" href="rook-onboarding-v2.html">Find My Matches</a>
+  <a class="btn-secondary" href="rook-login.html">Log In</a>
+  <div class="trust">Medical and veterinary sales only</div>
+</section>
+
+<script>
+  // ── Close button — go back to originating page ───────────────────────────────
+  // Uses history.back() so the originating page's state is preserved.
+  // If there is no previous history entry (page opened as a direct URL
+  // or new tab), fall back to the member dashboard or the homepage.
+  let _isSignedIn = false;
+  document.getElementById('closeBtn').addEventListener('click', function() {
+    if (document.referrer && document.referrer !== window.location.href) {
+      history.back();
+    } else {
+      window.location.href = _isSignedIn ? 'rook-dashboard.html' : 'index.html';
+    }
+  });
+
+  // ── Session check — determines which menu to show ────────────────────────────
+  (async function initMenu() {
+    let session = null;
+    try {
+      // rookSupabase is initialised by rook-auth.js which loaded above.
+      // getSession() reads from the in-memory/localStorage cache — no
+      // network request when a valid token is already stored, so this
+      // resolves in < 5 ms on a returning visitor.
+      const { data } = await rookSupabase.auth.getSession();
+      session = data?.session ?? null;
+    } catch (e) {
+      // Any failure (no config, supabase unavailable) → public menu.
+    }
+
+    _isSignedIn = !!session;
+
+    document.getElementById('loadingPanel').style.display = 'none';
+
+    if (session) {
+      document.getElementById('memberPanel').style.display = 'block';
+      // Update brand link to go to dashboard for signed-in users
+      document.getElementById('brandLink').href = 'rook-dashboard.html';
+    } else {
+      document.getElementById('publicPanel').style.display = 'block';
+    }
+  })();
+
+  // ── Sign out ─────────────────────────────────────────────────────────────────
+  // Uses rookSignOut() from rook-auth.js which clears the Supabase session
+  // and redirects. Destination is the homepage, not the login page, so a
+  // just-signed-out visitor lands on the public marketing site rather than
+  // being immediately prompted to sign in again.
+  document.getElementById('signOutBtn').addEventListener('click', async function(e) {
+    e.preventDefault();
+    this.textContent = 'Signing out…';
+    this.style.pointerEvents = 'none';
+    try {
+      await rookSignOut('index.html');
+    } catch(err) {
+      // rookSignOut already redirects; this catch only fires on unexpected errors.
+      window.location.href = 'index.html';
+    }
+  });
+</script>
 </body>
 </html>
