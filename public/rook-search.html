@@ -140,6 +140,68 @@
   .pagination a{width:34px; height:34px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:600; background:#fff; box-shadow:0 2px 8px -4px rgba(11,29,58,0.1);}
   .pagination a.active{background:var(--navy); color:#fff;}
 
+  /* ── Mobile ZIP row — always visible above results on mobile ── */
+  /* Hidden on desktop; shown inside the same max-width:900px block
+     that reveals the Filters toggle and hides the filters aside. */
+  .mobile-zip-row{
+    display:none;
+    flex-direction:column;
+    gap:6px;
+    margin-bottom:12px;
+    background:#fff;
+    border:1px solid var(--border, #E3E8F0);
+    border-radius:12px;
+    padding:12px 14px;
+    box-shadow:0 2px 8px -4px rgba(11,29,58,0.08);
+  }
+  .mobile-zip-label{
+    font-size:11px;
+    font-weight:700;
+    letter-spacing:.06em;
+    text-transform:uppercase;
+    color:#5B6B85;
+  }
+  .mobile-zip-field{
+    display:flex;
+    gap:8px;
+    align-items:center;
+  }
+  .mobile-zip-input{
+    flex:1;
+    min-width:0;
+    height:42px;
+    border:1.5px solid var(--border, #E3E8F0);
+    border-radius:10px;
+    padding:0 12px;
+    font-size:15px;
+    color:var(--navy, #071E41);
+    background:#fff;
+    outline:none;
+    transition:border-color .15s;
+  }
+  .mobile-zip-input:focus{ border-color:var(--royal, #1463FF); }
+  .mobile-zip-go{
+    height:42px;
+    padding:0 16px;
+    border:0;
+    border-radius:10px;
+    background:var(--navy, #071E41);
+    color:#fff;
+    font-size:14px;
+    font-weight:700;
+    white-space:nowrap;
+    cursor:pointer;
+    flex-shrink:0;
+    font-family:inherit;
+  }
+  .mobile-zip-status{
+    font-size:11.5px;
+    color:#8B96AB;
+    min-height:0;
+  }
+
+  /* ── Mobile ZIP row — desktop: hidden ── */
+
   /* Toggle button lives inside main (injected by JS) — never in the grid */
   .mobile-filters-toggle{
     display:none; align-items:center; justify-content:space-between; gap:10px;
@@ -183,6 +245,7 @@
     .filters{display:none;}
     .filters.mobile-open{display:block;}
     .mobile-filters-toggle{display:flex;}
+    .mobile-zip-row{display:flex;}
   }
 .spinner {
   width: 32px; height: 32px; margin: 0 auto 12px;
@@ -710,6 +773,96 @@
     btn.onclick = toggleMobileFilters;
     btn.innerHTML = '<span>🔎 Filters<span class="badge" id="mobileFiltersBadge" style="display:none;">0</span></span><span id="mobileFiltersChevron">▾</span>';
     main.insertBefore(btn, main.firstChild);
+  })();
+
+  // Inject a persistent ZIP/location row above the results (mobile only).
+  // This row is always visible, unlike the ZIP field inside the collapsed
+  // Filters panel. It is a proxy for the existing nearLocationInput:
+  //   • On input: syncs value to nearLocationInput and vice versa.
+  //   • On submit: calls the existing searchNearLocation() directly —
+  //     same geocode → live-scoring flow, no duplicate state.
+  // The existing nearLocationInput inside the filters panel remains
+  // fully functional; both views stay in sync.
+  (function injectMobileZipRow() {
+    const main = document.querySelector('main');
+    const filterToggle = document.getElementById('mobileFiltersToggle');
+    if (!main || !filterToggle) return;
+
+    const row = document.createElement('div');
+    row.id = 'mobileZipRow';
+    row.className = 'mobile-zip-row';
+    row.innerHTML = `
+      <label class="mobile-zip-label" for="mobileZipInput">ZIP code</label>
+      <div class="mobile-zip-field">
+        <input
+          type="text"
+          id="mobileZipInput"
+          class="mobile-zip-input"
+          placeholder="ZIP or city"
+          autocomplete="postal-code"
+          inputmode="numeric"
+          aria-label="ZIP code or city for location search"
+          maxlength="40"
+        >
+        <button
+          type="button"
+          id="mobileZipGo"
+          class="mobile-zip-go"
+          aria-label="Search near this location"
+        >Search</button>
+      </div>
+      <div id="mobileZipStatus" class="mobile-zip-status" aria-live="polite"></div>
+    `;
+    // Insert immediately after the Filters toggle so it appears first in the results area
+    filterToggle.insertAdjacentElement('afterend', row);
+
+    const mobileInput  = document.getElementById('mobileZipInput');
+    const mobileStatus = document.getElementById('mobileZipStatus');
+    const mainInput    = document.getElementById('nearLocationInput');
+    const mainStatus   = document.getElementById('nearLocationStatus');
+
+    // Seed the visible row with whatever value is already in the main input
+    // (the page auto-fills it from the candidate's saved ZIP on load).
+    if (mainInput && mainInput.value) mobileInput.value = mainInput.value;
+
+    // Keep the two inputs in sync — changes in either propagate to the other.
+    // This ensures the Filters panel and the visible row always show the same value.
+    mobileInput.addEventListener('input', () => {
+      if (mainInput) mainInput.value = mobileInput.value;
+    });
+    if (mainInput) {
+      mainInput.addEventListener('input', () => {
+        mobileInput.value = mainInput.value;
+      });
+    }
+
+    // Mirror the status text from the main status element so it appears
+    // in the visible row without duplicating the element.
+    // Use a MutationObserver so any text set by searchNearLocation() is reflected.
+    if (mainStatus) {
+      new MutationObserver(() => {
+        mobileStatus.innerHTML = mainStatus.innerHTML;
+      }).observe(mainStatus, { childList: true, characterData: true, subtree: true });
+    }
+
+    // Submit handler — syncs value then calls the existing searchNearLocation().
+    function submitZip() {
+      if (mainInput) mainInput.value = mobileInput.value;
+      if (typeof searchNearLocation === 'function') searchNearLocation();
+    }
+    document.getElementById('mobileZipGo').addEventListener('click', submitZip);
+    mobileInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); submitZip(); }
+    });
+
+    // After page load completes, re-sync the visible input in case the
+    // auto-fill (home_zip prefill + searchNearLocation auto-run) set a
+    // value after this function executed.
+    setTimeout(() => {
+      if (mainInput && mainInput.value && !mobileInput.value) {
+        mobileInput.value = mainInput.value;
+      }
+    }, 1500);
   })();
 
   function applyFiltersAndRender() {
