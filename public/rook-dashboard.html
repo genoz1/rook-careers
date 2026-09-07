@@ -720,15 +720,16 @@
     document.getElementById('greetingSubtitle').textContent =
       `We found ${jobs.length} opportunit${jobs.length === 1 ? 'y' : 'ies'} matching your career profile.`;
 
-    // Mobile scorehero — populated here with the same real count used above.
-    // Subtitle is neutral: "Your ranked opportunities." — we do not claim
-    // these are "new since your last visit" because that would require
-    // reliable last-visit timestamps and first_seen_at filtering, which
-    // this endpoint does not provide. The per-day new-match count is already
-    // shown accurately in the stat card above via /new-matches-today-count.
+    // Mobile scorehero — populated here with the real count from /api/jobs.
+    // The endpoint applies limit=300, so jobs.length <= 300. If the response
+    // is exactly 300 the pool may be larger; display "300+" to avoid
+    // presenting a capped page size as a precise total. Under the cap the
+    // count is the actual scored pool for this candidate.
+    // Subtitle: "Your ranked opportunities." — no claim about newness or
+    // score distribution; those are shown correctly in the stat cards above.
     const mobileCount = document.getElementById('mobileJobCount');
     const mobileSub   = document.getElementById('mobileJobSub');
-    if (mobileCount) mobileCount.textContent = jobs.length;
+    if (mobileCount) mobileCount.textContent = jobs.length >= 300 ? '300+' : String(jobs.length);
     if (mobileSub)   mobileSub.textContent   = 'Your ranked opportunities.';
   }
 
