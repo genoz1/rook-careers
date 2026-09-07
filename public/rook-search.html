@@ -194,6 +194,22 @@
     flex-shrink:0;
     font-family:inherit;
   }
+  .mobile-zip-clear{
+    height:42px;
+    width:42px;
+    border:1.5px solid var(--border, #E3E8F0);
+    border-radius:10px;
+    background:#fff;
+    color:#8B96AB;
+    font-size:16px;
+    cursor:pointer;
+    flex-shrink:0;
+    font-family:inherit;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  .mobile-zip-clear:hover{ color:var(--navy, #071E41); border-color:var(--navy, #071E41); }
   .mobile-zip-status{
     font-size:11.5px;
     color:#8B96AB;
@@ -810,6 +826,13 @@
           class="mobile-zip-go"
           aria-label="Search near this location"
         >Search</button>
+        <button
+          type="button"
+          id="mobileZipClear"
+          class="mobile-zip-clear"
+          aria-label="Clear location"
+          title="Clear location filter"
+        >✕</button>
       </div>
       <div id="mobileZipStatus" class="mobile-zip-status" aria-live="polite"></div>
     `;
@@ -821,31 +844,50 @@
     const mainInput    = document.getElementById('nearLocationInput');
     const mainStatus   = document.getElementById('nearLocationStatus');
 
-    // Seed the visible row with whatever value is already in the main input
-    // (the page auto-fills it from the candidate's saved ZIP on load).
+    // Seed from current value (profile may have loaded before injection).
     if (mainInput && mainInput.value) mobileInput.value = mainInput.value;
 
-    // Keep the two inputs in sync — changes in either propagate to the other.
-    // This ensures the Filters panel and the visible row always show the same value.
+    // Bidirectional sync for user-typed changes in either input.
     mobileInput.addEventListener('input', () => {
       if (mainInput) mainInput.value = mobileInput.value;
     });
     if (mainInput) {
       mainInput.addEventListener('input', () => {
-        mobileInput.value = mainInput.value;
+        if (document.activeElement !== mobileInput) mobileInput.value = mainInput.value;
       });
     }
 
-    // Mirror the status text from the main status element so it appears
-    // in the visible row without duplicating the element.
-    // Use a MutationObserver so any text set by searchNearLocation() is reflected.
+    // Intercept programmatic .value = assignments on nearLocationInput using
+    // Object.defineProperty on the element instance. When async profile load
+    // sets nearLocationInput.value = me.home_zip, no 'input' event fires —
+    // the descriptor setter fires immediately on any assignment, no timer
+    // or global-function modification needed.
+    const nativeDesc = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+    if (mainInput && nativeDesc) {
+      Object.defineProperty(mainInput, 'value', {
+        configurable: true,
+        get() { return nativeDesc.get.call(this); },
+        set(v) {
+          nativeDesc.set.call(this, v);
+          // Only update the visible field when the user isn't actively
+          // editing it — avoids overwriting a ZIP they typed mid-search.
+          if (mobileInput && document.activeElement !== mobileInput) {
+            mobileInput.value = v;
+          }
+        },
+      });
+    }
+
+    // Mirror status text from the hidden main status element.
     if (mainStatus) {
       new MutationObserver(() => {
         mobileStatus.innerHTML = mainStatus.innerHTML;
       }).observe(mainStatus, { childList: true, characterData: true, subtree: true });
     }
 
-    // Submit handler — syncs value then calls the existing searchNearLocation().
+    // Submit: sync mobile → main, trigger existing search.
+    // searchNearLocation does a temporary geo-sort of already-loaded jobs;
+    // it does not change the candidate's saved profile preferences.
     function submitZip() {
       if (mainInput) mainInput.value = mobileInput.value;
       if (typeof searchNearLocation === 'function') searchNearLocation();
@@ -855,29 +897,15 @@
       if (e.key === 'Enter') { e.preventDefault(); submitZip(); }
     });
 
-    // After the injection completes, patch window.searchNearLocation so that
-    // EVERY invocation — including the automatic home_zip prefill that runs
-    // inside loadJobs() — syncs mobileZipInput.value before searching.
-    //
-    // Why this is needed: the home_zip prefill sets nearLocationInput.value
-    // programmatically (not via user interaction), so no 'input' event fires
-    // and the bidirectional listener above misses it. A setTimeout-based
-    // deferred sync is a race condition on slow connections where the profile
-    // fetch + jobs fetch together take longer than the fixed delay.
-    //
-    // This works because searchNearLocation is a top-level function in a
-    // non-module <script>, which puts it on window. Calls to searchNearLocation()
-    // inside the page's loadJobs() resolve via the global scope chain and
-    // therefore pick up this patched version.
-    if (typeof window.searchNearLocation === 'function') {
-      const _origSearch = window.searchNearLocation;
-      window.searchNearLocation = async function() {
-        // Sync the visible input from the canonical input before searching.
-        // This fires regardless of whether the value was set by the user or
-        // by programmatic assignment (e.g. home_zip prefill).
-        if (mainInput && mobileInput) mobileInput.value = mainInput.value;
-        return _origSearch.apply(this, arguments);
-      };
+    // Clear: reset both inputs, re-render without geo-sort.
+    const clearBtn = document.getElementById('mobileZipClear');
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => {
+        mobileInput.value = '';
+        if (mainInput && nativeDesc) nativeDesc.set.call(mainInput, '');
+        mobileStatus.textContent = '';
+        if (typeof applyFiltersAndRender === 'function') applyFiltersAndRender();
+      });
     }
   })();
 
@@ -1075,10 +1103,22 @@
     applyFiltersAndRender();
   }
 
-  function matchLevelInfo(score) {
-    if (score == null) return { label: 'Unscored', cls: 'ml-strong' };
-    if (score >= 85) return { label: 'Excellent Match', cls: 'ml-excellent' };
-    if (score >= 75) return { label: 'Strong Match', cls: 'ml-strong' };
+  // Uses the authoritative engine classification from the backend —
+  // excellent_match flag (backend's strict multi-category determination)
+  // takes precedence over score, then recommendation field.
+  // Matches rook-dashboard.html's identical logic exactly.
+  // Never invents frontend thresholds that could disagree with the engine.
+  function matchLevelInfo(match) {
+    if (!match) return { label: 'Unscored', cls: 'ml-strong' };
+    if (match.excellent_match) return { label: 'Excellent Match', cls: 'ml-excellent' };
+    const rec = match.recommendation;
+    if (rec === 'Strong Match') return { label: 'Strong Match', cls: 'ml-strong' };
+    if (rec === 'Apply')        return { label: 'Apply',        cls: 'ml-possible' };
+    if (rec === 'Stretch Apply') return { label: 'Stretch Apply', cls: 'ml-possible' };
+    if (rec === 'Skip')         return { label: 'Possible Match', cls: 'ml-possible' };
+    // Fallback: unknown recommendation value — use score as a coarse guide
+    const score = match.overall_score;
+    if (score != null && score >= 75) return { label: 'Strong Match', cls: 'ml-strong' };
     return { label: 'Possible Match', cls: 'ml-possible' };
   }
 
@@ -1099,7 +1139,7 @@
     const match = job.match;
     const score = match?.overall_score;
     const scoreDisplay = score != null ? `${score}%` : '—';
-    const level = matchLevelInfo(score);
+    const level = matchLevelInfo(match); // pass full match object — uses excellent_match flag + recommendation
     const reasonList = (match?.reasons || []).slice(0, 3);
     // Direct instruction: cards were too tall on mobile scanning through
     // many jobs. Rather than dropping the "why" context entirely (which

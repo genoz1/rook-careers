@@ -341,6 +341,9 @@
           </div>
           <div class="err" id="resendErr"></div>
           <div style="font-size:13px;color:#27844b;font-weight:600;margin-top:8px;display:none" id="resendOk">Email resent — check your inbox.</div>
+          <div id="emailScreenLoginHint" style="display:none;margin-top:20px;padding-top:20px;border-top:1px solid var(--line);text-align:center;font-size:14px;color:var(--muted);">
+            Already have an account? <a href="rook-login.html" style="color:var(--blue);font-weight:700;">Log In</a>
+          </div>
         </div>
       </section>
 
@@ -720,6 +723,21 @@
 
       if (error) {
         showErr('accountErr', error.message);
+        return;
+      }
+
+      // Supabase returns a user object with empty identities[] when the email
+      // is already registered (email confirmation enabled). No email is sent
+      // in that case — asserting "check your email" would be false. Use
+      // privacy-safe wording that doesn't reveal registration status and
+      // gives a clear Log In path for users who already have an account.
+      const alreadyRegistered = Array.isArray(data?.user?.identities) && data.user.identities.length === 0;
+      if (alreadyRegistered) {
+        document.getElementById('checkEmailLead').textContent =
+          'If this is a new account, check your email for a confirmation link. If you already have a ROOK account, use the Log In link below.';
+        const loginHint = document.getElementById('emailScreenLoginHint');
+        if (loginHint) loginHint.style.display = 'block';
+        show('4b');
         return;
       }
 

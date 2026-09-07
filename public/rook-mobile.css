@@ -525,8 +525,9 @@
   }
 
   /* ── Settings/Profile ──────────────────────────────────────── */
-  /* Hide sidebar + restructure */
-  .settings-sidebar,[class*="settings-nav"],[class*="settings-tabs"]{
+  /* Hide only the desktop sidebar — keep the in-content .settings-nav
+     panel tab strip so all settings sections remain reachable on mobile. */
+  .settings-sidebar{
     display:none !important;
   }
   .settings-shell,.settings-layout{
@@ -534,6 +535,36 @@
   }
   .settings-main,.settings-content,.profile-main{
     padding:0 !important; max-width:none !important;
+  }
+  /* Settings tab strip: horizontal scroll chips above the panels */
+  .settings-nav{
+    display:flex !important;
+    flex-direction:row !important;
+    gap:6px !important;
+    overflow-x:auto !important;
+    padding:14px 18px 4px !important;
+    margin-bottom:12px !important;
+    scrollbar-width:none !important;
+    background:transparent !important;
+    box-shadow:none !important;
+  }
+  .settings-nav::-webkit-scrollbar{ display:none !important; }
+  .settings-nav a{
+    white-space:nowrap !important;
+    padding:9px 14px !important;
+    border-radius:99px !important;
+    font-size:13px !important;
+    font-weight:600 !important;
+    color:#47637c !important;
+    background:#fff !important;
+    border:1.5px solid #dce7f0 !important;
+    flex-shrink:0 !important;
+    min-height:0 !important;
+  }
+  .settings-nav a.active{
+    background:#062d55 !important;
+    color:#fff !important;
+    border-color:#062d55 !important;
   }
   /* Profile top */
   .rm-profiletop{ text-align:center !important; margin-bottom:19px !important; }
