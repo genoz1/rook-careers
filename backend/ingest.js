@@ -29,6 +29,9 @@ const { fetchTeamtailorJobs, normalizeTeamtailorJob } = require("./adapters/team
 const { fetchPinpointJobs, normalizePinpointJob } = require("./adapters/pinpoint");
 const { fetchEightfoldJobs, normalizeEightfoldJob } = require("./adapters/eightfold");
 const { fetchPaylocityJobs, normalizePaylocityJob } = require("./adapters/paylocity");
+const { fetchAdpJobs }    = require("./adapters/adp");
+const { fetchUkgJobs }    = require("./adapters/ukg");
+const { fetchJazzHRJobs } = require("./adapters/jazzhr");
 const { analyzeJob } = require("./ai/jobAnalysis");
 const { generateEmbedding } = require("./ai/embeddings");
 const { geocodeLocation } = require("./geocoding");
@@ -101,6 +104,18 @@ async function ingestEmployer(employer) {
     } else if (employer.ats_type === "paylocity") {
       rawJobs = await fetchPaylocityJobs(employer.ats_identifier);
       normalize = normalizePaylocityJob;
+    } else if (employer.ats_type === "adp") {
+      // ADP Workforce Now and ADP Recruiting — normalize built into adapter
+      rawJobs = await fetchAdpJobs(employer);
+      normalize = (job) => job; // adapter returns already-normalized rows
+    } else if (employer.ats_type === "ukg") {
+      // UKG Pro (UltiPro) — normalize built into adapter
+      rawJobs = await fetchUkgJobs(employer);
+      normalize = (job) => job;
+    } else if (employer.ats_type === "jazzhr") {
+      // JazzHR / ApplyToJob — normalize built into adapter
+      rawJobs = await fetchJazzHRJobs(employer);
+      normalize = (job) => job;
     } else {
       console.log(`  Skipping — no adapter for ats_type "${employer.ats_type}"`);
       return;
