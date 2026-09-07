@@ -338,7 +338,7 @@
     <div class="scorehero" id="mobileScoreboard">
       <div class="big" id="mobileJobCount">—</div>
       <h2>opportunities ranked for you</h2>
-      <p id="mobileJobSub">Your ranked opportunities.</p>
+      <p id="mobileJobSub">Loading your matches…</p>
     </div>
     <div class="stat-grid">
       <div class="stat-card"><div class="num" id="statNewMatches">—</div><div class="lbl">New Matches Today</div></div>
@@ -628,6 +628,10 @@
       }
 
       if (!Array.isArray(jobs) || jobs.length === 0) {
+        const _mc0 = document.getElementById('mobileJobCount');
+        const _ms0 = document.getElementById('mobileJobSub');
+        if (_mc0) _mc0.textContent = '0';
+        if (_ms0) _ms0.textContent = 'No ranked opportunities yet.';
         showBanner('No live jobs yet. Add employers and run <code>npm run ingest</code> — see ROOK-Setup-Guide.pdf. Showing example matches below in the meantime.');
         revealDemo();
         return;
@@ -664,6 +668,10 @@
       showBanner('Showing live jobs from your database, ranked by your real match score.', 'info');
       revealDemo();
     } catch (err) {
+      const _mce = document.getElementById('mobileJobCount');
+      const _mse = document.getElementById('mobileJobSub');
+      if (_mce) _mce.textContent = '—';
+      if (_mse) _mse.textContent = 'Unable to load opportunities.';
       showBanner('Could not reach the ROOK API (' + err.message + '). Showing example matches below — see ROOK-Setup-Guide.pdf to get the backend running.');
       revealDemo();
     }
@@ -729,8 +737,14 @@
     // score distribution; those are shown correctly in the stat cards above.
     const mobileCount = document.getElementById('mobileJobCount');
     const mobileSub   = document.getElementById('mobileJobSub');
-    if (mobileCount) mobileCount.textContent = jobs.length >= 300 ? '300+' : String(jobs.length);
-    if (mobileSub)   mobileSub.textContent   = 'Your ranked opportunities.';
+    // Count: exact when under the 300-row API cap; show 300 (not 300+)
+    // at the cap so we report the returned count without implying a known total.
+    // Label shifts to "Opportunities loaded" at the cap to signal the number
+    // is what was retrieved, not a guaranteed pool size.
+    if (mobileCount) mobileCount.textContent = jobs.length >= 300 ? '300' : String(jobs.length);
+    if (mobileSub)   mobileSub.textContent   = jobs.length >= 300
+      ? 'Opportunities loaded'
+      : 'Your ranked opportunities.';
   }
 
   // Shared by applyRecruiterToggle's sort and renderRealJobRow's card
