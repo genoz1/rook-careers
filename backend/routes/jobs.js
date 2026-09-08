@@ -1274,25 +1274,52 @@ router.get("/onboarding/match-preview", requireConfig, requireAuth, async (req, 
 
   // ── 4. Live scoring (awaited, not fire-and-forget) ──────────────────
   const scoringPromise = (async () => {
+    const t0 = Date.now();
     const activeJobs = await fetchActiveJobs(supabaseAdmin);
+    const tFetch = Date.now();
+
+    // Diagnostic: log which scoring inputs are present for this user.
+    // candidate_fit = null when resume_structured is absent, reducing
+    // overall_score to preference_fit only, which can be ~9% when
+    // distance multiplier is large and no home location is set.
+    console.log(`[match-preview] uid=${userId.slice(0,8)} ` +
+      `resume_structured=${!!profile.resume_structured} ` +
+      `candidate_embedding=${!!profile.candidate_embedding} ` +
+      `home_lat=${profile.home_lat != null} home_state=${profile.home_state || 'null'} ` +
+      `industries=${JSON.stringify(profile.desired_industries || [])} ` +
+      `fetch_ms=${tFetch - t0}`);
 
     const scored = activeJobs
       .filter((job) => !mentionsNonUsCountry(job.location_raw, job.job_lng, job.title_original))
-      .map((job) => ({ score: scoreJob(job, profile), jobId: job.id }))
+      .map((job) => ({ score: scoreJob(job, profile), jobId: job.id, job }))
       .filter((r) => r.score.overall_score != null && r.score.overall_score > 0)
       .sort((a, b) => b.score.overall_score - a.score.overall_score);
 
+    const tScore = Date.now();
+    console.log(`[match-preview] uid=${userId.slice(0,8)} score_ms=${tScore - tFetch} count=${scored.length} top=${scored[0]?.score?.overall_score ?? 'none'}`);
+
     const count = scored.length;
 
-    // Top 3 scores — no job IDs, titles, employer names, descriptions, or URLs.
-    const topThree = scored.slice(0, 3).map((r) => ({
-      overall_score:   Math.round(r.score.overall_score),
-      excellent_match: Boolean(r.score.excellent_match),
-      // The engine's own recommendation string — the front end derives the
-      // display label from excellent_match first, then falls back to this,
-      // exactly as the dashboard's card renderer does.
-      recommendation:  r.score.recommendation || null,
-    }));
+    // Top 3: preview-safe fields only. Employer identity, apply links,
+    // descriptions, and recruiter info are never included.
+    // Company names are scrubbed from titles using the existing helper.
+    const topThree = scored.slice(0, 3).map((r) => {
+      const job = r.job;
+      const rawTitle = job.title_normalized || job.title_original || null;
+      const safeTitle = (rawTitle && job.company_name)
+        ? (scrubCompanyNameFromText(rawTitle, job.company_name) || rawTitle)
+        : rawTitle;
+      return {
+        overall_score:   Math.round(r.score.overall_score),
+        excellent_match: Boolean(r.score.excellent_match),
+        recommendation:  r.score.recommendation || null,
+        // Preview-safe job detail
+        title:  safeTitle,
+        city:   job.city  || null,
+        state:  job.state || null,
+        reasons: (r.score.reasons || []).slice(0, 2),
+      };
+    });
 
     return { count, top_matches: topThree, scoring_complete: true };
   })();
