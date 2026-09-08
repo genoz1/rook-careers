@@ -762,10 +762,6 @@
     }
   }
 
-  /* ── Résumé file selection (Screen 4) ── */
-  const resumeInput = document.getElementById('resumeInput');
-  const uploadZone  = document.getElementById('uploadZone');
-
   function handleFileSelect(file, inputId, zoneId, displayId, nameId, storeVar) {
     if (!file) return null;
     const ext = (file.name.split('.').pop() || '').toLowerCase();
@@ -783,22 +779,6 @@
     document.getElementById(nameId).textContent = file.name;
     return file;
   }
-
-  resumeInput.addEventListener('change', e => {
-    const f = handleFileSelect(e.target.files[0], 'resumeInput', 'uploadZone', 'fileSelected', 'fileName', 'resumeFile');
-    if (f) {
-      resumeFile = f;
-      gtag('event', 'onboarding_resume_selected', { file_type: f.name.split('.').pop().toLowerCase() });
-    }
-  });
-  uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.style.borderColor='var(--blue)'; });
-  uploadZone.addEventListener('dragleave', () => { uploadZone.style.borderColor=''; });
-  uploadZone.addEventListener('drop', e => {
-    e.preventDefault(); uploadZone.style.borderColor='';
-    const f = handleFileSelect(e.dataTransfer.files[0], 'resumeInput', 'uploadZone', 'fileSelected', 'fileName', 'resumeFile');
-    if (f) resumeFile = f;
-  });
-  uploadZone.addEventListener('keydown', e => { if (e.key==='Enter'||e.key===' ') { e.preventDefault(); resumeInput.click(); } });
 
   /* ── Account creation (Screen 4 → 4b) ──
      Creates a Supabase account using a password the user sets.
