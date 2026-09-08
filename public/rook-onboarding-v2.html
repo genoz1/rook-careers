@@ -108,14 +108,7 @@
     .rlw-item:last-child{border-bottom:none}
     .rlw-item.rlw-active,.rlw-item:hover{background:#f0f7ff;color:var(--blue)}
 
-    /* ── Opportunity preview cards (screen 3c) ── */
-    .preview-card{background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:10px;}
-    .preview-card-title{font-size:15px;font-weight:800;color:var(--navy);margin-bottom:3px;}
-    .preview-card-meta{font-size:12px;color:var(--muted);margin-bottom:6px;}
-    .preview-card-comp{font-size:12px;font-weight:700;color:#1a6b3a;}
-    .preview-card-note{font-size:11px;color:var(--muted);margin-top:6px;padding-top:6px;border-top:1px solid var(--line);}
-    .preview-empty{text-align:center;padding:24px 0;color:var(--muted);font-size:14px;}
-    .preview-loading{text-align:center;padding:24px 0;color:var(--muted);font-size:14px;}
+    /* ── Example match card (welcome screen) ── */
     .example-match-card{background:#fff;border:1.5px solid var(--line);border-radius:18px;padding:16px 18px;margin-top:22px;text-align:left;box-shadow:0 4px 18px rgba(7,44,80,.07);}
     .em-label{font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;}
     .em-score-row{display:flex;align-items:center;gap:10px;margin-bottom:6px;}
@@ -371,26 +364,6 @@
            On submit: creates Supabase account → sends confirmation email →
            saves draft selections to localStorage → advances to check-email screen.
            Password is set by the user — never auto-generated. -->
-      <!-- Screen 3c: Opportunity preview — shows up to 3 real, current jobs
-           filtered by industry and state. No personalized scores (résumé not
-           yet uploaded). Fetched from /api/onboarding/job-preview which applies
-           strict server-side field masking before responding. Employer identity,
-           descriptions, and application links are never sent to the client.
-           The screen handles 0 results, <3 results, and fetch failures honestly. -->
-      <section class="screen" data-step="3c">
-        <div class="content">
-          <div class="eyebrow">Your area</div>
-          <h2>Here's what's out there.</h2>
-          <p class="lead" id="previewLead">Matching current opportunities to your answers…</p>
-          <div id="previewCards" style="margin:12px 0"></div>
-          <p style="font-size:12px;color:var(--muted);margin:12px 0 0;text-align:center" id="previewNote"></p>
-          <div class="actions" style="margin-top:20px">
-            <button class="back" onclick="goBack()">Back</button>
-            <button class="primary" id="btnPreviewNext">Create Account to See All</button>
-          </div>
-        </div>
-      </section>
-
       <!-- Screen 4: Account creation only.
            Résumé upload is intentionally deferred to Screen 4c (after email
            verification) because: (a) browser security clears file inputs on
@@ -654,17 +627,16 @@
   // The array includes 4b, 4c, 6e — steps not in the original approved ZIP
   // but using the same visual system.
   const allScreens = [...document.querySelectorAll('.screen')];
-  const stepOrder  = ['0','1','2','3','3b','3c','4','4b','4c','4c-retry','5','6','6e','7'];
+  const stepOrder  = ['0','1','2','3','3b','4','4b','4c','4c-retry','5','6','6e','7'];
   const LABELS     = {
     '0':'Welcome',
     '1':'Step 1 of 5','2':'Step 2 of 5','3':'Step 3 of 5',
     '3b':'Step 4 of 5',
-    '3c':'Step 4 of 5',
     '4':'Step 5 of 5','4b':'Step 5 of 5','4c':'Step 5 of 5','4c-retry':'Step 5 of 5',
     '5':'Analyzing','6':'Your matches','6e':'Your matches','7':'Start trial'
   };
   const PROGRESS   = {
-    '0':0,'1':20,'2':40,'3':60,'3b':80,'3c':90,
+    '0':0,'1':20,'2':40,'3':60,'3b':80,
     '4':100,'4b':100,'4c':100,'4c-retry':100,'5':100,'6':100,'6e':100,'7':100
   };
   let currentStep = '0';
@@ -765,8 +737,6 @@
     gtag('event', 'onboarding_step_completed', { step: 2, years: sel.years });
     show('3');
   });
-  document.getElementById('btnPreviewNext').addEventListener('click', () => show('4'));
-
   document.getElementById('btnTerrNext').addEventListener('click', () => {
     gtag('event', 'onboarding_step_completed', { step: 3, territories: sel.territories });
     show('3b');
@@ -799,8 +769,7 @@
   document.getElementById('btnLocNext').addEventListener('click', () => {
     if (!sel.location) return; // guard — button should be disabled anyway
     gtag('event', 'onboarding_step_completed', { step: '3b', location_label: sel.location.label });
-    loadOpportunityPreview(); // fetch preview before showing screen 3c
-    show('3c');
+    show('4');
   });
 
   /* ── localStorage draft helpers ──
@@ -890,102 +859,6 @@
     document.getElementById(displayId).style.display = 'flex';
     document.getElementById(nameId).textContent = file.name;
     return file;
-  }
-
-  /* ── Opportunity preview (screen 3c) ──────────────────────────────────────
-     Fetches up to 3 real, current jobs from /api/onboarding/job-preview using
-     the visitor's questionnaire answers as filters. No auth required.
-     Server returns only preview-safe fields (title, location, compensation,
-     requirements) — employer identity, descriptions, and apply links are
-     stripped server-side before this client ever sees the response.
-     No match percentages are shown — résumé analysis has not run. */
-  async function loadOpportunityPreview() {
-    const cardsEl = document.getElementById('previewCards');
-    const leadEl  = document.getElementById('previewLead');
-    const noteEl  = document.getElementById('previewNote');
-    if (!cardsEl) return;
-    cardsEl.innerHTML = '<div class="preview-loading">Finding current opportunities…</div>';
-    if (leadEl) leadEl.textContent = 'Current opportunities in your area:';
-
-    try {
-      const params = new URLSearchParams();
-      if (sel.industry && sel.industry !== 'Breaking In') params.set('industry', sel.industry);
-      // Use the state from the location selection when available
-      if (sel.location?.stateAbbr) params.set('state', sel.location.stateAbbr);
-
-      const res = await fetch('/api/onboarding/job-preview?' + params.toString());
-      const data = res.ok ? await res.json() : null;
-      const jobs = data?.jobs || [];
-
-      if (!jobs.length) {
-        cardsEl.innerHTML = '<div class="preview-empty">No matching roles found in your area right now — ROOK updates its job pool continuously, so new matches appear regularly after you sign up.</div>';
-        if (leadEl) leadEl.textContent = 'Opportunities based on your answers:';
-        if (noteEl) noteEl.textContent = '';
-        return;
-      }
-
-      cardsEl.innerHTML = '';
-      jobs.forEach(job => {
-        const card = document.createElement('div');
-        card.className = 'preview-card';
-
-        const loc = job.remote_status === 'remote' ? 'Remote'
-          : [job.city, job.state].filter(Boolean).join(', ') || 'Location not listed';
-
-        const comp = job.compensation_text || (
-          (job.salary_min && job.salary_max)
-            ? `$${Math.round(job.salary_min/1000)}k–$${Math.round(job.salary_max/1000)}k`
-          : job.salary_min
-            ? `From $${Math.round(job.salary_min/1000)}k`
-          : null
-        );
-
-        const expText = (job.experience_min_years != null || job.experience_max_years != null)
-          ? (job.experience_min_years != null && job.experience_max_years != null
-              ? `${job.experience_min_years}–${job.experience_max_years} yrs exp. required`
-              : job.experience_min_years != null
-              ? `${job.experience_min_years}+ yrs exp. required`
-              : `Up to ${job.experience_max_years} yrs exp.`)
-          : null;
-
-        card.innerHTML = `
-          <div class="preview-card-title">${escapeHtml(job.title_original || 'Role')}</div>
-          <div class="preview-card-meta">${escapeHtml(loc)}${job.employment_type ? ' · ' + escapeHtml(job.employment_type) : ''}</div>
-          ${comp ? '<div class="preview-card-comp">' + escapeHtml(comp) + '</div>' : ''}
-          ${expText ? '<div class="preview-card-note">' + escapeHtml(expText) + '</div>' : ''}
-          <div class="preview-card-note">🔒 Employer and application details unlock after signup</div>`;
-        cardsEl.appendChild(card);
-      });
-
-      if (leadEl) leadEl.textContent = data.label || 'Opportunities based on your answers:';
-      if (noteEl) noteEl.textContent = jobs.length < 3
-        ? 'Personalized scoring and more opportunities unlock after you upload your résumé.'
-        : 'Personalized match scores unlock after résumé analysis.';
-
-    } catch (err) {
-      cardsEl.innerHTML = '<div class="preview-empty">Could not load preview right now — continue to see your full results after signing up.</div>';
-      if (leadEl) leadEl.textContent = 'Opportunities based on your answers:';
-    }
-  }
-
-  /* ── first_dashboard_access replacement ────────────────────────────────────
-     sessionStorage resets on tab close — not reliable for "first ever" semantics.
-     Renamed to onboarding_v2_flow_completed: fires when the onboarding page
-     sends a v2 user to the dashboard. A localStorage flag deduplicates across
-     sessions on the same browser. The event accurately describes what it
-     measures: completion of the v2 onboarding flow on this device, not a
-     guaranteed first-ever dashboard visit. */
-  function fireOnboardingCompleted(isNewFlow, hasEmbedding) {
-    if (localStorage.getItem('rook_ob_v2_done')) return; // already fired on this browser
-    localStorage.setItem('rook_ob_v2_done', '1');
-    gtag('event', 'onboarding_v2_flow_completed', {
-      // Accurately named: this fires when the v2 onboarding page sends the user
-      // to the dashboard. Not guaranteed to be their absolute first dashboard
-      // visit (e.g. they could open the dashboard directly in another tab),
-      // but deduplicates across sessions on this browser via localStorage.
-      is_new_flow: isNewFlow,
-      has_embedding: hasEmbedding,
-    });
   }
 
   /* ── Welcome trust line — fetched from the server trial config ─────────────
@@ -1612,7 +1485,17 @@
           }
 
           // Path B: complete profile (or legacy user) → dashboard.
-          fireOnboardingCompleted(isNewFlow, !!(profile.candidate_embedding));
+          // first_dashboard_access fires only here, not on every login.
+          // We use sessionStorage to deduplicate: once set in this tab,
+          // future show() calls driven by back-button won't re-fire it.
+          if (!sessionStorage.getItem('rook_first_dash_fired')) {
+            sessionStorage.setItem('rook_first_dash_fired', '1');
+            gtag('event', 'first_dashboard_access', {
+              method: 'v2_onboarding',
+              is_new_flow: isNewFlow,
+              has_embedding: !!(profile.candidate_embedding),
+            });
+          }
           window.location.href = 'rook-dashboard.html';
           return;
         }
