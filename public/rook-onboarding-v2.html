@@ -589,6 +589,14 @@
     if (bar)   bar.style.width   = (PROGRESS[key] ?? 0) + '%';
     window.scrollTo({ top:0, behavior:'smooth' });
     if (key === '5') runAnalysis();
+    // Track every screen view so GA4 shows exactly where people drop off.
+    // Pairs with the existing onboarding_step_completed events on Continue
+    // buttons — together they reveal both reach and completion per step.
+    gtag('event', 'onboarding_step_viewed', {
+      step: key,
+      step_label: LABELS[key] || key,
+      progress_pct: PROGRESS[key] ?? 0,
+    });
   }
 
   function goBack() {
@@ -784,7 +792,10 @@
 
   resumeInput.addEventListener('change', e => {
     const f = handleFileSelect(e.target.files[0], 'resumeInput', 'uploadZone', 'fileSelected', 'fileName', 'resumeFile');
-    if (f) resumeFile = f;
+    if (f) {
+      resumeFile = f;
+      gtag('event', 'onboarding_resume_selected', { file_type: f.name.split('.').pop().toLowerCase() });
+    }
   });
   uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.style.borderColor='var(--blue)'; });
   uploadZone.addEventListener('dragleave', () => { uploadZone.style.borderColor=''; });
@@ -827,6 +838,14 @@
     const btn = document.getElementById('btnAnalyze');
     btn.disabled = true;
     btn.textContent = 'Creating account…';
+
+    // Track the attempt regardless of outcome — tells us how many people
+    // reach and submit the account form vs. how many complete verification.
+    gtag('event', 'onboarding_account_attempted', {
+      has_resume: !!resumeFile,
+      has_location: !!sel.location,
+      territory_count: sel.territories.length,
+    });
 
     try {
       const { data, error } = await sb.auth.signUp({
