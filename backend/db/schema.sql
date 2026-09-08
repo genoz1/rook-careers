@@ -240,6 +240,10 @@ create table if not exists candidate_profiles (
   territory_size_preferences text[],         -- multi-select; set alongside territory_size_preference
                                               -- for backward compat. Populated by onboarding Step 3
                                               -- and the Settings Job Preferences panel.
+  onboarding_version integer,                -- null = legacy user (pre-2026-09 onboarding);
+                                              -- 2 = completed the new v2 flow (résumé required).
+                                              -- Used in routing to avoid requiring existing users
+                                              -- who completed old onboarding to re-upload a résumé.
   overnight_travel_preference text,
   maximum_travel_percentage int,
 
@@ -544,3 +548,10 @@ create index if not exists social_post_history_category_idx
 -- gets zero rows and zero write access, full stop — there is no
 -- policy to accidentally get wrong here, because there is no policy.
 alter table social_post_history enable row level security;
+
+-- Added with the new onboarding flow (2026-09): distinguishes users who
+-- completed the new v2 onboarding (requiring résumé + successful analysis)
+-- from users who completed the old flow (no résumé gate).
+-- Legacy users have NULL; new users get 2 written by doBackendWork.
+-- See backend/db/add-onboarding-version.sql for the migration.
+-- candidate_profiles.onboarding_version integer

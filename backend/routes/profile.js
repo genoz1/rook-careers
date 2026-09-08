@@ -298,4 +298,81 @@ router.get("/resume-url", requireConfig, requireAuth, async (req, res) => {
   }
 });
 
+// POST /api/resume/reanalyze — re-runs text extraction, AI analysis, and
+// embedding on the résumé already stored in Supabase Storage for this user.
+// Used when a previous upload succeeded (resume_file_path is set) but
+// analysis failed (candidate_embedding / resume_structured are null).
+// The user does not need to re-select or re-upload their file.
+//
+// Returns the same shape as POST /api/resume so the onboarding client
+// can handle both routes identically.
+router.post("/resume/reanalyze", requireConfig, requireAuth, async (req, res) => {
+  const { data: profile, error: profileErr } = await supabaseAdmin
+    .from("candidate_profiles")
+    .select("resume_file_path, resume_text")
+    .eq("user_id", req.user.id)
+    .maybeSingle();
+
+  if (profileErr) return res.status(500).json({ error: profileErr.message });
+  if (!profile?.resume_file_path) {
+    return res.status(400).json({ error: "No résumé on file. Please upload your résumé first." });
+  }
+
+  let resumeText = profile.resume_text || null; // reuse stored text if present
+  let resumeStructured = null;
+  let resumeEmbedding = null;
+  let suggestedRoles = null;
+  let analysisStatus = "skipped";
+
+  // Download the file from storage only when we don't already have the text.
+  if (!resumeText) {
+    try {
+      const { data: fileData, error: dlErr } = await supabaseAdmin.storage
+        .from("resumes")
+        .download(profile.resume_file_path);
+      if (dlErr) throw dlErr;
+      const arrayBuffer = await fileData.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      const ext = (profile.resume_file_path.split(".").pop() || "").toLowerCase();
+      const mimeType = ext === "pdf" ? "application/pdf"
+        : ext === "docx" ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        : "application/msword";
+      resumeText = await extractResumeText(buffer, mimeType);
+    } catch (err) {
+      console.error(`[reanalyze] file download / extraction failed: ${err.message}`);
+    }
+  }
+
+  if (resumeText) {
+    try {
+      resumeStructured = await analyzeResume(resumeText);
+      analysisStatus = "ok";
+    } catch (err) {
+      console.error(`[reanalyze] AI analysis failed: ${err.message}`);
+      analysisStatus = "failed";
+    }
+    try {
+      resumeEmbedding = await generateEmbedding(resumeText);
+    } catch (err) {
+      console.error(`[reanalyze] embedding failed: ${err.message}`);
+    }
+    if (resumeStructured) {
+      try { suggestedRoles = await suggestRoles(resumeStructured); } catch (_) {}
+    }
+  } else {
+    analysisStatus = "no_text_extracted";
+  }
+
+  const updatePayload = { user_id: req.user.id, updated_at: new Date().toISOString() };
+  if (resumeText)      updatePayload.resume_text = resumeText;
+  if (resumeStructured) updatePayload.resume_structured = resumeStructured;
+  if (resumeEmbedding)  updatePayload.candidate_embedding = resumeEmbedding;
+  if (suggestedRoles)   updatePayload.suggested_roles = suggestedRoles;
+
+  await supabaseAdmin.from("candidate_profiles")
+    .upsert(updatePayload, { onConflict: "user_id" });
+
+  res.json({ ok: true, analysis_status: analysisStatus, resume_structured: resumeStructured });
+});
+
 module.exports = router;
