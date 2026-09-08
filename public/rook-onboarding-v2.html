@@ -108,24 +108,7 @@
     .rlw-item:last-child{border-bottom:none}
     .rlw-item.rlw-active,.rlw-item:hover{background:#f0f7ff;color:var(--blue)}
 
-    /* ── Example match card (welcome screen) ── */
-    .example-match-card{background:#fff;border:1.5px solid var(--line);border-radius:18px;padding:16px 18px;margin-top:22px;text-align:left;box-shadow:0 4px 18px rgba(7,44,80,.07);}
-    .em-label{font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;}
-    .em-score-row{display:flex;align-items:center;gap:10px;margin-bottom:6px;}
-    .em-badge{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;background:#e8f9f0;color:#1a6b3a;border-radius:99px;padding:4px 9px;}
-    .em-pct{font-size:22px;font-weight:900;color:var(--navy);line-height:1;}
-    .em-title{font-size:15px;font-weight:800;color:var(--navy);margin-bottom:2px;}
-    .em-sub{font-size:12px;color:var(--muted);margin-bottom:12px;}
-    .em-cats{display:flex;flex-direction:column;gap:5px;margin-bottom:12px;}
-    .em-cat{display:grid;grid-template-columns:80px 1fr 36px;align-items:center;gap:6px;font-size:11px;color:var(--muted);}
-    .em-bar{background:#eaf1f6;border-radius:99px;height:5px;overflow:hidden;}
-    .em-bar span{display:block;height:100%;background:linear-gradient(90deg,#0877d1,#1463FF);border-radius:99px;}
-    .em-val{font-size:11px;font-weight:700;color:var(--navy);text-align:right;}
-    .em-lock{font-size:11px;color:var(--muted);padding-top:10px;border-top:1px solid var(--line);text-align:center;}
-    /* ── Résumé requirement notice (screen 4) ── */
-    .resume-notice{display:flex;align-items:flex-start;gap:12px;background:#f0f7ff;border:1.5px solid #c4ddf5;border-radius:13px;padding:13px 14px;font-size:13.5px;color:var(--navy);line-height:1.5;margin-top:16px;}
-    .resume-notice-icon{font-size:22px;flex-shrink:0;margin-top:1px;}
-    .resume-notice span{color:var(--muted);}
+    /* ── Error banner ── */
     .err{background:#fff0f0;border:1.5px solid #f9b8b8;border-radius:13px;padding:12px 15px;font-size:14px;color:#8b1c1c;font-weight:600;margin-top:12px;display:none}
     .err.vis{display:block}
 
@@ -236,29 +219,7 @@
           <h2>Find the medical sales jobs that fit you.</h2>
           <p class="lead">Tell us what you're looking for. ROOK will compare your experience with thousands of current opportunities.</p>
           <button class="primary" id="btnWelcomeStart">Find My Matches</button>
-          <!-- Trust line: overwritten by applyWelcomeTrust() once the server
-               trial config is fetched. Fallback is accurate: trial terms vary. -->
-          <div class="trust" id="welcomeTrust">Takes about 2 minutes · Free trial available</div>
-
-          <!-- Example match card: static, shows the *kind* of result the user
-               will receive. Company and apply link are intentionally blurred —
-               this mirrors the locked-results screen. Values are representative,
-               not fabricated scores for a real candidate. -->
-          <div class="example-match-card" aria-label="Example of a personalized match result">
-            <div class="em-label">EXAMPLE MATCH</div>
-            <div class="em-score-row">
-              <span class="em-badge">EXCELLENT MATCH</span>
-              <span class="em-pct">94%</span>
-            </div>
-            <div class="em-title">Territory Sales Representative</div>
-            <div class="em-sub">Medical Device · Southeast Territory</div>
-            <div class="em-cats">
-              <div class="em-cat"><span>Experience</span><span class="em-bar"><span style="width:96%"></span></span><span class="em-val">96%</span></div>
-              <div class="em-cat"><span>Industry fit</span><span class="em-bar"><span style="width:88%"></span></span><span class="em-val">88%</span></div>
-              <div class="em-cat"><span>Location</span><span class="em-bar"><span style="width:91%"></span></span><span class="em-val">91%</span></div>
-            </div>
-            <div class="em-lock">🔒 Company name and apply link unlock with your account</div>
-          </div>
+          <div class="trust">Takes about 2 minutes · No payment yet</div>
         </div>
       </section>
 
@@ -364,31 +325,34 @@
            On submit: creates Supabase account → sends confirmation email →
            saves draft selections to localStorage → advances to check-email screen.
            Password is set by the user — never auto-generated. -->
-      <!-- Screen 4: Account creation only.
-           Résumé upload is intentionally deferred to Screen 4c (after email
-           verification) because: (a) browser security clears file inputs on
-           page navigation, and (b) the résumé cannot be held across the
-           email-verification round-trip. Questionnaire answers are saved in
-           localStorage so users who leave before verifying can resume here. -->
       <section class="screen" data-step="4">
         <div class="content">
-          <div class="eyebrow">Create your account</div>
-          <h2>Almost there.</h2>
-          <p class="lead">Create your account to save your preferences and unlock personalized match scores.</p>
+          <div class="eyebrow">Personalize your results</div>
+          <h2>Upload your résumé.</h2>
+          <p class="lead">ROOK uses your experience to identify stronger matches. Your résumé stays private.</p>
 
-          <!-- Résumé requirement notice — sets accurate expectation before signup -->
-          <div class="resume-notice">
-            <span class="resume-notice-icon">📄</span>
-            <div>
-              <b>A résumé is required for personalized scores.</b><br>
-              <span>You'll upload it right after verifying your email — takes about 30 seconds.</span>
-            </div>
+          <!-- File picker (hidden input, triggered by button) -->
+          <input type="file" id="resumeInput" accept=".pdf,.doc,.docx" style="display:none" aria-label="Choose résumé file">
+
+          <div class="upload" id="uploadZone" role="button" tabindex="0" aria-label="Upload résumé — click or drag and drop">
+            <div class="up">↑</div>
+            <b>Drop your résumé here</b>
+            <p class="micro">PDF or DOCX · Maximum 10 MB</p>
+            <button type="button" style="border:1.5px solid var(--line);border-radius:13px;padding:11px 20px;background:#fff;color:var(--ink);font-weight:700;font-size:14px;cursor:pointer;margin-top:14px;display:inline-block;transition:border-color .18s" onclick="document.getElementById('resumeInput').click()">Choose résumé</button>
           </div>
 
+          <div class="file-selected" id="fileSelected" style="display:none">
+            <span class="fi">📄</span>
+            <div><div class="fn" id="fileName"></div><div class="fs">Ready to upload after account creation</div></div>
+          </div>
+
+          <!-- Account creation fields — same visual language as the approved email field -->
           <div class="field" style="margin-top:16px">
             <label>Email address</label>
             <input type="email" id="emailInput" placeholder="you@example.com" autocomplete="email" spellcheck="false">
           </div>
+          <!-- Password is collected here so the user always knows it.
+               Do not remove or auto-generate. -->
           <div class="field" style="margin-top:10px">
             <label>Create a password</label>
             <input type="password" id="passwordInput" placeholder="8 or more characters" autocomplete="new-password" minlength="8">
@@ -398,7 +362,7 @@
 
           <div class="actions" style="margin-top:20px">
             <button class="back" onclick="goBack()">Back</button>
-            <button class="primary" id="btnAnalyze">Create Account</button>
+            <button class="primary" id="btnAnalyze">Analyze My Experience</button>
           </div>
           <div class="trust">🔒 Your information is never sold</div>
         </div>
@@ -430,47 +394,38 @@
         </div>
       </section>
 
-      <!-- Screen 4c: Résumé upload — shown after email verification for new users,
-           and directly after questionnaire for already-authenticated users.
-           This is the PRIMARY résumé upload step, not just a "reselect".
-           Résumé is required for personalized match scoring; Skip is not offered. -->
+      <!-- Screen 4c: Post-verification resume step
+           Shown when the user returns from email verification.
+           Selections have been restored from localStorage.
+           Asks the user to reselect their résumé honestly. -->
       <section class="screen" data-step="4c">
         <div class="content">
-          <div class="eyebrow">Personalize your results</div>
-          <h2>Upload your résumé.</h2>
-          <p class="lead">ROOK compares your actual experience with every open role. Your résumé stays private and is never shared with employers without your permission.</p>
+          <div class="eyebrow">One last step</div>
+          <h2>Reselect your résumé.</h2>
+          <p class="lead">Your questionnaire selections were saved. Please choose your résumé file again — we can't hold it across email verification.</p>
 
           <input type="file" id="resumeInputV" accept=".pdf,.doc,.docx" style="display:none" aria-label="Choose résumé file">
 
-          <!-- Upload zone: default state -->
           <div class="upload" id="uploadZoneV" role="button" tabindex="0" aria-label="Upload résumé — click or drag and drop">
             <div class="up">↑</div>
             <b>Drop your résumé here</b>
             <p class="micro">PDF or DOCX · Maximum 10 MB</p>
-            <button type="button" style="border:1.5px solid var(--line);border-radius:13px;padding:11px 20px;background:#fff;color:var(--ink);font-weight:700;font-size:14px;cursor:pointer;margin-top:14px;display:inline-block" onclick="document.getElementById('resumeInputV').click()">Choose file</button>
+            <button type="button" style="border:1.5px solid var(--line);border-radius:13px;padding:11px 20px;background:#fff;color:var(--ink);font-weight:700;font-size:14px;cursor:pointer;margin-top:14px;display:inline-block" onclick="document.getElementById('resumeInputV').click()">Choose résumé</button>
           </div>
 
-          <!-- File selected state -->
           <div class="file-selected" id="fileSelectedV" style="display:none">
             <span class="fi">📄</span>
-            <div>
-              <div class="fn" id="fileNameV"></div>
-              <div class="fs">Ready to analyze</div>
-            </div>
+            <div><div class="fn" id="fileNameV"></div><div class="fs">Ready to upload</div></div>
           </div>
 
-          <!-- Upload error / retry state (shown on upload failure) -->
-          <div id="resumeUploadError" style="display:none;background:#fff0f0;border:1.5px solid #f9b8b8;border-radius:13px;padding:14px 16px;font-size:14px;color:#8b1c1c;font-weight:600;margin-top:14px;">
-            <div id="resumeUploadErrorMsg">Upload failed. Please try again.</div>
-            <button type="button" onclick="retryResumeUpload()" style="margin-top:10px;background:none;border:1.5px solid #c94444;border-radius:9px;padding:7px 14px;color:#8b1c1c;font-weight:700;cursor:pointer;font-size:13px;">Try again</button>
-          </div>
+          <p style="font-size:13px;color:var(--muted);text-align:center;margin:14px 0 0">No résumé? <button type="button" id="btnSkipResume" style="background:none;border:none;color:var(--blue);font-weight:700;cursor:pointer;font-size:13px;padding:0">Skip for now</button> — you can add it later in Settings.</p>
 
           <div class="err" id="resumeErr"></div>
 
           <div class="actions" style="margin-top:20px">
             <button class="primary" id="btnUploadAndAnalyze">Analyze My Experience</button>
           </div>
-          <div class="trust">🔒 Your information is never sold or shared</div>
+          <div class="trust">🔒 Your information is never sold</div>
         </div>
       </section>
 
@@ -621,7 +576,8 @@
   };
   let currentStep = '0';
   let analysisTimer = null;
-  let resumeFileV = null;  // Screen 4c (primary résumé upload step)
+  let resumeFile = null;   // Screen 4
+  let resumeFileV = null;  // Screen 4c (post-verification)
 
   function show(step) {
     const key = String(step);
@@ -812,53 +768,43 @@
     }
   }
 
-  /* ── File selection helper (used by screen 4c upload zone) ── */
+  /* ── Résumé file selection (Screen 4) ── */
+  const resumeInput = document.getElementById('resumeInput');
+  const uploadZone  = document.getElementById('uploadZone');
+
   function handleFileSelect(file, inputId, zoneId, displayId, nameId, storeVar) {
     if (!file) return null;
     const ext = (file.name.split('.').pop() || '').toLowerCase();
     if (!['pdf','doc','docx'].includes(ext)) {
-      showErr('resumeErr', 'Please upload a PDF or DOCX résumé.');
+      showErr('accountErr', 'Please upload a PDF or DOCX résumé.');
       return null;
     }
     if (file.size > 10 * 1024 * 1024) {
-      showErr('resumeErr', 'Your résumé must be under 10 MB.');
+      showErr('accountErr', 'Your résumé must be under 10 MB.');
       return null;
     }
-    clearErr('resumeErr');
+    clearErr('accountErr');
     document.getElementById(zoneId).style.display  = 'none';
     document.getElementById(displayId).style.display = 'flex';
     document.getElementById(nameId).textContent = file.name;
     return file;
   }
 
-  /* ── Welcome trust line — fetched from the server trial config ─────────────
-     The trial length is server-controlled (TRIAL_PERIOD_DAYS env var).
-     We update the trust line dynamically so it always shows the real terms
-     rather than a hard-coded claim. "No payment yet" is inaccurate when a
-     payment method is required at trial start, so we replace it entirely. */
-  (async () => {
-    try {
-      const res  = await fetch('/api/stripe/trial-config');
-      const data = res.ok ? await res.json() : null;
-      const el   = document.getElementById('welcomeTrust');
-      if (!el) return;
-      if (data && data.trialDays > 0) {
-        const d = data.trialDays;
-        el.textContent = `Takes about 2 minutes · ${d}-day free trial, then $29/month · Cancel anytime`;
-      } else {
-        el.textContent = 'Takes about 2 minutes · $29/month · Cancel anytime';
-      }
-    } catch (_) { /* keep the placeholder text */ }
-  })();
-
-  /* ── Retry résumé upload after a transient error ────────────────────────── */
-  function retryResumeUpload() {
-    document.getElementById('resumeUploadError').style.display = 'none';
-    document.getElementById('resumeErr').classList.remove('vis');
-    // Re-enable the upload button and zone
-    const btn = document.getElementById('btnUploadAndAnalyze');
-    if (btn) { btn.disabled = false; btn.textContent = 'Analyze My Experience'; }
-  }
+  resumeInput.addEventListener('change', e => {
+    const f = handleFileSelect(e.target.files[0], 'resumeInput', 'uploadZone', 'fileSelected', 'fileName', 'resumeFile');
+    if (f) {
+      resumeFile = f;
+      gtag('event', 'onboarding_resume_selected', { file_type: f.name.split('.').pop().toLowerCase() });
+    }
+  });
+  uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.style.borderColor='var(--blue)'; });
+  uploadZone.addEventListener('dragleave', () => { uploadZone.style.borderColor=''; });
+  uploadZone.addEventListener('drop', e => {
+    e.preventDefault(); uploadZone.style.borderColor='';
+    const f = handleFileSelect(e.dataTransfer.files[0], 'resumeInput', 'uploadZone', 'fileSelected', 'fileName', 'resumeFile');
+    if (f) resumeFile = f;
+  });
+  uploadZone.addEventListener('keydown', e => { if (e.key==='Enter'||e.key===' ') { e.preventDefault(); resumeInput.click(); } });
 
   /* ── Account creation (Screen 4 → 4b) ──
      Creates a Supabase account using a password the user sets.
@@ -896,6 +842,7 @@
     // Track the attempt regardless of outcome — tells us how many people
     // reach and submit the account form vs. how many complete verification.
     gtag('event', 'onboarding_account_attempted', {
+      has_resume: !!resumeFile,
       has_location: !!sel.location,
       territory_count: sel.territories.length,
     });
@@ -975,10 +922,7 @@
 
   resumeInputV.addEventListener('change', e => {
     const f = handleFileSelect(e.target.files[0], 'resumeInputV', 'uploadZoneV', 'fileSelectedV', 'fileNameV', 'resumeFileV');
-    if (f) {
-      resumeFileV = f;
-      gtag('event', 'onboarding_resume_selected', { file_type: f.name.split('.').pop().toLowerCase() });
-    }
+    if (f) resumeFileV = f;
   });
   uploadZoneV.addEventListener('dragover', e => { e.preventDefault(); uploadZoneV.style.borderColor='var(--blue)'; });
   uploadZoneV.addEventListener('dragleave', () => { uploadZoneV.style.borderColor=''; });
@@ -988,14 +932,17 @@
     if (f) resumeFileV = f;
   });
 
+  document.getElementById('btnSkipResume').addEventListener('click', () => {
+    resumeFileV = null;
+    show('5');
+    doBackendWork(false);
+  });
+
   document.getElementById('btnUploadAndAnalyze').addEventListener('click', () => {
     clearErr('resumeErr');
     if (!resumeFileV) {
-      return showErr('resumeErr', 'Please choose a résumé file to continue.');
+      return showErr('resumeErr', 'Please choose a résumé file, or tap "Skip for now" to continue without one.');
     }
-    gtag('event', 'onboarding_resume_upload_started', {
-      file_type: resumeFileV.name.split('.').pop().toLowerCase(),
-    });
     show('5');
     doBackendWork(true);
   });
@@ -1087,9 +1034,7 @@
           throw new Error(pd.error || 'Could not save your profile.');
         }
 
-        // ── b. Upload and analyze résumé ────────────────────────────────
-        // Résumé is required for personalized scoring. Upload failure is
-        // surfaced via the retry state on screen 4c, not silently swallowed.
+        // ── b. Upload and analyze résumé (if present) ───────────────────
         if (hasResume && resumeFileV) {
           if (statusEl) statusEl.textContent = 'Uploading and analyzing your résumé…';
           const fd = new FormData();
@@ -1105,10 +1050,9 @@
             if (rd.analysis_status === 'ok') {
               gtag('event', 'resume_analysis_completed', { method: 'v2' });
             }
-          } else {
-            gtag('event', 'resume_upload_failed', { method: 'v2', status: resumeRes.status });
-            throw new Error('Résumé upload failed. Your progress is saved — please try again.');
           }
+          // Resume upload failure is non-fatal — profile is already saved,
+          // and the preview will still run against the profile data.
         }
 
         // ── c. Match preview (awaited live scoring) ──────────────────────
@@ -1146,22 +1090,7 @@
     await Promise.all([animationDone, backendDone]);
 
     if (backendError || !previewData) {
-      // If the error was a résumé upload failure, go back to the upload screen
-      // so the user can retry without losing their account or questionnaire answers.
-      if (backendError && backendError.includes('Résumé upload failed')) {
-        const errDiv = document.getElementById('resumeUploadError');
-        const errMsg = document.getElementById('resumeUploadErrorMsg');
-        if (errDiv) { errDiv.style.display = 'block'; if (errMsg) errMsg.textContent = backendError; }
-        // Reset the file selection so they must re-choose
-        resumeFileV = null;
-        const zoneV = document.getElementById('uploadZoneV');
-        const selV  = document.getElementById('fileSelectedV');
-        if (zoneV) zoneV.style.display = '';
-        if (selV)  selV.style.display  = 'none';
-        show('4c');
-      } else {
-        show('6e');
-      }
+      show('6e');
     } else {
       renderLockedResults(previewData);
       show('6');
@@ -1321,21 +1250,7 @@
         const profile = res.ok ? await res.json() : null;
 
         if (profile) {
-          // Path B2: profile exists but résumé has not been uploaded yet.
-          // The user created an account, verified email, and then left before
-          // uploading their résumé. Restore questionnaire answers from the
-          // profile and send them straight to the résumé upload step.
-          if (!profile.resume_file_path) {
-            const draft = loadDraft();
-            if (draft) restoreDraft(draft);
-            // Repopulate sel from profile in case the draft is gone
-            if (!sel.industry && profile.desired_industries?.length) sel.industry = profile.desired_industries[0];
-            if (sel.years == null && profile.total_sales_years != null) sel.years = profile.total_sales_years;
-            if (!sel.territories?.length && profile.territory_size_preferences?.length) sel.territories = profile.territory_size_preferences;
-            show('4c');
-            return;
-          }
-          // Path B: complete profile with résumé → dashboard.
+          // Path B: has a profile → dashboard (handles all subscription states).
           window.location.href = 'rook-dashboard.html';
           return;
         }
