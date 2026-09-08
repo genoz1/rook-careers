@@ -906,19 +906,57 @@
     if (f) resumeFileV = f;
   });
 
-  document.getElementById('btnSkipResume').addEventListener('click', () => {
+  document.getElementById('btnSkipResume').addEventListener('click', async () => {
     resumeFileV = null;
-    doBackendWork(false); // show('5') is called at the top of doBackendWork
+    await saveProfileNow();
+    doBackendWork(false);
   });
 
-  document.getElementById('btnUploadAndAnalyze').addEventListener('click', () => {
+  document.getElementById('btnUploadAndAnalyze').addEventListener('click', async () => {
     clearErr('resumeErr');
     if (!resumeFileV) {
       return showErr('resumeErr', 'Please choose a résumé file, or tap "Skip for now" to continue without one.');
     }
     gtag('event', 'onboarding_resume_upload_started', { file_type: resumeFileV.name.split('.').pop().toLowerCase() });
-    doBackendWork(true); // show('5') is called at the top of doBackendWork
+    await saveProfileNow();
+    doBackendWork(true);
   });
+
+  // Save questionnaire answers to the profile immediately when the user
+  // clicks Analyze — before doBackendWork starts the résumé upload.
+  // This ensures home_lat, home_state, desired_industries, and territory
+  // are all in the DB before match-preview runs scoring, regardless of
+  // how long fetchActiveJobs takes.
+  async function saveProfileNow() {
+    try {
+      const { data: { session } } = await sb.auth.getSession().catch(() => ({ data: { session: null } }));
+      if (!session) return;
+      const payload = {
+        desired_industries: sel.industry && sel.industry !== 'Breaking In' ? [sel.industry] : [],
+        total_sales_years:  sel.years != null ? Number(sel.years) : null,
+        territory_size_preferences: sel.territories.length > 0 ? sel.territories : null,
+        territory_size_preference:  sel.territories[0] || null,
+        work_style: (sel.territories.length === 1 && sel.territories[0] === 'remote') ? 'remote' : 'field',
+        ...(sel.location ? {
+          home_city:           sel.location.city  || null,
+          home_state:          sel.location.state || null,
+          home_zip:            sel.location.zip   || null,
+          home_lat:            sel.location.lat   != null ? sel.location.lat : null,
+          home_lng:            sel.location.lng   != null ? sel.location.lng : null,
+          home_location_label: sel.location.label || null,
+        } : {}),
+        ...rookGetStoredAttribution(),
+      };
+      await fetch('/api/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify(payload),
+      });
+      console.log('[saveProfileNow] questionnaire saved before résumé upload');
+    } catch (err) {
+      console.warn('[saveProfileNow] failed (non-fatal):', err.message);
+    }
+  }
 
   /* ── Analysis animation ──
      Runs during backend work. Timed to ~2.5 seconds so real work can

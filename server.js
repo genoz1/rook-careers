@@ -63,4 +63,16 @@ app.get("*", (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`ROOK server running on port ${PORT}`);
+  // Pre-warm the active-jobs cache 5 s after boot so the first onboarding
+  // preview request hits the cache instead of waiting 40+ s for a cold fetch.
+  const { fetchActiveJobs } = require("./backend/scoring/precompute");
+  const { createClient } = require("@supabase/supabase-js");
+  if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    setTimeout(() => {
+      const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+      fetchActiveJobs(supabaseAdmin)
+        .then(jobs => console.log(`[boot] active-jobs cache warmed: ${jobs.length} jobs`))
+        .catch(err => console.warn(`[boot] cache warm failed: ${err.message}`));
+    }, 5000);
+  }
 });
