@@ -133,11 +133,7 @@
     .result-banner:after{content:"";position:absolute;width:135px;height:135px;border-radius:50%;background:rgba(83,200,120,.18);right:-40px;top:-40px}
     .result-banner .count{font-size:58px;font-weight:900;line-height:1;letter-spacing:-.05em}
     .result-banner p{margin:8px 0 0;color:#dcedf8;font-size:15px;max-width:285px}
-    .matchcard{border:1px solid var(--line);border-radius:17px;padding:16px;margin-top:11px;background:#fff;display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:start}
-    .matchcard-body{min-width:0}
-    .matchcard-title{font-size:13px;font-weight:700;color:var(--navy);margin:3px 0 1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .matchcard-loc{font-size:11px;color:var(--muted);margin-bottom:2px}
-    .matchcard-reason{font-size:11.5px;color:#1a6b3a;font-weight:600}
+    .matchcard{border:1px solid var(--line);border-radius:17px;padding:16px;margin-top:11px;background:#fff;display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center}
     .matchscore{width:50px;height:50px;border-radius:14px;background:#eaf8ee;color:#27844b;display:grid;place-items:center;font-weight:900}
     .blurline{height:10px;border-radius:9px;background:#dce5ec;margin:5px 0}
     .blurline.short{width:62%}
@@ -331,16 +327,26 @@
            Password is set by the user — never auto-generated. -->
       <section class="screen" data-step="4">
         <div class="content">
-          <div class="eyebrow">Create your account</div>
-          <h2>Almost there.</h2>
-          <p class="lead">Save your preferences and get personalized results. You'll upload your résumé next.</p>
+          <div class="eyebrow">Personalize your results</div>
+          <h2>Upload your résumé.</h2>
+          <p class="lead">ROOK uses your experience to identify stronger matches. Your résumé stays private.</p>
 
-          <!-- Account creation only — résumé is collected on screen 4c after email verification.
-               Browser security prevents holding a file across page navigation, so asking for
-               it here would require the user to select it twice. Screen 4c is the single
-               résumé collection point. -->
+          <!-- File picker (hidden input, triggered by button) -->
+          <input type="file" id="resumeInput" accept=".pdf,.doc,.docx" style="display:none" aria-label="Choose résumé file">
 
-          <!-- Account creation fields -->
+          <div class="upload" id="uploadZone" role="button" tabindex="0" aria-label="Upload résumé — click or drag and drop">
+            <div class="up">↑</div>
+            <b>Drop your résumé here</b>
+            <p class="micro">PDF or DOCX · Maximum 10 MB</p>
+            <button type="button" style="border:1.5px solid var(--line);border-radius:13px;padding:11px 20px;background:#fff;color:var(--ink);font-weight:700;font-size:14px;cursor:pointer;margin-top:14px;display:inline-block;transition:border-color .18s" onclick="document.getElementById('resumeInput').click()">Choose résumé</button>
+          </div>
+
+          <div class="file-selected" id="fileSelected" style="display:none">
+            <span class="fi">📄</span>
+            <div><div class="fn" id="fileName"></div><div class="fs">Ready to upload after account creation</div></div>
+          </div>
+
+          <!-- Account creation fields — same visual language as the approved email field -->
           <div class="field" style="margin-top:16px">
             <label>Email address</label>
             <input type="email" id="emailInput" placeholder="you@example.com" autocomplete="email" spellcheck="false">
@@ -433,11 +439,11 @@
           <p class="lead">Comparing your background with current medical sales openings…</p>
           <div class="radar" aria-hidden="true"><b class="pct" id="pctDisplay">0%</b></div>
           <div class="checks">
-            <div class="check" id="chk0"><span class="tick">✓</span>Preferences saved</div>
-            <div class="check" id="chk1"><span class="tick">✓</span>Résumé uploaded</div>
-            <div class="check" id="chk2"><span class="tick">✓</span>Résumé analyzed</div>
-            <div class="check" id="chk3"><span class="tick">✓</span>Jobs loaded</div>
-            <div class="check" id="chk4"><span class="tick">✓</span>Matches ready</div>
+            <div class="check" id="chk0"><span class="tick">✓</span>Experience</div>
+            <div class="check" id="chk1"><span class="tick">✓</span>Industry and products</div>
+            <div class="check" id="chk2"><span class="tick">✓</span>Customer specialty</div>
+            <div class="check" id="chk3"><span class="tick">✓</span>Location and preferences</div>
+            <div class="check" id="chk4"><span class="tick">✓</span>Job requirements</div>
           </div>
           <p class="analysis-status" id="analysisStatus"></p>
         </div>
@@ -569,7 +575,7 @@
     '4':100,'4b':100,'4c':100,'5':100,'6':100,'6e':100,'7':100
   };
   let currentStep = '0';
-  let analysisResolve = null; // kept for legacy compatibility — new flow uses milestone functions
+  let analysisTimer = null;
   let resumeFile = null;   // Screen 4
   let resumeFileV = null;  // Screen 4c (post-verification)
 
@@ -762,6 +768,10 @@
     }
   }
 
+  /* ── Résumé file selection (Screen 4) ── */
+  const resumeInput = document.getElementById('resumeInput');
+  const uploadZone  = document.getElementById('uploadZone');
+
   function handleFileSelect(file, inputId, zoneId, displayId, nameId, storeVar) {
     if (!file) return null;
     const ext = (file.name.split('.').pop() || '').toLowerCase();
@@ -779,6 +789,22 @@
     document.getElementById(nameId).textContent = file.name;
     return file;
   }
+
+  resumeInput.addEventListener('change', e => {
+    const f = handleFileSelect(e.target.files[0], 'resumeInput', 'uploadZone', 'fileSelected', 'fileName', 'resumeFile');
+    if (f) {
+      resumeFile = f;
+      gtag('event', 'onboarding_resume_selected', { file_type: f.name.split('.').pop().toLowerCase() });
+    }
+  });
+  uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.style.borderColor='var(--blue)'; });
+  uploadZone.addEventListener('dragleave', () => { uploadZone.style.borderColor=''; });
+  uploadZone.addEventListener('drop', e => {
+    e.preventDefault(); uploadZone.style.borderColor='';
+    const f = handleFileSelect(e.dataTransfer.files[0], 'resumeInput', 'uploadZone', 'fileSelected', 'fileName', 'resumeFile');
+    if (f) resumeFile = f;
+  });
+  uploadZone.addEventListener('keydown', e => { if (e.key==='Enter'||e.key===' ') { e.preventDefault(); resumeInput.click(); } });
 
   /* ── Account creation (Screen 4 → 4b) ──
      Creates a Supabase account using a password the user sets.
@@ -908,7 +934,8 @@
 
   document.getElementById('btnSkipResume').addEventListener('click', () => {
     resumeFileV = null;
-    doBackendWork(false); // show('5') is called at the top of doBackendWork
+    show('5');
+    doBackendWork(false);
   });
 
   document.getElementById('btnUploadAndAnalyze').addEventListener('click', () => {
@@ -916,267 +943,156 @@
     if (!resumeFileV) {
       return showErr('resumeErr', 'Please choose a résumé file, or tap "Skip for now" to continue without one.');
     }
-    gtag('event', 'onboarding_resume_upload_started', { file_type: resumeFileV.name.split('.').pop().toLowerCase() });
-    doBackendWork(true); // show('5') is called at the top of doBackendWork
+    show('5');
+    doBackendWork(true);
   });
 
   /* ── Analysis animation ──
      Runs during backend work. Timed to ~2.5 seconds so real work can
      complete. If work finishes before animation, it waits. If work takes
      longer, the animation holds at 100% until the promise resolves. */
-  // ── Milestone-driven animation ──────────────────────────────────────────
-  // The animation on screen 5 is tied to real backend milestones, not a
-  // fixed-duration timer. The timer still runs to produce smooth motion, but:
-  //   - It never exceeds the current target percentage.
-  //   - The target is set by backend milestones as they complete.
-  //   - 100% is only set when results are actually received.
-  //   - If a milestone hasn't fired within expected time, the bar simply waits.
-  let _animPct    = 0;   // current displayed percentage
-  let _animTarget = 0;   // percentage to animate toward
-  let _animTimer  = null;
+  let analysisResolve = null;
 
-  function _animTick() {
-    const pctEl = document.getElementById('pctDisplay');
-    if (_animPct < _animTarget) {
-      _animPct = Math.min(_animPct + 1.5, _animTarget); // smooth increment
-      if (pctEl) pctEl.textContent = Math.round(_animPct) + '%';
-    }
+  function runAnalysis() {
+    clearInterval(analysisTimer);
+    const checks  = document.querySelectorAll('.check');
+    const pct     = document.getElementById('pctDisplay');
+    checks.forEach(c => c.classList.remove('done'));
+    if (pct) pct.textContent = '0%';
+    let p = 0, i = 0;
+    analysisTimer = setInterval(() => {
+      p += 4;
+      if (pct) pct.textContent = Math.min(p, 100) + '%';
+      if (p >= 18 + i * 16 && i < checks.length) checks[i++].classList.add('done');
+      if (p >= 100) {
+        clearInterval(analysisTimer);
+        // Signal to doBackendWork that the animation has completed.
+        if (analysisResolve) { analysisResolve(); analysisResolve = null; }
+      }
+    }, 70);
   }
 
-  function initAnimation() {
-    clearInterval(_animTimer);
-    _animPct = 0; _animTarget = 3;
-    document.querySelectorAll('.check').forEach(c => c.classList.remove('done'));
-    const pctEl = document.getElementById('pctDisplay');
-    if (pctEl) pctEl.textContent = '0%';
-    const statusEl = document.getElementById('analysisStatus');
-    if (statusEl) statusEl.textContent = '';
-    _animTimer = setInterval(_animTick, 60);
-  }
-
-  // Advance animation to a target percentage and tick a checkmark.
-  // chkIndex: 0-4 matching chk0–chk4. targetPct must be < 100.
-  // 100% is only reached via completeAnimation().
-  function milestoneAnim(targetPct, chkIndex) {
-    _animTarget = Math.min(targetPct, 99); // never reach 100 automatically
-    const chk = document.getElementById('chk' + chkIndex);
-    if (chk) chk.classList.add('done');
-  }
-
-  // Called when real results are received. Advances to 100% and resolves
-  // when the displayed counter actually reaches it.
-  function completeAnimation() {
-    return new Promise(resolve => {
-      _animTarget = 100;
-      const check = setInterval(() => {
-        if (_animPct >= 100) {
-          clearInterval(check);
-          clearInterval(_animTimer);
-          resolve();
-        }
-      }, 80);
-    });
-  }
-
-  // Legacy entry point — called by show('5'). Starts the animation.
-  function runAnalysis() { initAnimation(); }
-
-  /* ── Backend work sequence ─────────────────────────────────────────────────
-     Show the animation screen immediately, then drive its milestones from real
-     backend events. Five checkmarks map to five real phases:
-       chk0 Experience      → profile saved
-       chk1 Industry/prod.  → résumé uploaded to storage
-       chk2 Customer spec.  → résumé analysis complete (resume_structured saved)
-       chk3 Location/prefs  → job list ready (warm cache hit or fresh fetch)
-       chk4 Requirements    → scoring and preview complete
-     100% is set ONLY when real results are received.
-
-     Parallelisation — preserving correct scoring order:
-       a. Save profile (must complete first — scoring reads it)
-       b. Then CONCURRENTLY:
-            i.  Fire warm-jobs request (fills server-side job cache; no auth,
-                no scoring — just a prefetch so the cache is hot)
-            ii. Upload résumé → extract → AI analysis
-       c. After BOTH b.i and b.ii complete, call match-preview.
-          At this point: profile is saved, résumé is analysed, jobs are cached.
-          Scoring against a stale or incomplete profile is not possible.
-
-     10-second rule: if processing is still running at T+10s, analysisStatus
-     shows an honest "still working" message. Processing continues and
-     completes normally — no fake results, no navigation until real data arrives.
-
-     Timing: each phase is logged to the browser console with elapsed time.  */
+  /* ── Backend work sequence (Screen 5) ──
+     1. Await both: animation completes AND backend work completes.
+     2. Backend work:
+        a. Save profile with questionnaire selections.
+        b. Upload and analyze résumé (if present).
+        c. Fetch the match preview (awaited scoring, not fire-and-forget).
+     3. Advance to locked-results screen (or error screen on failure). */
   async function doBackendWork(hasResume) {
-    const T0 = Date.now();
-    const ms = () => Date.now() - T0;
-    const log = (label) => console.log(`[doBackendWork] ${label} at ${ms()}ms`);
-
-    // Navigate to animation screen immediately.
-    // runAnalysis() was called by show('5') → initAnimation() already started.
-    show('5');
-
     const statusEl = document.getElementById('analysisStatus');
-    const setStatus = (t) => { if (statusEl) statusEl.textContent = t; };
 
-    // 10-second slow-warning: honest, no navigation change
-    const slowWarn = setTimeout(() => {
-      setStatus('Still working… Résumé analysis and job matching can take 15–20 s on the first run.');
-    }, 10_000);
+    // The animation is already running (started by show('5') → runAnalysis()).
+    // Create a promise that resolves when the animation completes.
+    const animationDone = new Promise(resolve => { analysisResolve = resolve; });
 
     let backendError = null;
     let previewData  = null;
 
-    try {
-      const { data: { session }, error: sessErr } = await sb.auth.getSession();
-      if (sessErr || !session) throw new Error('No authenticated session. Please refresh and try again.');
-      const token = session.access_token;
+    const backendDone = (async () => {
+      try {
+        // Get the authenticated session — must exist at this point since
+        // the user returned from email verification.
+        const { data: { session }, error: sessErr } = await sb.auth.getSession();
+        if (sessErr || !session) throw new Error('No authenticated session. Please refresh and try again.');
 
-      // ── a. Save profile ────────────────────────────────────────────
-      setStatus('Saving your preferences…');
-      const profilePayload = {
-        desired_industries: sel.industry && sel.industry !== 'Breaking In' ? [sel.industry] : [],
-        total_sales_years:  sel.years   != null ? Number(sel.years) : null,
-        territory_size_preferences: sel.territories.length > 0 ? sel.territories : null,
-        territory_size_preference:  sel.territories[0] || null,
-        work_style: (sel.territories.length === 1 && sel.territories[0] === 'remote') ? 'remote' : 'field',
-        ...(sel.location ? {
-          home_city:           sel.location.city  || null,
-          home_state:          sel.location.state || null,
-          home_zip:            sel.location.zip   || null,
-          home_lat:            sel.location.lat   != null ? sel.location.lat : null,
-          home_lng:            sel.location.lng   != null ? sel.location.lng : null,
-          home_location_label: sel.location.label || null,
-        } : {}),
-        ...rookGetStoredAttribution(),
-      };
-      const profileRes = await fetch('/api/profile', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(profilePayload),
-      });
-      if (!profileRes.ok) {
-        const pd = await profileRes.json().catch(() => ({}));
-        throw new Error(pd.error || 'Could not save your profile.');
-      }
-      log('profile saved');
-      milestoneAnim(20, 0); // chk0 Experience
+        const token = session.access_token;
 
-      // ── b. Warm job cache + résumé upload in parallel ─────────────
-      // The warm-jobs request fills the server-side active-jobs cache
-      // without requiring auth or performing any scoring. It runs
-      // concurrently with the résumé upload. After both complete, the
-      // preview request finds a warm cache and returns quickly.
-      //
-      // Scoring does NOT start here. The preview request fires in step c,
-      // AFTER résumé analysis is confirmed, ensuring match scores are
-      // computed against the full, analysis-complete profile.
+        // ── a. Save profile (questionnaire selections) ──────────────────
+        if (statusEl) statusEl.textContent = 'Saving your preferences…';
+        const profilePayload = {
+          desired_industries: sel.industry && sel.industry !== 'Breaking In' ? [sel.industry] : [],
+          total_sales_years:  sel.years   != null ? Number(sel.years) : null,
+          // Multi-select territory preferences (new field, text array)
+          territory_size_preferences: sel.territories.length > 0 ? sel.territories : null,
+          // Backward-compat single-value field for existing code that reads it
+          territory_size_preference: sel.territories[0] || null,
+          // work_style: 'remote' if ONLY remote selected; 'field' if any in-field option
+          work_style: (sel.territories.length === 1 && sel.territories[0] === 'remote') ? 'remote' : 'field',
+          // Primary job-search location (from screen 3b)
+          // The widget's selection already contains geocoded lat/lng so the
+          // profile route will not re-geocode; it stores them as-is.
+          ...(sel.location ? {
+            home_city:     sel.location.city  || null,
+            home_state:    sel.location.state || null, // full state name — matches matching.js
+            home_zip:      sel.location.zip   || null,
+            home_lat:      sel.location.lat   != null ? sel.location.lat : null,
+            home_lng:      sel.location.lng   != null ? sel.location.lng : null,
+            home_location_label: sel.location.label || null,
+          } : {}),
+          // First-touch attribution
+          ...rookGetStoredAttribution(),
+        };
 
-      // Fire warm-jobs — no await, just kick off the cache fill
-      const warmPromise = fetch('/api/onboarding/warm-jobs').catch(() => {});
-
-      // Upload and analyse résumé
-      if (hasResume && resumeFileV) {
-        setStatus('Uploading and analysing your résumé…');
-        const fd = new FormData();
-        fd.append('resume', resumeFileV);
-        const resumeRes = await fetch('/api/resume', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
-          body: fd,
+        const profileRes = await fetch('/api/profile', {
+          method: 'PUT',
+          headers: { 'Content-Type':'application/json', Authorization:`Bearer ${token}` },
+          body: JSON.stringify(profilePayload),
         });
-        const tResume = ms();
-        if (!resumeRes.ok) {
-          // File storage failed — user must re-select and retry
-          gtag('event', 'resume_upload_failed', { method: 'v2', status: resumeRes.status, ms: tResume });
-          throw new Error('__analysis_retry__:Storage upload failed. Please try again or use a different file.');
+        if (!profileRes.ok) {
+          const pd = await profileRes.json().catch(() => ({}));
+          throw new Error(pd.error || 'Could not save your profile.');
         }
 
-        milestoneAnim(45, 1); // chk1 Résumé uploaded — file in storage
-        gtag('event', 'resume_uploaded', { method: 'v2', ms: tResume });
-        const rd = await resumeRes.json().catch(() => ({}));
-        log('résumé analysis_status=' + rd.analysis_status);
-
-        if (rd.analysis_status !== 'ok') {
-          // Analysis failed. We must not proceed to preview — scored results
-          // would lack candidate_fit entirely and show misleadingly low scores.
-          // Show a retry state so the user can try a different file.
-          const statusHint = rd.analysis_status === 'no_text_extracted'
-            ? 'We couldn’t read text from your file. Try a PDF exported from a word processor rather than a scanned image.'
-            : 'Résumé analysis failed. Please try again, or upload a PDF if you used DOCX.';
-          gtag('event', 'resume_analysis_failed', { method: 'v2', status: rd.analysis_status, ms: ms() });
-          throw new Error('__analysis_retry__:' + statusHint);
+        // ── b. Upload and analyze résumé (if present) ───────────────────
+        if (hasResume && resumeFileV) {
+          if (statusEl) statusEl.textContent = 'Uploading and analyzing your résumé…';
+          const fd = new FormData();
+          fd.append('resume', resumeFileV);
+          const resumeRes = await fetch('/api/resume', {
+            method: 'POST',
+            headers: { Authorization:`Bearer ${token}` },
+            body: fd,
+          });
+          if (resumeRes.ok) {
+            gtag('event', 'resume_uploaded', { method: 'v2' });
+            const rd = await resumeRes.json().catch(() => ({}));
+            if (rd.analysis_status === 'ok') {
+              gtag('event', 'resume_analysis_completed', { method: 'v2' });
+            }
+          }
+          // Resume upload failure is non-fatal — profile is already saved,
+          // and the preview will still run against the profile data.
         }
 
-        milestoneAnim(65, 2); // chk2 Résumé analyzed — analysis_status=ok
-        gtag('event', 'resume_analysis_completed', { method: 'v2', ms: ms() });
+        // ── c. Match preview (awaited live scoring) ──────────────────────
+        // Uses /api/onboarding/match-preview — scores the active job pool live,
+        // awaited synchronously, against the just-saved authenticated profile.
+        // No fire-and-forget: the result is current for this exact profile state.
+        if (statusEl) statusEl.textContent = 'Calculating your matches…';
+        const previewRes = await fetch('/api/onboarding/match-preview', {
+          headers: { Authorization:`Bearer ${token}` },
+        });
+        if (!previewRes.ok) {
+          const pd = await previewRes.json().catch(() => ({}));
+          throw new Error(pd.error || 'Could not calculate your matches.');
+        }
+        previewData = await previewRes.json();
+
+        if (statusEl) statusEl.textContent = '';
+        gtag('event', 'match_preview_viewed', {
+          method: 'v2',
+          count: previewData.count,
+        });
+
+        // After successful save, delete the localStorage draft.
+        deleteDraft();
+
+      } catch (err) {
+        backendError = err.message;
+        console.error('[doBackendWork]', err);
+        gtag('event', 'onboarding_error', { method: 'v2', message: err.message });
+        if (statusEl) statusEl.textContent = '';
       }
+    })();
 
-      // Wait for warm-jobs to finish (ensures cache is populated before preview)
-      await warmPromise;
-      milestoneAnim(78, 3); // chk3 Location/prefs — jobs ready
-      log('job cache warm, firing preview');
-
-      // ── c. Match preview ───────────────────────────────────────────
-      // Profile is saved, résumé analysis is done, job list is cached.
-      // Scoring now runs against the complete profile.
-      setStatus('Calculating your matches…');
-      const previewRes = await fetch('/api/onboarding/match-preview', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!previewRes.ok) {
-        const pd = await previewRes.json().catch(() => ({}));
-        throw new Error(pd.error || 'Could not calculate your matches.');
-      }
-      previewData = await previewRes.json();
-      const tDone = ms();
-      log('preview done count=' + previewData.count +
-          ' top=' + (previewData.top_matches?.[0]?.overall_score ?? 'none') +
-          ' total=' + tDone + 'ms');
-
-      gtag('event', 'match_preview_viewed', {
-        method: 'v2',
-        count: previewData.count,
-        elapsed_ms: tDone,
-      });
-
-      milestoneAnim(99, 4); // chk4 Requirements — about to complete
-      setStatus('');
-      deleteDraft();
-
-    } catch (err) {
-      const isRetry = err.message.startsWith('__analysis_retry__:');
-      if (isRetry) {
-        // Analysis failed — do not show fallback scores; offer retry.
-        // Navigate back to screen 4c with a visible error.
-        clearTimeout(slowWarn);
-        const retryMsg = err.message.slice('__analysis_retry__:'.length);
-        console.warn('[doBackendWork] analysis retry needed:', retryMsg);
-        gtag('event', 'resume_analysis_failed', { method: 'v2', message: retryMsg, elapsed_ms: ms() });
-        showErr('resumeErr', retryMsg);
-        // Reset file selection so user must re-choose (file may be corrupt or unsupported)
-        resumeFileV = null;
-        const zoneV = document.getElementById('uploadZoneV');
-        const selV  = document.getElementById('fileSelectedV');
-        if (zoneV) zoneV.style.display = '';
-        if (selV)  selV.style.display  = 'none';
-        show('4c');
-        return; // exit doBackendWork without reaching the show('6e') below
-      }
-      backendError = err.message;
-      console.error('[doBackendWork]', err);
-      gtag('event', 'onboarding_error', { method: 'v2', message: err.message, elapsed_ms: ms() });
-      setStatus('');
-    } finally {
-      clearTimeout(slowWarn);
-    }
+    // Wait for BOTH the animation and backend work to finish.
+    await Promise.all([animationDone, backendDone]);
 
     if (backendError || !previewData) {
       show('6e');
     } else {
-      // Advance animation to 100% and wait for the display to catch up
-      // (at most ~400ms at 1.5%/60ms) before navigating to results.
       renderLockedResults(previewData);
-      await completeAnimation();
       show('6');
     }
   }
@@ -1196,23 +1112,9 @@
      same score never appears under a different label. */
   function renderLockedResults(data) {
     const count = data.count ?? 0;
-    const top   = (data.top_matches || [])[0];
-    const cEl   = document.getElementById('matchCount');
+    const cEl = document.getElementById('matchCount');
     const descEl = document.getElementById('matchCountDesc');
-    // Headline reflects actual quality of the best match
-    const h2El = document.querySelector('[data-step="6"] h2');
-    if (h2El) {
-      if (top && top.excellent_match) {
-        h2El.textContent = 'You have excellent matches.';
-      } else if (top && top.overall_score >= 70) {
-        h2El.textContent = 'You have strong matches.';
-      } else if (count > 0) {
-        h2El.textContent = 'Your matches are ready.';
-      } else {
-        h2El.textContent = 'Your results are ready.';
-      }
-    }
-    if (cEl)   cEl.textContent   = count;
+    if (cEl) cEl.textContent = count;
     if (descEl) descEl.textContent = `We ranked ${count} current medical sales opportunities for you.`;
     // Button does not repeat the count — the count is already in the banner above.
     const unlockBtn = document.getElementById('btnUnlock');
@@ -1233,23 +1135,13 @@
 
       const card = document.createElement('div');
       card.className = 'matchcard';
-      card.setAttribute('aria-label', `${m.overall_score}% — ${badgeText}`);
-
-      // Job title and location — scrubbed by server, safe to display
-      const titleHtml  = m.title  ? `<div class="matchcard-title">${escapeHtml(m.title)}</div>` : '';
-      const locParts   = [m.city, m.state].filter(Boolean);
-      const locHtml    = locParts.length ? `<div class="matchcard-loc">${escapeHtml(locParts.join(', '))}</div>` : '';
-      const reason     = (m.reasons || [])[0] || null;
-      const reasonHtml = reason ? `<div class="matchcard-reason">${escapeHtml(reason)}</div>` : '';
-
+      card.setAttribute('aria-label', `${m.overall_score}% — ${badgeText}, locked`);
       card.innerHTML = `
         <div class="matchscore">${m.overall_score}%</div>
-        <div class="matchcard-body">
+        <div>
           <span class="micro-label">${badgeText}</span>
-          ${titleHtml}
-          ${locHtml}
-          ${reasonHtml}
-          <div class="blurline" style="margin-top:4px"></div>
+          <div class="blurline"></div>
+          <div class="blurline short"></div>
         </div>
         <div class="lock" aria-label="Locked">🔒</div>`;
       cards.appendChild(card);
@@ -1258,7 +1150,8 @@
 
   /* ── Retry preview ── */
   document.getElementById('btnRetryPreview').addEventListener('click', () => {
-    doBackendWork(false); // navigates to screen 5 internally
+    show('5');
+    doBackendWork(false);
   });
 
   /* ── Stripe checkout ──
