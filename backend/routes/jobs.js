@@ -1188,6 +1188,111 @@ router.get("/saved-jobs", requireConfig, requireAuth, loadCandidateId, async (re
 router.scrubCompanyNameFromText = scrubCompanyNameFromText;
 router.redactForNonSubscriber = redactForNonSubscriber;
 
+// GET /api/onboarding/job-preview
+// Returns up to 3 preview-safe job listings based on the visitor's
+// questionnaire answers (industry, state, years). Called from the onboarding
+// "3c" screen — between the location question and account creation — so the
+// visitor has not yet created an account.
+//
+// Security model:
+//   - No authentication required (user has no account yet).
+//   - Query params are display inputs ONLY — they filter which jobs are shown
+//     but never affect pricing, access, or any security decision.
+//   - Only preview-safe fields are returned from this endpoint. Employer
+//     identity, application links, descriptions, recruiter details, and any
+//     field that would identify the hiring company are stripped SERVER-SIDE —
+//     not merely hidden client-side.
+//   - Preview-safe fields returned: title_original (company name scrubbed),
+//     city, state, remote_status, compensation_text, salary_min, salary_max,
+//     experience_min_years, experience_max_years, employment_type, industry,
+//     product_type, date_posted.
+//   - No personalized match percentages — résumé analysis has not run.
+//     Label: "Opportunities based on your answers."
+//
+// Rate limiting: 10 requests per 30 seconds per IP (same pattern as /location-search).
+const JP_RATE = new Map();
+function checkJobPreviewRateLimit(ip) {
+  const now = Date.now();
+  const e = JP_RATE.get(ip);
+  if (!e || now > e.resetAt) { JP_RATE.set(ip, { count: 1, resetAt: now + 30_000 }); return true; }
+  if (e.count >= 10) return false;
+  e.count++;
+  return true;
+}
+setInterval(() => { const n = Date.now(); for (const [k, v] of JP_RATE) if (n > v.resetAt) JP_RATE.delete(k); }, 300_000);
+
+// Only these fields leave this endpoint — everything else is dropped before
+// the response is built. This list is the authoritative server-side mask.
+const PREVIEW_SAFE_FIELDS = new Set([
+  'title_original', 'city', 'state', 'remote_status', 'employment_type',
+  'compensation_text', 'salary_min', 'salary_max',
+  'experience_min_years', 'experience_max_years',
+  'industry', 'product_type', 'date_posted',
+]);
+
+function maskForPreview(job) {
+  const safe = {};
+  for (const f of PREVIEW_SAFE_FIELDS) {
+    if (job[f] !== undefined) safe[f] = job[f];
+  }
+  // Scrub any company name that leaked into the title
+  if (safe.title_original && job.company_name) {
+    safe.title_original = scrubCompanyNameFromText(safe.title_original, job.company_name) || safe.title_original;
+  }
+  return safe;
+}
+
+router.get('/onboarding/job-preview', async (req, res) => {
+  if (!isConfigured) return res.json({ jobs: [], reason: 'not_configured' });
+
+  const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
+  if (!checkJobPreviewRateLimit(ip)) return res.status(429).json({ error: 'Too many requests.' });
+
+  const { industry, state } = req.query;
+
+  try {
+    // Build a narrow query — filter by industry and state when provided.
+    // No scoring (no résumé), no profile. Sort by recency.
+    // Fetch only the columns needed for the preview mask + company_name
+    // (needed for scrubbing, then dropped before response).
+    const PREVIEW_SELECT = 'title_original, city, state, remote_status, employment_type, ' +
+      'compensation_text, salary_min, salary_max, experience_min_years, experience_max_years, ' +
+      'industry, product_type, date_posted, company_name';
+
+    let query = supabaseAnon
+      .from('jobs')
+      .select(PREVIEW_SELECT)
+      .eq('status', 'active')
+      .eq('moderation_status', 'approved')
+      .order('date_posted', { ascending: false })
+      .limit(20); // fetch more than 3 so we can filter; return max 3
+
+    if (industry) query = query.eq('industry', industry);
+    if (state)    query = query.eq('state', state);
+
+    const { data: jobs, error } = await query;
+    if (error) throw error;
+
+    const preview = (jobs || [])
+      .filter(j => !mentionsNonUsCountry(null, null, j.title_original))
+      .slice(0, 3)
+      .map(maskForPreview);
+
+    res.json({
+      jobs: preview,
+      total_shown: preview.length,
+      // Honest about what this is: filtered by questionnaire answers,
+      // not personalized scores (which require résumé analysis).
+      label: 'Opportunities based on your answers',
+      personalized: false,
+    });
+  } catch (err) {
+    console.error('[job-preview]', err.message);
+    // Return empty rather than an error — the screen handles 0 results
+    res.json({ jobs: [], total_shown: 0, label: 'Opportunities based on your answers', personalized: false });
+  }
+});
+
 // GET /api/onboarding/match-preview
 // Returns a safe count and top scores for the locked-results screen
 // shown at the end of onboarding, before the candidate starts their trial.
