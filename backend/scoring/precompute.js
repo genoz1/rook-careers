@@ -34,7 +34,21 @@ const UPSERT_BATCH_SIZE = 500; // keeps individual requests to Supabase a reason
  * @param {object} profile - a full candidate_profiles row (must include .id)
  * @returns {Promise<{scoredCount: number}>}
  */
+// Active-jobs cache — 2 minute TTL, process-scoped.
+// fetchActiveJobs does 17+ sequential Supabase round-trips (~3-5 s total
+// at PAGE_SIZE=150). For onboarding match previews this runs on every
+// submission. A short cache means the first submitter pays the fetch cost;
+// all others within the window score against the same job list instantly.
+// 2 minutes is short enough that a newly ingested job appears within two
+// refresh cycles, long enough to absorb a burst of simultaneous signups.
+let _activeJobsListCache = null;
+let _activeJobsListExpiry = 0;
+
 async function fetchActiveJobs(supabase) {
+  const now = Date.now();
+  if (_activeJobsListCache && now < _activeJobsListExpiry) {
+    return _activeJobsListCache;
+  }
   // Paginated fetch — Supabase/PostgREST caps a single query at 1000
   // rows by default, and a plain .select("*") with no .range() silently
   // truncates rather than erroring. With ATS + Adzuna ingestion now
@@ -97,6 +111,9 @@ async function fetchActiveJobs(supabase) {
   if (deduped.length !== activeJobs.length) {
     console.log(`  (removed ${activeJobs.length - deduped.length} duplicate job row(s) from pagination overlap)`);
   }
+  // Write to cache — 2 minute TTL
+  _activeJobsListCache = deduped;
+  _activeJobsListExpiry = Date.now() + 2 * 60 * 1000;
   return deduped;
 }
 
