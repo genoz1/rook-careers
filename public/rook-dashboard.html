@@ -262,6 +262,10 @@
     .job-actions{display:flex; flex-wrap:wrap; gap:6px; margin-top:10px;}
     .job-actions .reason-tag{background:#f3f8fc; border-radius:9px; padding:6px 8px; font-size:10px; color:#47637c;}
   }
+  /* Location widget suggestion list — shared styles used by rook-location-widget.js */
+  .rlw-item{padding:10px 14px;cursor:pointer;font-size:14px;color:#062d55;border-bottom:1px solid #eaf1f6;list-style:none;}
+  .rlw-item:last-child{border-bottom:none;}
+  .rlw-item.rlw-active,.rlw-item:hover{background:#f0f7ff;color:#0877d1;}
 
 </style>
 <link rel="stylesheet" href="rook-mobile.css">
@@ -330,6 +334,36 @@
       <div class="top-actions">
         <a href="rook-onboarding.html" class="btn btn-outline">Edit Preferences</a>
         <a href="rook-search.html" class="btn btn-primary">+ New Search</a>
+      </div>
+    </div>
+
+    <!-- Primary Job-Search Location row — shows the saved work location and
+         lets the candidate change it inline. Changing it saves to the profile,
+         rescores, and reloads the job list. Does NOT affect the Find Jobs page
+         (temporary location searches there are independent). -->
+    <div id="locationRow" style="display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:16px; padding:10px 14px; background:#f3f8fc; border:1px solid #dce7f0; border-radius:13px;">
+      <span style="font-size:13px; font-weight:700; color:#47637c; white-space:nowrap; flex-shrink:0;">📍 Primary Job-Search Location:</span>
+      <span id="locationLabel" style="font-size:13px; font-weight:700; color:#062d55; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">—</span>
+      <button id="btnChangeLocation" style="font-size:12px; font-weight:700; color:#0877d1; background:none; border:1.5px solid #c4ddf5; border-radius:8px; padding:5px 11px; cursor:pointer; flex-shrink:0;">Change</button>
+    </div>
+    <!-- Inline location editor — hidden until "Change" is clicked -->
+    <div id="locationEditor" style="display:none; margin-bottom:16px; padding:14px; background:#fff; border:1.5px solid #0877d1; border-radius:13px; position:relative;">
+      <div style="font-size:12px; font-weight:700; color:#47637c; margin-bottom:8px; text-transform:uppercase; letter-spacing:.06em;">Change Primary Job-Search Location</div>
+      <div style="font-size:12px; color:#637589; margin-bottom:10px;">This updates your dashboard ranking and saves to your profile.</div>
+      <div style="position:relative;">
+        <input id="dashLocInput" type="text" placeholder="City, state or ZIP code"
+          style="width:100%;box-sizing:border-box;border:1.5px solid #dce7f0;border-radius:10px;padding:12px 14px;font-size:14px;outline:none;font-family:inherit;">
+        <ul id="dashLocList" hidden style="
+          position:absolute; top:100%; left:0; right:0; z-index:200;
+          background:#fff; border:1.5px solid #0877d1; border-top:none;
+          border-radius:0 0 10px 10px; margin:0; padding:4px 0; list-style:none;
+          max-height:200px; overflow-y:auto; box-shadow:0 8px 20px rgba(7,44,80,.12);
+        "></ul>
+      </div>
+      <div id="dashLocStatus" style="font-size:12px; color:#637589; min-height:16px; margin:6px 0 10px;"></div>
+      <div style="display:flex; gap:8px; justify-content:flex-end;">
+        <button id="btnCancelLocation" style="font-size:13px; font-weight:600; color:#637589; background:none; border:1.5px solid #dce7f0; border-radius:8px; padding:8px 14px; cursor:pointer;">Cancel</button>
+        <button id="btnSaveLocation" disabled style="font-size:13px; font-weight:700; color:#fff; background:linear-gradient(105deg,#062d55,#0877d1); border:0; border-radius:8px; padding:8px 16px; cursor:pointer; opacity:.5;">Save &amp; Refresh</button>
       </div>
     </div>
 
@@ -489,6 +523,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="rook-config.js"></script>
 <script src="rook-auth.js"></script>
+<script src="rook-location-widget.js"></script>
 <script>
   // Every job row currently in the HTML is sample/demo data — clearly
   // marked as such per the "no fake functionality" principle in the
@@ -537,19 +572,19 @@
         }
         if (!profile) return; // no profile row at all — rookRequireAuth's routing already sends these candidates to onboarding, not here
         const missingResume = !profile.resume_file_path;
-        const missingZip = !profile.home_zip;
-        if (!missingResume && !missingZip) return;
+        const missingLocation = !profile.home_lat && !profile.home_zip; // lat/lng from any source
+        if (!missingResume && !missingLocation) return;
         const title = document.getElementById('profileGateTitle');
         const body = document.getElementById('profileGateBody');
-        if (missingResume && missingZip) {
-          title.textContent = "You're missing a résumé and a ZIP code";
-          body.textContent = "Without these, we can't actually score jobs against your background or rank them by real distance — that's why everything looks flat right now.";
+        if (missingResume && missingLocation) {
+          title.textContent = "You're missing a résumé and a primary location";
+          body.textContent = "Without these, we can't score jobs against your background or rank them by real distance — that's why everything looks flat right now.";
         } else if (missingResume) {
           title.textContent = "You're missing a résumé";
           body.textContent = "Without it, we can't score jobs against your actual background — that's why everything looks flat right now.";
         } else {
-          title.textContent = "You're missing a ZIP code";
-          body.textContent = "Without it, we can't rank jobs by real distance from you — just which state they're in.";
+          title.textContent = "You're missing a primary job-search location";
+          body.textContent = "Without it, we can't rank jobs by real distance from you — just which state they're in. Add one in Settings or use the location row above.";
         }
         document.getElementById('profileGateOverlay').classList.add('active');
       } catch {
@@ -560,6 +595,101 @@
 
     const jobList = document.getElementById('jobList');
     const loading = document.getElementById('jobListLoading');
+
+    // ── Primary Job-Search Location display and change widget ─────────────────
+    // updateLocationLabel: reads the profile and updates the location row text.
+    // Called by loadJobs after fetching the profile.
+    function updateLocationLabel(profile) {
+      const labelEl = document.getElementById('locationLabel');
+      if (!labelEl) return;
+      let label = null;
+      if (profile?.home_location_label) {
+        label = profile.home_location_label;
+      } else if (profile?.home_city && profile?.home_state) {
+        // Derive from city + state abbreviation (fallback for older profiles)
+        const abbr = (profile.home_state.trim().length === 2)
+          ? profile.home_state.trim().toUpperCase()
+          : null; // stateAbbrFromName is backend-only; just show city, ST if 2-char
+        label = abbr ? `${profile.home_city}, ${abbr}` : `${profile.home_city}, ${profile.home_state}`;
+      } else if (profile?.home_zip) {
+        label = profile.home_zip;
+      }
+      labelEl.textContent = label || 'Not set — add in Settings';
+    }
+
+    // Wire the "Change" / "Cancel" buttons for the inline location editor
+    (function wireLocationEditor() {
+      const row     = document.getElementById('locationRow');
+      const editor  = document.getElementById('locationEditor');
+      const btnOpen = document.getElementById('btnChangeLocation');
+      const btnCancel = document.getElementById('btnCancelLocation');
+      const btnSave   = document.getElementById('btnSaveLocation');
+      if (!editor || !btnOpen) return;
+
+      let pendingLocation = null;
+
+      const dashWidget = RookLocationWidget.init({
+        inputEl:  document.getElementById('dashLocInput'),
+        listEl:   document.getElementById('dashLocList'),
+        statusEl: document.getElementById('dashLocStatus'),
+        onSelect: (s) => {
+          pendingLocation = s;
+          if (btnSave) { btnSave.disabled = false; btnSave.style.opacity = '1'; }
+        },
+        onClear: () => {
+          pendingLocation = null;
+          if (btnSave) { btnSave.disabled = true; btnSave.style.opacity = '.5'; }
+        },
+      });
+
+      btnOpen.addEventListener('click', () => {
+        editor.style.display = 'block';
+        row.style.display = 'none';
+        pendingLocation = null;
+        if (dashWidget) dashWidget.reset();
+        if (btnSave) { btnSave.disabled = true; btnSave.style.opacity = '.5'; }
+        document.getElementById('dashLocInput')?.focus();
+      });
+
+      btnCancel.addEventListener('click', () => {
+        editor.style.display = 'none';
+        row.style.display = 'flex';
+        if (dashWidget) dashWidget.reset();
+      });
+
+      btnSave.addEventListener('click', async () => {
+        if (!pendingLocation) return;
+        btnSave.disabled = true;
+        btnSave.textContent = 'Saving…';
+        try {
+          const payload = {
+            home_city:  pendingLocation.city  || null,
+            home_state: pendingLocation.state || null,
+            home_zip:   pendingLocation.zip   || null,
+            home_lat:   pendingLocation.lat   != null ? pendingLocation.lat : null,
+            home_lng:   pendingLocation.lng   != null ? pendingLocation.lng : null,
+            home_location_label: pendingLocation.label || null,
+          };
+          const saveRes = await rookApiFetch('/profile', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          if (!saveRes.ok) throw new Error('Save failed');
+          // Update the label in the row before closing
+          document.getElementById('locationLabel').textContent = pendingLocation.label || pendingLocation.zip || '—';
+          editor.style.display = 'none';
+          row.style.display = 'flex';
+          // Reload jobs with new location — loadJobs re-fetches the profile
+          // and uses the freshly saved lat/lng for ranking
+          loadJobs();
+        } catch (err) {
+          document.getElementById('dashLocStatus').textContent = 'Could not save. Try again.';
+          btnSave.disabled = false;
+          btnSave.textContent = 'Save & Refresh';
+        }
+      });
+    })();
 
     function revealDemo() {
       loading.style.display = 'none';
@@ -600,18 +730,24 @@
       // below — overlaps with the rest of this function's own fetches
       // instead of adding to them sequentially.
       const ctaLabelPromise = rookLockedJobCtaLabel();
-      // Direct instruction: use the literal same mechanism as Job
-      // Search's "show jobs near X" (already confirmed correct),
-      // locked to the candidate's own saved ZIP instead of a manual
-      // search - geocode fresh and pass explicit near_lat/near_lng,
-      // rather than relying on any server-side default that could
-      // silently behave differently. Byte-for-byte the same two-step
-      // flow Job Search itself uses.
       const profileRes = await rookApiFetch('/profile');
-      const profileForZip = profileRes.ok ? await profileRes.json() : null;
+      const profileForLocation = profileRes.ok ? await profileRes.json() : null;
+
+      // Update the Primary Job-Search Location label in the UI
+      updateLocationLabel(profileForLocation);
+
+      // Build the jobs URL.
+      // Prefer stored home_lat/home_lng (populated for all new users and
+      // for existing users whose profile was re-saved after the migration).
+      // Fall back to geocoding from home_zip for existing users who have a
+      // saved ZIP but home_lat/home_lng haven't been populated yet.
       let jobsUrl = '/jobs?limit=300';
-      if (profileForZip?.home_zip) {
-        const geoRes = await rookApiFetch('/geocode?q=' + encodeURIComponent(profileForZip.home_zip));
+      const hasStoredCoords = profileForLocation?.home_lat != null && profileForLocation?.home_lng != null;
+      if (hasStoredCoords) {
+        jobsUrl = `/jobs?limit=300&near_lat=${profileForLocation.home_lat}&near_lng=${profileForLocation.home_lng}`;
+      } else if (profileForLocation?.home_zip) {
+        // Legacy fallback: geocode the saved ZIP
+        const geoRes = await rookApiFetch('/geocode?q=' + encodeURIComponent(profileForLocation.home_zip));
         if (geoRes.ok) {
           const geo = await geoRes.json();
           jobsUrl = `/jobs?limit=300&near_lat=${geo.lat}&near_lng=${geo.lng}`;

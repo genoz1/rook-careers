@@ -99,6 +99,12 @@
     .field input:focus{border-color:var(--blue)}
     .field label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em}
     .micro{font-size:12px;color:var(--muted);font-weight:700}
+    /* Location input (screen 3b) */
+    .ob-input{width:100%;border:1.5px solid var(--line);border-radius:14px;padding:16px;outline:none;font-size:16px;background:#fff;color:var(--ink);transition:border-color .18s;font-family:inherit;box-sizing:border-box}
+    .ob-input:focus{border-color:var(--blue)}
+    .rlw-item{padding:12px 16px;cursor:pointer;font-size:15px;color:var(--ink);border-bottom:1px solid var(--line);list-style:none}
+    .rlw-item:last-child{border-bottom:none}
+    .rlw-item.rlw-active,.rlw-item:hover{background:#f0f7ff;color:var(--blue)}
 
     /* ── Error banner ── */
     .err{background:#fff0f0;border:1.5px solid #f9b8b8;border-radius:13px;padding:12px 15px;font-size:14px;color:#8b1c1c;font-weight:600;margin-top:12px;display:none}
@@ -269,6 +275,45 @@
           <div class="actions">
             <button class="back" onclick="goBack()">Back</button>
             <button class="primary" id="btnTerrNext" disabled>Continue</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Screen 3b: Work location (primary job-search location)
+           Collects: city, state, ZIP, lat, lng for scoring and dashboard display.
+           Uses the shared rook-location-widget.js autocomplete backed by
+           /api/location-search (no auth required — this screen runs before
+           account creation). Stored in sel.location and persisted in the draft.
+           Wired in JS below; Continue button is disabled until a valid
+           suggestion is selected explicitly. -->
+      <section class="screen" data-step="3b">
+        <div class="content">
+          <div class="eyebrow">Your search</div>
+          <h2>Where do you want to work?</h2>
+          <p class="lead">Choose your primary U.S. job-search location. We'll use it to score and display nearby jobs on your dashboard. You can search other locations anytime.</p>
+          <div class="field-wrap" style="position:relative; margin:0 0 6px;">
+            <input
+              type="text"
+              id="locationInput"
+              class="ob-input"
+              placeholder="City, state or ZIP code"
+              autocomplete="off"
+              aria-label="Primary job-search location"
+              style="width:100%; box-sizing:border-box;"
+            >
+            <ul id="locationList" hidden style="
+              position:absolute; top:100%; left:0; right:0; z-index:200;
+              background:#fff; border:1.5px solid #0877d1; border-top:none;
+              border-radius:0 0 12px 12px; margin:0; padding:4px 0;
+              list-style:none; max-height:220px; overflow-y:auto;
+              box-shadow:0 8px 20px rgba(7,44,80,.12);
+            "></ul>
+          </div>
+          <div id="locationStatus" style="font-size:12px; color:#637589; min-height:18px; margin-bottom:8px;"></div>
+          <p style="font-size:12px; color:#8B96AB; margin:0 0 20px;">Examples: <code style="background:#f3f8fc;padding:2px 6px;border-radius:4px;">34484</code>, <code style="background:#f3f8fc;padding:2px 6px;border-radius:4px;">Boise, ID</code>, <code style="background:#f3f8fc;padding:2px 6px;border-radius:4px;">Orlando, Florida</code></p>
+          <div class="actions">
+            <button class="back" onclick="goBack()">Back</button>
+            <button class="primary" id="btnLocNext" disabled>Continue</button>
           </div>
         </div>
       </section>
@@ -467,6 +512,7 @@
 <!-- Supabase and ROOK config -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="rook-config.js"></script>
+<script src="rook-location-widget.js"></script>
 <script src="rook-attribution.js"></script>
 <script>
 /* ══════════════════════════════════════════════════════════════════
@@ -514,14 +560,15 @@
   // The array includes 4b, 4c, 6e — steps not in the original approved ZIP
   // but using the same visual system.
   const allScreens = [...document.querySelectorAll('.screen')];
-  const stepOrder  = ['0','1','2','3','4','4b','4c','5','6','6e','7'];
+  const stepOrder  = ['0','1','2','3','3b','4','4b','4c','5','6','6e','7'];
   const LABELS     = {
     '0':'Welcome','1':'Step 1 of 4','2':'Step 2 of 4','3':'Step 3 of 4',
+    '3b':'Step 3 of 4',
     '4':'Step 4 of 4','4b':'Step 4 of 4','4c':'Step 4 of 4',
     '5':'Analyzing','6':'Your matches','6e':'Your matches','7':'Start trial'
   };
   const PROGRESS   = {
-    '0':0,'1':14,'2':28,'3':43,'4':57,'4b':57,'4c':57,'5':75,'6':90,'6e':90,'7':100
+    '0':0,'1':14,'2':28,'3':43,'3b':50,'4':57,'4b':57,'4c':57,'5':75,'6':90,'6e':90,'7':100
   };
   let currentStep = '0';
   let analysisTimer = null;
@@ -546,7 +593,7 @@
   }
 
   /* ── Selections ── */
-  const sel = { industry: null, years: null, territory: null };
+  const sel = { industry: null, years: null, territory: null, location: null };
 
   function wireSingleSelect(groupId, field, nextBtnId) {
     const group = document.getElementById(groupId);
@@ -586,6 +633,36 @@
   });
   document.getElementById('btnTerrNext').addEventListener('click', () => {
     gtag('event', 'onboarding_step_completed', { step: 3, territory: sel.territory });
+    show('3b');
+  });
+
+  /* ── Screen 3b: Work Location ── */
+  const locWidget = RookLocationWidget.init({
+    inputEl:  document.getElementById('locationInput'),
+    listEl:   document.getElementById('locationList'),
+    statusEl: document.getElementById('locationStatus'),
+    onSelect: (suggestion) => {
+      sel.location = suggestion;
+      document.getElementById('btnLocNext').disabled = false;
+    },
+    onClear: () => {
+      sel.location = null;
+      document.getElementById('btnLocNext').disabled = true;
+    },
+  });
+
+  // Restore widget value from draft if present
+  (function () {
+    const el = document.getElementById('locationInput');
+    if (el && el.dataset.pendingRestore) {
+      try { locWidget.setValue(JSON.parse(el.dataset.pendingRestore)); } catch (_) {}
+      delete el.dataset.pendingRestore;
+    }
+  })();
+
+  document.getElementById('btnLocNext').addEventListener('click', () => {
+    if (!sel.location) return; // guard — button should be disabled anyway
+    gtag('event', 'onboarding_step_completed', { step: '3b', location_label: sel.location.label });
     show('4');
   });
 
@@ -604,6 +681,7 @@
         industry: sel.industry,
         years: sel.years,
         territory: sel.territory,
+        location: sel.location, // { label, city, state, stateAbbr, lat, lng, zip }
         savedAt: Date.now(),
       }));
     } catch (_) { /* storage unavailable — proceed without draft */ }
@@ -641,6 +719,13 @@
       sel.territory = d.territory;
       const btn = document.querySelector(`#choicesTerritory .choice[data-val="${d.territory}"]`);
       if (btn) { btn.classList.add('selected'); document.getElementById('btnTerrNext').disabled = false; }
+    }
+    if (d.location && d.location.label) {
+      sel.location = d.location;
+      // Restore the input display — the widget setValue is called after widget init below
+      const el = document.getElementById('locationInput');
+      if (el) el.dataset.pendingRestore = JSON.stringify(d.location);
+      document.getElementById('btnLocNext').disabled = false;
     }
   }
 
@@ -870,6 +955,17 @@
           total_sales_years:  sel.years   != null ? Number(sel.years) : null,
           territory_size_preference: sel.territory || null,
           work_style: sel.territory === 'remote' ? 'remote' : 'field',
+          // Primary job-search location (from screen 3b)
+          // The widget's selection already contains geocoded lat/lng so the
+          // profile route will not re-geocode; it stores them as-is.
+          ...(sel.location ? {
+            home_city:     sel.location.city  || null,
+            home_state:    sel.location.state || null, // full state name — matches matching.js
+            home_zip:      sel.location.zip   || null,
+            home_lat:      sel.location.lat   != null ? sel.location.lat : null,
+            home_lng:      sel.location.lng   != null ? sel.location.lng : null,
+            home_location_label: sel.location.label || null,
+          } : {}),
           // First-touch attribution
           ...rookGetStoredAttribution(),
         };
