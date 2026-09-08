@@ -433,11 +433,11 @@
           <p class="lead">Comparing your background with current medical sales openings…</p>
           <div class="radar" aria-hidden="true"><b class="pct" id="pctDisplay">0%</b></div>
           <div class="checks">
-            <div class="check" id="chk0"><span class="tick">✓</span>Experience</div>
-            <div class="check" id="chk1"><span class="tick">✓</span>Industry and products</div>
-            <div class="check" id="chk2"><span class="tick">✓</span>Customer specialty</div>
-            <div class="check" id="chk3"><span class="tick">✓</span>Location and preferences</div>
-            <div class="check" id="chk4"><span class="tick">✓</span>Job requirements</div>
+            <div class="check" id="chk0"><span class="tick">✓</span>Preferences saved</div>
+            <div class="check" id="chk1"><span class="tick">✓</span>Résumé uploaded</div>
+            <div class="check" id="chk2"><span class="tick">✓</span>Résumé analyzed</div>
+            <div class="check" id="chk3"><span class="tick">✓</span>Jobs loaded</div>
+            <div class="check" id="chk4"><span class="tick">✓</span>Matches ready</div>
           </div>
           <p class="analysis-status" id="analysisStatus"></p>
         </div>
@@ -1105,26 +1105,30 @@
           body: fd,
         });
         const tResume = ms();
-        if (resumeRes.ok) {
-          milestoneAnim(45, 1); // chk1 Industry/products — file stored
-          gtag('event', 'resume_uploaded', { method: 'v2', ms: tResume });
-          const rd = await resumeRes.json().catch(() => ({}));
-          log('résumé analysis_status=' + rd.analysis_status);
-          if (rd.analysis_status === 'ok') {
-            milestoneAnim(65, 2); // chk2 Customer specialty — analysis complete
-            gtag('event', 'resume_analysis_completed', { method: 'v2', ms: ms() });
-          } else {
-            // Upload succeeded but AI analysis failed — profile scored on
-            // questionnaire data only. Scoring will still run; scores
-            // will lack the résumé-based candidate_fit component.
-            milestoneAnim(55, 2);
-            console.warn('[doBackendWork] analysis_status:', rd.analysis_status,
-              '— scoring will use questionnaire data only');
-          }
-        } else {
-          // Upload to storage failed — continue without résumé
-          log('résumé upload failed ' + resumeRes.status);
+        if (!resumeRes.ok) {
+          // File storage failed — user must re-select and retry
+          gtag('event', 'resume_upload_failed', { method: 'v2', status: resumeRes.status, ms: tResume });
+          throw new Error('__analysis_retry__:Storage upload failed. Please try again or use a different file.');
         }
+
+        milestoneAnim(45, 1); // chk1 Résumé uploaded — file in storage
+        gtag('event', 'resume_uploaded', { method: 'v2', ms: tResume });
+        const rd = await resumeRes.json().catch(() => ({}));
+        log('résumé analysis_status=' + rd.analysis_status);
+
+        if (rd.analysis_status !== 'ok') {
+          // Analysis failed. We must not proceed to preview — scored results
+          // would lack candidate_fit entirely and show misleadingly low scores.
+          // Show a retry state so the user can try a different file.
+          const statusHint = rd.analysis_status === 'no_text_extracted'
+            ? 'We couldn’t read text from your file. Try a PDF exported from a word processor rather than a scanned image.'
+            : 'Résumé analysis failed. Please try again, or upload a PDF if you used DOCX.';
+          gtag('event', 'resume_analysis_failed', { method: 'v2', status: rd.analysis_status, ms: ms() });
+          throw new Error('__analysis_retry__:' + statusHint);
+        }
+
+        milestoneAnim(65, 2); // chk2 Résumé analyzed — analysis_status=ok
+        gtag('event', 'resume_analysis_completed', { method: 'v2', ms: ms() });
       }
 
       // Wait for warm-jobs to finish (ensures cache is populated before preview)
@@ -1160,6 +1164,24 @@
       deleteDraft();
 
     } catch (err) {
+      const isRetry = err.message.startsWith('__analysis_retry__:');
+      if (isRetry) {
+        // Analysis failed — do not show fallback scores; offer retry.
+        // Navigate back to screen 4c with a visible error.
+        clearTimeout(slowWarn);
+        const retryMsg = err.message.slice('__analysis_retry__:'.length);
+        console.warn('[doBackendWork] analysis retry needed:', retryMsg);
+        gtag('event', 'resume_analysis_failed', { method: 'v2', message: retryMsg, elapsed_ms: ms() });
+        showErr('resumeErr', retryMsg);
+        // Reset file selection so user must re-choose (file may be corrupt or unsupported)
+        resumeFileV = null;
+        const zoneV = document.getElementById('uploadZoneV');
+        const selV  = document.getElementById('fileSelectedV');
+        if (zoneV) zoneV.style.display = '';
+        if (selV)  selV.style.display  = 'none';
+        show('4c');
+        return; // exit doBackendWork without reaching the show('6e') below
+      }
       backendError = err.message;
       console.error('[doBackendWork]', err);
       gtag('event', 'onboarding_error', { method: 'v2', message: err.message, elapsed_ms: ms() });
