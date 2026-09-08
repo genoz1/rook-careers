@@ -386,7 +386,7 @@
           <p style="font-size:12px;color:var(--muted);margin:12px 0 0;text-align:center" id="previewNote"></p>
           <div class="actions" style="margin-top:20px">
             <button class="back" onclick="goBack()">Back</button>
-            <button class="primary" id="btnPreviewNext">Create Account to See All</button>
+            <button class="primary" id="btnPreviewNext">Continue — Résumé &amp; Trial Required to Unlock</button>
           </div>
         </div>
       </section>
@@ -953,7 +953,7 @@
           <div class="preview-card-meta">${escapeHtml(loc)}${job.employment_type ? ' · ' + escapeHtml(job.employment_type) : ''}</div>
           ${comp ? '<div class="preview-card-comp">' + escapeHtml(comp) + '</div>' : ''}
           ${expText ? '<div class="preview-card-note">' + escapeHtml(expText) + '</div>' : ''}
-          <div class="preview-card-note">🔒 Employer and application details unlock after signup</div>`;
+          <div class="preview-card-note">🔒 Employer name and apply link unlock after résumé analysis and trial</div>`;
         cardsEl.appendChild(card);
       });
 
@@ -1033,6 +1033,14 @@
     const { data: { session: existingSession } } = await sb.auth.getSession()
       .catch(() => ({ data: { session: null } }));
     if (existingSession) {
+      // Path C: authenticated user with no profile. Save onboarding_version:2
+      // now — before résumé upload — so if they leave after this point they
+      // are correctly routed back to résumé upload, not treated as legacy users.
+      fetch('/api/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${existingSession.access_token}` },
+        body: JSON.stringify({ onboarding_version: 2 }),
+      }).catch(err => console.warn('[Path C version mark]', err.message));
       show('4c');
       return;
     }
@@ -1532,6 +1540,11 @@
             home_lng: sel.location.lng ?? null,
             home_location_label: sel.location.label || null,
           } : {}),
+          // Mark as new-flow at the first authenticated write — before résumé
+          // upload — so users who leave after email verification are correctly
+          // routed to the résumé step on return, not treated as legacy users.
+          // NULL is preserved for profiles that existed before this deploy.
+          onboarding_version: 2,
         };
         fetch('/api/profile', {
           method: 'PUT',
