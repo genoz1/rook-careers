@@ -89,19 +89,16 @@ router.put("/profile", requireConfig, requireAuth, async (req, res) => {
     });
   }
 
-  // If a ZIP was provided AND lat/lng were NOT already supplied by the caller
-  // (e.g. from the location-autocomplete widget which sends real coordinates
-  // for any city or ZIP selection), geocode the ZIP to get coordinates.
-  // When the caller already provides home_lat/home_lng (city selections), skip
-  // this geocoding so we don't clobber precise coordinates with a ZIP-centroid.
-  if (payload.home_zip && payload.home_lat == null && payload.home_lng == null) {
+  // If a ZIP was provided, geocode it once here so home_lat/home_lng save
+  // in the same write — powers the proximity bonus in backend/matching.js.
+  // A geocoding failure doesn't block saving the rest of the profile; it
+  // just means no proximity bonus until a later save succeeds.
+  if (payload.home_zip) {
     try {
       const coords = await geocodeZip(payload.home_zip);
       if (coords) {
         payload.home_lat = coords.lat;
         payload.home_lng = coords.lng;
-        // Also capture the state name if not already provided
-        if (!payload.home_state && coords.state) payload.home_state = coords.state;
       }
     } catch (err) {
       console.error(`Geocoding failed for ZIP ${payload.home_zip}: ${err.message}`);

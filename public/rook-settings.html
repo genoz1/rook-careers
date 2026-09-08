@@ -259,11 +259,11 @@
           <div class="field"><label>City</label><input type="text" id="fieldCity"></div>
           <div class="field"><label>State</label><input type="text" id="fieldState"></div>
         </div>
-          <div class="field-row">
+        <div class="field-row">
           <div class="field">
-            <label>Primary Job-Search Location (ZIP or City)</label>
-            <input type="text" id="fieldZip" placeholder="e.g. 34484 or Boise, ID" maxlength="100">
-            <div style="font-size:11.5px; color:#8B96AB; margin-top:4px;">The U.S. location you want to work near. Used to rank nearby jobs on your dashboard.</div>
+            <label>ZIP Code</label>
+            <input type="text" id="fieldZip" placeholder="33602" maxlength="5">
+            <div style="font-size:11.5px; color:#8B96AB; margin-top:4px;">Used to rank in-state jobs by how close they are to you.</div>
           </div>
           <div class="field"></div>
         </div>
@@ -288,24 +288,6 @@
           <div style="font-size:12.5px; color:#8B96AB; margin:-2px 0 10px;">Your home state is always included. Add more states individually, or use a region shortcut below.</div>
           <div id="regionShortcuts" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px;"></div>
           <div id="stateGrid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(72px, 1fr)); gap:6px; max-height:220px; overflow-y:auto; padding:12px; border:1px solid var(--border); border-radius:10px;"></div>
-        </div>
-        <!-- Territory preferences (multi-select — same options as onboarding Step 3) -->
-        <div class="field" style="margin-top:16px;">
-          <label>Territory Preferences <span style="font-size:11px;font-weight:400;color:#8B96AB;">(select all that apply)</span></label>
-          <div id="settingsTerritoryGroup" style="display:grid; gap:8px; margin-top:8px;">
-            <label style="display:flex; align-items:center; gap:10px; padding:10px 14px; border:1.5px solid var(--border,#E3E8F0); border-radius:10px; cursor:pointer; font-size:14px; font-weight:600; color:var(--navy,#062d55);">
-              <input type="checkbox" id="terrLocal" value="local" style="width:16px;height:16px;"> Local territory — home most nights
-            </label>
-            <label style="display:flex; align-items:center; gap:10px; padding:10px 14px; border:1.5px solid var(--border,#E3E8F0); border-radius:10px; cursor:pointer; font-size:14px; font-weight:600; color:var(--navy,#062d55);">
-              <input type="checkbox" id="terrRegional" value="regional" style="width:16px;height:16px;"> Regional territory — some overnight travel
-            </label>
-            <label style="display:flex; align-items:center; gap:10px; padding:10px 14px; border:1.5px solid var(--border,#E3E8F0); border-radius:10px; cursor:pointer; font-size:14px; font-weight:600; color:var(--navy,#062d55);">
-              <input type="checkbox" id="terrNational" value="national" style="width:16px;height:16px;"> Large or national territory — frequent travel
-            </label>
-            <label style="display:flex; align-items:center; gap:10px; padding:10px 14px; border:1.5px solid var(--border,#E3E8F0); border-radius:10px; cursor:pointer; font-size:14px; font-weight:600; color:var(--navy,#062d55);">
-              <input type="checkbox" id="terrRemote" value="remote" style="width:16px;height:16px;"> Remote or inside sales
-            </label>
-          </div>
         </div>
         <div class="field-row">
           <div class="field"><label>Remote / Hybrid / On-site</label>
@@ -686,18 +668,6 @@ function addRegion(region) {
     if (currentProfile.work_style) setVal('fieldWorkStyle', currentProfile.work_style);
     setVal('fieldRelocation', currentProfile.willing_to_relocate ? 'true' : 'false');
 
-    // Populate territory multi-select checkboxes
-    // territory_size_preferences (text[]) takes precedence; fall back to the
-    // legacy territory_size_preference (text) for users who set it before the upgrade.
-    const savedTerritories = Array.isArray(currentProfile.territory_size_preferences)
-      ? currentProfile.territory_size_preferences
-      : (currentProfile.territory_size_preference ? [currentProfile.territory_size_preference] : []);
-    savedTerritories.forEach(val => {
-      const map = { local:'terrLocal', regional:'terrRegional', national:'terrNational', remote:'terrRemote' };
-      const el = document.getElementById(map[val]);
-      if (el) el.checked = true;
-    });
-
     (currentProfile.preferred_states || []).forEach((abbr) => {
       const box = document.querySelector(`.state-check[value="${abbr}"]`);
       if (box) box.checked = true;
@@ -859,15 +829,6 @@ async function saveProfilePanel(panel, btn) {
       preferred_states: preferredStates,
       overnight_travel_preference: document.getElementById('fieldOvernightTravel').value || null,
       desired_industries: selectedChips('settingsDesiredIndustries'),
-      // Territory multi-select — collect all checked options
-      territory_size_preferences: ['terrLocal','terrRegional','terrNational','terrRemote']
-        .filter(id => document.getElementById(id)?.checked)
-        .map(id => document.getElementById(id).value),
-      // Backward-compat single-value field
-      territory_size_preference: (['terrLocal','terrRegional','terrNational','terrRemote']
-        .find(id => document.getElementById(id)?.checked)
-        ? document.getElementById(['terrLocal','terrRegional','terrNational','terrRemote'].find(id => document.getElementById(id)?.checked)).value
-        : null),
     };
   } else if (panel === 'experience') {
     payload = {
