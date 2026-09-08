@@ -430,26 +430,6 @@
         </div>
       </section>
 
-      <!-- Screen 4c-retry: analysis retry — file already stored, no re-upload needed.
-           Shown via Path B2b when resume_file_path exists but analysis failed
-           (no candidate_embedding or resume_structured). The user sees a clear
-           explanation that their file was saved and analysis is being retried. -->
-      <section class="screen" data-step="4c-retry">
-        <div class="content" style="text-align:center">
-          <div style="font-size:48px;margin-bottom:12px">🔄</div>
-          <div class="eyebrow">Analysis needed</div>
-          <h2>Let's try that again.</h2>
-          <p class="lead">Your résumé file was saved successfully, but the analysis step didn't complete. We'll retry it now — you don't need to re-upload your file.</p>
-          <div class="err" id="retryErr" style="text-align:left"></div>
-          <div class="actions" style="margin-top:24px;justify-content:center">
-            <button class="primary" id="btnRetryAnalysis" style="width:100%">Retry Analysis</button>
-          </div>
-          <p style="font-size:13px;color:var(--muted);margin-top:16px">
-            If retry keeps failing, <button type="button" id="btnRetryWithNewFile" style="background:none;border:none;color:var(--blue);font-weight:700;cursor:pointer;font-size:13px;padding:0">upload a different file</button>.
-          </p>
-        </div>
-      </section>
-
       <!-- Screen 4c: Résumé upload — shown after email verification for new users,
            and directly after questionnaire for already-authenticated users.
            This is the PRIMARY résumé upload step, not just a "reselect".
@@ -627,17 +607,17 @@
   // The array includes 4b, 4c, 6e — steps not in the original approved ZIP
   // but using the same visual system.
   const allScreens = [...document.querySelectorAll('.screen')];
-  const stepOrder  = ['0','1','2','3','3b','4','4b','4c','4c-retry','5','6','6e','7'];
+  const stepOrder  = ['0','1','2','3','3b','4','4b','4c','5','6','6e','7'];
   const LABELS     = {
     '0':'Welcome',
     '1':'Step 1 of 5','2':'Step 2 of 5','3':'Step 3 of 5',
     '3b':'Step 4 of 5',
-    '4':'Step 5 of 5','4b':'Step 5 of 5','4c':'Step 5 of 5','4c-retry':'Step 5 of 5',
+    '4':'Step 5 of 5','4b':'Step 5 of 5','4c':'Step 5 of 5',
     '5':'Analyzing','6':'Your matches','6e':'Your matches','7':'Start trial'
   };
   const PROGRESS   = {
     '0':0,'1':20,'2':40,'3':60,'3b':80,
-    '4':100,'4b':100,'4c':100,'4c-retry':100,'5':100,'6':100,'6e':100,'7':100
+    '4':100,'4b':100,'4c':100,'5':100,'6':100,'6e':100,'7':100
   };
   let currentStep = '0';
   let analysisTimer = null;
@@ -661,16 +641,6 @@
       step_label: LABELS[key] || key,
       progress_pct: PROGRESS[key] ?? 0,
     });
-  }
-
-  // Populate sel from profile fields — used when returning to the page after
-  // email verification on a different device where the localStorage draft is
-  // gone. Only sets fields that are still empty to avoid overwriting answers
-  // the user just entered in this session.
-  function restoreSelFromProfile(profile) {
-    if (!sel.industry && profile.desired_industries?.length) sel.industry = profile.desired_industries[0];
-    if (sel.years == null && profile.total_sales_years != null) sel.years = profile.total_sales_years;
-    if (!sel.territories?.length && profile.territory_size_preferences?.length) sel.territories = [...profile.territory_size_preferences];
   }
 
   function goBack() {
@@ -1032,53 +1002,6 @@
     doBackendWork(true);
   });
 
-  // ── Screen 4c-retry: retry analysis without re-upload ─────────────────────
-  document.getElementById('btnRetryAnalysis').addEventListener('click', async () => {
-    const btn = document.getElementById('btnRetryAnalysis');
-    btn.disabled = true;
-    btn.textContent = 'Retrying…';
-    clearErr('retryErr');
-    try {
-      const { data: { session } } = await sb.auth.getSession();
-      if (!session) throw new Error('No session — please refresh and try again.');
-      const res = await fetch('/api/resume/reanalyze', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || 'Retry failed.');
-      if (data.analysis_status === 'ok') {
-        gtag('event', 'resume_analysis_completed', { method: 'v2_retry' });
-        // Analysis now complete — run the match preview
-        show('5');
-        doBackendWork(false); // résumé already stored, no file to upload
-      } else if (data.analysis_status === 'no_text_extracted') {
-        showErr('retryErr', "We couldn't read text from your résumé. Please upload a different file (try PDF if you used DOCX, or vice versa).");
-        btn.disabled = false;
-        btn.textContent = 'Retry Analysis';
-      } else {
-        throw new Error('analysis_failed');
-      }
-    } catch (err) {
-      gtag('event', 'resume_analysis_failed', { method: 'v2_retry', error: err.message });
-      showErr('retryErr', err.message === 'analysis_failed'
-        ? 'Analysis failed again. Please upload a different résumé file.'
-        : err.message);
-      btn.disabled = false;
-      btn.textContent = 'Retry Analysis';
-    }
-  });
-
-  document.getElementById('btnRetryWithNewFile').addEventListener('click', () => {
-    clearErr('retryErr');
-    resumeFileV = null;
-    const zoneV = document.getElementById('uploadZoneV');
-    const selV  = document.getElementById('fileSelectedV');
-    if (zoneV) zoneV.style.display = '';
-    if (selV)  selV.style.display  = 'none';
-    show('4c');
-  });
-
   /* ── Analysis animation ──
      Runs during backend work. Timed to ~2.5 seconds so real work can
      complete. If work finishes before animation, it waits. If work takes
@@ -1135,21 +1058,24 @@
         const profilePayload = {
           desired_industries: sel.industry && sel.industry !== 'Breaking In' ? [sel.industry] : [],
           total_sales_years:  sel.years   != null ? Number(sel.years) : null,
+          // Multi-select territory preferences (new field, text array)
           territory_size_preferences: sel.territories.length > 0 ? sel.territories : null,
+          // Backward-compat single-value field for existing code that reads it
           territory_size_preference: sel.territories[0] || null,
+          // work_style: 'remote' if ONLY remote selected; 'field' if any in-field option
           work_style: (sel.territories.length === 1 && sel.territories[0] === 'remote') ? 'remote' : 'field',
+          // Primary job-search location (from screen 3b)
+          // The widget's selection already contains geocoded lat/lng so the
+          // profile route will not re-geocode; it stores them as-is.
           ...(sel.location ? {
             home_city:     sel.location.city  || null,
-            home_state:    sel.location.state || null,
+            home_state:    sel.location.state || null, // full state name — matches matching.js
             home_zip:      sel.location.zip   || null,
             home_lat:      sel.location.lat   != null ? sel.location.lat : null,
             home_lng:      sel.location.lng   != null ? sel.location.lng : null,
             home_location_label: sel.location.label || null,
           } : {}),
-          // Mark this user as completing the new v2 onboarding flow.
-          // Routing uses this to apply the résumé requirement only to new
-          // users and not to legacy users who completed the old flow.
-          onboarding_version: 2,
+          // First-touch attribution
           ...rookGetStoredAttribution(),
         };
 
@@ -1164,6 +1090,8 @@
         }
 
         // ── b. Upload and analyze résumé ────────────────────────────────
+        // Résumé is required for personalized scoring. Upload failure is
+        // surfaced via the retry state on screen 4c, not silently swallowed.
         if (hasResume && resumeFileV) {
           if (statusEl) statusEl.textContent = 'Uploading and analyzing your résumé…';
           const fd = new FormData();
@@ -1173,21 +1101,15 @@
             headers: { Authorization:`Bearer ${token}` },
             body: fd,
           });
-          if (!resumeRes.ok) {
-            // File could not be stored — user must re-select the file
-            gtag('event', 'resume_upload_failed', { method: 'v2', status: resumeRes.status });
-            throw new Error('upload_failed');
-          }
-          gtag('event', 'resume_uploaded', { method: 'v2' });
-          const rd = await resumeRes.json().catch(() => ({}));
-          if (rd.analysis_status === 'ok') {
-            gtag('event', 'resume_analysis_completed', { method: 'v2' });
+          if (resumeRes.ok) {
+            gtag('event', 'resume_uploaded', { method: 'v2' });
+            const rd = await resumeRes.json().catch(() => ({}));
+            if (rd.analysis_status === 'ok') {
+              gtag('event', 'resume_analysis_completed', { method: 'v2' });
+            }
           } else {
-            // File was stored (resume_file_path set) but text extraction or
-            // embedding failed. Do NOT proceed to scored results — signal
-            // analysis failure so the user can retry without re-uploading.
-            gtag('event', 'resume_analysis_failed', { method: 'v2', status: rd.analysis_status });
-            throw new Error('analysis_failed');
+            gtag('event', 'resume_upload_failed', { method: 'v2', status: resumeRes.status });
+            throw new Error('Résumé upload failed. Your progress is saved — please try again.');
           }
         }
 
@@ -1226,20 +1148,19 @@
     await Promise.all([animationDone, backendDone]);
 
     if (backendError || !previewData) {
-      if (backendError === 'upload_failed') {
-        // File storage failed — user must choose the file again
+      // If the error was a résumé upload failure, go back to the upload screen
+      // so the user can retry without losing their account or questionnaire answers.
+      if (backendError && backendError.includes('Résumé upload failed')) {
         const errDiv = document.getElementById('resumeUploadError');
         const errMsg = document.getElementById('resumeUploadErrorMsg');
-        if (errDiv) { errDiv.style.display = 'block'; if (errMsg) errMsg.textContent = 'Upload failed. Check your connection and try again.'; }
+        if (errDiv) { errDiv.style.display = 'block'; if (errMsg) errMsg.textContent = backendError; }
+        // Reset the file selection so they must re-choose
         resumeFileV = null;
         const zoneV = document.getElementById('uploadZoneV');
         const selV  = document.getElementById('fileSelectedV');
         if (zoneV) zoneV.style.display = '';
         if (selV)  selV.style.display  = 'none';
         show('4c');
-      } else if (backendError === 'analysis_failed') {
-        // File was stored but analysis failed — retry without re-upload
-        show('4c-retry');
       } else {
         show('6e');
       }
@@ -1377,61 +1298,9 @@
       .catch(() => ({ data: { session: null } }));
 
     if (isReturn && session) {
-      // Path A: returning from email verification on the same (or different) device.
+      // Path A: returning from email verification on the same device.
       const draft = loadDraft();
       if (draft) restoreDraft(draft);
-
-      // Persist questionnaire to the profile immediately — now that we have
-      // an authenticated session we can write to the server. This ensures
-      // questionnaire answers survive regardless of localStorage state on the
-      // next visit (settings save, another-browser return, etc.).
-      // Guard: only write fields that are actually populated in sel. Never
-      // overwrite a profile with empty arrays when the draft was lost.
-      const hasQuestionnaireData = sel.industry || sel.years != null || sel.territories.length > 0;
-      if (hasQuestionnaireData) {
-        const questPayload = {
-          ...(sel.industry ? { desired_industries: sel.industry !== 'Breaking In' ? [sel.industry] : [] } : {}),
-          ...(sel.years != null ? { total_sales_years: Number(sel.years) } : {}),
-          ...(sel.territories.length > 0 ? {
-            territory_size_preferences: sel.territories,
-            territory_size_preference: sel.territories[0] || null,
-            work_style: (sel.territories.length === 1 && sel.territories[0] === 'remote') ? 'remote' : 'field',
-          } : {}),
-          ...(sel.location ? {
-            home_city: sel.location.city || null,
-            home_state: sel.location.state || null,
-            home_zip: sel.location.zip || null,
-            home_lat: sel.location.lat ?? null,
-            home_lng: sel.location.lng ?? null,
-            home_location_label: sel.location.label || null,
-          } : {}),
-        };
-        fetch('/api/profile', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-          body: JSON.stringify(questPayload),
-        }).catch(err => console.warn('[Path A questionnaire save]', err.message));
-        // Save fires async — do not await; show 4c immediately
-      } else {
-        // Cross-device case: draft is empty (different browser) and we have no
-        // local questionnaire answers. Check if the profile already has them
-        // from a prior save. If not, re-ask the questions before upload.
-        try {
-          const pr = await fetch('/api/profile', { headers: { Authorization: `Bearer ${session.access_token}` } });
-          const existingProfile = pr.ok ? await pr.json() : null;
-          if (existingProfile) restoreSelFromProfile(existingProfile);
-          // If still no answers after profile check, send to questionnaire first
-          const stillMissing = !sel.industry && sel.years == null && sel.territories.length === 0;
-          if (stillMissing) {
-            // Show a notice before sending them back to screen 1
-            show('1');
-            const lead = document.querySelector('[data-step="1"] .lead');
-            if (lead) lead.textContent = 'Welcome back! Please answer a few quick questions before uploading your résumé.';
-            return;
-          }
-        } catch (_) { /* network error — proceed to 4c, answers may be empty */ }
-      }
-
       show('4c');
       return;
     }
@@ -1454,48 +1323,32 @@
         const profile = res.ok ? await res.json() : null;
 
         if (profile) {
-          // ── Routing matrix for returning authenticated users ──────────────
-          // Legacy users (onboarding_version IS NULL) completed the old flow
-          // where résumé was optional. They go straight to the dashboard to
-          // avoid blocking customers who legitimately completed onboarding.
-          const isNewFlow = profile.onboarding_version === 2;
-
-          if (isNewFlow) {
-            // Path B2a: new-flow user — résumé not yet uploaded.
-            if (!profile.resume_file_path) {
-              const draft = loadDraft();
-              if (draft) restoreDraft(draft);
-              restoreSelFromProfile(profile);
-              show('4c');
-              return;
-            }
-
-            // Path B2b: new-flow user — résumé uploaded but analysis failed
-            // (no candidate_embedding AND no resume_structured). Re-run
-            // analysis on the stored file without requiring re-upload.
-            // We can't determine analysis success from resume_file_path alone.
-            const analysisComplete = !!(profile.candidate_embedding || profile.resume_structured);
-            if (!analysisComplete) {
-              const draft = loadDraft();
-              if (draft) restoreDraft(draft);
-              restoreSelFromProfile(profile);
-              show('4c-retry'); // dedicated retry screen, defined below
-              return;
-            }
+          // Path B2: profile exists but résumé has not been uploaded yet.
+          // The user created an account, verified email, and then left before
+          // uploading their résumé. Restore questionnaire answers from the
+          // profile and send them straight to the résumé upload step.
+          // NOTE FOR REVIEW: this also affects existing users who clicked
+          // "Skip for now" under the old flow (resume_file_path = null).
+          // Those users will now be prompted to upload a résumé on next login,
+          // since résumé is now required. This is an intentional behavior
+          // change; flag during review if existing skip-users need a different path.
+          if (!profile.resume_file_path) {
+            const draft = loadDraft();
+            if (draft) restoreDraft(draft);
+            // Repopulate sel from profile in case the draft is gone
+            if (!sel.industry && profile.desired_industries?.length) sel.industry = profile.desired_industries[0];
+            if (sel.years == null && profile.total_sales_years != null) sel.years = profile.total_sales_years;
+            if (!sel.territories?.length && profile.territory_size_preferences?.length) sel.territories = profile.territory_size_preferences;
+            show('4c');
+            return;
           }
-
-          // Path B: complete profile (or legacy user) → dashboard.
-          // first_dashboard_access fires only here, not on every login.
-          // We use sessionStorage to deduplicate: once set in this tab,
-          // future show() calls driven by back-button won't re-fire it.
-          if (!sessionStorage.getItem('rook_first_dash_fired')) {
-            sessionStorage.setItem('rook_first_dash_fired', '1');
-            gtag('event', 'first_dashboard_access', {
-              method: 'v2_onboarding',
-              is_new_flow: isNewFlow,
-              has_embedding: !!(profile.candidate_embedding),
-            });
-          }
+          // Path B: complete profile with résumé → dashboard.
+          // Fires for: resume uploaded (analysis may have succeeded or failed —
+          // the dashboard handles both; scoring runs against profile data regardless).
+          gtag('event', 'first_dashboard_access', {
+            method: 'v2_onboarding',
+            has_embedding: !!profile.candidate_embedding,
+          });
           window.location.href = 'rook-dashboard.html';
           return;
         }
