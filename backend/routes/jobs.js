@@ -1188,6 +1188,34 @@ router.get("/saved-jobs", requireConfig, requireAuth, loadCandidateId, async (re
 router.scrubCompanyNameFromText = scrubCompanyNameFromText;
 router.redactForNonSubscriber = redactForNonSubscriber;
 
+// GET /api/onboarding/warm-jobs
+// Triggers fetchActiveJobs() server-side to warm the 2-minute active-jobs
+// cache. Called fire-and-forget from doBackendWork concurrently with the
+// résumé upload, so the cache is hot when the preview request fires.
+//
+// No authentication required — this endpoint performs no scoring and
+// returns no job data. It only fills a server-side in-memory cache.
+// Rate-limited at 5 req/30 s per IP to prevent sustained abuse.
+const WARM_RATE = new Map();
+function checkWarmRateLimit(ip) {
+  const now = Date.now();
+  const e = WARM_RATE.get(ip);
+  if (!e || now > e.resetAt) { WARM_RATE.set(ip, { count: 1, resetAt: now + 30_000 }); return true; }
+  if (e.count >= 5) return false;
+  e.count++;
+  return true;
+}
+setInterval(() => { const n = Date.now(); for (const [k, v] of WARM_RATE) if (n > v.resetAt) WARM_RATE.delete(k); }, 300_000);
+
+router.get("/onboarding/warm-jobs", async (req, res) => {
+  if (!isConfigured) return res.json({ ok: false, reason: "not_configured" });
+  const ip = (req.headers["x-forwarded-for"] || "").split(",")[0].trim() || req.socket.remoteAddress || "unknown";
+  if (!checkWarmRateLimit(ip)) return res.status(429).json({ ok: false, reason: "rate_limited" });
+  // Fire and don't block the response — the client doesn't need to wait
+  fetchActiveJobs(supabaseAdmin).catch(err => console.error("[warm-jobs]", err.message));
+  res.json({ ok: true });
+});
+
 // GET /api/onboarding/match-preview
 // Returns a safe count and top scores for the locked-results screen
 // shown at the end of onboarding, before the candidate starts their trial.

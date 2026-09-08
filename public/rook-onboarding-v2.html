@@ -416,15 +416,7 @@
 
           <div class="err" id="resumeErr"></div>
 
-          <!-- Inline processing status — visible beside the submit button, no full-screen animation.
-               Phase labels update as each step completes. Never shows 100% until results are ready. -->
-          <div id="processStatus" style="display:none;margin-top:14px;padding:12px 14px;background:#f3f8fc;border:1px solid #dce7f0;border-radius:12px;font-size:13px;color:#47637c;line-height:1.5;">
-            <div style="font-weight:700;color:#062d55;margin-bottom:4px;" id="processPhase">Starting…</div>
-            <div id="processDetail" style="font-size:12px;"></div>
-            <div id="processTimer" style="font-size:11px;color:#8B96AB;margin-top:4px;"></div>
-          </div>
-
-          <div class="actions" style="margin-top:16px">
+          <div class="actions" style="margin-top:20px">
             <button class="primary" id="btnUploadAndAnalyze">Analyze My Experience</button>
           </div>
           <div class="trust">🔒 Your information is never sold</div>
@@ -577,7 +569,7 @@
     '4':100,'4b':100,'4c':100,'5':100,'6':100,'6e':100,'7':100
   };
   let currentStep = '0';
-  let analysisTimer = null;
+  let analysisResolve = null; // kept for legacy compatibility — new flow uses milestone functions
   let resumeFile = null;   // Screen 4
   let resumeFileV = null;  // Screen 4c (post-verification)
 
@@ -936,8 +928,7 @@
 
   document.getElementById('btnSkipResume').addEventListener('click', () => {
     resumeFileV = null;
-    // doBackendWork handles navigation directly — no animation screen
-    doBackendWork(false);
+    doBackendWork(false); // show('5') is called at the top of doBackendWork
   });
 
   document.getElementById('btnUploadAndAnalyze').addEventListener('click', () => {
@@ -946,75 +937,111 @@
       return showErr('resumeErr', 'Please choose a résumé file, or tap "Skip for now" to continue without one.');
     }
     gtag('event', 'onboarding_resume_upload_started', { file_type: resumeFileV.name.split('.').pop().toLowerCase() });
-    doBackendWork(true);
+    doBackendWork(true); // show('5') is called at the top of doBackendWork
   });
 
   /* ── Analysis animation ──
      Runs during backend work. Timed to ~2.5 seconds so real work can
      complete. If work finishes before animation, it waits. If work takes
      longer, the animation holds at 100% until the promise resolves. */
-  let analysisResolve = null;
+  // ── Milestone-driven animation ──────────────────────────────────────────
+  // The animation on screen 5 is tied to real backend milestones, not a
+  // fixed-duration timer. The timer still runs to produce smooth motion, but:
+  //   - It never exceeds the current target percentage.
+  //   - The target is set by backend milestones as they complete.
+  //   - 100% is only set when results are actually received.
+  //   - If a milestone hasn't fired within expected time, the bar simply waits.
+  let _animPct    = 0;   // current displayed percentage
+  let _animTarget = 0;   // percentage to animate toward
+  let _animTimer  = null;
 
-  function runAnalysis() {
-    clearInterval(analysisTimer);
-    const checks  = document.querySelectorAll('.check');
-    const pct     = document.getElementById('pctDisplay');
-    checks.forEach(c => c.classList.remove('done'));
-    if (pct) pct.textContent = '0%';
-    let p = 0, i = 0;
-    analysisTimer = setInterval(() => {
-      p += 4;
-      if (pct) pct.textContent = Math.min(p, 100) + '%';
-      if (p >= 18 + i * 16 && i < checks.length) checks[i++].classList.add('done');
-      if (p >= 100) {
-        clearInterval(analysisTimer);
-        // Signal to doBackendWork that the animation has completed.
-        if (analysisResolve) { analysisResolve(); analysisResolve = null; }
-      }
-    }, 70);
+  function _animTick() {
+    const pctEl = document.getElementById('pctDisplay');
+    if (_animPct < _animTarget) {
+      _animPct = Math.min(_animPct + 1.5, _animTarget); // smooth increment
+      if (pctEl) pctEl.textContent = Math.round(_animPct) + '%';
+    }
   }
 
-  /* ── Backend work sequence (Screen 4c → 6 or 6e directly) ─────────────────
-     Replaces the full-screen animation (screen 5) with inline status updates
-     in the processStatus div on screen 4c. Navigates directly to 6 or 6e.
+  function initAnimation() {
+    clearInterval(_animTimer);
+    _animPct = 0; _animTarget = 3;
+    document.querySelectorAll('.check').forEach(c => c.classList.remove('done'));
+    const pctEl = document.getElementById('pctDisplay');
+    if (pctEl) pctEl.textContent = '0%';
+    const statusEl = document.getElementById('analysisStatus');
+    if (statusEl) statusEl.textContent = '';
+    _animTimer = setInterval(_animTick, 60);
+  }
 
-     Key optimisations:
-       a. Profile save (must run first, then résumé upload can start)
-       b. Résumé upload + match-preview HTTP request fired concurrently:
-          the server runs fetchActiveJobs + scoring while the résumé
-          upload/analysis completes client-side. Server-side job-list cache
-          (2-min TTL) means the fetch is often instant.
-       c. 10-second slow warning — shows "still working" without stopping.
-       d. Timing logged to console for every phase. */
+  // Advance animation to a target percentage and tick a checkmark.
+  // chkIndex: 0-4 matching chk0–chk4. targetPct must be < 100.
+  // 100% is only reached via completeAnimation().
+  function milestoneAnim(targetPct, chkIndex) {
+    _animTarget = Math.min(targetPct, 99); // never reach 100 automatically
+    const chk = document.getElementById('chk' + chkIndex);
+    if (chk) chk.classList.add('done');
+  }
+
+  // Called when real results are received. Advances to 100% and resolves
+  // when the displayed counter actually reaches it.
+  function completeAnimation() {
+    return new Promise(resolve => {
+      _animTarget = 100;
+      const check = setInterval(() => {
+        if (_animPct >= 100) {
+          clearInterval(check);
+          clearInterval(_animTimer);
+          resolve();
+        }
+      }, 80);
+    });
+  }
+
+  // Legacy entry point — called by show('5'). Starts the animation.
+  function runAnalysis() { initAnimation(); }
+
+  /* ── Backend work sequence ─────────────────────────────────────────────────
+     Show the animation screen immediately, then drive its milestones from real
+     backend events. Five checkmarks map to five real phases:
+       chk0 Experience      → profile saved
+       chk1 Industry/prod.  → résumé uploaded to storage
+       chk2 Customer spec.  → résumé analysis complete (resume_structured saved)
+       chk3 Location/prefs  → job list ready (warm cache hit or fresh fetch)
+       chk4 Requirements    → scoring and preview complete
+     100% is set ONLY when real results are received.
+
+     Parallelisation — preserving correct scoring order:
+       a. Save profile (must complete first — scoring reads it)
+       b. Then CONCURRENTLY:
+            i.  Fire warm-jobs request (fills server-side job cache; no auth,
+                no scoring — just a prefetch so the cache is hot)
+            ii. Upload résumé → extract → AI analysis
+       c. After BOTH b.i and b.ii complete, call match-preview.
+          At this point: profile is saved, résumé is analysed, jobs are cached.
+          Scoring against a stale or incomplete profile is not possible.
+
+     10-second rule: if processing is still running at T+10s, analysisStatus
+     shows an honest "still working" message. Processing continues and
+     completes normally — no fake results, no navigation until real data arrives.
+
+     Timing: each phase is logged to the browser console with elapsed time.  */
   async function doBackendWork(hasResume) {
-    const t0 = Date.now();
-    const elapsed = () => ((Date.now() - t0) / 1000).toFixed(1) + 's';
+    const T0 = Date.now();
+    const ms = () => Date.now() - T0;
+    const log = (label) => console.log(`[doBackendWork] ${label} at ${ms()}ms`);
 
-    const statusDiv  = document.getElementById('processStatus');
-    const phaseEl    = document.getElementById('processPhase');
-    const detailEl   = document.getElementById('processDetail');
-    const timerEl    = document.getElementById('processTimer');
-    const analyzeBtn = document.getElementById('btnUploadAndAnalyze');
-    const skipBtn    = document.getElementById('btnSkipResume');
+    // Navigate to animation screen immediately.
+    // runAnalysis() was called by show('5') → initAnimation() already started.
+    show('5');
 
-    function setPhase(phase, detail) {
-      if (statusDiv) statusDiv.style.display = 'block';
-      if (phaseEl)   phaseEl.textContent  = phase;
-      if (detailEl)  detailEl.textContent = detail || '';
-      if (timerEl)   timerEl.textContent  = elapsed();
-    }
+    const statusEl = document.getElementById('analysisStatus');
+    const setStatus = (t) => { if (statusEl) statusEl.textContent = t; };
 
-    if (analyzeBtn) { analyzeBtn.disabled = true; analyzeBtn.textContent = 'Processing…'; }
-    if (skipBtn)    { skipBtn.disabled    = true; }
-
-    setPhase('Saving preferences…', '');
-
-    const slowWarning = setTimeout(() => {
-      setPhase('Still working…',
-        'Résumé analysis and matching can take 10–20 s on first run. Almost there.');
+    // 10-second slow-warning: honest, no navigation change
+    const slowWarn = setTimeout(() => {
+      setStatus('Still working… Résumé analysis and job matching can take 15–20 s on the first run.');
     }, 10_000);
-
-    const timerTick = setInterval(() => { if (timerEl) timerEl.textContent = elapsed(); }, 500);
 
     let backendError = null;
     let previewData  = null;
@@ -1024,12 +1051,13 @@
       if (sessErr || !session) throw new Error('No authenticated session. Please refresh and try again.');
       const token = session.access_token;
 
-      // ── a. Save profile ─────────────────────────────────────────────
+      // ── a. Save profile ────────────────────────────────────────────
+      setStatus('Saving your preferences…');
       const profilePayload = {
         desired_industries: sel.industry && sel.industry !== 'Breaking In' ? [sel.industry] : [],
         total_sales_years:  sel.years   != null ? Number(sel.years) : null,
         territory_size_preferences: sel.territories.length > 0 ? sel.territories : null,
-        territory_size_preference: sel.territories[0] || null,
+        territory_size_preference:  sel.territories[0] || null,
         work_style: (sel.territories.length === 1 && sel.territories[0] === 'remote') ? 'remote' : 'field',
         ...(sel.location ? {
           home_city:           sel.location.city  || null,
@@ -1050,20 +1078,25 @@
         const pd = await profileRes.json().catch(() => ({}));
         throw new Error(pd.error || 'Could not save your profile.');
       }
-      console.log('[doBackendWork] profile saved at', elapsed());
+      log('profile saved');
+      milestoneAnim(20, 0); // chk0 Experience
 
-      // ── b. Résumé upload + match-preview in parallel ─────────────────
-      // Fire the preview request immediately after profile save. The server
-      // will run fetchActiveJobs + scoring. While that is in flight, the
-      // client uploads the résumé and awaits analysis. Both complete
-      // concurrently, saving the time of whichever is faster.
-      setPhase('Uploading résumé…', 'Analysing your experience — this takes a few seconds');
+      // ── b. Warm job cache + résumé upload in parallel ─────────────
+      // The warm-jobs request fills the server-side active-jobs cache
+      // without requiring auth or performing any scoring. It runs
+      // concurrently with the résumé upload. After both complete, the
+      // preview request finds a warm cache and returns quickly.
+      //
+      // Scoring does NOT start here. The preview request fires in step c,
+      // AFTER résumé analysis is confirmed, ensuring match scores are
+      // computed against the full, analysis-complete profile.
 
-      const previewPromise = fetch('/api/onboarding/match-preview', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      // Fire warm-jobs — no await, just kick off the cache fill
+      const warmPromise = fetch('/api/onboarding/warm-jobs').catch(() => {});
 
+      // Upload and analyse résumé
       if (hasResume && resumeFileV) {
+        setStatus('Uploading and analysing your résumé…');
         const fd = new FormData();
         fd.append('resume', resumeFileV);
         const resumeRes = await fetch('/api/resume', {
@@ -1071,55 +1104,79 @@
           headers: { Authorization: `Bearer ${token}` },
           body: fd,
         });
+        const tResume = ms();
         if (resumeRes.ok) {
-          gtag('event', 'resume_uploaded', { method: 'v2' });
+          milestoneAnim(45, 1); // chk1 Industry/products — file stored
+          gtag('event', 'resume_uploaded', { method: 'v2', ms: tResume });
           const rd = await resumeRes.json().catch(() => ({}));
-          console.log('[doBackendWork] résumé done at', elapsed(), 'status:', rd.analysis_status);
+          log('résumé analysis_status=' + rd.analysis_status);
           if (rd.analysis_status === 'ok') {
-            gtag('event', 'resume_analysis_completed', { method: 'v2' });
+            milestoneAnim(65, 2); // chk2 Customer specialty — analysis complete
+            gtag('event', 'resume_analysis_completed', { method: 'v2', ms: ms() });
+          } else {
+            // Upload succeeded but AI analysis failed — profile scored on
+            // questionnaire data only. Scoring will still run; scores
+            // will lack the résumé-based candidate_fit component.
+            milestoneAnim(55, 2);
+            console.warn('[doBackendWork] analysis_status:', rd.analysis_status,
+              '— scoring will use questionnaire data only');
           }
+        } else {
+          // Upload to storage failed — continue without résumé
+          log('résumé upload failed ' + resumeRes.status);
         }
-        // Upload failure non-fatal — preview still runs on profile data
       }
 
-      // ── c. Await preview result ──────────────────────────────────────
-      setPhase('Matching…', 'Comparing your background with current openings');
-      const previewRes = await previewPromise;
+      // Wait for warm-jobs to finish (ensures cache is populated before preview)
+      await warmPromise;
+      milestoneAnim(78, 3); // chk3 Location/prefs — jobs ready
+      log('job cache warm, firing preview');
+
+      // ── c. Match preview ───────────────────────────────────────────
+      // Profile is saved, résumé analysis is done, job list is cached.
+      // Scoring now runs against the complete profile.
+      setStatus('Calculating your matches…');
+      const previewRes = await fetch('/api/onboarding/match-preview', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (!previewRes.ok) {
         const pd = await previewRes.json().catch(() => ({}));
         throw new Error(pd.error || 'Could not calculate your matches.');
       }
       previewData = await previewRes.json();
-      console.log('[doBackendWork] preview done at', elapsed(),
-        'count=', previewData.count, 'top=', previewData.top_matches?.[0]?.overall_score);
+      const tDone = ms();
+      log('preview done count=' + previewData.count +
+          ' top=' + (previewData.top_matches?.[0]?.overall_score ?? 'none') +
+          ' total=' + tDone + 'ms');
 
-      gtag('event', 'match_preview_viewed', { method: 'v2', count: previewData.count, elapsed_ms: Date.now() - t0 });
+      gtag('event', 'match_preview_viewed', {
+        method: 'v2',
+        count: previewData.count,
+        elapsed_ms: tDone,
+      });
+
+      milestoneAnim(99, 4); // chk4 Requirements — about to complete
+      setStatus('');
       deleteDraft();
 
     } catch (err) {
       backendError = err.message;
       console.error('[doBackendWork]', err);
-      gtag('event', 'onboarding_error', { method: 'v2', message: err.message, elapsed_ms: Date.now() - t0 });
+      gtag('event', 'onboarding_error', { method: 'v2', message: err.message, elapsed_ms: ms() });
+      setStatus('');
     } finally {
-      clearTimeout(slowWarning);
-      clearInterval(timerTick);
-      if (backendError) {
-        if (analyzeBtn) { analyzeBtn.disabled = false; analyzeBtn.textContent = 'Try again'; }
-        if (skipBtn)    { skipBtn.disabled    = false; }
-        if (statusDiv)  statusDiv.style.display = 'none';
-      }
+      clearTimeout(slowWarn);
     }
 
     if (backendError || !previewData) {
       show('6e');
     } else {
+      // Advance animation to 100% and wait for the display to catch up
+      // (at most ~400ms at 1.5%/60ms) before navigating to results.
       renderLockedResults(previewData);
+      await completeAnimation();
       show('6');
     }
-  }
-
-  function escapeHtml(str) {
-    return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
 
   /* ── Render locked results ──
@@ -1199,7 +1256,7 @@
 
   /* ── Retry preview ── */
   document.getElementById('btnRetryPreview').addEventListener('click', () => {
-    doBackendWork(false); // résumé already uploaded; retry preview only
+    doBackendWork(false); // navigates to screen 5 internally
   });
 
   /* ── Stripe checkout ──
