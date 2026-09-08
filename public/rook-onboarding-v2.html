@@ -82,6 +82,8 @@
     .orbit:after{right:-5px;bottom:55px;background:var(--blue)}
     @keyframes spin{to{transform:rotate(360deg)}}
     .hero-mark{width:118px;height:118px;border-radius:33px;background:linear-gradient(145deg,var(--navy),var(--blue));display:grid;place-items:center;color:white;font-family:Georgia;font-size:78px;box-shadow:0 18px 40px rgba(7,62,112,.24);z-index:2}
+    .trust{text-align:center}
+    .welcome .primary{display:block;margin:0 auto}
     .welcome h2{text-align:center}
     .welcome .lead{text-align:center}
     .pillrow{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:24px}
@@ -185,9 +187,9 @@
       <img src="assets/rook-logo.png" alt="ROOK logo">
       <div><strong>ROOK</strong><span>MEDICAL SALES CAREERS</span></div>
     </div>
-    <div class="eyebrow">Interactive design concept</div>
+    <div class="eyebrow">Medical Sales Job Matching</div>
     <h1>Your next move, made personal.</h1>
-    <p>A shorter, clearer onboarding experience that demonstrates value before asking candidates to start their trial.</p>
+    <p>ROOK compares your experience with thousands of current medical sales opportunities so you can focus on the jobs that fit.</p>
     <div class="proof">
       <div><b id="proofJobCount">5,500+</b><span>current opportunities</span></div>
       <div><b>Medical sales</b><span>nothing else</span></div>
@@ -260,17 +262,17 @@
         </div>
       </section>
 
-      <!-- Screen 3: Territory -->
+      <!-- Screen 3: Territory (multi-select) -->
       <section class="screen" data-step="3">
         <div class="content">
           <div class="eyebrow">Your search</div>
           <h2>What kind of territory works for you?</h2>
-          <p class="lead">You can adjust this later in your profile.</p>
-          <div class="choices" id="choicesTerritory">
-            <button class="choice" data-val="local"><span class="ico">⌂</span><span>Local territory<small>Home most nights</small></span></button>
-            <button class="choice" data-val="regional"><span class="ico">◎</span><span>Regional territory<small>Some overnight travel</small></span></button>
-            <button class="choice" data-val="national"><span class="ico">✈</span><span>Large or national territory<small>Frequent travel is fine</small></span></button>
-            <button class="choice" data-val="remote"><span class="ico">◫</span><span>Remote or inside sales</span></button>
+          <p class="lead">Select all that apply. You can adjust this later in your profile.</p>
+          <div class="choices" id="choicesTerritory" role="group" aria-label="Territory preferences">
+            <button class="choice" data-val="local" aria-pressed="false"><span class="ico">&#8962;</span><span>Local territory<small>Home most nights</small></span></button>
+            <button class="choice" data-val="regional" aria-pressed="false"><span class="ico">&#9676;</span><span>Regional territory<small>Some overnight travel</small></span></button>
+            <button class="choice" data-val="national" aria-pressed="false"><span class="ico">&#9992;</span><span>Large or national territory<small>Frequent travel is fine</small></span></button>
+            <button class="choice" data-val="remote" aria-pressed="false"><span class="ico">&#9725;</span><span>Remote or inside sales</span></button>
           </div>
           <div class="actions">
             <button class="back" onclick="goBack()">Back</button>
@@ -562,13 +564,15 @@
   const allScreens = [...document.querySelectorAll('.screen')];
   const stepOrder  = ['0','1','2','3','3b','4','4b','4c','5','6','6e','7'];
   const LABELS     = {
-    '0':'Welcome','1':'Step 1 of 4','2':'Step 2 of 4','3':'Step 3 of 4',
-    '3b':'Step 3 of 4',
-    '4':'Step 4 of 4','4b':'Step 4 of 4','4c':'Step 4 of 4',
+    '0':'Welcome',
+    '1':'Step 1 of 5','2':'Step 2 of 5','3':'Step 3 of 5',
+    '3b':'Step 4 of 5',
+    '4':'Step 5 of 5','4b':'Step 5 of 5','4c':'Step 5 of 5',
     '5':'Analyzing','6':'Your matches','6e':'Your matches','7':'Start trial'
   };
   const PROGRESS   = {
-    '0':0,'1':14,'2':28,'3':43,'3b':50,'4':57,'4b':57,'4c':57,'5':75,'6':90,'6e':90,'7':100
+    '0':0,'1':20,'2':40,'3':60,'3b':80,
+    '4':100,'4b':100,'4c':100,'5':100,'6':100,'6e':100,'7':100
   };
   let currentStep = '0';
   let analysisTimer = null;
@@ -593,7 +597,7 @@
   }
 
   /* ── Selections ── */
-  const sel = { industry: null, years: null, territory: null, location: null };
+  const sel = { industry: null, years: null, territories: [], location: null };
 
   function wireSingleSelect(groupId, field, nextBtnId) {
     const group = document.getElementById(groupId);
@@ -615,7 +619,27 @@
 
   wireSingleSelect('choicesIndustry', 'industry', 'btnIndNext');
   wireSingleSelect('choicesYears',    'years',    'btnYearsNext');
-  wireSingleSelect('choicesTerritory','territory', 'btnTerrNext');
+  // Territory: multi-select (toggle on/off, min 1 required to Continue)
+  (function wireMultiSelectTerritory() {
+    const group = document.getElementById('choicesTerritory');
+    if (!group) return;
+    group.querySelectorAll('.choice').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const val = btn.dataset.val;
+        const idx = sel.territories.indexOf(val);
+        if (idx >= 0) {
+          sel.territories.splice(idx, 1);
+          btn.classList.remove('selected');
+          btn.setAttribute('aria-pressed', 'false');
+        } else {
+          sel.territories.push(val);
+          btn.classList.add('selected');
+          btn.setAttribute('aria-pressed', 'true');
+        }
+        document.getElementById('btnTerrNext').disabled = sel.territories.length === 0;
+      });
+    });
+  })();
 
   document.getElementById('btnWelcomeStart').addEventListener('click', () => {
     gtag('event', 'onboarding_started', { method: 'v2' });
@@ -632,7 +656,7 @@
     show('3');
   });
   document.getElementById('btnTerrNext').addEventListener('click', () => {
-    gtag('event', 'onboarding_step_completed', { step: 3, territory: sel.territory });
+    gtag('event', 'onboarding_step_completed', { step: 3, territories: sel.territories });
     show('3b');
   });
 
@@ -680,8 +704,8 @@
       localStorage.setItem(DRAFT_KEY, JSON.stringify({
         industry: sel.industry,
         years: sel.years,
-        territory: sel.territory,
-        location: sel.location, // { label, city, state, stateAbbr, lat, lng, zip }
+        territories: sel.territories,   // array — multi-select territory preferences
+        location: sel.location,
         savedAt: Date.now(),
       }));
     } catch (_) { /* storage unavailable — proceed without draft */ }
@@ -715,10 +739,17 @@
       const btn = document.querySelector(`#choicesYears .choice[data-val="${d.years}"]`);
       if (btn) { btn.classList.add('selected'); document.getElementById('btnYearsNext').disabled = false; }
     }
-    if (d.territory) {
-      sel.territory = d.territory;
-      const btn = document.querySelector(`#choicesTerritory .choice[data-val="${d.territory}"]`);
-      if (btn) { btn.classList.add('selected'); document.getElementById('btnTerrNext').disabled = false; }
+    // Restore territory multi-select from draft
+    // Handles both old single-value drafts (d.territory string) and new arrays (d.territories)
+    const restoredTerritories = Array.isArray(d.territories) ? d.territories
+      : (d.territory ? [d.territory] : []);
+    if (restoredTerritories.length > 0) {
+      sel.territories = restoredTerritories;
+      restoredTerritories.forEach(val => {
+        const btn = document.querySelector(`#choicesTerritory .choice[data-val="${val}"]`);
+        if (btn) { btn.classList.add('selected'); btn.setAttribute('aria-pressed','true'); }
+      });
+      document.getElementById('btnTerrNext').disabled = false;
     }
     if (d.location && d.location.label) {
       sel.location = d.location;
@@ -953,8 +984,12 @@
         const profilePayload = {
           desired_industries: sel.industry && sel.industry !== 'Breaking In' ? [sel.industry] : [],
           total_sales_years:  sel.years   != null ? Number(sel.years) : null,
-          territory_size_preference: sel.territory || null,
-          work_style: sel.territory === 'remote' ? 'remote' : 'field',
+          // Multi-select territory preferences (new field, text array)
+          territory_size_preferences: sel.territories.length > 0 ? sel.territories : null,
+          // Backward-compat single-value field for existing code that reads it
+          territory_size_preference: sel.territories[0] || null,
+          // work_style: 'remote' if ONLY remote selected; 'field' if any in-field option
+          work_style: (sel.territories.length === 1 && sel.territories[0] === 'remote') ? 'remote' : 'field',
           // Primary job-search location (from screen 3b)
           // The widget's selection already contains geocoded lat/lng so the
           // profile route will not re-geocode; it stores them as-is.

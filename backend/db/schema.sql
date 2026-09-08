@@ -237,6 +237,9 @@ create table if not exists candidate_profiles (
   preferred_cities text[],
   preferred_regions text[],
   territory_size_preference text,
+  territory_size_preferences text[],         -- multi-select; set alongside territory_size_preference
+                                              -- for backward compat. Populated by onboarding Step 3
+                                              -- and the Settings Job Preferences panel.
   overnight_travel_preference text,
   maximum_travel_percentage int,
 

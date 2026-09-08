@@ -45,107 +45,155 @@ router.get("/geocode", requireAuth, async (req, res) => {
 });
 
 // ── GET /api/location-search?q=<text> ────────────────────────────────────────
-// Returns up to 5 formatted U.S. location suggestions for the given query.
-// Used by the onboarding "Where do you want to work?" screen AND the dashboard
-// location-change widget — both need it before or without an authenticated session,
-// so this endpoint does not require auth.
+// Returns up to 5 U.S. location suggestions from a bundled local dataset.
 //
-// Abuse protection: simple IP-based rate limit (10 requests per 30 seconds).
-// All Nominatim calls still go through the same throttled client in geocoding.js
-// (≤1 req/sec) so the rate limit here is a secondary guard against bursts.
+// Data source: the 'zipcodes' npm package (v8.x, BSD license).
+//   https://www.npmjs.com/package/zipcodes
+//   Bundled U.S. ZIP/city/state/lat/lng data derived from USPS ZIP Code data.
+//   No external API calls. No recurring cost. No Nominatim or paid geocoding.
+//
+// Used by the onboarding "Where do you want to work?" screen (pre-auth) and
+// the dashboard location-change widget (authenticated). Because autocomplete
+// results come from the local dataset rather than an external API, the main
+// concern is DoS via sustained request volume — addressed by the IP rate limit.
 //
 // Accepts:
-//   - Five-digit US ZIP:          "34484"   → [{ label:"34484 — Oxford, FL", ... }]
-//   - City + full state:          "Boise, Idaho"
-//   - City + state abbreviation:  "Boise, ID"
-//   - Partial city name:          "Boise"
+//   "34484"         -> exact ZIP lookup
+//   "Boise, ID"     -> city + state abbreviation
+//   "Boise, Idaho"  -> city + full state name
+//   "Boise"         -> prefix match across all cities
 //
-// Returns array of { label, city, state, stateAbbr, lat, lng, zip } objects.
-// "zip" is the Nominatim-reported postal code for the result area (may be null).
-// The frontend MUST require the user to select a suggestion; it must NOT silently
-// accept the first result on an arbitrary keypress.
+// Returns array of { label, city, state, stateAbbr, lat, lng, zip }.
+// Always US-only. The 'zip' field is the representative ZIP for the city.
 
-const USER_AGENT_LS = "ROOK-Careers/1.0 (rookcareers.com; location-search)";
-const REQUEST_TIMEOUT_LS = 8_000;
+const zipcodes = require("zipcodes");
 
-// US state name → abbreviation map (mirrors backend/matching.js for consistency)
-const STATE_ABBR_MAP = {
-  "alabama":"AL","alaska":"AK","arizona":"AZ","arkansas":"AR","california":"CA",
-  "colorado":"CO","connecticut":"CT","delaware":"DE","florida":"FL","georgia":"GA",
-  "hawaii":"HI","idaho":"ID","illinois":"IL","indiana":"IN","iowa":"IA",
-  "kansas":"KS","kentucky":"KY","louisiana":"LA","maine":"ME","maryland":"MD",
-  "massachusetts":"MA","michigan":"MI","minnesota":"MN","mississippi":"MS","missouri":"MO",
-  "montana":"MT","nebraska":"NE","nevada":"NV","new hampshire":"NH","new jersey":"NJ",
-  "new mexico":"NM","new york":"NY","north carolina":"NC","north dakota":"ND","ohio":"OH",
-  "oklahoma":"OK","oregon":"OR","pennsylvania":"PA","rhode island":"RI","south carolina":"SC",
-  "south dakota":"SD","tennessee":"TN","texas":"TX","utah":"UT","vermont":"VT",
-  "virginia":"VA","washington":"WA","west virginia":"WV","wisconsin":"WI","wyoming":"WY",
-};
-
-function stateToAbbr(stateName) {
-  if (!stateName) return null;
-  const key = stateName.trim().toLowerCase();
-  if (STATE_ABBR_MAP[key]) return STATE_ABBR_MAP[key];
-  if (/^[a-z]{2}$/i.test(key)) return key.toUpperCase(); // already an abbr
-  return null;
+// Build a deduplicated city index once at startup (31 k entries -> ~600 ms, cached).
+// Key: "City|ST", value: first ZIP record for that city.
+let _cityIndex = null;
+function getCityIndex() {
+  if (_cityIndex) return _cityIndex;
+  _cityIndex = new Map();
+  const US_ABBRS = new Set([
+    "AL","AK","AZ","AR","CA","CO","CT","DE","DC","FL","GA","HI","ID","IL","IN","IA",
+    "KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM",
+    "NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA",
+    "WV","WI","WY",
+  ]);
+  for (const entry of Object.values(zipcodes.codes)) {
+    if (!US_ABBRS.has(entry.state)) continue; // exclude Canadian entries in the dataset
+    const key = entry.city + "|" + entry.state;
+    if (!_cityIndex.has(key)) _cityIndex.set(key, entry);
+  }
+  return _cityIndex;
 }
 
-function stateFromAbbr(abbr) {
-  if (!abbr) return null;
-  const up = abbr.trim().toUpperCase();
-  for (const [name, a] of Object.entries(STATE_ABBR_MAP)) {
+// US state name -> abbreviation (mirrors backend/matching.js for consistency)
+const STATE_NAME_TO_ABBR = {
+  "alabama":"AL","alaska":"AK","arizona":"AZ","arkansas":"AR","california":"CA",
+  "colorado":"CO","connecticut":"CT","delaware":"DE","district of columbia":"DC",
+  "florida":"FL","georgia":"GA","hawaii":"HI","idaho":"ID","illinois":"IL",
+  "indiana":"IN","iowa":"IA","kansas":"KS","kentucky":"KY","louisiana":"LA",
+  "maine":"ME","maryland":"MD","massachusetts":"MA","michigan":"MI","minnesota":"MN",
+  "mississippi":"MS","missouri":"MO","montana":"MT","nebraska":"NE","nevada":"NV",
+  "new hampshire":"NH","new jersey":"NJ","new mexico":"NM","new york":"NY",
+  "north carolina":"NC","north dakota":"ND","ohio":"OH","oklahoma":"OK","oregon":"OR",
+  "pennsylvania":"PA","rhode island":"RI","south carolina":"SC","south dakota":"SD",
+  "tennessee":"TN","texas":"TX","utah":"UT","vermont":"VT","virginia":"VA",
+  "washington":"WA","west virginia":"WV","wisconsin":"WI","wyoming":"WY",
+};
+
+function stateNameToAbbr(name) {
+  return STATE_NAME_TO_ABBR[name.trim().toLowerCase()] || null;
+}
+
+function abbrToStateName(abbr) {
+  const up = abbr.toUpperCase();
+  for (const [name, a] of Object.entries(STATE_NAME_TO_ABBR)) {
     if (a === up) return name.split(" ").map(w => w[0].toUpperCase() + w.slice(1)).join(" ");
   }
   return null;
 }
 
-function formatCandidate(raw) {
-  // Extract city from address (Nominatim uses different keys by place type)
-  const addr = raw.address || {};
-  const city  = addr.city || addr.town || addr.village || addr.hamlet || addr.county || null;
-  const state = addr.state || null;
-  const zip   = addr.postcode || null;
-  const abbr  = stateToAbbr(state);
-  const lat   = parseFloat(raw.lat);
-  const lng   = parseFloat(raw.lon);
-
-  if (!state || !abbr || isNaN(lat) || isNaN(lng)) return null;
-  // Filter to US only (Nominatim with countrycodes=us should guarantee this, but double-check)
-  if (addr.country_code && addr.country_code !== "us") return null;
-
-  let label;
-  const isZipResult = raw.type === "postcode" || (zip && raw.display_name?.startsWith(zip));
-  if (isZipResult && zip && city) {
-    label = `${zip} — ${city}, ${abbr}`;
-  } else if (city) {
-    label = `${city}, ${abbr}`;
-  } else {
-    label = abbr; // last resort
-  }
-
-  return { label, city: city || null, state, stateAbbr: abbr, lat, lng, zip: zip || null };
+function entryToSuggestion(entry) {
+  // Representative ZIP for this city (entry.zip from the dataset)
+  const stateAbbr = entry.state;
+  const stateName = abbrToStateName(stateAbbr) || stateAbbr;
+  return {
+    label: `${entry.city}, ${stateAbbr}`,
+    city: entry.city,
+    state: stateName,
+    stateAbbr,
+    lat: entry.latitude,
+    lng: entry.longitude,
+    zip: entry.zip,
+  };
 }
 
-async function nominatimFetch(url) {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_LS);
-  try {
-    const res = await fetch(url, {
-      signal: ctrl.signal,
-      headers: { "User-Agent": USER_AGENT_LS },
-    });
-    if (!res.ok) return [];
-    return await res.json();
-  } catch {
-    return [];
-  } finally {
-    clearTimeout(timer);
-  }
+function zipToSuggestion(entry) {
+  const stateAbbr = entry.state;
+  const stateName = abbrToStateName(stateAbbr) || stateAbbr;
+  return {
+    label: `${entry.zip} \u2014 ${entry.city}, ${stateAbbr}`,
+    city: entry.city,
+    state: stateName,
+    stateAbbr,
+    lat: entry.latitude,
+    lng: entry.longitude,
+    zip: entry.zip,
+  };
 }
 
-// In-memory IP rate limiter: 10 requests per 30 seconds per IP.
-// Resets per-IP after 30 seconds of inactivity.
-const LS_RATE = new Map(); // ip → { count, resetAt }
+function searchLocal(q) {
+  const trimmed = q.trim();
+
+  // --- Exact 5-digit ZIP ---
+  if (/^\d{5}$/.test(trimmed)) {
+    const r = zipcodes.lookup(trimmed);
+    return r ? [zipToSuggestion(r)] : [];
+  }
+
+  // --- "City, ST" or "City, State Name" ---
+  const commaIdx = trimmed.lastIndexOf(",");
+  if (commaIdx > 0) {
+    const cityPart  = trimmed.slice(0, commaIdx).trim();
+    const statePart = trimmed.slice(commaIdx + 1).trim();
+    let abbr = /^[A-Za-z]{2}$/.test(statePart) ? statePart.toUpperCase() : stateNameToAbbr(statePart);
+    if (abbr) {
+      const rows = zipcodes.lookupByName(cityPart, abbr);
+      if (rows.length > 0) return [entryToSuggestion(rows[0])];
+      // Fuzzy: prefix match in that state
+      const idx = getCityIndex();
+      const results = [];
+      for (const [key, entry] of idx) {
+        if (entry.state !== abbr) continue;
+        if (entry.city.toLowerCase().startsWith(cityPart.toLowerCase())) {
+          results.push(entryToSuggestion(entry));
+          if (results.length >= 5) break;
+        }
+      }
+      return results;
+    }
+  }
+
+  // --- Prefix city name search ---
+  const idx = getCityIndex();
+  const lower = trimmed.toLowerCase();
+  const results = [];
+  for (const entry of idx.values()) {
+    if (entry.city.toLowerCase().startsWith(lower)) {
+      results.push(entryToSuggestion(entry));
+      if (results.length >= 5) break;
+    }
+  }
+  return results;
+}
+
+// Prime the city index at startup so the first user request is fast
+setImmediate(() => { try { getCityIndex(); } catch(_) {} });
+
+// In-memory IP rate limit: 15 requests per 30 s per IP.
+const LS_RATE = new Map();
 function checkRateLimit(ip) {
   const now = Date.now();
   const entry = LS_RATE.get(ip);
@@ -153,61 +201,28 @@ function checkRateLimit(ip) {
     LS_RATE.set(ip, { count: 1, resetAt: now + 30_000 });
     return true;
   }
-  if (entry.count >= 10) return false;
+  if (entry.count >= 15) return false;
   entry.count++;
   return true;
 }
-// Prune stale entries every 5 minutes to avoid unbounded growth
 setInterval(() => {
   const now = Date.now();
   for (const [ip, e] of LS_RATE.entries()) { if (now > e.resetAt) LS_RATE.delete(ip); }
 }, 300_000);
 
-// Simple global Nominatim throttle for this route (separate from geocoding.js's
-// throttle, which is used by ingestion). Nominatim policy: ≤1 req/sec.
-let lsLastCall = 0;
-async function lsThrottle() {
-  const wait = 1100 - (Date.now() - lsLastCall);
-  if (wait > 0) await new Promise(r => setTimeout(r, wait));
-  lsLastCall = Date.now();
-}
-
-router.get("/location-search", async (req, res) => {
+router.get("/location-search", (req, res) => {
   const q = (req.query.q || "").trim();
   if (!q || q.length < 2) return res.json([]);
 
-  const ip = req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
+  const ip = (req.headers["x-forwarded-for"] || "").split(",")[0].trim()
+    || req.socket.remoteAddress || "unknown";
   if (!checkRateLimit(ip)) return res.status(429).json({ error: "Too many requests. Try again shortly." });
 
   try {
-    await lsThrottle();
-
-    let results;
-    const isZip = /^\d{5}$/.test(q);
-
-    if (isZip) {
-      // ZIP code input: use Nominatim's postal-code search
-      const url = `https://nominatim.openstreetmap.org/search?postalcode=${encodeURIComponent(q)}&country=us&format=json&limit=1&addressdetails=1`;
-      results = await nominatimFetch(url);
-    } else {
-      // City / city+state input: free-text search restricted to US
-      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&countrycodes=us&format=json&limit=7&addressdetails=1`;
-      results = await nominatimFetch(url);
-    }
-
-    const seen = new Set();
-    const suggestions = [];
-    for (const r of results) {
-      const c = formatCandidate(r);
-      if (!c || seen.has(c.label)) continue;
-      seen.add(c.label);
-      suggestions.push(c);
-      if (suggestions.length >= 5) break;
-    }
-
+    const suggestions = searchLocal(q);
     res.json(suggestions);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "Location search unavailable." });
   }
 });
 
