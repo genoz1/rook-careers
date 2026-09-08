@@ -220,6 +220,10 @@ create table if not exists candidate_profiles (
   home_lat numeric,                      -- geocoded once when home_zip is saved
   home_lng numeric,                      -- (see backend/geocoding.js) — used for
                                           -- proximity scoring within an accepted state
+  home_location_label text,              -- user-facing label, e.g. "Boise, ID" or
+                                          -- "34484 — Oxford, FL" — set by the location
+                                          -- autocomplete widget on onboarding and the
+                                          -- dashboard location-change widget
   preferred_states text[],               -- states this candidate wants to see
                                           -- jobs from — distinct from home_state
                                           -- (where they live) and willing_to_relocate
@@ -233,6 +237,9 @@ create table if not exists candidate_profiles (
   preferred_cities text[],
   preferred_regions text[],
   territory_size_preference text,
+  territory_size_preferences text[],         -- multi-select; set alongside territory_size_preference
+                                              -- for backward compat. Populated by onboarding Step 3
+                                              -- and the Settings Job Preferences panel.
   overnight_travel_preference text,
   maximum_travel_percentage int,
 
