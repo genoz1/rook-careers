@@ -245,7 +245,7 @@
                this mirrors the locked-results screen. Values are representative,
                not fabricated scores for a real candidate. -->
           <div class="example-match-card" aria-label="Example of a personalized match result">
-            <div class="em-label">Illustrative example — your scores are calculated after résumé analysis</div>
+            <div class="em-label">EXAMPLE MATCH</div>
             <div class="em-score-row">
               <span class="em-badge">EXCELLENT MATCH</span>
               <span class="em-pct">94%</span>
@@ -844,9 +844,7 @@
       if (!el) return;
       if (data && data.trialDays > 0) {
         const d = data.trialDays;
-        // Card is required at checkout even during a trial (payment_method_collection: "always").
-        // Charge occurs after the trial period. This wording reflects the actual billing behavior.
-        el.textContent = `Takes about 2 minutes · ${d}-day free trial · Card required · $29/month after`;
+        el.textContent = `Takes about 2 minutes · ${d}-day free trial, then $29/month · Cancel anytime`;
       } else {
         el.textContent = 'Takes about 2 minutes · $29/month · Cancel anytime';
       }
@@ -1327,11 +1325,6 @@
           // The user created an account, verified email, and then left before
           // uploading their résumé. Restore questionnaire answers from the
           // profile and send them straight to the résumé upload step.
-          // NOTE FOR REVIEW: this also affects existing users who clicked
-          // "Skip for now" under the old flow (resume_file_path = null).
-          // Those users will now be prompted to upload a résumé on next login,
-          // since résumé is now required. This is an intentional behavior
-          // change; flag during review if existing skip-users need a different path.
           if (!profile.resume_file_path) {
             const draft = loadDraft();
             if (draft) restoreDraft(draft);
@@ -1343,12 +1336,6 @@
             return;
           }
           // Path B: complete profile with résumé → dashboard.
-          // Fires for: resume uploaded (analysis may have succeeded or failed —
-          // the dashboard handles both; scoring runs against profile data regardless).
-          gtag('event', 'first_dashboard_access', {
-            method: 'v2_onboarding',
-            has_embedding: !!profile.candidate_embedding,
-          });
           window.location.href = 'rook-dashboard.html';
           return;
         }
