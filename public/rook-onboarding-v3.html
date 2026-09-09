@@ -670,6 +670,33 @@ document.getElementById('btnResend').addEventListener('click', async () => {
 });
 
 // ── Results screens ────────────────────────────────────────────────────────
+// Clean up raw location strings like "FL-Florida-FIELD" → "Florida · Territory"
+// "US MA Remote" → "Remote · Massachusetts"  "Gainesville, FL" → unchanged
+function cleanLocation(job) {
+  const r = job.location_raw || '';
+  const city = job.city || '';
+  const state = job.state || '';
+  if (city && state) return city + ', ' + state;
+  if (city) return city;
+  if (state) return state;
+  if (!r) return '';
+  // Remote patterns
+  if (/^remote$/i.test(r.trim())) return 'Remote';
+  // "US XX Remote" or "US Remote"
+  const usRemote = r.match(/^US\s+([A-Z]{2})\s+Remote$/i);
+  if (usRemote) return 'Remote';
+  // "XX-StateName-FIELD" or "XX-StateName-TERRITORY"
+  const fieldPat = r.match(/^[A-Z]{2}-([A-Za-z ]+)-(FIELD|TERRITORY|NATIONAL|REGIONAL)/i);
+  if (fieldPat) return fieldPat[1].trim() + ' · Territory';
+  // "StateName-FIELD"
+  const sfPat = r.match(/^([A-Za-z ]+)-(FIELD|TERRITORY)/i);
+  if (sfPat) return sfPat[1].trim() + ' · Territory';
+  // "City, ST" already clean
+  if (/^[A-Za-z ,]+$/.test(r) && r.length < 60) return r;
+  // Fall back to just showing it, trimmed
+  return r.replace(/[-_]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 function renderJobCardsA(jobs) {
   if (!jobs?.length) {
     document.getElementById('jobCardsA').innerHTML = '<p style="color:var(--muted);font-size:14px;text-align:center;padding:20px 0">Your matches are loading. Try refreshing in a moment.</p>';
