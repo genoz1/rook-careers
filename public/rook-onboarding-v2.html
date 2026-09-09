@@ -120,6 +120,11 @@
     .radar{width:180px;height:180px;border-radius:50%;margin:12px auto 30px;background:repeating-radial-gradient(circle,transparent 0 27px,rgba(8,119,209,.13) 28px 29px),conic-gradient(from 0deg,rgba(8,119,209,.08),rgba(83,200,120,.34),rgba(8,119,209,.08));position:relative}
     .radar:after{content:"";position:absolute;inset:12px;border-radius:50%;background:conic-gradient(from 0deg,transparent 0 78%,rgba(8,119,209,.35) 99%);animation:spin 2s linear infinite}
     .radar b{position:absolute;inset:0;display:grid;place-items:center;font-size:35px;color:var(--navy);z-index:2}
+    /* ── Job preview skeleton ── */
+    .sk-card{background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:10px;display:flex;gap:12px}
+    .sk-icon{width:36px;height:36px;border-radius:10px;flex-shrink:0;background:linear-gradient(90deg,#EEF1F6 25%,#E4E9F1 37%,#EEF1F6 63%);background-size:400% 100%;animation:shimmer 1.4s ease infinite}
+    .sk-bar{border-radius:6px;background:linear-gradient(90deg,#EEF1F6 25%,#E4E9F1 37%,#EEF1F6 63%);background-size:400% 100%;animation:shimmer 1.4s ease infinite;height:13px}
+    @keyframes shimmer{0%{background-position:100% 50%}100%{background-position:0 50%}}
     .checks{display:grid;gap:10px;text-align:left}
     .check{display:flex;align-items:center;gap:12px;padding:12px 14px;background:#f4faf6;border-radius:13px;color:#315241;font-weight:730;opacity:.35;transform:translateX(-5px);transition:.35s}
     .check.done{opacity:1;transform:none}
@@ -1038,6 +1043,12 @@
     if (!cardsEl) return;
     try {
       if (!_previewJobsCache) prefetchJobPreview();
+      // Show shimmer skeletons instantly while the fetch resolves
+      cardsEl.innerHTML = [1,2,3].map(() =>
+        '<div class="sk-card"><div class="sk-icon"></div><div style="flex:1;padding-top:2px">' +
+        '<div class="sk-bar" style="width:65%;margin-bottom:8px"></div>' +
+        '<div class="sk-bar" style="width:40%"></div></div></div>'
+      ).join('');
       const data = await _previewJobsCache;
       const jobs = Array.isArray(data) ? data.slice(0, 3) : ((data && data.jobs) || []).slice(0, 3);
       if (leadEl) leadEl.textContent = jobs.length
