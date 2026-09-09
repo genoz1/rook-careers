@@ -721,18 +721,11 @@ document.getElementById('btnStartTrial').addEventListener('click', async () => {
     userId = session.user.id;
 
     if (path === 'a') {
-      // Check if scoring is ready; if not, poll and show processing screen
-      const statusRes = await fetch(`/api/onboarding/pre-verify-status/${userId}`).catch(() => null);
-      const status = statusRes?.ok ? await statusRes.json() : null;
-
-      if (status?.scoring_ready) {
-        // Scores ready — fetch and show results
-        await loadAndShowResultsA(session.access_token);
-      } else {
-        // Not ready yet — show processing screen and poll
-        show('processing');
-        await waitForScoring(userId, session.access_token);
-      }
+      // Go straight to results — match-preview uses pre-computed scores if
+      // available, or in-memory scoring (~1s with warm cache) as fallback.
+      // No need to poll for scoring_ready: AI analysis takes 5-15s,
+      // email verification takes 30s+, so analysis is almost always done.
+      await loadAndShowResultsA(session.access_token);
     } else {
       // Path B — load preference-based results
       await loadAndShowResultsB(session.access_token);
