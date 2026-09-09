@@ -228,14 +228,14 @@ select.field-select:focus{border-color:var(--blue)}
     <div class="eyebrow">Almost there</div>
     <h2>Find your matches.</h2>
     <p class="lead">Add your résumé for personalized scores, then enter your email. We'll send a secure sign-in link and calculate your results while you verify.</p>
-    <label class="upload-zone" id="uploadZone" for="resumeFileInput" style="margin-top:4px">
+    <label class="upload-zone" id="uploadZone" for="resumeFileInput" style="margin-top:4px;display:block">
       <div class="upload-zone-inner">
         <div class="upload-icon">📄</div>
         <b>Drop your résumé here</b>
         <small>PDF or DOCX · Up to 10 MB · Click to choose</small>
       </div>
     </label>
-    <input type="file" id="resumeFileInput" accept=".pdf,.doc,.docx" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none">
+    <input type="file" id="resumeFileInput" accept=".pdf,.doc,.docx" style="display:none">
     <div class="file-chip" id="fileChip" style="display:none">
       <span class="fi">📄</span>
       <div><div class="fn" id="fileName"></div><div class="fs">Ready to upload</div></div>
