@@ -722,6 +722,9 @@
     onSelect: (suggestion) => {
       sel.location = suggestion;
       document.getElementById('btnLocNext').disabled = false;
+      // Prefetch jobs immediately when location is selected so they are
+      // ready before the user taps Continue — hides the API round trip.
+      prefetchJobPreview();
     },
     onClear: () => {
       sel.location = null;
@@ -741,7 +744,7 @@
   document.getElementById('btnLocNext').addEventListener('click', () => {
     if (!sel.location) return; // guard — button should be disabled anyway
     safeGtag('event', 'onboarding_step_completed', { step: '3b', location_label: sel.location.label });
-    loadJobPreview3c();
+    loadJobPreview3c(); // start fetch before show() so jobs load during transition
     show('3c');
   });
 
@@ -1014,37 +1017,38 @@
   document.getElementById('btnPreview3cNext').addEventListener('click', () => show('1'));
 
   // Load 3 masked jobs for the preview screen using industry + state from sel
+  // Cache for prefetched jobs — populated when user selects location,
+  // read instantly when screen 3c renders.
+  let _previewJobsCache = null;
+
+  function prefetchJobPreview() {
+    _previewJobsCache = null;
+    const params = new URLSearchParams({ limit: '3' });
+    if (sel.location && sel.location.lat)       params.set('near_lat',   sel.location.lat);
+    if (sel.location && sel.location.lng)       params.set('near_lng',   sel.location.lng);
+    if (sel.location && sel.location.stateAbbr) params.set('near_state', sel.location.stateAbbr);
+    _previewJobsCache = fetch('/api/jobs?' + params.toString())
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .catch(function() { return null; });
+  }
+
   async function loadJobPreview3c() {
     const cardsEl = document.getElementById('previewCards3c');
     const leadEl  = document.getElementById('previewLead');
     if (!cardsEl) return;
-
     try {
-      // Same call as rook-browse.html — no auth header, backend automatically
-      // returns redacted teaser jobs (no employer name, no apply link).
-      // This is the proven path that already works on the public browse page.
-      // Pass location coordinates so jobs are sorted near the user's ZIP —
-      // same params rook-browse.html uses for proximity sorting.
-      const params = new URLSearchParams({ limit: '3' });
-      if (sel.location?.lat)       params.set('near_lat',   sel.location.lat);
-      if (sel.location?.lng)       params.set('near_lng',   sel.location.lng);
-      if (sel.location?.stateAbbr) params.set('near_state', sel.location.stateAbbr);
-      const res  = await fetch('/api/jobs?' + params.toString());
-      if (!res.ok) throw new Error('API ' + res.status);
-      const data = await res.json();
-      const jobs = Array.isArray(data) ? data.slice(0, 3) : (data.jobs || []).slice(0, 3);
-
+      if (!_previewJobsCache) prefetchJobPreview();
+      const data = await _previewJobsCache;
+      const jobs = Array.isArray(data) ? data.slice(0, 3) : ((data && data.jobs) || []).slice(0, 3);
       if (leadEl) leadEl.textContent = jobs.length
-        ? 'A few current medical sales openings:'
+        ? 'A few current medical sales openings near you:'
         : 'Thousands of medical sales roles are waiting for you.';
-
       cardsEl.innerHTML = '';
       if (!jobs.length) {
         cardsEl.innerHTML = '<p style="color:var(--muted);font-size:14px;text-align:center;padding:8px 0">Sign up to browse available roles.</p>';
         return;
       }
-
-      jobs.forEach(job => {
+      jobs.forEach(function(job) {
         const card = document.createElement('div');
         card.style.cssText = 'background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:flex-start;gap:12px';
         const comp = job.compensation_text || (job.salary_min ? '$' + job.salary_min + (job.salary_max ? '-$' + job.salary_max : '+') : null);
@@ -1057,8 +1061,7 @@
           '</div>';
         cardsEl.appendChild(card);
       });
-    } catch (err) {
-      console.error('[preview] failed:', err.message);
+    } catch(err) {
       if (leadEl) leadEl.textContent = 'Thousands of medical sales roles are waiting for you.';
       cardsEl.innerHTML = '<p style="color:var(--muted);font-size:14px;text-align:center;padding:8px 0">Sign up to browse available roles.</p>';
     }
