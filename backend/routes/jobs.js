@@ -1217,13 +1217,13 @@ router.get('/onboarding/job-preview', async (req, res) => {
     if (industry) countQ = countQ.eq('industry', industry);
     const { count } = await countQ;
 
-    // Fetch 3 preview-safe fields only — no employer identity, no apply links
+    // Fetch preview-safe fields — no state filter, show recent active jobs
+    // State filtering was causing empty results because DB stores full state
+    // names ("Florida") but the client sends abbreviations ("FL").
     let q = supabaseAnon.from('jobs')
       .select('title_original, city, state, remote_status, compensation_text, company_name')
       .eq('status', 'active').eq('moderation_status', 'approved')
-      .order('date_posted', { ascending: false }).limit(6);
-    if (state) q = q.eq('state', state);
-    if (industry) q = q.eq('industry', industry);
+      .order('date_posted', { ascending: false }).limit(8);
     const { data: jobs } = await q;
 
     const masked = (jobs || []).slice(0, 3).map(j => ({
