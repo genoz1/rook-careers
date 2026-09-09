@@ -147,7 +147,7 @@ select.field-select:focus{border-color:var(--blue)}
       </div>
       <div style="display:flex;gap:12px;align-items:flex-start">
         <div style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#062d55,#0877d1);color:#fff;display:grid;place-items:center;font-size:13px;font-weight:800;flex-shrink:0">2</div>
-        <div><div style="font-size:14px;font-weight:700;color:var(--navy)">Add your résumé for personalized scores</div><div style="font-size:13px;color:var(--muted);margin-top:2px">Optional — skip it if you don't have one handy. You can add it later.</div></div>
+        <div><div style="font-size:14px;font-weight:700;color:var(--navy)">Answer 3 quick questions</div><div style="font-size:13px;color:var(--muted);margin-top:2px">Industry, experience, and territory. Takes about 30 seconds.</div></div>
       </div>
       <div style="display:flex;gap:12px;align-items:flex-start">
         <div style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#062d55,#0877d1);color:#fff;display:grid;place-items:center;font-size:13px;font-weight:800;flex-shrink:0">3</div>
@@ -223,37 +223,18 @@ select.field-select:focus{border-color:var(--blue)}
     <button class="btn-back" onclick="goBack()">← Back</button>
   </div>
 
-  <!-- ── Screen: Résumé + email (combined, step 5→6) ── -->
+  <!-- ── Screen: Email (step 5) ── -->
   <div class="screen" id="s-resume">
-    <div class="eyebrow">Almost there</div>
-    <h2>Find your matches.</h2>
-    <p class="lead">Enter your email and optionally drop your résumé for personalized match scores. We'll send a sign-in link and calculate your results while you verify.</p>
-    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:16px;margin-bottom:4px">
-      <span style="font-size:13px;font-weight:700;color:var(--ink)">Résumé</span>
-      <span style="font-size:12px;font-weight:600;color:var(--blue);background:#eef7ff;padding:2px 8px;border-radius:99px">Optional</span>
-    </div>
-    <label class="upload-zone" id="uploadZone" for="resumeFileInput" style="margin-top:0;display:block">
-      <div class="upload-zone-inner">
-        <div class="upload-icon">📄</div>
-        <b>Drop your résumé here</b>
-        <small>PDF or DOCX · Up to 10 MB · Click to choose</small>
-      </div>
-    </label>
-    <input type="file" id="resumeFileInput" accept=".pdf,.doc,.docx" style="display:none">
-    <div class="file-chip" id="fileChip" style="display:none">
-      <span class="fi">📄</span>
-      <div><div class="fn" id="fileName"></div><div class="fs">Ready to upload</div></div>
-    </div>
-    <div class="field" style="margin-top:18px">
-      <label for="emailInput">Email address <span style="font-weight:500;color:var(--muted)">— we'll send a sign-in link</span></label>
+    <div class="eyebrow">One last step</div>
+    <h2>See your matches.</h2>
+    <p class="lead">Enter your email and we'll send a secure sign-in link. Your scored results will be ready when you verify.</p>
+    <div class="field" style="margin-top:8px">
+      <label for="emailInput">Email address</label>
       <input type="email" id="emailInput" placeholder="you@example.com" autocomplete="email" spellcheck="false">
     </div>
     <div class="err" id="teaserErr"></div>
-    <button class="btn-primary" id="btnResumeNext" style="margin-top:18px">Find My Matches</button>
-    <p style="font-size:12px;color:var(--muted);text-align:center;margin-top:10px">
-      No résumé? <button id="btnSkipResume" style="background:none;border:none;color:var(--blue);font:inherit;font-size:12px;font-weight:700;cursor:pointer;text-decoration:underline;padding:0">Continue without one</button> — you can upload later from your dashboard.
-    </p>
-    <div class="trust">🔒 No password yet · No payment until you choose a trial</div>
+    <button class="btn-primary" id="btnResumeNext" style="margin-top:18px">Send My Sign-In Link</button>
+    <div class="trust">🔒 No password yet · Preview your matches free · No card until you start a trial</div>
     <button class="btn-back" onclick="goBack()">← Back</button>
   </div>
 
@@ -381,25 +362,19 @@ try {
 let currentScreen = 'welcome';
 let path = 'a';        // 'a' = résumé path, 'b' = no-résumé path
 let userId = null;
-let resumeFile = null;
-let uploadStarted = false;
-let uploadPhase = 'idle'; // idle | uploading | done | failed
-let analysisStatus = null;
-let scoringReady = false;
-let hasResume = false;
+// No résumé upload in this flow — scoring uses questionnaire only
 
 const zip = () => selectedLocation?.zip || '';
 const email = () => (document.getElementById('emailInput') || {value:''}).value.trim();
 
 const PROGRESS = {
   welcome: 0, details: 10, industry: 25, years: 40, territory: 55,
-  resume: 70, 'check-email': 82,
+  resume: 85, 'check-email': 100,
   'results-a': 88, 'results-b': 88, password: 93, trial: 97, processing: 82
 };
 const LABELS = {
-  welcome: '', details: 'Step 1 of 6', industry: 'Step 2 of 6',
-  years: 'Step 3 of 6', territory: 'Step 4 of 6', resume: 'Step 5 of 6',
-  teaser: 'Step 5 of 6', 'check-email': 'Step 6 of 6',
+  welcome: '', details: 'Step 1 of 5', industry: 'Step 2 of 5',
+  years: 'Step 3 of 5', territory: 'Step 4 of 5', resume: 'Step 5 of 5',
   'results-a': '', 'results-b': '', password: '', trial: '', processing: ''
 };
 
@@ -474,43 +449,9 @@ if (_locInput && _locList && typeof RookLocationWidget !== 'undefined') {
   });
 }
 
-const resumeInput = document.getElementById('resumeFileInput');
-const fileChip    = document.getElementById('fileChip');
-const uploadZone  = document.getElementById('uploadZone');
+// No file upload elements in this flow
 
-if (resumeInput) {
-  resumeInput.addEventListener('change', e => {
-    const f = e.target.files[0];
-    if (!f) return;
-    const ext = f.name.split('.').pop().toLowerCase();
-    if (!['pdf','doc','docx'].includes(ext)) return;
-    if (f.size > 10 * 1024 * 1024) return;
-    resumeFile = f;
-    if (fileChip) fileChip.style.display = 'flex';
-    if (uploadZone) uploadZone.style.display = 'none';
-    document.getElementById('fileName').textContent = f.name;
-    const btnNext = document.getElementById('btnResumeNext');
-    if (btnNext) btnNext.style.display = 'block';
-    const skipBtn = document.getElementById('btnSkipResume');
-    if (skipBtn) skipBtn.style.display = 'none';
-  });
-  if (uploadZone) {
-    uploadZone.addEventListener('dragover', e => e.preventDefault());
-    uploadZone.addEventListener('drop', e => {
-      e.preventDefault();
-      const f = e.dataTransfer.files[0];
-      if (f) { const dt = new DataTransfer(); dt.items.add(f); resumeInput.files = dt.files; resumeInput.dispatchEvent(new Event('change')); }
-    });
-  }
-}
-
-// Skip résumé — clear file and mark as path B
-document.getElementById('btnSkipResume')?.addEventListener('click', () => {
-  resumeFile = null;
-  path = 'b';
-  // btnResumeNext click will handle signUp as path B
-  document.getElementById('btnResumeNext')?.click();
-});
+// No skip button needed — résumé not part of this flow
 
 // ── Teaser job cards ─────────────────────────────────────────────────────────
 async function loadTeaserJobs() {
@@ -649,7 +590,7 @@ async function startSignUpAndSend(prefs = null) {
     if (error) { showErr('teaserErr', error.message); btn.disabled = false; btn.textContent = path === 'a' ? 'Find My Matches' : 'Find opportunities & email my link'; return; }
 
     const uid = data?.user?.id;
-    if (!uid) { showErr(path === 'a' ? 'detailsErr' : 'prefsErr', 'Account creation failed. Please try again.'); btn.disabled = false; return; }
+    if (!uid) { showErr('teaserErr', 'Account creation failed. Please try again.'); btn.disabled = false; return; }
     userId = uid;
 
     // Save questionnaire + location to DB immediately via prefill endpoint
@@ -684,21 +625,12 @@ async function startSignUpAndSend(prefs = null) {
       body: JSON.stringify(prefillPayload)
     }).catch(() => {});
 
-    // Navigate to check-email screen, then start background upload
+    // Navigate to check-email screen
     show('check-email');
     updateCheckEmailUI();
 
-    if (path === 'a' && resumeFile) {
-      startBackgroundUpload(uid);
-    } else {
-      // Path B: location already saved in prefill above
-      ;
-      uploadPhase = 'done';
-      updateCheckEmailUI();
-    }
-
   } catch (err) {
-    showErr(path === 'a' ? 'detailsErr' : 'prefsErr', 'Something went wrong. Please try again.');
+    showErr('teaserErr', 'Something went wrong. Please try again.');
     console.error(err);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = 'Find My Matches'; }
@@ -758,30 +690,12 @@ function updateCheckEmailUI() {
   const note = document.getElementById('statusNote');
   if (!box) return;
 
-  if (path === 'a') {
-    const rows = [];
-
-    // Row 1: Résumé saved
-    const saved = uploadPhase === 'done' || uploadPhase === 'failed';
-    rows.push(statusRow(saved, uploadPhase === 'failed', saved ? '✓ Résumé saved securely' : 'Saving your résumé…'));
-
-    // Row 2: Résumé analyzed
-    const analyzed = analysisStatus === 'ok';
-    const analysisFailed = analysisStatus === 'failed' || analysisStatus === 'no_text_extracted';
-    const analyzing = uploadPhase === 'done' && !analyzed && !analysisFailed;
-    rows.push(statusRow(analyzed, analysisFailed, analyzed ? '✓ Résumé analyzed' : analysisFailed ? '⚠ Analysis failed — results will use location only' : 'Analyzing your résumé…', analyzing));
-
-    // Row 3: Results ready
-    const ready = scoringReady;
-    const stillRunning = analyzed && !ready;
-    rows.push(statusRow(ready, false, ready ? '✓ Results ready' : 'Finding your best matches…', stillRunning));
-
-    box.innerHTML = rows.join('');
-    if (note) note.textContent = ready ? 'Your results stay private until you verify your email.' : 'Your information is saved. You can verify now while we finish.';
-  } else {
-    box.innerHTML = statusRow(true, false, '✓ Location and preferences saved') + statusRow(true, false, '✓ Opportunities ready');
-    if (note) note.textContent = 'Your results stay private until you verify your email.';
-  }
+  // Questionnaire-only flow — no résumé processing, results ready immediately
+  box.innerHTML =
+    statusRow(true, false, '✓ Location and preferences saved') +
+    statusRow(true, false, '✓ Scoring your matches now…') +
+    statusRow(false, false, 'Results ready when you verify your email');
+  if (note) note.textContent = 'Your matches are being calculated. Verify your email to see them.';
 }
 
 function statusRow(done, failed, text, spinning = false) {
@@ -922,16 +836,9 @@ document.getElementById('btnStartTrial').addEventListener('click', async () => {
 
     userId = session.user.id;
 
-    if (path === 'a') {
-      // Go straight to results — match-preview uses pre-computed scores if
-      // available, or in-memory scoring (~1s with warm cache) as fallback.
-      // No need to poll for scoring_ready: AI analysis takes 5-15s,
-      // email verification takes 30s+, so analysis is almost always done.
+    // Always show scored results — questionnaire provides location,
+      // industry, years, territory which is enough for real percentages.
       await loadAndShowResultsA(session.access_token);
-    } else {
-      // Path B — load preference-based results
-      await loadAndShowResultsB(session.access_token);
-    }
     return;
   }
 
