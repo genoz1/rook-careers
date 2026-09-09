@@ -165,8 +165,14 @@ select.field-select:focus{border-color:var(--blue)}
     <p class="lead">We'll email you a secure sign-in link. Add your résumé for personalized match scores, or start with your preferences.</p>
 
     <div class="field">
-      <label for="zipInput">Job-search ZIP code</label>
-      <input type="text" id="zipInput" inputmode="numeric" placeholder="34483" maxlength="5" autocomplete="postal-code">
+      <label for="locationInput">Job-search location</label>
+      <div style="position:relative">
+        <input type="text" id="locationInput" placeholder="City, state or ZIP code"
+          autocomplete="off" aria-label="Job-search location"
+          style="width:100%;padding:13px 14px;border:1.5px solid var(--line);border-radius:var(--input-radius);font:inherit;font-size:16px;color:var(--ink);background:var(--paper);outline:none;-webkit-appearance:none;transition:border-color .15s">
+        <ul id="locationList" hidden style="position:absolute;top:100%;left:0;right:0;z-index:200;background:#fff;border:1.5px solid var(--blue);border-top:none;border-radius:0 0 12px 12px;margin:0;padding:4px 0;list-style:none;max-height:220px;overflow-y:auto;box-shadow:0 8px 20px rgba(7,44,80,.12)"></ul>
+      </div>
+      <div id="locationStatus" style="font-size:12px;color:var(--muted);min-height:18px;margin-top:4px"></div>
     </div>
     <div class="field">
       <label for="emailInput">Email address</label>
@@ -332,6 +338,7 @@ select.field-select:focus{border-color:var(--blue)}
 
 </div><!-- /shell -->
 
+<script src="rook-location-widget.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="rook-config.js"></script>
 <script src="rook-attribution.js"></script>
@@ -394,7 +401,23 @@ function clearErr(id) {
   if (el) { el.textContent = ''; el.classList.remove('show'); }
 }
 
-// ── Résumé file selection ──────────────────────────────────────────────────
+// ── Location widget ────────────────────────────────────────────────────────
+let selectedLocation = null; // {label, city, state, stateAbbr, zip, lat, lng}
+
+RookLocationWidget.init({
+  inputEl: document.getElementById('locationInput'),
+  listEl:  document.getElementById('locationList'),
+  onSelect: (suggestion) => {
+    selectedLocation = suggestion;
+    document.getElementById('locationStatus').textContent = suggestion.label;
+    // Prefetch jobs as soon as location is chosen
+    prefetchJobPreview();
+  },
+  onClear: () => {
+    selectedLocation = null;
+    document.getElementById('locationStatus').textContent = '';
+  },
+});
 const resumeInput = document.getElementById('resumeFileInput');
 const fileChip    = document.getElementById('fileChip');
 const uploadZone  = document.getElementById('uploadZone');
@@ -434,13 +457,24 @@ document.getElementById('btnSkipResume').addEventListener('click', () => {
   uploadZone.style.display = '';
 });
 
-// ── Welcome → Details ──────────────────────────────────────────────────────
+// ── Job preview prefetch ───────────────────────────────────────────────────
+let _previewJobsCache = null;
+
+function prefetchJobPreview() {
+  const params = new URLSearchParams({ limit: '3' });
+  if (selectedLocation?.lat)       params.set('near_lat',   selectedLocation.lat);
+  if (selectedLocation?.lng)       params.set('near_lng',   selectedLocation.lng);
+  if (selectedLocation?.stateAbbr) params.set('near_state', selectedLocation.stateAbbr);
+  _previewJobsCache = fetch('/api/jobs?' + params.toString())
+    .then(r => r.ok ? r.json() : null)
+    .catch(() => null);
+}
 document.getElementById('btnWelcomeStart').addEventListener('click', () => show('details'));
 
 // ── Details next ───────────────────────────────────────────────────────────
 document.getElementById('btnDetailsNext').addEventListener('click', async () => {
   clearErr('detailsErr');
-  if (!/^\d{5}$/.test(zip())) return showErr('detailsErr', 'Please enter a valid 5-digit ZIP code.');
+  if (!selectedLocation) return showErr('detailsErr', 'Please enter your city, state or ZIP code and select a result from the dropdown.');
   if (!email() || !email().includes('@')) return showErr('detailsErr', 'Please enter a valid email address.');
 
   if (resumeFile) {
@@ -502,6 +536,15 @@ async function startSignUpAndSend(prefs = null) {
       prefillPayload.territory_size_preference  = prefs.territories[0];
       prefillPayload.work_style = prefs.territories.length === 1 && prefs.territories[0] === 'remote' ? 'remote' : 'field';
     }
+    // Include location in prefill payload
+    if (selectedLocation) {
+      prefillPayload.home_city           = selectedLocation.city  || null;
+      prefillPayload.home_state          = selectedLocation.state || null;
+      prefillPayload.home_zip            = selectedLocation.zip   || null;
+      prefillPayload.home_lat            = selectedLocation.lat   != null ? selectedLocation.lat : null;
+      prefillPayload.home_lng            = selectedLocation.lng   != null ? selectedLocation.lng : null;
+      prefillPayload.home_location_label = selectedLocation.label || null;
+    }
     fetch('/api/profile/prefill', {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify(prefillPayload)
@@ -514,11 +557,8 @@ async function startSignUpAndSend(prefs = null) {
     if (path === 'a' && resumeFile) {
       startBackgroundUpload(uid);
     } else {
-      // Path B: just geocode the ZIP and save location
-      fetch('/api/profile/prefill', {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ user_id: uid, home_zip: zip() })
-      }).catch(() => {});
+      // Path B: location already saved in prefill above
+      ;
       uploadPhase = 'done';
       updateCheckEmailUI();
     }
@@ -541,7 +581,9 @@ async function startBackgroundUpload(uid) {
   const fd = new FormData();
   fd.append('user_id', uid);
   fd.append('resume', resumeFile);
-  fd.append('zip', zip());
+  if (selectedLocation?.zip) fd.append('zip', selectedLocation.zip);
+  if (selectedLocation?.lat != null) fd.append('lat', selectedLocation.lat);
+  if (selectedLocation?.lng != null) fd.append('lng', selectedLocation.lng);
 
   try {
     const res = await fetch('/api/onboarding/pre-verify-upload', { method: 'POST', body: fd });

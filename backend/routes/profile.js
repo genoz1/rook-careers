@@ -119,9 +119,16 @@ router.post("/onboarding/pre-verify-upload", requireConfig, preVerifyUpload.sing
         if (resumeStructured) { try { suggestedRoles = await suggestRoles(resumeStructured); } catch (_) {} }
       } else { analysisStatus = "no_text_extracted"; }
 
-      // Geocode ZIP if provided and no coordinates yet
+      // Use lat/lng from location widget if provided (already geocoded client-side)
+      // Fall back to ZIP geocoding only when coordinates aren't supplied.
       let geoFields = {};
-      if (zip && /^\d{5}$/.test(zip)) {
+      const clientLat = parseFloat(req.body.lat);
+      const clientLng = parseFloat(req.body.lng);
+      if (!isNaN(clientLat) && !isNaN(clientLng)) {
+        geoFields = { home_lat: clientLat, home_lng: clientLng };
+        if (zip) geoFields.home_zip = zip;
+        console.log(`[pre-verify-upload] using client coords lat=${clientLat} lng=${clientLng}`);
+      } else if (zip && /^\d{5}$/.test(zip)) {
         try {
           const coords = await geocodeZip(zip);
           if (coords) {
@@ -134,7 +141,7 @@ router.post("/onboarding/pre-verify-upload", requireConfig, preVerifyUpload.sing
           console.error(`[pre-verify-upload] geocoding failed for zip=${zip}: ${geoErr.message}`);
         }
       } else {
-        console.warn(`[pre-verify-upload] no valid zip provided (got: ${JSON.stringify(zip)})`);
+        console.warn(`[pre-verify-upload] no valid zip or coords provided`);
       }
 
       const payload = { user_id, resume_file_path: filePath, updated_at: new Date().toISOString(), ...geoFields };
