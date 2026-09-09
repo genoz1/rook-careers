@@ -1205,39 +1205,45 @@ function checkJobPreviewRate(ip) {
 setInterval(() => { const n = Date.now(); for (const [k, v] of JP_PREVIEW_RATE) if (n > v.resetAt) JP_PREVIEW_RATE.delete(k); }, 300_000);
 
 router.get('/onboarding/job-preview', async (req, res) => {
-  if (!isConfigured) return res.json({ jobs: [], total_count: 0 });
+  if (!isConfigured) {
+    console.log('[job-preview] not configured');
+    return res.json({ jobs: [], total_count: 0 });
+  }
   const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
   if (!checkJobPreviewRate(ip)) return res.status(429).json({ error: 'Too many requests' });
-  const { industry, state } = req.query;
+
   try {
-    // Count query
-    let countQ = supabaseAnon.from('jobs').select('id', { count: 'exact', head: true })
-      .eq('status', 'active').eq('moderation_status', 'approved');
-    if (state) countQ = countQ.eq('state', state);
-    if (industry) countQ = countQ.eq('industry', industry);
-    const { count } = await countQ;
-
-    // Fetch preview-safe fields — no state filter, show recent active jobs
-    // State filtering was causing empty results because DB stores full state
-    // names ("Florida") but the client sends abbreviations ("FL").
-    let q = supabaseAnon.from('jobs')
+    const { data: jobs, error } = await supabaseAnon.from('jobs')
       .select('title_original, city, state, remote_status, compensation_text, company_name')
-      .eq('status', 'active').eq('moderation_status', 'approved')
-      .order('date_posted', { ascending: false }).limit(8);
-    const { data: jobs } = await q;
+      .eq('status', 'active')
+      .eq('moderation_status', 'approved')
+      .order('date_posted', { ascending: false })
+      .limit(8);
 
-    const masked = (jobs || []).slice(0, 3).map(j => ({
-      title_original: j.company_name ? (scrubCompanyNameFromText(j.title_original, j.company_name) || j.title_original) : j.title_original,
+    if (error) {
+      console.error('[job-preview] DB error:', error.message);
+      return res.json({ jobs: [], total_count: 0 });
+    }
+
+    console.log('[job-preview] rows returned:', jobs?.length, 'first:', jobs?.[0]?.title_original);
+
+    const masked = (jobs || []).slice(0, 5).map(j => ({
+      title_original: j.company_name
+        ? (scrubCompanyNameFromText(j.title_original, j.company_name) || j.title_original)
+        : j.title_original,
       city: j.city,
       state: j.state,
       remote_status: j.remote_status,
       compensation_text: j.compensation_text,
     }));
-    res.json({ jobs: masked, total_count: count || 0 });
+
+    res.json({ jobs: masked, total_count: jobs?.length || 0 });
   } catch (err) {
+    console.error('[job-preview] exception:', err.message);
     res.json({ jobs: [], total_count: 0 });
   }
 });
+
 
 // GET /api/onboarding/warm-jobs
 // Triggers fetchActiveJobs() server-side to warm the 2-minute active-jobs

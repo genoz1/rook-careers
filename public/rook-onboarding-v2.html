@@ -1017,6 +1017,7 @@
       // state is stored in the DB. Shows the most recent active jobs.
       const res  = await fetch('/api/onboarding/job-preview');
       const data = res.ok ? await res.json() : null;
+      console.log('[job-preview] status:', res.status, 'data:', JSON.stringify(data));
       const jobs = data?.jobs || [];
 
       if (leadEl) leadEl.textContent = jobs.length
