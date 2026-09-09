@@ -246,6 +246,10 @@ select.field-select:focus{border-color:var(--blue)}
     </div>
     <div class="err" id="teaserErr"></div>
     <button class="btn-primary" id="btnResumeNext" style="margin-top:18px">Find My Matches</button>
+    <div class="skip-link" style="margin-top:8px">
+      <button id="btnSkipResume">No résumé right now — continue without one →</button>
+    </div>
+    <p style="font-size:11px;color:var(--muted);text-align:center;margin-top:6px">Résumé is optional. Scores improve when you add one later from your dashboard.</p>
     <div class="trust">🔒 No password yet · No payment until you choose a trial</div>
     <button class="btn-back" onclick="goBack()">← Back</button>
   </div>
@@ -481,7 +485,13 @@ if (resumeInput) {
   }
 }
 
-// (no skip-résumé button in v4 — user just doesn't select a file)
+// Skip résumé — clear file and mark as path B
+document.getElementById('btnSkipResume')?.addEventListener('click', () => {
+  resumeFile = null;
+  path = 'b';
+  // btnResumeNext click will handle signUp as path B
+  document.getElementById('btnResumeNext')?.click();
+});
 
 // ── Teaser job cards ─────────────────────────────────────────────────────────
 async function loadTeaserJobs() {
@@ -946,7 +956,11 @@ async function loadAndShowResultsB(token) {
     '<div class="sk-card"><div style="flex:1"><div class="sk" style="height:16px;width:70%;margin-bottom:10px"></div><div class="sk" style="height:12px;width:45%"></div></div></div>'
   ).join('');
 
-  const res = await fetch('/api/jobs?limit=3', {});
+  const _p = new URLSearchParams({ limit: '3' });
+  if (selectedLocation?.lat) _p.set('near_lat', selectedLocation.lat);
+  if (selectedLocation?.lng) _p.set('near_lng', selectedLocation.lng);
+  if (selectedLocation?.stateAbbr) _p.set('near_state', selectedLocation.stateAbbr);
+  const res = await fetch('/api/jobs?' + _p.toString(), {});
   if (res.ok) {
     const data = await res.json();
     const jobs = Array.isArray(data) ? data.slice(0, 3) : (data.jobs || []).slice(0, 3);
