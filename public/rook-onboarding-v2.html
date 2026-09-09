@@ -644,6 +644,13 @@
   }
 
   /* ── Selections ── */
+  // Safe HTML escaping — used by job preview cards
+  function escapeHtml(str) {
+    return String(str || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  // Safe gtag wrapper — GA may not be loaded yet in some browsers
+  function safeGtag() { if (typeof gtag === 'function') gtag.apply(null, arguments); }
+
   const sel = { industry: null, years: null, territories: [], location: null };
 
   function wireSingleSelect(groupId, field, nextBtnId) {
@@ -733,7 +740,7 @@
 
   document.getElementById('btnLocNext').addEventListener('click', () => {
     if (!sel.location) return; // guard — button should be disabled anyway
-    gtag('event', 'onboarding_step_completed', { step: '3b', location_label: sel.location.label });
+    safeGtag('event', 'onboarding_step_completed', { step: '3b', location_label: sel.location.label });
     loadJobPreview3c();
     show('3c');
   });
