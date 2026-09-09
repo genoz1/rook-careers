@@ -599,10 +599,14 @@
   const DRAFT_KEY   = 'rook_ob_v2_draft';
   const DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
-  const sb = window.supabase.createClient(
-    window.ROOK_CONFIG.SUPABASE_URL,
-    window.ROOK_CONFIG.SUPABASE_ANON_KEY
-  );
+  let sb;
+  try {
+    sb = window.supabase.createClient(window.ROOK_CONFIG.SUPABASE_URL, window.ROOK_CONFIG.SUPABASE_ANON_KEY);
+  } catch(e) {
+    console.warn('[ROOK] Supabase not loaded:', e.message);
+    const _s = m => () => Promise.resolve({data:{},error:{message:m}});
+    sb = { auth: { getSession:_s('unavailable'), signUp:_s('unavailable'), updateUser:_s('unavailable'), resend:_s('unavailable'), onAuthStateChange:()=>({data:{subscription:{unsubscribe:()=>{}}}}) }};
+  }
 
   /* ── Screen navigation ── */
   // Maps a data-step attribute string to an index in the screens NodeList.
