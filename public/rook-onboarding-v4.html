@@ -546,38 +546,41 @@ document.getElementById('btnDetailsNext').addEventListener('click', () => {
   show('industry');
 });
 
-// Industry — listen on click (not change) for iOS compatibility
-document.querySelectorAll('#s-industry .choice').forEach(label => {
-  label.addEventListener('click', () => {
-    const radio = label.querySelector('input[name="industry"]');
-    if (radio) {
-      sel.industry = radio.value;
-      document.getElementById('btnIndustryNext').disabled = false;
-    }
-  });
+// ── Questionnaire state ─────────────────────────────────────────────────────
+const sel = { industry: null, years: null, territories: [] };
+
+// Event delegation on each screen container — catches clicks anywhere in
+// the choice, including label text and sub-text, not just the radio itself.
+document.getElementById('s-industry').addEventListener('click', e => {
+  const choice = e.target.closest('.choice');
+  if (!choice) return;
+  const radio = choice.querySelector('input[name="industry"]');
+  if (!radio) return;
+  radio.checked = true;
+  sel.industry = radio.value;
+  document.getElementById('btnIndustryNext').disabled = false;
 });
 document.getElementById('btnIndustryNext').addEventListener('click', () => show('years'));
 
-// Years — same fix
-document.querySelectorAll('#s-years .choice').forEach(label => {
-  label.addEventListener('click', () => {
-    const radio = label.querySelector('input[name="years"]');
-    if (radio) {
-      sel.years = parseFloat(radio.value);
-      document.getElementById('btnYearsNext').disabled = false;
-    }
-  });
+document.getElementById('s-years').addEventListener('click', e => {
+  const choice = e.target.closest('.choice');
+  if (!choice) return;
+  const radio = choice.querySelector('input[name="years"]');
+  if (!radio) return;
+  radio.checked = true;
+  sel.years = parseFloat(radio.value);
+  document.getElementById('btnYearsNext').disabled = false;
 });
 document.getElementById('btnYearsNext').addEventListener('click', () => show('territory'));
 
-// Territory — checkboxes, click on label
-document.querySelectorAll('#s-territory .choice').forEach(label => {
-  label.addEventListener('click', () => {
-    setTimeout(() => {
-      sel.territories = [...document.querySelectorAll('#s-territory input[name="territory"]:checked')].map(e => e.value);
-      document.getElementById('btnTerritoryNext').disabled = sel.territories.length === 0;
-    }, 0);
-  });
+document.getElementById('s-territory').addEventListener('click', e => {
+  const choice = e.target.closest('.choice');
+  if (!choice) return;
+  // let browser toggle the checkbox first, then read state
+  setTimeout(() => {
+    sel.territories = [...document.querySelectorAll('#s-territory input[name="territory"]:checked')].map(el => el.value);
+    document.getElementById('btnTerritoryNext').disabled = sel.territories.length === 0;
+  }, 0);
 });
 document.getElementById('btnTerritoryNext').addEventListener('click', () => show('resume'));
 
