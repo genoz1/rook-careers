@@ -706,7 +706,7 @@
   })();
 
   document.getElementById('btnWelcomeStart').addEventListener('click', () => {
-    gtag('event', 'onboarding_started', { method: 'v2' });
+    safeGtag('event', 'onboarding_started', { method: 'v2' });
     const draft = loadDraft();
     if (draft) restoreDraft(draft);
     show('3b'); // new first step: location
