@@ -177,16 +177,34 @@ function searchLocal(q) {
   }
 
   // --- Prefix city name search ---
+  // Collect ALL matching cities, then sort by ZIP count so large cities
+  // (Dallas TX, Austin TX) rank above small towns with the same name.
+  // Without this, TX cities never appear because lower ZIP-numbered states
+  // (PA=15k, WV=24k, NC=27k) fill the result limit before TX=75k.
   const idx = getCityIndex();
   const lower = trimmed.toLowerCase();
-  const results = [];
+  const matches = [];
   for (const entry of idx.values()) {
     if (entry.city.toLowerCase().startsWith(lower)) {
-      results.push(entryToSuggestion(entry));
-      if (results.length >= 5) break;
+      matches.push(entry);
     }
   }
-  return results;
+  if (!matches.length) return [];
+  // Count ZIPs per city as a proxy for city size
+  const zipCount = {};
+  for (const entry of Object.values(zipcodes.codes)) {
+    const k = entry.city + "|" + entry.state;
+    zipCount[k] = (zipCount[k] || 0) + 1;
+  }
+  matches.sort((a, b) => {
+    const ka = a.city + "|" + a.state;
+    const kb = b.city + "|" + b.state;
+    const diff = (zipCount[kb] || 0) - (zipCount[ka] || 0);
+    if (diff !== 0) return diff;
+    // Tiebreaker: alphabetical by state so results are stable
+    return a.state.localeCompare(b.state);
+  });
+  return matches.slice(0, 8).map(entryToSuggestion);
 }
 
 // Prime the city index at startup so the first user request is fast

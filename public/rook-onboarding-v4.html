@@ -428,6 +428,22 @@ function clearErr(id) {
   if (el) { el.textContent = ''; el.classList.remove('show'); }
 }
 
+// ── Back navigation ──────────────────────────────────────────────────────────
+// Called via onclick="goBack()" on Back buttons throughout the flow.
+const BACK_MAP = {
+  'details':    'welcome',
+  'industry':   'details',
+  'years':      'industry',
+  'territory':  'years',
+  'resume':     'territory',
+};
+function goBack() {
+  const prev = BACK_MAP[currentScreen];
+  if (prev) show(prev);
+}
+window.goBack = goBack; // expose for onclick= attributes
+window.rookShow = show; // expose for testing and any inline navigation
+
 // ── Welcome button — wired first so it always works ────────────────────────
 document.getElementById('btnWelcomeStart').addEventListener('click', () => show('details'));
 
