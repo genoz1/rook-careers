@@ -275,8 +275,8 @@
   <div class="profile-gate-card">
     <h2 id="profileGateTitle">Finish setting up your profile</h2>
     <p id="profileGateBody">We can't score jobs against your background yet — a couple of things are still missing.</p>
-    <a class="btn-primary" href="rook-onboarding.html" style="background:var(--royal); color:#fff;">Complete My Profile →</a>
-    <button type="button" class="dismiss" onclick="document.getElementById('profileGateOverlay').classList.remove('active')">I'll do this later</button>
+    <a class="btn-primary" href="rook-settings.html" style="background:var(--royal); color:#fff;">Complete My Profile →</a>
+    <button type="button" class="dismiss" id="profileGateDismiss">Continue browsing</button>
   </div>
 </div>
 <div class="linkedin-popover-overlay" id="linkedinPopoverOverlay" onclick="if(event.target === this) this.classList.remove('active')">
@@ -572,19 +572,41 @@
         }
         if (!profile) return; // no profile row at all — rookRequireAuth's routing already sends these candidates to onboarding, not here
         const missingResume = !profile.resume_file_path;
-        const missingLocation = !profile.home_lat && !profile.home_zip; // lat/lng from any source
+        const missingLocation = !profile.home_lat && !profile.home_zip;
+
+        // Dismiss button with sessionStorage — shows again on next visit if résumé still missing
+        const dismissBtn = document.getElementById('profileGateDismiss');
+        if (dismissBtn) {
+          dismissBtn.addEventListener('click', () => {
+            sessionStorage.setItem('rook_resume_prompt_dismissed', '1');
+            document.getElementById('profileGateOverlay').classList.remove('active');
+          });
+        }
+
+        // Don't show if dismissed this session (but show again next visit)
+        if (missingResume && sessionStorage.getItem('rook_resume_prompt_dismissed')) {
+          // Still show the persistent reminder button below if résumé is missing
+          const reminder = document.getElementById('resumeReminder');
+          if (reminder) reminder.style.display = 'block';
+          return;
+        }
+
         if (!missingResume && !missingLocation) return;
         const title = document.getElementById('profileGateTitle');
-        const body = document.getElementById('profileGateBody');
-        if (missingResume && missingLocation) {
+        const body  = document.getElementById('profileGateBody');
+        const link  = document.querySelector('#profileGateOverlay .btn-primary');
+        if (missingResume && !missingLocation) {
+          title.textContent = 'Make your matches more personal';
+          body.textContent = 'Right now your opportunities are based on your location and preferences. Upload your résumé for personalized match scores.';
+          if (link) { link.textContent = 'Upload résumé'; link.href = 'rook-settings.html#resume'; }
+        } else if (missingResume && missingLocation) {
           title.textContent = "You're missing a résumé and a primary location";
-          body.textContent = "Without these, we can't score jobs against your background or rank them by real distance — that's why everything looks flat right now.";
-        } else if (missingResume) {
-          title.textContent = "You're missing a résumé";
-          body.textContent = "Without it, we can't score jobs against your actual background — that's why everything looks flat right now.";
+          body.textContent = "Without these, we can't score jobs against your background or rank them by real distance.";
+          if (link) { link.textContent = 'Complete my profile'; link.href = 'rook-settings.html'; }
         } else {
           title.textContent = "You're missing a primary job-search location";
-          body.textContent = "Without it, we can't rank jobs by real distance from you — just which state they're in. Add one in Settings or use the location row above.";
+          body.textContent = "Without it, we can't rank jobs by real distance from you — just which state they're in.";
+          if (link) { link.textContent = 'Add location'; link.href = 'rook-settings.html'; }
         }
         document.getElementById('profileGateOverlay').classList.add('active');
       } catch {

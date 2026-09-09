@@ -71,6 +71,108 @@ async function requireAuth(req, res, next) {
 // browser-scoped so the draft is unavailable in Safari. With this endpoint,
 // the questionnaire is already in the DB when the verification link opens.
 const prefillRate = new Map();
+// POST /api/onboarding/pre-verify-upload
+// Accepts a résumé file BEFORE email verification using the user_id returned
+// by signUp(). Stores the file, runs AI analysis, and starts background
+// scoring so results are ready when the user clicks their verification link.
+//
+// Security: validates user_id exists in Supabase Auth via admin API before
+// touching storage or the database. Rate-limited to prevent abuse.
+// Only writes résumé + profile fields; never writes subscription data.
+const preVerifyRate = new Map();
+const preVerifyUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+router.post("/onboarding/pre-verify-upload", requireConfig, preVerifyUpload.single("resume"), async (req, res) => {
+  const ip = (req.headers["x-forwarded-for"] || "").split(",")[0].trim() || req.socket.remoteAddress || "unknown";
+  const now = Date.now();
+  const e = preVerifyRate.get(ip);
+  if (e && now < e.resetAt && e.count >= 4) return res.status(429).json({ ok: false, error: "Too many requests" });
+  if (!e || now >= e.resetAt) preVerifyRate.set(ip, { count: 1, resetAt: now + 600_000 }); // 4 per 10 min
+  else e.count++;
+
+  const { user_id, zip } = req.body;
+  if (!user_id || !/^[0-9a-f-]{36}$/.test(user_id)) return res.status(400).json({ ok: false, error: "Invalid user_id" });
+  if (!req.file) return res.status(400).json({ ok: false, error: "No file" });
+
+  // Validate user exists in Supabase before touching storage
+  const { data: authUser, error: authErr } = await supabaseAdmin.auth.admin.getUserById(user_id);
+  if (authErr || !authUser?.user) return res.status(400).json({ ok: false, error: "User not found" });
+
+  const filePath = `${user_id}/${Date.now()}-${req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+  const { error: uploadErr } = await supabaseAdmin.storage
+    .from("resumes").upload(filePath, req.file.buffer, { contentType: req.file.mimetype, upsert: false });
+  if (uploadErr) return res.status(500).json({ ok: false, error: uploadErr.message });
+
+  // Run analysis in background — respond immediately so check-email screen can update
+  res.json({ ok: true, path: filePath, status: "processing" });
+
+  // Background pipeline: extract → analyze → embed → save → score
+  (async () => {
+    try {
+      let resumeText = null, resumeStructured = null, resumeEmbedding = null, suggestedRoles = null;
+      let analysisStatus = "skipped";
+
+      try { resumeText = await extractResumeText(req.file.buffer, req.file.mimetype); } catch (_) {}
+
+      if (resumeText) {
+        try { resumeStructured = await analyzeResume(resumeText); analysisStatus = "ok"; } catch (_) { analysisStatus = "failed"; }
+        try { resumeEmbedding = await generateEmbedding(resumeText); } catch (_) {}
+        if (resumeStructured) { try { suggestedRoles = await suggestRoles(resumeStructured); } catch (_) {} }
+      } else { analysisStatus = "no_text_extracted"; }
+
+      // Geocode ZIP if provided and no coordinates yet
+      let geoFields = {};
+      if (zip && /^\d{5}$/.test(zip)) {
+        try {
+          const coords = await geocodeZip(zip);
+          if (coords) geoFields = { home_zip: zip, home_lat: coords.lat, home_lng: coords.lng, ...(coords.state ? { home_state: coords.state } : {}) };
+        } catch (_) {}
+      }
+
+      const payload = { user_id, resume_file_path: filePath, analysis_status: analysisStatus, updated_at: new Date().toISOString(), ...geoFields };
+      if (resumeText) payload.resume_text = resumeText;
+      if (resumeStructured) payload.resume_structured = resumeStructured;
+      if (resumeEmbedding) payload.candidate_embedding = resumeEmbedding;
+      if (suggestedRoles) payload.suggested_roles = suggestedRoles;
+
+      const { data: profile, error: dbErr } = await supabaseAdmin.from("candidate_profiles")
+        .upsert(payload, { onConflict: "user_id" }).select().single();
+      if (dbErr) { console.error("[pre-verify-upload] db:", dbErr.message); return; }
+
+      console.log(`[pre-verify-upload] uid=${user_id.slice(0,8)} analysis=${analysisStatus}`);
+
+      // Score in background if analysis succeeded
+      if (profile && analysisStatus === "ok") {
+        scoreAndStoreForCandidate(supabaseAdmin, profile)
+          .then(r => console.log(`[pre-verify-upload] scored ${r.scoredCount} jobs for uid=${user_id.slice(0,8)}`))
+          .catch(err => console.error("[pre-verify-upload] scoring:", err.message));
+      }
+    } catch (err) {
+      console.error("[pre-verify-upload] pipeline:", err.message);
+    }
+  })();
+});
+
+// POST /api/onboarding/pre-verify-status
+// Polls processing status for a pre-verified user. Returns current profile
+// state so the check-email screen can show real progress.
+router.get("/onboarding/pre-verify-status/:user_id", requireConfig, async (req, res) => {
+  const { user_id } = req.params;
+  if (!user_id || !/^[0-9a-f-]{36}$/.test(user_id)) return res.status(400).json({ ok: false });
+  // Rate-limit status polling
+  const ip = (req.headers["x-forwarded-for"] || "").split(",")[0].trim() || req.socket.remoteAddress || "unknown";
+  const key = `status:${ip}`;
+  const now = Date.now();
+  const se = preVerifyRate.get(key);
+  if (se && now < se.resetAt && se.count >= 60) return res.status(429).json({ ok: false });
+  if (!se || now >= se.resetAt) preVerifyRate.set(key, { count: 1, resetAt: now + 60_000 });
+  else se.count++;
+
+  const { data: profile } = await supabaseAdmin.from("candidate_profiles")
+    .select("analysis_status, resume_file_path, candidate_embedding")
+    .eq("user_id", user_id).maybeSingle();
+  res.json({ ok: true, analysis_status: profile?.analysis_status || null, has_resume: !!profile?.resume_file_path, scoring_ready: !!profile?.candidate_embedding });
+});
+
 router.post("/profile/prefill", requireConfig, async (req, res) => {
   const ip = (req.headers["x-forwarded-for"] || "").split(",")[0].trim() || req.socket.remoteAddress || "unknown";
   const now = Date.now();
