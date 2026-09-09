@@ -58,7 +58,7 @@ function buildGraphicPaths({ dateStr, slot, jobId, contentVersion }) {
   assertSafeSegment(jobId, "job_id");
   assertSafeSegment(contentVersion, "content_version");
 
-  const filename = `${slot}-${jobId}-${contentVersion}.png`;
+  const filename = `${slot}-${jobId}-${contentVersion}.jpg`;
   const relativeDir = path.join(SOCIAL_SUBDIR, dateStr);
   const relativePath = path.join(relativeDir, filename);
   const absoluteDir = path.join(PUBLIC_DIR, relativeDir);
@@ -87,7 +87,7 @@ async function validateGraphicBuffer(buffer) {
   } catch (err) {
     throw new Error(`Graphic buffer is not a readable image: ${err.message}`);
   }
-  if (metadata.format !== "png") {
+  if (metadata.format !== "jpeg") {
     throw new Error(`Expected a PNG, got: ${metadata.format}`);
   }
   if (metadata.width !== EXPECTED_WIDTH || metadata.height !== EXPECTED_HEIGHT) {

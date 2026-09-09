@@ -17,7 +17,13 @@ const fs = require("fs/promises");
 
 let sharp = null;
 function getSharp() {
-  if (!sharp) sharp = require("sharp");
+  if (!sharp) {
+    sharp = require("sharp");
+    // Disable sharp's internal operation cache and limit concurrent
+    // threads — both reduce peak memory significantly in a job container.
+    sharp.cache(false);
+    sharp.concurrency(1);
+  }
   return sharp;
 }
 
@@ -362,7 +368,7 @@ function buildMiddleSectionSvg(candidate) {
       <stop offset="1" stop-color="#0753bb"/>
     </linearGradient>
     <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
-      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#08295b" flood-opacity="0.15"/>
+      <feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#08295b" flood-opacity="0.12"/>
     </filter>
     <style>
       .sans { font-family: Arial, Helvetica, sans-serif; }
@@ -444,7 +450,7 @@ async function renderFeaturedJobGraphic(candidate) {
       { input: middleBuffer, left: 0, top: TOP_HEIGHT },
       { input: bottomBuffer, left: 0, top: TOP_HEIGHT + MIDDLE_HEIGHT },
     ])
-    .png()
+    .jpeg({ quality: 90, mozjpeg: false })
     .toBuffer();
 }
 

@@ -12,7 +12,7 @@
 // itself is never read, logged, or returned by anything here.
 
 const BUCKET_NAME = "social-creatives";
-const ALLOWED_MIME_TYPES = ["image/png"];
+const ALLOWED_MIME_TYPES = ["image/png", "image/jpeg"];
 const SAFE_SEGMENT = /^[a-zA-Z0-9-]+$/;
 
 function assertSafeSegment(value, label) {
@@ -57,7 +57,7 @@ function buildObjectPath({ dateStr, slot, jobId, contentVersion }) {
   assertSafeSegment(slot, "slot");
   assertSafeSegment(jobId, "job_id");
   assertSafeSegment(contentVersion, "content_version");
-  return `${dateStr}/${slot}-${jobId}-${contentVersion}.png`;
+  return `${dateStr}/${slot}-${jobId}-${contentVersion}.jpg`;
 }
 
 /**
@@ -75,7 +75,7 @@ async function uploadGraphicToStorage(supabaseAdmin, { dateStr, slot, jobId, con
   const objectPath = buildObjectPath({ dateStr, slot, jobId, contentVersion });
 
   const { error: uploadError } = await supabaseAdmin.storage.from(BUCKET_NAME).upload(objectPath, buffer, {
-    contentType: "image/png",
+    contentType: "image/jpeg",
     upsert: true,
   });
   if (uploadError) {

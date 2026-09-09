@@ -722,10 +722,12 @@ async function run() {
     const lines = wrapFactText("Regional Territory Manager, Medical Device Sales, Southeast Region Including Florida Georgia and the Carolinas", 54, 960, 3);
     assert.ok(lines.length <= 3);
   });
-  await asyncTest("renderFeaturedJobGraphic produces a real PNG at the exact fixed 1024x1536 composition size, for a long title", async () => {
+  await asyncTest("renderFeaturedJobGraphic produces a real JPEG at the exact fixed 1024x1536 composition size, for a long title", async () => {
     const candidate = buildCandidateResponse(baseJob({ title_original: "Senior Regional Territory Manager — Medical Device and Diagnostics Sales, Greater Southeast Territory" }), SECRET);
     const buffer = await renderFeaturedJobGraphic(candidate);
-    assert.strictEqual(buffer.slice(0, 8).toString("hex"), "89504e470d0a1a0a");
+    // JPEG magic bytes: FF D8 FF
+    assert.strictEqual(buffer[0], 0xFF, "must start with JPEG SOI marker byte 1 (0xFF)");
+    assert.strictEqual(buffer[1], 0xD8, "must start with JPEG SOI marker byte 2 (0xD8)");
     const meta = await require("sharp")(buffer).metadata();
     assert.strictEqual(meta.width, 1024);
     assert.strictEqual(meta.height, 1536, "top (399) + middle (621) + bottom (516) must sum to exactly 1536 — no drift in the fixed composition");
@@ -990,7 +992,7 @@ async function run() {
     const recentDate = new Date().toISOString().slice(0, 10);
     await fs.mkdir(path.join(publicDir, oldDate), { recursive: true });
     await fs.mkdir(path.join(publicDir, recentDate), { recursive: true });
-    await fs.writeFile(path.join(publicDir, oldDate, "placeholder.png"), Buffer.from("x"));
+    await fs.writeFile(path.join(publicDir, oldDate, "placeholder.jpg"), Buffer.from("x"));
 
     const result = await cleanupOldGraphics({ retentionDays: 30 });
     assert.ok(result.deletedDirs.includes(oldDate), "the old directory must be deleted");
