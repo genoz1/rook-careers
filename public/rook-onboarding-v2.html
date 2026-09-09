@@ -329,12 +329,16 @@
            Demonstrates that real jobs exist before asking for account creation. -->
       <section class="screen" data-step="3c">
         <div class="content">
-          <h2 id="previewHeadline">Jobs in your area</h2>
-          <div id="previewCards3c" style="margin:14px 0"></div>
-          <p style="font-size:14px;color:var(--muted);text-align:center;margin:4px 0 16px" id="previewNote3c"></p>
+          <div class="eyebrow">Your market</div>
+          <div style="background:linear-gradient(135deg,#062d55,#0877d1);border-radius:20px;padding:24px 20px;margin:4px 0 16px;text-align:center;color:#fff">
+            <div id="previewCount" style="font-size:56px;font-weight:900;line-height:1;letter-spacing:-.03em">—</div>
+            <div id="previewCountLabel" style="font-size:15px;font-weight:600;opacity:.85;margin-top:4px">medical sales roles in your area</div>
+          </div>
+          <div id="previewCards3c"></div>
+          <p style="font-size:12px;color:var(--muted);text-align:center;margin:8px 0 18px">Employer names and match scores unlock after signup.</p>
           <div class="actions">
             <button class="back" onclick="goBack()">Back</button>
-            <button class="primary" id="btnPreview3cNext">Create Account to Unlock</button>
+            <button class="primary" id="btnPreview3cNext">See My Matches</button>
           </div>
         </div>
       </section>
@@ -599,11 +603,11 @@
   // The array includes 4b, 4c, 6e — steps not in the original approved ZIP
   // but using the same visual system.
   const allScreens = [...document.querySelectorAll('.screen')];
-  const stepOrder  = ['0','1','2','3','3b','3c','4','4b','4c','5','6','6e','7','resume-post'];
+  const stepOrder  = ['0','3b','3c','1','2','3','4','4b','4c','5','6','6e','7','resume-post'];
   const LABELS     = {
     '0':'Welcome',
     '1':'Step 1 of 5','2':'Step 2 of 5','3':'Step 3 of 5',
-    '3b':'Step 4 of 5',
+    '3b':'Step 1 of 4',
     '4':'Step 5 of 5','4b':'Step 5 of 5','4c':'Step 5 of 5',
     '5':'Analyzing','6':'Your matches','6e':'Your matches','7':'Start trial','resume-post':'Upload résumé'
   };
@@ -690,7 +694,7 @@
     gtag('event', 'onboarding_started', { method: 'v2' });
     const draft = loadDraft();
     if (draft) restoreDraft(draft);
-    show('1');
+    show('3b'); // new first step: location
   });
   document.getElementById('btnIndNext').addEventListener('click', () => {
     gtag('event', 'onboarding_step_completed', { step: 1, industry: sel.industry });
@@ -702,7 +706,7 @@
   });
   document.getElementById('btnTerrNext').addEventListener('click', () => {
     gtag('event', 'onboarding_step_completed', { step: 3, territories: sel.territories });
-    show('3b');
+    show('4');
   });
 
   /* ── Screen 3b: Work Location ── */
@@ -1002,56 +1006,55 @@
     }
   }
 
-  document.getElementById('btnPreview3cNext').addEventListener('click', () => show('4'));
+  document.getElementById('btnPreview3cNext').addEventListener('click', () => show('1'));
 
   // Load 3 masked jobs for the preview screen using industry + state from sel
   async function loadJobPreview3c() {
-    const headEl  = document.getElementById('previewHeadline');
     const cardsEl = document.getElementById('previewCards3c');
-    const noteEl  = document.getElementById('previewNote3c');
     if (!cardsEl) return;
-    cardsEl.innerHTML = '<p style="color:var(--muted);font-size:14px;text-align:center">Loading…</p>';
+    cardsEl.innerHTML = '<p style="color:var(--muted);font-size:14px;text-align:center;padding:16px 0">Finding roles in your area…</p>';
 
     try {
+      // Location-only — industry not collected yet at this step
       const params = new URLSearchParams();
       if (sel.location?.stateAbbr) params.set('state', sel.location.stateAbbr);
-      // Try with industry first, fall back to state-only if no results
-      if (sel.industry && sel.industry !== 'Breaking In') params.set('industry', sel.industry);
-      let res  = await fetch('/api/onboarding/job-preview?' + params.toString());
-      let data2 = res.ok ? await res.json() : null;
-      // If no jobs with industry filter, try state-only
-      if ((!data2?.jobs?.length) && sel.industry && sel.location?.stateAbbr) {
-        const p2 = new URLSearchParams(); p2.set('state', sel.location.stateAbbr);
-        res = await fetch('/api/onboarding/job-preview?' + p2.toString());
-      }
+      const res  = await fetch('/api/onboarding/job-preview?' + params.toString());
       const data = res.ok ? await res.json() : null;
       const jobs = data?.jobs || [];
-      const count = data?.total_count || jobs.length;
+      const count = data?.total_count || 0;
 
-      const loc = sel.location?.label || (sel.location?.stateAbbr ? sel.location.stateAbbr : 'your area');
-      if (headEl) headEl.textContent = `Jobs in your area`;
+      // Update count banner
+      const countEl = document.getElementById('previewCount');
+      const labelEl = document.getElementById('previewCountLabel');
+      const locName = sel.location?.stateAbbr || 'your area';
+      if (countEl) countEl.textContent = count > 0 ? count.toLocaleString() + '+' : '5,000+';
+      if (labelEl) labelEl.textContent = 'medical sales roles in ' + locName;
 
+      // Render masked cards
       cardsEl.innerHTML = '';
       if (!jobs.length) {
-        cardsEl.innerHTML = '<p style="color:var(--muted);font-size:14px;text-align:center">Create your account to see matching roles.</p>';
+        cardsEl.innerHTML = '<p style="color:var(--muted);font-size:14px;text-align:center;padding:16px 0">Sign up to browse available roles in your area.</p>';
       } else {
-        jobs.forEach(job => {
+        jobs.slice(0, 5).forEach(job => {
           const card = document.createElement('div');
-          card.style.cssText = 'background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:10px';
-          const loc2 = job.remote_status === 'remote' ? 'Remote'
-            : [job.city, job.state].filter(Boolean).join(', ') || 'Location not listed';
+          card.style.cssText = 'background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:flex-start;gap:12px';
+          const locStr = job.remote_status === 'remote' ? 'Remote'
+            : [job.city, job.state].filter(Boolean).join(', ') || locName;
           const comp = job.compensation_text || null;
-          card.innerHTML = `
-            <div style="font-size:15px;font-weight:800;color:var(--navy);margin-bottom:3px">${escapeHtml(job.title_original || 'Medical Sales Role')}</div>
-            <div style="font-size:12px;color:var(--muted);margin-bottom:4px">${escapeHtml(loc2)}${comp ? ' · ' + escapeHtml(comp) : ''}</div>
-            <div style="font-size:12px;color:#8B96AB">🔒 Employer and match score unlock after signup</div>`;
+          card.innerHTML =
+            '<div style="width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,#e8f1fb,#c8dff7);flex-shrink:0;display:grid;place-items:center;font-size:18px">💼</div>' +
+            '<div style="flex:1;min-width:0">' +
+              '<div style="font-size:14px;font-weight:800;color:var(--navy);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escapeHtml(job.title_original || 'Medical Sales Role') + '</div>' +
+              '<div style="font-size:12px;color:var(--muted)">' + escapeHtml(locStr) + (comp ? ' · ' + escapeHtml(comp) : '') + '</div>' +
+              '<div style="margin-top:6px;display:inline-block;background:#f3f8fc;border-radius:99px;padding:3px 10px;font-size:11px;font-weight:700;color:#47637c">🔒 Employer name unlocks after signup</div>' +
+            '</div>';
           cardsEl.appendChild(card);
         });
       }
-      if (noteEl) noteEl.textContent = 'Create your free account to see your personalized match scores.';
     } catch (_) {
-      if (headEl) headEl.textContent = 'Roles available in your area';
-      if (cardsEl) cardsEl.innerHTML = '<p style="color:var(--muted);font-size:14px;text-align:center">Create your account to see matching roles.</p>';
+      const countEl = document.getElementById('previewCount');
+      if (countEl) countEl.textContent = '5,000+';
+      if (cardsEl) cardsEl.innerHTML = '<p style="color:var(--muted);font-size:14px;text-align:center;padding:16px 0">Sign up to browse available roles in your area.</p>';
     }
   }
 
