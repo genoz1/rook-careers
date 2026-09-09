@@ -144,6 +144,40 @@ function zipToSuggestion(entry) {
   };
 }
 
+// ZIP count cache — built once, reused across all searches.
+let _zipCount = null;
+function getZipCount() {
+  if (_zipCount) return _zipCount;
+  _zipCount = {};
+  for (const e of Object.values(zipcodes.codes)) {
+    const k = e.city + "|" + e.state;
+    _zipCount[k] = (_zipCount[k] || 0) + 1;
+  }
+  return _zipCount;
+}
+
+// Sort city matches: larger cities (more ZIPs) first, then alphabetical by state.
+function sortCityMatches(matches) {
+  const zc = getZipCount();
+  matches.sort((a, b) => {
+    const diff = (zc[b.city+"|"+b.state] || 0) - (zc[a.city+"|"+a.state] || 0);
+    return diff !== 0 ? diff : a.state.localeCompare(b.state);
+  });
+  return matches;
+}
+
+// Case-insensitive city prefix search, optionally filtered to one state.
+function cityPrefixSearch(cityQuery, stateAbbr = null) {
+  const idx = getCityIndex();
+  const lower = cityQuery.toLowerCase();
+  const matches = [];
+  for (const entry of idx.values()) {
+    if (stateAbbr && entry.state !== stateAbbr) continue;
+    if (entry.city.toLowerCase().startsWith(lower)) matches.push(entry);
+  }
+  return sortCityMatches(matches).slice(0, stateAbbr ? 5 : 8).map(entryToSuggestion);
+}
+
 function searchLocal(q) {
   const trimmed = q.trim();
 
@@ -153,58 +187,30 @@ function searchLocal(q) {
     return r ? [zipToSuggestion(r)] : [];
   }
 
-  // --- "City, ST" or "City, State Name" ---
+  // --- "City, ST", "City, State Name", "City ST" (space-separated) ---
+  // Handles all formats case-insensitively:
+  //   "dallas, tx"  "Dallas, TX"  "dallas tx"  "Dallas TX"  "dallas, texas"
   const commaIdx = trimmed.lastIndexOf(",");
-  if (commaIdx > 0) {
-    const cityPart  = trimmed.slice(0, commaIdx).trim();
-    const statePart = trimmed.slice(commaIdx + 1).trim();
-    let abbr = /^[A-Za-z]{2}$/.test(statePart) ? statePart.toUpperCase() : stateNameToAbbr(statePart);
-    if (abbr) {
-      const rows = zipcodes.lookupByName(cityPart, abbr);
-      if (rows.length > 0) return [entryToSuggestion(rows[0])];
-      // Fuzzy: prefix match in that state
-      const idx = getCityIndex();
-      const results = [];
-      for (const [key, entry] of idx) {
-        if (entry.state !== abbr) continue;
-        if (entry.city.toLowerCase().startsWith(cityPart.toLowerCase())) {
-          results.push(entryToSuggestion(entry));
-          if (results.length >= 5) break;
-        }
-      }
-      return results;
+  const hasComma = commaIdx > 0;
+  const parts    = hasComma
+    ? [trimmed.slice(0, commaIdx).trim(), trimmed.slice(commaIdx + 1).trim()]
+    : trimmed.split(/\s+/);
+
+  if (parts.length >= 2) {
+    const lastPart  = parts[parts.length - 1];
+    const cityPart  = parts.slice(0, parts.length - 1).join(" ").trim();
+    // Detect "ST" (2-letter abbr) or full state name as the last token
+    const abbr = /^[A-Za-z]{2}$/.test(lastPart)
+      ? lastPart.toUpperCase()
+      : stateNameToAbbr(lastPart);
+    if (abbr && cityPart.length >= 2) {
+      const results = cityPrefixSearch(cityPart, abbr);
+      if (results.length) return results;
     }
   }
 
-  // --- Prefix city name search ---
-  // Collect ALL matching cities, then sort by ZIP count so large cities
-  // (Dallas TX, Austin TX) rank above small towns with the same name.
-  // Without this, TX cities never appear because lower ZIP-numbered states
-  // (PA=15k, WV=24k, NC=27k) fill the result limit before TX=75k.
-  const idx = getCityIndex();
-  const lower = trimmed.toLowerCase();
-  const matches = [];
-  for (const entry of idx.values()) {
-    if (entry.city.toLowerCase().startsWith(lower)) {
-      matches.push(entry);
-    }
-  }
-  if (!matches.length) return [];
-  // Count ZIPs per city as a proxy for city size
-  const zipCount = {};
-  for (const entry of Object.values(zipcodes.codes)) {
-    const k = entry.city + "|" + entry.state;
-    zipCount[k] = (zipCount[k] || 0) + 1;
-  }
-  matches.sort((a, b) => {
-    const ka = a.city + "|" + a.state;
-    const kb = b.city + "|" + b.state;
-    const diff = (zipCount[kb] || 0) - (zipCount[ka] || 0);
-    if (diff !== 0) return diff;
-    // Tiebreaker: alphabetical by state so results are stable
-    return a.state.localeCompare(b.state);
-  });
-  return matches.slice(0, 8).map(entryToSuggestion);
+  // --- Plain prefix city name search (no state hint) ---
+  return cityPrefixSearch(trimmed);
 }
 
 // Prime the city index at startup so the first user request is fast
