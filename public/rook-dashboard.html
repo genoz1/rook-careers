@@ -1119,9 +1119,13 @@
 
   function renderRealJobRow(job) {
     const comp = job.compensation_text || (job.salary_min ? `$${job.salary_min}${job.salary_max ? '–$' + job.salary_max : '+'}` : '');
-    const match = job.match; // present when the request was authenticated — see rook-auth.js / jobs.js
-    const scoreDisplay = match && match.overall_score != null ? `${match.overall_score}%` : '—';
-    const scorePct = match && match.overall_score != null ? match.overall_score : 0;
+    const match = job.match;
+    // When no résumé is uploaded, overall_score is null but preference_fit
+    // is a real score (location + industry + years + territory).
+    // Show preference_fit in the circle so the card doesn't look broken.
+    const displayScore = match?.overall_score ?? match?.preference_fit ?? null;
+    const scoreDisplay = displayScore != null ? `${displayScore}%` : '—';
+    const scorePct     = displayScore ?? 0;
 
     // One short AI-generated line, not the full reasons/concerns list —
     // the most important reason to apply if the score is strong, or the
