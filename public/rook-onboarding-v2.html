@@ -1023,7 +1023,13 @@
       // Same call as rook-browse.html — no auth header, backend automatically
       // returns redacted teaser jobs (no employer name, no apply link).
       // This is the proven path that already works on the public browse page.
-      const res  = await fetch('/api/jobs?limit=3');
+      // Pass location coordinates so jobs are sorted near the user's ZIP —
+      // same params rook-browse.html uses for proximity sorting.
+      const params = new URLSearchParams({ limit: '3' });
+      if (sel.location?.lat)       params.set('near_lat',   sel.location.lat);
+      if (sel.location?.lng)       params.set('near_lng',   sel.location.lng);
+      if (sel.location?.stateAbbr) params.set('near_state', sel.location.stateAbbr);
+      const res  = await fetch('/api/jobs?' + params.toString());
       if (!res.ok) throw new Error('API ' + res.status);
       const data = await res.json();
       const jobs = Array.isArray(data) ? data.slice(0, 3) : (data.jobs || []).slice(0, 3);
