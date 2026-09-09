@@ -415,51 +415,37 @@ function scoreJob(job, profile) {
     prefCap = Math.min(prefCap, 65);
   } else if (hasRealCoordinates) {
     // --- Distance-primary path ---
-    dataPointsAvailable++; // this data point (real coordinates) was actually available
+    dataPointsAvailable++;
     const miles = distanceMiles(profile.home_lat, profile.home_lng, job.job_lat, job.job_lng);
-    const jobStateAbbr = [...acceptedStateAbbrs].find((abbr) => locationMentionsState(job.location_raw, abbr))
-      || Object.values(STATE_ABBR).find((abbr) => locationMentionsState(job.location_raw, abbr));
     const inAcceptedRegion = acceptedStateAbbrs.size === 0 || [...acceptedStateAbbrs].some((abbr) => locationMentionsState(job.location_raw, abbr));
 
-    // Direct instruction, stated with a concrete worked example: for the
-    // same underlying job/fit, distance should be THE dominant
-    // differentiator - the same lab-diagnostics role should rank
-    // Villages > Orlando > Jacksonville > Iowa, in that order, purely
-    // on distance, regardless of how well it scores on every other
-    // category. The old additive-only approach (up to 35 of ~100
-    // preference points) gets diluted once blended with unrelated
-    // categories - a job with a terrible location fit but excellent
-    // comp/industry/freshness could still land a deceptively high
-    // overall score, which is exactly what let a 900+-mile job hit 98%.
-    // distanceMultiplier scales the FINAL overall_score directly
-    // (applied once, near the very end of this function) instead of
-    // being diluted as just one ingredient among several, so distance
-    // can never be washed out by unrelated categories compensating for
-    // it. Still fully visible at every tier, including the worst one -
-    // "should show up but way down the list," not hidden. A smooth
-    // curve rather than hard tiers, so two jobs at, say, 40 and 55
-    // miles still rank in the right order relative to each other
-    // instead of tying inside a flat bucket.
+    // Two-tier distance model based on field-sales territory norms:
+    //   0-60 mi    Full score. Core territory, home most nights.
+    //   60-150 mi  Slight discount. Field reps routinely drive this far;
+    //              150-mile territories are normal in medical sales.
+    //   150-300 mi Meaningful penalty — regular overnight travel.
+    //   300+ mi    Very low — outside realistic territory range.
+    // "Remote" is NOT treated as a distance bypass. In field sales,
+    // "remote" means no required office, not work-from-anywhere.
     if (miles <= 60) {
       locationForcedStrong = true;
       prefScore += 35;
-      distanceMultiplier = 1 - (miles / 300) * 0.15; // 0mi -> 1.0, 60mi -> 0.97
+      distanceMultiplier = 1.0;
+      reasons.push(`About ${Math.round(miles)} miles from you`);
+    } else if (miles <= 150) {
+      const ratio = (miles - 60) / 90;
+      prefScore += Math.round(35 - ratio * 5); // 35→30 pts (gentle drop)
+      distanceMultiplier = 1.0 - ratio * 0.07; // 1.0→0.93 (slight penalty)
+      reasons.push(`About ${Math.round(miles)} miles from you — within typical territory range`);
     } else if (miles <= 300) {
-      prefScore += Math.round(35 - ((miles - 60) / 240) * 22); // eases down to ~13 pts at 300mi, for the Location category label
-      distanceMultiplier = 1 - (miles / 300) * 0.55; // 60mi -> 0.89, 150mi -> 0.73, 300mi -> 0.45
+      const ratio = (miles - 150) / 150;
+      prefScore += Math.round(29 - ratio * 19); // 29→10 pts
+      distanceMultiplier = 0.88 - ratio * 0.48; // 0.88→0.40
+      concerns.push(`About ${Math.round(miles)} miles away — would likely require overnight travel`);
     } else {
       prefScore += 3;
       distanceMultiplier = 0.25;
-    }
-    reasons.push(`About ${Math.round(miles)} miles from you`);
-    if (miles > 300 && !inAcceptedRegion && !profile.willing_to_relocate) {
-      concerns.push(`Location (${job.location_raw}, about ${Math.round(miles)} miles away) is far outside your area and not in a region you've said you're open to`);
-    } else if (miles > 300) {
-      concerns.push(
-        profile.willing_to_relocate
-          ? "Far from you, but you've indicated openness to relocation"
-          : "Far from you, but within a region you said you're open to"
-      );
+      concerns.push(`About ${Math.round(miles)} miles away — far outside typical territory range`);
     }
   } else if (acceptedStateAbbrs.size > 0 && [...acceptedStateAbbrs].some((abbr) => locationMentionsState(job.location_raw, abbr))) {
     // --- Fallback: no real coordinates on one or both sides, so fall
@@ -522,29 +508,42 @@ function scoreJob(job, profile) {
   if (hardDisqualifier && prefCap <= 65) catGap.add("location_prefs");
 
   // --- Compensation (up to 30 points) ---
-  prefMax += 30;
-  dataPointsPossible++;
-  const _compBefore = prefScore;
+  // Only added to prefMax when the profile has a stated minimum salary.
+  // Without one, compensation is unknown — not a zero. Counting it as
+  // 0/30 would penalize candidates who simply haven't set a preference,
+  // making a perfect questionnaire match score 57% instead of 100%.
+  // The job's salary is still surfaced in reasons/concerns when available.
   const jobSalary = extractSalaryFigure(job);
-  if (jobSalary) dataPointsAvailable++;
-
-  if (profile.minimum_base_salary && jobSalary) {
-    if (jobSalary >= profile.minimum_base_salary) {
-      prefScore += 30;
-      reasons.push("Compensation meets your stated minimum");
-    } else if (jobSalary >= profile.minimum_base_salary * 0.85) {
-      prefScore += 13;
-      concerns.push("Compensation may be slightly below your stated minimum");
+  const _compBefore = prefScore;
+  if (profile.minimum_base_salary) {
+    // Profile has a stated minimum — comp is a meaningful data point
+    prefMax += 30;
+    dataPointsPossible++;
+    if (jobSalary) dataPointsAvailable++;
+    if (profile.minimum_base_salary && jobSalary) {
+      if (jobSalary >= profile.minimum_base_salary) {
+        prefScore += 30;
+        reasons.push("Compensation meets your stated minimum");
+      } else if (jobSalary >= profile.minimum_base_salary * 0.85) {
+        prefScore += 13;
+        concerns.push("Compensation may be slightly below your stated minimum");
+      } else {
+        prefScore += 4;
+        concerns.push("Compensation appears well below your stated minimum");
+        hardDisqualifier = true;
+        prefCap = Math.min(prefCap, 55);
+      }
+    } else if (jobSalary) {
+      prefScore += 18;
     } else {
-      prefScore += 4;
-      concerns.push("Compensation appears well below your stated minimum");
-      hardDisqualifier = true;
-      prefCap = Math.min(prefCap, 55);
+      prefScore += 15;
     }
-  } else if (jobSalary) {
-    prefScore += 18;
   } else {
-    prefScore += 15;
+    // No salary preference set — don't add to prefMax, don't penalize.
+    // Still surface compensation in reasons when the job publishes it.
+    if (jobSalary) {
+      reasons.push(`Published compensation: ${job.compensation_text || '$' + Math.round(jobSalary / 1000) + 'k'}`);
+    }
   }
 
   cat.location_prefs.max += 30;
@@ -600,6 +599,11 @@ function scoreJob(job, profile) {
     if (matchedIndustry) {
       prefScore += 15;
       reasons.push(`Matches your stated interest in ${matchedIndustry}`);
+    } else {
+      // Industry not a stated preference but also not avoided.
+      // A nearby role in an adjacent field is still worth considering —
+      // don't score it as a zero just because the industry label differs.
+      prefScore += 8;
     }
     if (Array.isArray(profile.industries_to_avoid) && profile.industries_to_avoid.length > 0) {
       // Reported directly via audit: the Settings UI promises "We'll
@@ -631,9 +635,11 @@ function scoreJob(job, profile) {
   cat.industry_product.score += (prefScore - _indInterestBefore);
 
   // --- Job freshness (up to 8 points) ---
-  prefMax += 8;
+  // Only added to prefMax when the job has a date to measure.
+  // Without a date, freshness is unknown — not a zero.
   const referenceDate = job.last_seen_at || job.date_posted;
   if (referenceDate) {
+    prefMax += 8;
     const ageDays = (Date.now() - new Date(referenceDate).getTime()) / (1000 * 60 * 60 * 24);
     if (ageDays <= 3) {
       prefScore += 8;
@@ -643,6 +649,8 @@ function scoreJob(job, profile) {
     } else if (ageDays <= 30) {
       prefScore += 2;
     }
+    // Jobs older than 30 days earn 0 freshness points but don't reduce
+    // the denominator — 0/8 vs nothing: honest that it's stale.
   }
 
   // ============================================================
