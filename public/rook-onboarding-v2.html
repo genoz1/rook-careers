@@ -1040,16 +1040,6 @@
   // recent jobs. Re-fires with coordinates when user picks location.
   prefetchJobPreview();
 
-  // (prefetchJobPreview already defined and called above)
-    _previewJobsCache = null;
-    const params = new URLSearchParams({ limit: '3' });
-    if (sel.location && sel.location.lat)       params.set('near_lat',   sel.location.lat);
-    if (sel.location && sel.location.lng)       params.set('near_lng',   sel.location.lng);
-    if (sel.location && sel.location.stateAbbr) params.set('near_state', sel.location.stateAbbr);
-    _previewJobsCache = fetch('/api/jobs?' + params.toString())
-      .then(function(r) { return r.ok ? r.json() : null; })
-      .catch(function() { return null; });
-  }
 
   async function loadJobPreview3c() {
     const cardsEl = document.getElementById('previewCards3c');
