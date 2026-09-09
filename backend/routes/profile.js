@@ -124,8 +124,17 @@ router.post("/onboarding/pre-verify-upload", requireConfig, preVerifyUpload.sing
       if (zip && /^\d{5}$/.test(zip)) {
         try {
           const coords = await geocodeZip(zip);
-          if (coords) geoFields = { home_zip: zip, home_lat: coords.lat, home_lng: coords.lng, ...(coords.state ? { home_state: coords.state } : {}) };
-        } catch (_) {}
+          if (coords) {
+            geoFields = { home_zip: zip, home_lat: coords.lat, home_lng: coords.lng, ...(coords.state ? { home_state: coords.state } : {}) };
+            console.log(`[pre-verify-upload] geocoded zip=${zip} lat=${coords.lat} state=${coords.state}`);
+          } else {
+            console.warn(`[pre-verify-upload] geocodeZip returned null for zip=${zip}`);
+          }
+        } catch (geoErr) {
+          console.error(`[pre-verify-upload] geocoding failed for zip=${zip}: ${geoErr.message}`);
+        }
+      } else {
+        console.warn(`[pre-verify-upload] no valid zip provided (got: ${JSON.stringify(zip)})`);
       }
 
       const payload = { user_id, resume_file_path: filePath, analysis_status: analysisStatus, updated_at: new Date().toISOString(), ...geoFields };

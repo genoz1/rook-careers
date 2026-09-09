@@ -1360,6 +1360,54 @@ router.get("/onboarding/match-preview", requireConfig, requireAuth, async (req, 
   // ── 4. Live scoring (awaited, not fire-and-forget) ──────────────────
   const scoringPromise = (async () => {
     const t0 = Date.now();
+
+    // ── Fast path: use pre-computed scores from candidate_job_matches ──
+    // scoreAndStoreForCandidate (called during v3 onboarding background
+    // processing) writes scores here. Reading them is a single indexed
+    // DB query instead of 17+ sequential pages + in-memory scoring.
+    if (profile.id) {
+      const { data: precomputed, error: pcErr } = await supabaseAdmin
+        .from('candidate_job_matches')
+        .select(`
+          overall_score, excellent_match, recommendation, reasons,
+          jobs!inner(id, title_normalized, title_original, city, state, company_name)
+        `)
+        .eq('candidate_id', profile.id)
+        .gt('overall_score', 0)
+        .order('overall_score', { ascending: false })
+        .limit(3);
+
+      if (!pcErr && precomputed?.length >= 1) {
+        const { count } = await supabaseAdmin
+          .from('candidate_job_matches')
+          .select('id', { count: 'exact', head: true })
+          .eq('candidate_id', profile.id)
+          .gt('overall_score', 0);
+
+        console.log(`[match-preview] uid=${userId.slice(0,8)} using precomputed scores ms=${Date.now()-t0} top=${precomputed[0]?.overall_score}`);
+
+        const topThree = precomputed.map(row => {
+          const job = row.jobs;
+          const rawTitle = job?.title_normalized || job?.title_original || null;
+          const safeTitle = (rawTitle && job?.company_name)
+            ? (scrubCompanyNameFromText(rawTitle, job.company_name) || rawTitle)
+            : rawTitle;
+          return {
+            overall_score:   Math.round(row.overall_score),
+            excellent_match: Boolean(row.excellent_match),
+            recommendation:  row.recommendation || null,
+            title:   safeTitle,
+            city:    job?.city  || null,
+            state:   job?.state || null,
+            reasons: (row.reasons || []).slice(0, 2),
+          };
+        });
+
+        return { count: count || precomputed.length, top_matches: topThree, scoring_complete: true, from_precomputed: true };
+      }
+    }
+
+    // ── Slow path: in-memory scoring (no pre-computed scores yet) ──
     const activeJobs = await fetchActiveJobs(supabaseAdmin);
     const tFetch = Date.now();
 
