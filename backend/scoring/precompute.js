@@ -55,15 +55,27 @@ let _activeJobsListInFlight = null;
 
 async function fetchActiveJobs(supabase) {
   const now = Date.now();
-  if (_activeJobsListCache && now < _activeJobsListExpiry) {
+
+  // Fresh cache hit
+  if (_activeJobsListCache && now < _activeJobsListExpiry) return _activeJobsListCache;
+
+  // Stale-while-revalidate: return the old list immediately, refresh in background.
+  // This means no request ever blocks on a cold fetch after the first boot warm.
+  if (_activeJobsListCache && !_activeJobsListInFlight) {
+    console.log(`[fetchActiveJobs] stale — serving ${_activeJobsListCache.length} cached jobs, refreshing in background`);
+    _activeJobsListInFlight = _doFetchActiveJobs(supabase).finally(() => { _activeJobsListInFlight = null; });
     return _activeJobsListCache;
   }
-  // Deduplicate concurrent cold-cache callers: return the same Promise
-  // so only one 17-page fetch runs at a time.
-  if (_activeJobsListInFlight) {
-    return _activeJobsListInFlight;
-  }
-  const fetchPromise = (async () => {
+
+  // In-flight dedup: share one in-progress fetch
+  if (_activeJobsListInFlight) return _activeJobsListInFlight;
+
+  // No cache at all (first call) — must wait once
+  _activeJobsListInFlight = _doFetchActiveJobs(supabase).finally(() => { _activeJobsListInFlight = null; });
+  return _activeJobsListInFlight;
+}
+
+async function _doFetchActiveJobs(supabase) {
   // Paginated fetch — Supabase/PostgREST caps a single query at 1000
   // rows by default, and a plain .select("*") with no .range() silently
   // truncates rather than erroring. With ATS + Adzuna ingestion now
@@ -126,19 +138,11 @@ async function fetchActiveJobs(supabase) {
   if (deduped.length !== activeJobs.length) {
     console.log(`  (removed ${activeJobs.length - deduped.length} duplicate job row(s) from pagination overlap)`);
   }
-  // Write to cache — 10 minute TTL
+  // 60-minute TTL — stale-while-revalidate makes long TTL safe
   _activeJobsListCache = deduped;
-  _activeJobsListExpiry = Date.now() + 10 * 60 * 1000;
+  _activeJobsListExpiry = Date.now() + 60 * 60 * 1000;
+  console.log(`[fetchActiveJobs] cache refreshed: ${deduped.length} jobs`);
   return deduped;
-  })(); // end fetchPromise IIFE
-
-  _activeJobsListInFlight = fetchPromise;
-  try {
-    const result = await fetchPromise;
-    return result;
-  } finally {
-    _activeJobsListInFlight = null;
-  }
 }
 
 async function scoreAndStoreForCandidate(supabase, profile, activeJobs = null) {

@@ -1381,6 +1381,34 @@ router.get("/onboarding/match-preview", requireConfig, requireAuth, async (req, 
         console.error(`[match-preview] uid=${userId.slice(0,8)} precomputed join error: ${pcErr.message}`);
       }
 
+      // If no pre-computed scores yet, scoring may still be writing.
+      // Retry for up to 20 seconds (10 × 2s) before falling back to
+      // in-memory scoring. This handles the case where the user verified
+      // their email before background scoring completed.
+      if (!pcErr && !precomputed?.length) {
+        for (let attempt = 0; attempt < 10; attempt++) {
+          await new Promise(r => setTimeout(r, 2000));
+          const { data: retry, error: retryErr } = await supabaseAdmin
+            .from('candidate_job_matches')
+            .select('overall_score, excellent_match, recommendation, reasons, jobs!inner(id, title_normalized, title_original, city, state, location_raw, company_name)')
+            .eq('candidate_id', profile.id)
+            .gt('overall_score', 0)
+            .order('overall_score', { ascending: false })
+            .limit(3);
+          if (!retryErr && retry?.length >= 1) {
+            console.log(`[match-preview] uid=${userId.slice(0,8)} precomputed scores ready after ${(attempt+1)*2}s wait`);
+            const { count } = await supabaseAdmin.from('candidate_job_matches').select('id', { count: 'exact', head: true }).eq('candidate_id', profile.id).gt('overall_score', 0);
+            return { count: count || retry.length, top_matches: retry.map(row => {
+              const job = row.jobs;
+              const rawTitle = job?.title_normalized || job?.title_original || null;
+              const safeTitle = (rawTitle && job?.company_name) ? (scrubCompanyNameFromText(rawTitle, job.company_name) || rawTitle) : rawTitle;
+              return { overall_score: Math.round(row.overall_score), excellent_match: Boolean(row.excellent_match), recommendation: row.recommendation || null, title: safeTitle, city: job?.city || null, state: job?.state || null, location_raw: job?.location_raw || null, reasons: (row.reasons || []).slice(0, 2) };
+            }), scoring_complete: true, from_precomputed: true };
+          }
+          if (retryErr) break; // join failing — go to in-memory
+        }
+      }
+
       if (!pcErr && precomputed?.length >= 1) {
         const { count } = await supabaseAdmin
           .from('candidate_job_matches')
