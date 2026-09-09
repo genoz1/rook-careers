@@ -1013,12 +1013,13 @@
     if (!cardsEl) return;
 
     try {
-      // No state filter — ensures jobs always load regardless of how
-      // state is stored in the DB. Shows the most recent active jobs.
-      const res  = await fetch('/api/onboarding/job-preview');
-      const data = res.ok ? await res.json() : null;
-      console.log('[job-preview] status:', res.status, 'data:', JSON.stringify(data));
-      const jobs = data?.jobs || [];
+      // Same call as rook-browse.html — no auth header, backend automatically
+      // returns redacted teaser jobs (no employer name, no apply link).
+      // This is the proven path that already works on the public browse page.
+      const res  = await fetch('/api/jobs?limit=3');
+      if (!res.ok) throw new Error('API ' + res.status);
+      const data = await res.json();
+      const jobs = Array.isArray(data) ? data.slice(0, 3) : (data.jobs || []).slice(0, 3);
 
       if (leadEl) leadEl.textContent = jobs.length
         ? 'A few current medical sales openings:'
@@ -1030,24 +1031,23 @@
         return;
       }
 
-      jobs.slice(0, 5).forEach(job => {
+      jobs.forEach(job => {
         const card = document.createElement('div');
         card.style.cssText = 'background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:flex-start;gap:12px';
-        const locStr = job.remote_status === 'remote' ? 'Remote'
-          : [job.city, job.state].filter(Boolean).join(', ') || 'Location not listed';
-        const comp = job.compensation_text || null;
+        const comp = job.compensation_text || (job.salary_min ? '$' + job.salary_min + (job.salary_max ? '-$' + job.salary_max : '+') : null);
+        const loc  = job.location_raw || [job.city, job.state].filter(Boolean).join(', ') || '';
         card.innerHTML =
-          '<div style="width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,#e8f1fb,#c8dff7);flex-shrink:0;display:grid;place-items:center;font-size:16px">💼</div>' +
+          '<div style="width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,#e8f1fb,#c8dff7);flex-shrink:0;display:grid;place-items:center;font-size:16px">&#128188;</div>' +
           '<div style="flex:1;min-width:0">' +
-            '<div style="font-size:14px;font-weight:800;color:var(--navy);margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escapeHtml(job.title_original || 'Medical Sales Role') + '</div>' +
-            '<div style="font-size:12px;color:var(--muted);margin-bottom:5px">' + escapeHtml(locStr) + (comp ? ' · ' + escapeHtml(comp) : '') + '</div>' +
-            '<span style="background:#f3f8fc;border-radius:99px;padding:2px 9px;font-size:11px;font-weight:700;color:#47637c">🔒 Employer unlocks after signup</span>' +
+            '<div style="font-size:14px;font-weight:800;color:var(--navy);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escapeHtml(job.title_original || job.title_normalized || 'Medical Sales Role') + '</div>' +
+            '<div style="font-size:12px;color:var(--muted)">&#128274; Employer revealed with ROOK' + (loc ? ' &mdash; ' + escapeHtml(loc) : '') + (comp ? ' &middot; ' + escapeHtml(comp) : '') + '</div>' +
           '</div>';
         cardsEl.appendChild(card);
       });
-    } catch (_) {
+    } catch (err) {
+      console.error('[preview] failed:', err.message);
       if (leadEl) leadEl.textContent = 'Thousands of medical sales roles are waiting for you.';
-      if (cardsEl) cardsEl.innerHTML = '<p style="color:var(--muted);font-size:14px;text-align:center;padding:8px 0">Sign up to browse available roles.</p>';
+      cardsEl.innerHTML = '<p style="color:var(--muted);font-size:14px;text-align:center;padding:8px 0">Sign up to browse available roles.</p>';
     }
   }
 
