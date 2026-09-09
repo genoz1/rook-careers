@@ -1629,14 +1629,73 @@
      skips signUp() and goes directly to the analysis flow using the
      existing session. */
   (async () => {
-    const params   = new URLSearchParams(window.location.search);
+    const params         = new URLSearchParams(window.location.search);
     const isReturn       = params.get('ob') === 'v2_return';
     const isResumeUpload = params.get('ob') === 'resume_upload';
+    const isEditPrefs    = params.get('edit') === 'preferences';
 
     const { data: { session } } = await sb.auth.getSession()
       .catch(() => ({ data: { session: null } }));
 
-    // Path resume_upload: user just completed Stripe checkout, now upload résumé.
+    // Edit preferences: authenticated user editing industry/years/territory
+    if (isEditPrefs && session) {
+      // Load existing profile values into sel so current selections are pre-filled
+      try {
+        const pr = await fetch('/api/profile', { headers: { Authorization: `Bearer ${session.access_token}` } });
+        const profile = pr.ok ? await pr.json() : null;
+        if (profile) {
+          if (profile.desired_industries?.[0]) {
+            sel.industry = profile.desired_industries[0];
+            const btn = document.querySelector(`#choicesIndustry .choice[data-val="${sel.industry}"]`);
+            if (btn) { btn.classList.add('selected'); document.getElementById('btnIndNext').disabled = false; }
+          }
+          if (profile.total_sales_years != null) {
+            sel.years = profile.total_sales_years;
+            const btn = document.querySelector(`#choicesYears .choice[data-val="${sel.years}"]`);
+            if (btn) { btn.classList.add('selected'); document.getElementById('btnYearsNext').disabled = false; }
+          }
+          if (profile.territory_size_preferences?.length) {
+            sel.territories = profile.territory_size_preferences;
+            sel.territories.forEach(val => {
+              const btn = document.querySelector(`#choicesTerritory .choice[data-val="${val}"]`);
+              if (btn) { btn.classList.add('selected'); btn.setAttribute('aria-pressed','true'); }
+            });
+            document.getElementById('btnTerrNext').disabled = false;
+          }
+        }
+      } catch (_) {}
+
+      // Override Territory Continue button — save and go back to dashboard
+      document.getElementById('btnTerrNext').addEventListener('click', async () => {
+        // Save updated preferences
+        try {
+          const { data: { session: s } } = await sb.auth.getSession();
+          if (s) {
+            await fetch('/api/profile', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${s.access_token}` },
+              body: JSON.stringify({
+                desired_industries: sel.industry && sel.industry !== 'Breaking In' ? [sel.industry] : [],
+                total_sales_years: sel.years != null ? Number(sel.years) : null,
+                territory_size_preferences: sel.territories.length > 0 ? sel.territories : null,
+                territory_size_preference: sel.territories[0] || null,
+                work_style: (sel.territories.length === 1 && sel.territories[0] === 'remote') ? 'remote' : 'field',
+              }),
+            });
+          }
+        } catch (_) {}
+        window.location.href = 'rook-dashboard.html';
+      }, { once: true }); // once:true so it doesn't stack with the normal listener
+
+      show('1');
+      return;
+    }
+
+    if (isEditPrefs && !session) {
+      // Not logged in — send to welcome
+      show('0');
+      return;
+    }
     // After a Stripe redirect the session token may take a moment to be
     // available — retry a few times before falling through.
     if (isResumeUpload) {
