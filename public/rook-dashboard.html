@@ -323,7 +323,7 @@
       <div class="avatar" id="sideAvatar"></div>
       <div><div class="n" id="sideName">—</div><div class="r" id="sideStatus">—</div></div>
     </div>
-    <a href="#" onclick="rookSignOut(); return false;" style="display:block; text-align:center; font-size:12.5px; font-weight:600; color:#8B96AB; padding:12px 0 4px;">Log Out</a>
+    <a href="#" onclick="document.getElementById('logoutLink').textContent='Signing out…'; rookSupabase.auth.signOut().then(()=>window.location.href='rook-login.html').catch(()=>window.location.href='rook-login.html'); return false;" id="logoutLink" style="display:block; text-align:center; font-size:12.5px; font-weight:600; color:#8B96AB; padding:12px 0 4px;">Log Out</a>
   </aside>
 
   <main class="main">
@@ -558,14 +558,14 @@
     // score with no clear explanation why, and no obvious next step.
     // Doesn't block the rest of the page — jobs still load underneath —
     // it's just a clear nudge back to the exact place to fix it.
-    function rookApplySidebarProfile(profile) {
-      // Avatar initials
+    function rookApplySidebarProfile(profile, sessionEmail) {
       const avatarEl = document.getElementById('sideAvatar');
       const nameEl   = document.getElementById('sideName');
       const statusEl = document.getElementById('sideStatus');
       if (!avatarEl) return;
       const name  = profile?.name || '';
-      const email = profile?.email || '';
+      // Email comes from the auth session — not stored in candidate_profiles
+      const email = sessionEmail || profile?.email || '';
       const initials = name
         ? name.trim().split(/\s+/).map(w => w[0]).join('').toUpperCase().slice(0, 2)
         : (email ? email[0].toUpperCase() : '?');
@@ -585,7 +585,13 @@
         const res = await rookApiFetch('/profile');
         if (!res.ok) return;
         const profile = await res.json();
-        rookApplySidebarProfile(profile);
+        // Get email from session since candidate_profiles doesn't store it
+        let sessionEmail = '';
+        try {
+          const { data: { session } } = await rookSupabase.auth.getSession();
+          sessionEmail = session?.user?.email || '';
+        } catch(_) {}
+        rookApplySidebarProfile(profile, sessionEmail);
         if (profile?.name) {
           // First name only — matches how the rest of the app addresses
           // the candidate (e.g. application emails), not a full-name
