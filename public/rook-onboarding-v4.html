@@ -223,12 +223,12 @@ select.field-select:focus{border-color:var(--blue)}
     <button class="btn-back" onclick="goBack()">← Back</button>
   </div>
 
-  <!-- ── Screen: Résumé (optional) ── -->
+  <!-- ── Screen: Résumé + email (combined, step 5→6) ── -->
   <div class="screen" id="s-resume">
-    <div class="eyebrow">Personalize your results</div>
-    <h2>Add your résumé<br>for better matches.</h2>
-    <p class="lead">Optional — you'll see real jobs either way. A résumé unlocks personalized match scores after you verify your email.</p>
-    <label class="upload-zone" id="uploadZone" for="resumeFileInput" style="margin-top:8px">
+    <div class="eyebrow">Almost there</div>
+    <h2>Find your matches.</h2>
+    <p class="lead">Add your résumé for personalized scores, then enter your email. We'll send a secure sign-in link and calculate your results while you verify.</p>
+    <label class="upload-zone" id="uploadZone" for="resumeFileInput" style="margin-top:4px">
       <div class="upload-zone-inner">
         <div class="upload-icon">📄</div>
         <b>Drop your résumé here</b>
@@ -240,26 +240,12 @@ select.field-select:focus{border-color:var(--blue)}
       <span class="fi">📄</span>
       <div><div class="fn" id="fileName"></div><div class="fs">Ready to upload</div></div>
     </div>
-    <div class="skip-link" style="margin-top:16px">
-      <button id="btnSkipResume">I'll add my résumé later →</button>
-    </div>
-    <button class="btn-primary" id="btnResumeNext" style="margin-top:8px;display:none">Continue with résumé</button>
-    <button class="btn-back" onclick="goBack()">← Back</button>
-  </div>
-
-  <!-- ── Screen: Teaser jobs ── -->
-  <div class="screen" id="s-teaser">
-    <div class="eyebrow">Jobs in your area</div>
-    <h2>Here's what's out there.</h2>
-    <p class="lead" id="teaserLead">Finding current openings near you…</p>
-    <div id="teaserCards" style="margin:16px 0 4px"></div>
-    <p style="font-size:12px;color:var(--muted);text-align:center;margin:4px 0 20px">Employer names and personalized scores unlock after you sign up.</p>
-    <div class="field">
+    <div class="field" style="margin-top:18px">
       <label for="emailInput">Your email — we'll send a sign-in link</label>
       <input type="email" id="emailInput" placeholder="you@example.com" autocomplete="email" spellcheck="false">
     </div>
     <div class="err" id="teaserErr"></div>
-    <button class="btn-primary" id="btnTeaserSignup">See My Full Results</button>
+    <button class="btn-primary" id="btnResumeNext" style="margin-top:18px">Find My Matches</button>
     <div class="trust">🔒 No password yet · No payment until you choose a trial</div>
     <button class="btn-back" onclick="goBack()">← Back</button>
   </div>
@@ -383,7 +369,7 @@ const email = () => (document.getElementById('emailInput') || {value:''}).value.
 
 const PROGRESS = {
   welcome: 0, details: 10, industry: 25, years: 40, territory: 55,
-  resume: 65, teaser: 75, 'check-email': 80,
+  resume: 70, 'check-email': 82,
   'results-a': 88, 'results-b': 88, password: 93, trial: 97, processing: 82
 };
 const LABELS = {
@@ -567,28 +553,16 @@ document.querySelectorAll('[name="territory"]').forEach(el => {
 document.getElementById('btnTerritoryNext').addEventListener('click', () => show('resume'));
 
 // Résumé (optional) — file selection or skip
-document.getElementById('btnSkipResume').addEventListener('click', () => {
-  resumeFile = null;
-  path = 'b';
-  loadTeaserJobs();
-  show('teaser');
-});
-document.getElementById('btnResumeNext').addEventListener('click', () => {
-  path = 'a';
-  loadTeaserJobs();
-  show('teaser');
-});
-
-// Teaser sign-up button
-document.getElementById('btnTeaserSignup').addEventListener('click', async () => {
+// Résumé screen: clicking Find My Matches signs up and sends email
+document.getElementById('btnResumeNext').addEventListener('click', async () => {
   clearErr('teaserErr');
   const em = document.getElementById('emailInput').value.trim();
   if (!em || !em.includes('@')) return showErr('teaserErr', 'Please enter a valid email address.');
-  document.getElementById('btnTeaserSignup').disabled = true;
-  document.getElementById('btnTeaserSignup').textContent = 'Sending…';
+  path = resumeFile ? 'a' : 'b';
+  const btn = document.getElementById('btnResumeNext');
+  btn.disabled = true; btn.textContent = 'Sending…';
   await startSignUpAndSend();
-  document.getElementById('btnTeaserSignup').disabled = false;
-  document.getElementById('btnTeaserSignup').textContent = 'See My Full Results';
+  btn.disabled = false; btn.textContent = 'Find My Matches';
 });
 
 // ── Prefs next ─────────────────────────────────────────────────────────────
