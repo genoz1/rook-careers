@@ -546,29 +546,37 @@ document.getElementById('btnDetailsNext').addEventListener('click', () => {
   show('industry');
 });
 
-// Industry
-document.querySelectorAll('[name="industry"]').forEach(el => {
-  el.addEventListener('change', () => {
-    sel.industry = el.value;
-    document.getElementById('btnIndustryNext').disabled = false;
+// Industry — listen on click (not change) for iOS compatibility
+document.querySelectorAll('#s-industry .choice').forEach(label => {
+  label.addEventListener('click', () => {
+    const radio = label.querySelector('input[name="industry"]');
+    if (radio) {
+      sel.industry = radio.value;
+      document.getElementById('btnIndustryNext').disabled = false;
+    }
   });
 });
 document.getElementById('btnIndustryNext').addEventListener('click', () => show('years'));
 
-// Years
-document.querySelectorAll('[name="years"]').forEach(el => {
-  el.addEventListener('change', () => {
-    sel.years = parseFloat(el.value);
-    document.getElementById('btnYearsNext').disabled = false;
+// Years — same fix
+document.querySelectorAll('#s-years .choice').forEach(label => {
+  label.addEventListener('click', () => {
+    const radio = label.querySelector('input[name="years"]');
+    if (radio) {
+      sel.years = parseFloat(radio.value);
+      document.getElementById('btnYearsNext').disabled = false;
+    }
   });
 });
 document.getElementById('btnYearsNext').addEventListener('click', () => show('territory'));
 
-// Territory (multi-select)
-document.querySelectorAll('[name="territory"]').forEach(el => {
-  el.addEventListener('change', () => {
-    sel.territories = [...document.querySelectorAll('[name="territory"]:checked')].map(e => e.value);
-    document.getElementById('btnTerritoryNext').disabled = sel.territories.length === 0;
+// Territory — checkboxes, click on label
+document.querySelectorAll('#s-territory .choice').forEach(label => {
+  label.addEventListener('click', () => {
+    setTimeout(() => {
+      sel.territories = [...document.querySelectorAll('#s-territory input[name="territory"]:checked')].map(e => e.value);
+      document.getElementById('btnTerritoryNext').disabled = sel.territories.length === 0;
+    }, 0);
   });
 });
 document.getElementById('btnTerritoryNext').addEventListener('click', () => show('resume'));
