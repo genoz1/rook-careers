@@ -228,7 +228,7 @@
           <h2>Find the medical sales jobs that fit you.</h2>
           <p class="lead">Tell us what you're looking for. ROOK will compare your experience with thousands of current opportunities.</p>
           <button class="primary" id="btnWelcomeStart">Find My Matches</button>
-          <div class="trust">Takes about 2 minutes · No payment yet</div>
+          <div class="trust">3-day free trial · Card required · $29/month after</div>
         </div>
       </section>
 
@@ -336,9 +336,9 @@
         <div class="content">
           <div class="eyebrow">Jobs in your area</div>
           <h2>Here's what's out there.</h2>
-          <p class="lead" id="previewLead">Finding current openings near you…</p>
+          <p class="lead" id="previewLead">Finding opportunities in your area and region…</p>
           <div id="previewCards3c" style="margin:16px 0 8px"></div>
-          <p style="font-size:12px;color:var(--muted);text-align:center;margin:4px 0 20px">Employer names and personalized match scores unlock after you sign up.</p>
+          <p style="font-size:12px;color:var(--muted);text-align:center;margin:4px 0 20px">Employer names unlock when your trial starts · Match scores unlock after résumé analysis</p>
           <div class="actions">
             <button class="back" onclick="goBack()">Back</button>
             <button class="primary" id="btnPreview3cNext">Next: My Experience</button>
@@ -378,7 +378,7 @@
 
           <div class="actions" style="margin-top:20px">
             <button class="back" onclick="goBack()">Back</button>
-            <button class="primary" id="btnAnalyze">Analyze My Experience</button>
+            <button class="primary" id="btnAnalyze">Create Account</button>
           </div>
           <div class="trust">🔒 Your information is never sold</div>
         </div>
@@ -608,15 +608,17 @@
   const allScreens = [...document.querySelectorAll('.screen')];
   const stepOrder  = ['0','3b','3c','1','2','3','4','4b','4c','5','6','6e','7','resume-post'];
   const LABELS     = {
-    '0':'Welcome',
-    '1':'Step 1 of 5','2':'Step 2 of 5','3':'Step 3 of 5',
-    '3b':'Step 1 of 4',
+    '0':'',
+    '3b':'Step 1 of 5','3c':'Step 1 of 5',
+    '1':'Step 2 of 5','2':'Step 3 of 5','3':'Step 4 of 5',
     '4':'Step 5 of 5','4b':'Step 5 of 5','4c':'Step 5 of 5',
-    '5':'Analyzing','6':'Your matches','6e':'Your matches','7':'Start trial','resume-post':'Upload résumé'
+    '5':'','6':'','6e':'','7':'','resume-post':''
   };
   const PROGRESS   = {
-    '0':0,'1':20,'2':40,'3':60,'3b':80,
-    '4':100,'4b':100,'4c':100,'5':100,'6':100,'6e':100,'7':100
+    '0':0,
+    '3b':20,'3c':20,
+    '1':40,'2':60,'3':80,
+    '4':100,'4b':100,'4c':100,'5':100,'6':100,'6e':100,'7':100,'resume-post':100
   };
   let currentStep = '0';
   let analysisResolve = null; // kept for legacy compatibility — new flow uses milestone functions
@@ -928,7 +930,7 @@
       console.error('[signUp]', err);
     } finally {
       btn.disabled = false;
-      btn.textContent = 'Analyze My Experience';
+      btn.textContent = 'Create Account';
     }
   }
 
@@ -1056,7 +1058,7 @@
       const data = await _previewJobsCache;
       const jobs = Array.isArray(data) ? data.slice(0, 3) : ((data && data.jobs) || []).slice(0, 3);
       if (leadEl) leadEl.textContent = jobs.length
-        ? 'A few current medical sales openings near you:'
+        ? 'Opportunities in your area and region:'
         : 'Thousands of medical sales roles are waiting for you.';
       cardsEl.innerHTML = '';
       if (!jobs.length) {
@@ -1067,12 +1069,21 @@
         const card = document.createElement('div');
         card.style.cssText = 'background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:flex-start;gap:12px';
         const comp = job.compensation_text || (job.salary_min ? '$' + job.salary_min + (job.salary_max ? '-$' + job.salary_max : '+') : null);
-        const loc  = job.location_raw || [job.city, job.state].filter(Boolean).join(', ') || '';
+        const rawLoc = job.location_raw || [job.city, job.state].filter(Boolean).join(', ') || '';
+        const isRemote = /remote/i.test(rawLoc) || job.remote_status === 'remote';
+        const userState = sel.location && sel.location.stateAbbr;
+        const jobState  = job.state || '';
+        const isLocal   = userState && jobState && jobState.toUpperCase() === userState.toUpperCase();
+        const locTag    = isRemote
+          ? (userState ? 'Remote — ' + userState + ' residents' : 'Remote')
+          : isLocal
+            ? escapeHtml(rawLoc)
+            : (rawLoc ? 'Regional territory — ' + escapeHtml(rawLoc) : 'Territory role');
         card.innerHTML =
           '<div style="width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,#e8f1fb,#c8dff7);flex-shrink:0;display:grid;place-items:center;font-size:16px">&#128188;</div>' +
           '<div style="flex:1;min-width:0">' +
             '<div style="font-size:14px;font-weight:800;color:var(--navy);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escapeHtml(job.title_original || job.title_normalized || 'Medical Sales Role') + '</div>' +
-            '<div style="font-size:12px;color:var(--muted)">&#128274; Employer revealed with ROOK' + (loc ? ' &mdash; ' + escapeHtml(loc) : '') + (comp ? ' &middot; ' + escapeHtml(comp) : '') + '</div>' +
+            '<div style="font-size:12px;color:var(--muted)">&#128274; Employer revealed with ROOK &mdash; ' + locTag + (comp ? ' &middot; ' + escapeHtml(comp) : '') + '</div>' +
           '</div>';
         cardsEl.appendChild(card);
       });
