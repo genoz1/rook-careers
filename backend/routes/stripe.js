@@ -124,8 +124,8 @@ function buildCheckoutSessionParams({ trialDays, utm, userEmail, userId, publicA
     // "Paid Subscription" conversion rule correctly matching the
     // scenario it was actually built for.
     success_url: trialDays > 0
-      ? `${publicAppUrl}/rook-dashboard.html?trial=started`
-      : `${publicAppUrl}/rook-dashboard.html?checkout=success`,
+      ? `${publicAppUrl}/rook-onboarding-v2.html?ob=resume_upload&trial=started`
+      : `${publicAppUrl}/rook-onboarding-v2.html?ob=resume_upload&checkout=success`,
     cancel_url: `${publicAppUrl}/rook-pricing.html?checkout=cancelled`,
     client_reference_id: userId,
     // Also on the Checkout Session itself (not just subscription_data

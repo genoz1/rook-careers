@@ -324,6 +324,22 @@
         </div>
       </section>
 
+      <!-- Screen 3c: Job preview — shows real job count and 3 masked listings
+           filtered by location and industry. No scoring, no résumé needed.
+           Demonstrates that real jobs exist before asking for account creation. -->
+      <section class="screen" data-step="3c">
+        <div class="content">
+          <div class="eyebrow">Your area</div>
+          <h2 id="previewHeadline">Finding roles near you…</h2>
+          <div id="previewCards3c" style="margin:14px 0"></div>
+          <p style="font-size:13px;color:var(--muted);text-align:center;margin:8px 0 20px" id="previewNote3c"></p>
+          <div class="actions">
+            <button class="back" onclick="goBack()">Back</button>
+            <button class="primary" id="btnPreview3cNext">Create Account to Unlock</button>
+          </div>
+        </div>
+      </section>
+
       <!-- Screen 4: Résumé + account creation
            Collects: file, email, password.
            On submit: creates Supabase account → sends confirmation email →
@@ -501,6 +517,34 @@
         </div>
       </section>
 
+      <!-- Screen resume-post: Résumé upload shown AFTER Stripe checkout.
+           Reached via ?ob=resume_upload in the URL after payment succeeds.
+           After upload the user goes straight to the dashboard — no scoring wait. -->
+      <section class="screen" data-step="resume-post">
+        <div class="content">
+          <div class="eyebrow">One last step</div>
+          <h2>Upload your résumé.</h2>
+          <p class="lead">Your trial has started. Upload your résumé and we'll rank every job by how well it matches your actual experience.</p>
+          <input type="file" id="resumePostInput" accept=".pdf,.doc,.docx" style="display:none" aria-label="Choose résumé file">
+          <div class="upload" id="resumePostZone" role="button" tabindex="0" aria-label="Upload résumé">
+            <div class="up">↑</div>
+            <b>Drop your résumé here</b>
+            <p class="micro">PDF or DOCX · Maximum 10 MB</p>
+            <button type="button" style="border:1.5px solid var(--line);border-radius:13px;padding:11px 20px;background:#fff;color:var(--ink);font-weight:700;font-size:14px;cursor:pointer;margin-top:14px" onclick="document.getElementById('resumePostInput').click()">Choose file</button>
+          </div>
+          <div class="file-selected" id="resumePostSelected" style="display:none">
+            <span class="fi">📄</span>
+            <div><div class="fn" id="resumePostName"></div><div class="fs">Ready to upload</div></div>
+          </div>
+          <div class="err" id="resumePostErr"></div>
+          <div id="resumePostStatus" style="display:none;margin-top:12px;padding:10px 14px;background:#f3f8fc;border:1px solid #dce7f0;border-radius:12px;font-size:13px;color:#47637c;font-weight:600"></div>
+          <div class="actions" style="margin-top:20px">
+            <button class="primary" id="btnResumePostUpload">Go to My Dashboard</button>
+          </div>
+          <div class="trust">🔒 Your résumé is never shared without your permission</div>
+        </div>
+      </section>
+
     </div><!-- /screens -->
   </section>
 </main>
@@ -556,13 +600,13 @@
   // The array includes 4b, 4c, 6e — steps not in the original approved ZIP
   // but using the same visual system.
   const allScreens = [...document.querySelectorAll('.screen')];
-  const stepOrder  = ['0','1','2','3','3b','4','4b','4c','5','6','6e','7'];
+  const stepOrder  = ['0','1','2','3','3b','3c','4','4b','4c','5','6','6e','7','resume-post'];
   const LABELS     = {
     '0':'Welcome',
     '1':'Step 1 of 5','2':'Step 2 of 5','3':'Step 3 of 5',
     '3b':'Step 4 of 5',
     '4':'Step 5 of 5','4b':'Step 5 of 5','4c':'Step 5 of 5',
-    '5':'Analyzing','6':'Your matches','6e':'Your matches','7':'Start trial'
+    '5':'Analyzing','6':'Your matches','6e':'Your matches','7':'Start trial','resume-post':'Upload résumé'
   };
   const PROGRESS   = {
     '0':0,'1':20,'2':40,'3':60,'3b':80,
@@ -689,7 +733,8 @@
   document.getElementById('btnLocNext').addEventListener('click', () => {
     if (!sel.location) return; // guard — button should be disabled anyway
     gtag('event', 'onboarding_step_completed', { step: '3b', location_label: sel.location.label });
-    show('4');
+    loadJobPreview3c();
+    show('3c');
   });
 
   /* ── localStorage draft helpers ──
@@ -957,6 +1002,108 @@
       console.warn('[saveProfileNow] failed (non-fatal):', err.message);
     }
   }
+
+  document.getElementById('btnPreview3cNext').addEventListener('click', () => show('4'));
+
+  // Load 3 masked jobs for the preview screen using industry + state from sel
+  async function loadJobPreview3c() {
+    const headEl  = document.getElementById('previewHeadline');
+    const cardsEl = document.getElementById('previewCards3c');
+    const noteEl  = document.getElementById('previewNote3c');
+    if (!cardsEl) return;
+    cardsEl.innerHTML = '<p style="color:var(--muted);font-size:14px;text-align:center">Loading…</p>';
+
+    try {
+      const params = new URLSearchParams();
+      if (sel.industry && sel.industry !== 'Breaking In') params.set('industry', sel.industry);
+      if (sel.location?.stateAbbr) params.set('state', sel.location.stateAbbr);
+      const res  = await fetch('/api/onboarding/job-preview?' + params.toString());
+      const data = res.ok ? await res.json() : null;
+      const jobs = data?.jobs || [];
+      const count = data?.total_count || jobs.length;
+
+      const loc = sel.location?.label || (sel.location?.stateAbbr ? sel.location.stateAbbr : 'your area');
+      if (headEl) headEl.textContent = count > 0
+        ? `${count.toLocaleString()}+ roles available near ${loc}`
+        : `Roles available in ${loc}`;
+
+      cardsEl.innerHTML = '';
+      if (!jobs.length) {
+        cardsEl.innerHTML = '<p style="color:var(--muted);font-size:14px;text-align:center">Create your account to see matching roles.</p>';
+      } else {
+        jobs.forEach(job => {
+          const card = document.createElement('div');
+          card.style.cssText = 'background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:10px';
+          const loc2 = job.remote_status === 'remote' ? 'Remote'
+            : [job.city, job.state].filter(Boolean).join(', ') || 'Location not listed';
+          const comp = job.compensation_text || null;
+          card.innerHTML = `
+            <div style="font-size:15px;font-weight:800;color:var(--navy);margin-bottom:3px">${escapeHtml(job.title_original || 'Medical Sales Role')}</div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:4px">${escapeHtml(loc2)}${comp ? ' · ' + escapeHtml(comp) : ''}</div>
+            <div style="font-size:12px;color:#8B96AB">🔒 Employer and match score unlock after signup</div>`;
+          cardsEl.appendChild(card);
+        });
+      }
+      if (noteEl) noteEl.textContent = 'Create your free account to see your personalized match scores.';
+    } catch (_) {
+      if (headEl) headEl.textContent = 'Roles available in your area';
+      if (cardsEl) cardsEl.innerHTML = '<p style="color:var(--muted);font-size:14px;text-align:center">Create your account to see matching roles.</p>';
+    }
+  }
+
+  // ── Post-checkout résumé upload (screen resume-post) ──────────────────
+  // Reached via ?ob=resume_upload after Stripe checkout succeeds.
+  // After upload, redirect straight to dashboard — scoring runs in background.
+  let resumePostFile = null;
+  const resumePostInput = document.getElementById('resumePostInput');
+  const resumePostZone  = document.getElementById('resumePostZone');
+
+  if (resumePostInput) {
+    resumePostInput.addEventListener('change', e => {
+      const f = e.target.files[0];
+      if (!f) return;
+      resumePostFile = f;
+      document.getElementById('resumePostZone').style.display = 'none';
+      document.getElementById('resumePostSelected').style.display = 'flex';
+      document.getElementById('resumePostName').textContent = f.name;
+      clearErr('resumePostErr');
+    });
+    resumePostZone.addEventListener('click', () => resumePostInput.click());
+    resumePostZone.addEventListener('dragover', e => { e.preventDefault(); });
+    resumePostZone.addEventListener('drop', e => {
+      e.preventDefault();
+      const f = e.dataTransfer.files[0];
+      if (!f) return;
+      resumePostFile = f;
+      document.getElementById('resumePostZone').style.display = 'none';
+      document.getElementById('resumePostSelected').style.display = 'flex';
+      document.getElementById('resumePostName').textContent = f.name;
+      clearErr('resumePostErr');
+    });
+  }
+
+  document.getElementById('btnResumePostUpload')?.addEventListener('click', async () => {
+    if (!resumePostFile) return showErr('resumePostErr', 'Please choose your résumé file to continue.');
+    const btn = document.getElementById('btnResumePostUpload');
+    const statusDiv = document.getElementById('resumePostStatus');
+    btn.disabled = true; btn.textContent = 'Uploading…';
+    if (statusDiv) { statusDiv.style.display = 'block'; statusDiv.textContent = 'Uploading your résumé…'; }
+    try {
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session) throw new Error('No session');
+      const fd = new FormData();
+      fd.append('resume', resumePostFile);
+      const res = await fetch('/api/resume', { method: 'POST', headers: { Authorization: `Bearer ${session.access_token}` }, body: fd });
+      if (!res.ok) throw new Error('Upload failed');
+      if (statusDiv) statusDiv.textContent = 'Résumé uploaded! Taking you to your dashboard…';
+      gtag('event', 'resume_uploaded', { method: 'post_checkout' });
+      setTimeout(() => { window.location.href = 'rook-dashboard.html'; }, 800);
+    } catch (err) {
+      btn.disabled = false; btn.textContent = 'Go to My Dashboard';
+      if (statusDiv) statusDiv.style.display = 'none';
+      showErr('resumePostErr', 'Upload failed. Please try again.');
+    }
+  });
 
   /* ── Analysis animation ──
      Runs during backend work. Timed to ~2.5 seconds so real work can
@@ -1382,16 +1529,25 @@
      existing session. */
   (async () => {
     const params   = new URLSearchParams(window.location.search);
-    const isReturn = params.get('ob') === 'v2_return';
+    const isReturn       = params.get('ob') === 'v2_return';
+    const isResumeUpload = params.get('ob') === 'resume_upload';
 
     const { data: { session } } = await sb.auth.getSession()
       .catch(() => ({ data: { session: null } }));
 
+    // Path resume_upload: user just completed Stripe checkout, now upload résumé
+    if (isResumeUpload && session) {
+      show('resume-post');
+      return;
+    }
+
     if (isReturn && session) {
-      // Path A: returning from email verification on the same device.
+      // Path A: returning from email verification → go straight to Stripe checkout.
+      // Résumé upload now happens AFTER checkout, not here.
       const draft = loadDraft();
       if (draft) restoreDraft(draft);
-      show('4c');
+      await saveProfileNow(); // save questionnaire answers before checkout
+      show('7');
       return;
     }
 

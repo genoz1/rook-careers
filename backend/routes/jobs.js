@@ -1188,6 +1188,57 @@ router.get("/saved-jobs", requireConfig, requireAuth, loadCandidateId, async (re
 router.scrubCompanyNameFromText = scrubCompanyNameFromText;
 router.redactForNonSubscriber = redactForNonSubscriber;
 
+// GET /api/onboarding/job-preview
+// Returns up to 3 masked job listings and a total count filtered by
+// industry and state. Used on screen 3c to show real jobs exist before
+// the user creates an account. No auth required. No match scores.
+// Server-side field masking — employer identity and apply links never sent.
+const JP_PREVIEW_RATE = new Map();
+function checkJobPreviewRate(ip) {
+  const now = Date.now();
+  const e = JP_PREVIEW_RATE.get(ip);
+  if (!e || now > e.resetAt) { JP_PREVIEW_RATE.set(ip, { count: 1, resetAt: now + 30_000 }); return true; }
+  if (e.count >= 10) return false;
+  e.count++;
+  return true;
+}
+setInterval(() => { const n = Date.now(); for (const [k, v] of JP_PREVIEW_RATE) if (n > v.resetAt) JP_PREVIEW_RATE.delete(k); }, 300_000);
+
+router.get('/onboarding/job-preview', async (req, res) => {
+  if (!isConfigured) return res.json({ jobs: [], total_count: 0 });
+  const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
+  if (!checkJobPreviewRate(ip)) return res.status(429).json({ error: 'Too many requests' });
+  const { industry, state } = req.query;
+  try {
+    // Count query
+    let countQ = supabaseAnon.from('jobs').select('id', { count: 'exact', head: true })
+      .eq('status', 'active').eq('moderation_status', 'approved');
+    if (state) countQ = countQ.eq('state', state);
+    if (industry) countQ = countQ.eq('industry', industry);
+    const { count } = await countQ;
+
+    // Fetch 3 preview-safe fields only — no employer identity, no apply links
+    let q = supabaseAnon.from('jobs')
+      .select('title_original, city, state, remote_status, compensation_text, company_name')
+      .eq('status', 'active').eq('moderation_status', 'approved')
+      .order('date_posted', { ascending: false }).limit(6);
+    if (state) q = q.eq('state', state);
+    if (industry) q = q.eq('industry', industry);
+    const { data: jobs } = await q;
+
+    const masked = (jobs || []).slice(0, 3).map(j => ({
+      title_original: j.company_name ? (scrubCompanyNameFromText(j.title_original, j.company_name) || j.title_original) : j.title_original,
+      city: j.city,
+      state: j.state,
+      remote_status: j.remote_status,
+      compensation_text: j.compensation_text,
+    }));
+    res.json({ jobs: masked, total_count: count || 0 });
+  } catch (err) {
+    res.json({ jobs: [], total_count: 0 });
+  }
+});
+
 // GET /api/onboarding/warm-jobs
 // Triggers fetchActiveJobs() server-side to warm the 2-minute active-jobs
 // cache. Called fire-and-forget from doBackendWork concurrently with the

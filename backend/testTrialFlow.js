@@ -233,7 +233,7 @@ async function run() {
       trialDays: 0, utm: {}, userEmail: "a@b.com", userId: "user1",
       publicAppUrl: "https://rookcareers.com", priceId: "price_123",
     });
-    assert.strictEqual(params.success_url, "https://rookcareers.com/rook-dashboard.html?checkout=success", "must use the ORIGINAL checkout=success param when trial is disabled");
+    assert.strictEqual(params.success_url, "https://rookcareers.com/rook-onboarding-v2.html?ob=resume_upload&checkout=success", "must use the ORIGINAL checkout=success param when trial is disabled");
     assert.strictEqual(params.cancel_url, "https://rookcareers.com/rook-pricing.html?checkout=cancelled");
     assert.strictEqual(params.mode, "subscription");
     assert.deepStrictEqual(params.payment_method_types, ["card"]);
@@ -247,7 +247,7 @@ async function run() {
       trialDays: 0, utm: { utm_source: "facebook" }, userEmail: "a@b.com", userId: "user1",
       publicAppUrl: "https://rookcareers.com", priceId: "price_123",
     });
-    assert.strictEqual(params.success_url, "https://rookcareers.com/rook-dashboard.html?checkout=success");
+    assert.strictEqual(params.success_url, "https://rookcareers.com/rook-onboarding-v2.html?ob=resume_upload&checkout=success");
     assert.strictEqual(params.subscription_data.trial_period_days, undefined, "no trial should ever be applied when disabled, even with UTM present");
     assert.deepStrictEqual(params.subscription_data.metadata, { utm_source: "facebook" });
   });
@@ -257,7 +257,7 @@ async function run() {
       trialDays: 3, utm: { utm_source: "google", utm_medium: "cpc" }, userEmail: "a@b.com", userId: "user1",
       publicAppUrl: "https://rookcareers.com", priceId: "price_123",
     });
-    assert.strictEqual(params.success_url, "https://rookcareers.com/rook-dashboard.html?trial=started");
+    assert.strictEqual(params.success_url, "https://rookcareers.com/rook-onboarding-v2.html?ob=resume_upload&trial=started");
     assert.strictEqual(params.subscription_data.trial_period_days, 3, "must reflect whatever TRIAL_PERIOD_DAYS actually is, not a hardcoded number");
     assert.deepStrictEqual(params.subscription_data.metadata, { utm_source: "google", utm_medium: "cpc" });
     assert.strictEqual(params.payment_method_collection, "always", "card must always be collected, trial or not");
