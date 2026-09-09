@@ -143,11 +143,11 @@ select.field-select:focus{border-color:var(--blue)}
     <div style="margin:24px 0 8px;display:flex;flex-direction:column;gap:14px">
       <div style="display:flex;gap:12px;align-items:flex-start">
         <div style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#062d55,#0877d1);color:#fff;display:grid;place-items:center;font-size:13px;font-weight:800;flex-shrink:0">1</div>
-        <div><div style="font-size:14px;font-weight:700;color:var(--navy)">Tell us where you want to work</div><div style="font-size:13px;color:var(--muted);margin-top:2px">Your ZIP code and email — that's all we need to start.</div></div>
+        <div><div style="font-size:14px;font-weight:700;color:var(--navy)">Tell us where you want to work</div><div style="font-size:13px;color:var(--muted);margin-top:2px">Your location, specialty, and a few quick questions.</div></div>
       </div>
       <div style="display:flex;gap:12px;align-items:flex-start">
         <div style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#062d55,#0877d1);color:#fff;display:grid;place-items:center;font-size:13px;font-weight:800;flex-shrink:0">2</div>
-        <div><div style="font-size:14px;font-weight:700;color:var(--navy)">Add your résumé — or a few preferences</div><div style="font-size:13px;color:var(--muted);margin-top:2px">No résumé on your phone? Start with preferences and add it later.</div></div>
+        <div><div style="font-size:14px;font-weight:700;color:var(--navy)">Add your résumé for personalized scores</div><div style="font-size:13px;color:var(--muted);margin-top:2px">Optional — skip it if you don't have one handy. You can add it later.</div></div>
       </div>
       <div style="display:flex;gap:12px;align-items:flex-start">
         <div style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#062d55,#0877d1);color:#fff;display:grid;place-items:center;font-size:13px;font-weight:800;flex-shrink:0">3</div>
@@ -155,7 +155,7 @@ select.field-select:focus{border-color:var(--blue)}
       </div>
     </div>
     <button class="btn-primary" id="btnWelcomeStart">Find my next opportunity</button>
-    <div class="trust">3-day free trial · Card required · $29/month after · Cancel anytime</div>
+    <div class="trust">Preview your matches free — no card until you start your trial · $29/month after · Cancel anytime</div>
   </div>
 
   <!-- ── Screen 1: Location ── -->
@@ -227,8 +227,12 @@ select.field-select:focus{border-color:var(--blue)}
   <div class="screen" id="s-resume">
     <div class="eyebrow">Almost there</div>
     <h2>Find your matches.</h2>
-    <p class="lead">Add your résumé for personalized scores, then enter your email. We'll send a secure sign-in link and calculate your results while you verify.</p>
-    <label class="upload-zone" id="uploadZone" for="resumeFileInput" style="margin-top:4px;display:block">
+    <p class="lead">Enter your email and optionally drop your résumé for personalized match scores. We'll send a sign-in link and calculate your results while you verify.</p>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:16px;margin-bottom:4px">
+      <span style="font-size:13px;font-weight:700;color:var(--ink)">Résumé</span>
+      <span style="font-size:12px;font-weight:600;color:var(--blue);background:#eef7ff;padding:2px 8px;border-radius:99px">Optional</span>
+    </div>
+    <label class="upload-zone" id="uploadZone" for="resumeFileInput" style="margin-top:0;display:block">
       <div class="upload-zone-inner">
         <div class="upload-icon">📄</div>
         <b>Drop your résumé here</b>
@@ -241,15 +245,14 @@ select.field-select:focus{border-color:var(--blue)}
       <div><div class="fn" id="fileName"></div><div class="fs">Ready to upload</div></div>
     </div>
     <div class="field" style="margin-top:18px">
-      <label for="emailInput">Your email — we'll send a sign-in link</label>
+      <label for="emailInput">Email address <span style="font-weight:500;color:var(--muted)">— we'll send a sign-in link</span></label>
       <input type="email" id="emailInput" placeholder="you@example.com" autocomplete="email" spellcheck="false">
     </div>
     <div class="err" id="teaserErr"></div>
     <button class="btn-primary" id="btnResumeNext" style="margin-top:18px">Find My Matches</button>
-    <div class="skip-link" style="margin-top:8px">
-      <button id="btnSkipResume">No résumé right now — continue without one →</button>
-    </div>
-    <p style="font-size:11px;color:var(--muted);text-align:center;margin-top:6px">Résumé is optional. Scores improve when you add one later from your dashboard.</p>
+    <p style="font-size:12px;color:var(--muted);text-align:center;margin-top:10px">
+      No résumé? <button id="btnSkipResume" style="background:none;border:none;color:var(--blue);font:inherit;font-size:12px;font-weight:700;cursor:pointer;text-decoration:underline;padding:0">Continue without one</button> — you can upload later from your dashboard.
+    </p>
     <div class="trust">🔒 No password yet · No payment until you choose a trial</div>
     <button class="btn-back" onclick="goBack()">← Back</button>
   </div>
