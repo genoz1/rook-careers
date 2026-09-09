@@ -531,13 +531,16 @@
           <div class="eyebrow">One last step</div>
           <h2>Upload your résumé.</h2>
           <p class="lead">Your trial has started. Upload your résumé and we'll rank every job by how well it matches your actual experience.</p>
-          <input type="file" id="resumePostInput" accept=".pdf,.doc,.docx" style="display:none" aria-label="Choose résumé file">
-          <div class="upload" id="resumePostZone" role="button" tabindex="0" aria-label="Upload résumé">
+          <!-- label wraps the input — clicking anywhere on it natively opens
+               the file picker without any JavaScript, avoiding the double-trigger
+               bug where both onclick and a zone click listener both call .click() -->
+          <label for="resumePostInput" class="upload" id="resumePostZone" style="cursor:pointer;display:block">
             <div class="up">↑</div>
             <b>Drop your résumé here</b>
             <p class="micro">PDF or DOCX · Maximum 10 MB</p>
-            <button type="button" style="border:1.5px solid var(--line);border-radius:13px;padding:11px 20px;background:#fff;color:var(--ink);font-weight:700;font-size:14px;cursor:pointer;margin-top:14px" onclick="document.getElementById('resumePostInput').click()">Choose file</button>
-          </div>
+            <span style="border:1.5px solid var(--line);border-radius:13px;padding:11px 20px;background:#fff;color:var(--ink);font-weight:700;font-size:14px;cursor:pointer;margin-top:14px;display:inline-block">Choose file</span>
+          </label>
+          <input type="file" id="resumePostInput" accept=".pdf,.doc,.docx" style="display:none" aria-label="Choose résumé file">
           <div class="file-selected" id="resumePostSelected" style="display:none">
             <span class="fi">📄</span>
             <div><div class="fn" id="resumePostName"></div><div class="fs">Ready to upload</div></div>
@@ -1110,7 +1113,8 @@
       document.getElementById('resumePostName').textContent = f.name;
       clearErr('resumePostErr');
     });
-    resumePostZone.addEventListener('click', () => resumePostInput.click());
+    // No click listener needed — the label element natively opens the
+    // file picker when clicked, without any JavaScript.
     resumePostZone.addEventListener('dragover', e => { e.preventDefault(); });
     resumePostZone.addEventListener('drop', e => {
       e.preventDefault();
