@@ -137,11 +137,13 @@ router.post("/onboarding/pre-verify-upload", requireConfig, preVerifyUpload.sing
         console.warn(`[pre-verify-upload] no valid zip provided (got: ${JSON.stringify(zip)})`);
       }
 
-      const payload = { user_id, resume_file_path: filePath, analysis_status: analysisStatus, updated_at: new Date().toISOString(), ...geoFields };
-      if (resumeText) payload.resume_text = resumeText;
+      const payload = { user_id, resume_file_path: filePath, updated_at: new Date().toISOString(), ...geoFields };
+      if (resumeText)       payload.resume_text       = resumeText;
       if (resumeStructured) payload.resume_structured = resumeStructured;
-      if (resumeEmbedding) payload.candidate_embedding = resumeEmbedding;
-      if (suggestedRoles) payload.suggested_roles = suggestedRoles;
+      if (resumeEmbedding)  payload.candidate_embedding = resumeEmbedding;
+      if (suggestedRoles)   payload.suggested_roles   = suggestedRoles;
+      // analysis_status is NOT written — column does not exist in candidate_profiles
+      console.log(`[pre-verify-upload] uid=${user_id.slice(0,8)} analysis=${analysisStatus} has_structured=${!!resumeStructured} has_embedding=${!!resumeEmbedding} has_location=${!!geoFields.home_lat}`);
 
       const { data: profile, error: dbErr } = await supabaseAdmin.from("candidate_profiles")
         .upsert(payload, { onConflict: "user_id" }).select().single();
@@ -177,9 +179,14 @@ router.get("/onboarding/pre-verify-status/:user_id", requireConfig, async (req, 
   else se.count++;
 
   const { data: profile } = await supabaseAdmin.from("candidate_profiles")
-    .select("analysis_status, resume_file_path, candidate_embedding")
+    .select("resume_structured, resume_file_path, candidate_embedding")
     .eq("user_id", user_id).maybeSingle();
-  res.json({ ok: true, analysis_status: profile?.analysis_status || null, has_resume: !!profile?.resume_file_path, scoring_ready: !!profile?.candidate_embedding });
+  res.json({
+    ok: true,
+    analysis_status: profile?.resume_structured ? 'ok' : (profile?.resume_file_path ? 'processing' : null),
+    has_resume: !!profile?.resume_file_path,
+    scoring_ready: !!profile?.candidate_embedding
+  });
 });
 
 router.post("/profile/prefill", requireConfig, async (req, res) => {
