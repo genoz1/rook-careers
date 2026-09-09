@@ -1022,11 +1022,25 @@
   document.getElementById('btnPreview3cNext').addEventListener('click', () => show('1'));
 
   // Load 3 masked jobs for the preview screen using industry + state from sel
-  // Cache for prefetched jobs — populated when user selects location,
-  // read instantly when screen 3c renders.
+  // Prefetch jobs on page load so they are ready well before screen 3c.
+  // A second prefetch fires when location is selected to add coordinates.
   let _previewJobsCache = null;
 
   function prefetchJobPreview() {
+    const params = new URLSearchParams({ limit: '3' });
+    if (sel.location && sel.location.lat)       params.set('near_lat',   sel.location.lat);
+    if (sel.location && sel.location.lng)       params.set('near_lng',   sel.location.lng);
+    if (sel.location && sel.location.stateAbbr) params.set('near_state', sel.location.stateAbbr);
+    _previewJobsCache = fetch('/api/jobs?' + params.toString())
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .catch(function() { return null; });
+  }
+
+  // Start fetching immediately on page load — no location yet, returns
+  // recent jobs. Re-fires with coordinates when user picks location.
+  prefetchJobPreview();
+
+  // (prefetchJobPreview already defined and called above)
     _previewJobsCache = null;
     const params = new URLSearchParams({ limit: '3' });
     if (sel.location && sel.location.lat)       params.set('near_lat',   sel.location.lat);
@@ -1562,9 +1576,25 @@
     const { data: { session } } = await sb.auth.getSession()
       .catch(() => ({ data: { session: null } }));
 
-    // Path resume_upload: user just completed Stripe checkout, now upload résumé
-    if (isResumeUpload && session) {
-      show('resume-post');
+    // Path resume_upload: user just completed Stripe checkout, now upload résumé.
+    // After a Stripe redirect the session token may take a moment to be
+    // available — retry a few times before falling through.
+    if (isResumeUpload) {
+      let uploadSession = session;
+      if (!uploadSession) {
+        for (let i = 0; i < 5; i++) {
+          await new Promise(r => setTimeout(r, 600));
+          const retry = await sb.auth.getSession().catch(() => ({ data: { session: null } }));
+          uploadSession = retry.data?.session;
+          if (uploadSession) break;
+        }
+      }
+      if (uploadSession) {
+        show('resume-post');
+        return;
+      }
+      // Session never recovered — send to login
+      window.location.href = 'rook-login.html';
       return;
     }
 
