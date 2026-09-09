@@ -545,7 +545,7 @@
           <div class="err" id="resumePostErr"></div>
           <div id="resumePostStatus" style="display:none;margin-top:12px;padding:10px 14px;background:#f3f8fc;border:1px solid #dce7f0;border-radius:12px;font-size:13px;color:#47637c;font-weight:600"></div>
           <div class="actions" style="margin-top:20px">
-            <button class="primary" id="btnResumePostUpload">Go to My Dashboard</button>
+            <button class="primary" id="btnResumePostUpload">Upload &amp; Go to Dashboard</button>
           </div>
           <div class="trust">🔒 Your résumé is never shared without your permission</div>
         </div>
@@ -1114,25 +1114,33 @@
   }
 
   document.getElementById('btnResumePostUpload')?.addEventListener('click', async () => {
-    if (!resumePostFile) return showErr('resumePostErr', 'Please choose your résumé file to continue.');
+    if (!resumePostFile) return showErr('resumePostErr', 'Please choose your résumé file first.');
     const btn = document.getElementById('btnResumePostUpload');
     const statusDiv = document.getElementById('resumePostStatus');
     btn.disabled = true; btn.textContent = 'Uploading…';
     if (statusDiv) { statusDiv.style.display = 'block'; statusDiv.textContent = 'Uploading your résumé…'; }
     try {
       const { data: { session } } = await sb.auth.getSession();
-      if (!session) throw new Error('No session');
+      console.log('[resume-post] session:', !!session, 'file:', resumePostFile?.name);
+      if (!session) throw new Error('No session — please refresh and try again.');
       const fd = new FormData();
       fd.append('resume', resumePostFile);
-      const res = await fetch('/api/resume', { method: 'POST', headers: { Authorization: `Bearer ${session.access_token}` }, body: fd });
-      if (!res.ok) throw new Error('Upload failed');
+      const res = await fetch('/api/resume', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        body: fd
+      });
+      console.log('[resume-post] upload status:', res.status);
+      if (!res.ok) throw new Error('Upload failed (' + res.status + ')');
       if (statusDiv) statusDiv.textContent = 'Résumé uploaded! Taking you to your dashboard…';
-      gtag('event', 'resume_uploaded', { method: 'post_checkout' });
+      safeGtag('event', 'resume_uploaded', { method: 'post_checkout' });
       setTimeout(() => { window.location.href = 'rook-dashboard.html'; }, 800);
     } catch (err) {
-      btn.disabled = false; btn.textContent = 'Go to My Dashboard';
+      console.error('[resume-post] error:', err.message);
+      btn.disabled = false; btn.textContent = 'Upload & Go to Dashboard';
       if (statusDiv) statusDiv.style.display = 'none';
-      showErr('resumePostErr', 'Upload failed. Please try again.');
+      showErr('resumePostErr', err.message.includes('session') ? err.message : 'Upload failed. Please try again.');
+    }
     }
   });
 
