@@ -348,10 +348,27 @@ select.field-select:focus{border-color:var(--blue)}
 <script>
 (async () => {
 
-const sb = window.supabase.createClient(
-  window.ROOK_CONFIG.SUPABASE_URL,
-  window.ROOK_CONFIG.SUPABASE_ANON_KEY
-);
+// Initialize Supabase client. On the live site this always succeeds.
+// The try/catch protects against edge cases (ad blockers, slow CDN) so
+// a failed load doesn't crash all button listeners.
+let sb;
+try {
+  sb = window.supabase.createClient(
+    window.ROOK_CONFIG.SUPABASE_URL,
+    window.ROOK_CONFIG.SUPABASE_ANON_KEY
+  );
+} catch(e) {
+  console.warn('[ROOK] Supabase init failed:', e.message);
+  // Stub client so button listeners still attach; auth calls will fail
+  // gracefully with an error message rather than a silent crash.
+  const _stub = m => () => Promise.resolve({data:{},error:{message:m}});
+  sb = { auth: {
+    getSession:  _stub('Supabase not available'),
+    signUp:      _stub('Supabase not available'),
+    updateUser:  _stub('Supabase not available'),
+    resend:      _stub('Supabase not available'),
+  }};
+}
 
 // ── State ──────────────────────────────────────────────────────────────────
 let currentScreen = 'welcome';
@@ -364,7 +381,7 @@ let analysisStatus = null;
 let scoringReady = false;
 let hasResume = false;
 
-const zip = () => document.getElementById('zipInput').value.trim();
+const zip = () => selectedLocation?.zip || '';
 const email = () => (document.getElementById('emailInput') || {value:''}).value.trim();
 
 const PROGRESS = {
@@ -464,14 +481,7 @@ if (resumeInput) {
   }
 }
 
-document.getElementById('btnSkipResume').addEventListener('click', () => {
-  resumeFile = null;
-  path = 'b';
-  document.getElementById('btnDetailsNext').textContent = 'Continue with preferences';
-  document.getElementById('btnSkipResume').style.display = 'none';
-  fileChip.style.display = 'none';
-  uploadZone.style.display = '';
-});
+// (no skip-résumé button in v4 — user just doesn't select a file)
 
 // ── Teaser job cards ─────────────────────────────────────────────────────────
 async function loadTeaserJobs() {
@@ -576,28 +586,14 @@ document.getElementById('btnResumeNext').addEventListener('click', async () => {
   btn.disabled = false; btn.textContent = 'Find My Matches';
 });
 
-// ── Prefs next ─────────────────────────────────────────────────────────────
-document.getElementById('btnPrefsNext').addEventListener('click', async () => {
-  clearErr('prefsErr');
-  const industry = document.getElementById('industrySelect').value;
-  const years    = document.getElementById('yearsSelect').value;
-  const territories = [...document.querySelectorAll('[name="territory"]:checked')].map(el => el.value);
-  if (!industry) return showErr('prefsErr', 'Please select your industry experience.');
-  if (!years) return showErr('prefsErr', 'Please select your years of experience.');
-  if (!territories.length) return showErr('prefsErr', 'Please select at least one territory preference.');
-  await startSignUpAndSend({ industry, years, territories });
-});
-
-document.getElementById('btnPrefsBack').addEventListener('click', () => show('details'));
+// (prefs screen removed in v4 — questionnaire is inline)
 document.getElementById('btnEmailBack').addEventListener('click', () => show('details'));
 
 // ── Core: signUp + send email + start background work ─────────────────────
 async function startSignUpAndSend(prefs = null) {
-  const btn = path === 'a'
-    ? document.getElementById('btnDetailsNext')
-    : document.getElementById('btnPrefsNext');
-  btn.disabled = true;
-  btn.textContent = 'Sending…';
+  // btn is whichever submit button triggered this — always btnResumeNext in v4
+  const btn = document.getElementById('btnResumeNext');
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
 
   try {
     // signUp with a temporary password — user sets their real password after verification
@@ -665,8 +661,7 @@ async function startSignUpAndSend(prefs = null) {
     showErr(path === 'a' ? 'detailsErr' : 'prefsErr', 'Something went wrong. Please try again.');
     console.error(err);
   } finally {
-    btn.disabled = false;
-    btn.textContent = path === 'a' ? 'Find My Matches' : 'Find opportunities & email my link';
+    if (btn) { btn.disabled = false; btn.textContent = 'Find My Matches'; }
   }
 }
 
