@@ -50,6 +50,8 @@ global.dataLayer = [];
 global.rookApiFetch = () => Promise.resolve({ ok:true, json:()=>Promise.resolve({}) });
 global.rookSignOut = () => {};
 global.rookGetStoredAttribution = () => ({});
+global.rookRequireAuth = (cb) => cb && cb();
+global.document = { ...global.document, getElementsByTagName: () => [], querySelector: () => null, querySelectorAll: () => [], getElementById: global.document.getElementById, addEventListener: ()=>{}, createElement: tag => ({ style:{}, innerHTML:'', textContent:'', appendChild:()=>{}, setAttribute:()=>{} }), title:'' };
 `;
 
 const files = process.argv.slice(2).length
@@ -95,3 +97,6 @@ for (const file of files) {
 
 console.log(allPass ? '\nALL PASS — safe to push' : '\nFAILURES — do not push');
 process.exit(allPass ? 0 : 1);
+
+// These are known browser-only globals not needed in the stub
+// Add them to suppress false failures in dashboard tests
