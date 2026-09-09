@@ -1209,7 +1209,25 @@
     }
 
     if (backendError || !previewData) {
-      show('6e');
+      // Auto-retry once before showing the error screen — the cache is now
+      // warm so a second attempt usually succeeds where the first timed out.
+      if (!previewData) {
+        try {
+          setStatus('Retrying match calculation…');
+          const { data: { session: s2 } } = await sb.auth.getSession().catch(() => ({ data: { session: null } }));
+          if (s2) {
+            const r2 = await fetch('/api/onboarding/match-preview', { headers: { Authorization: `Bearer ${s2.access_token}` } });
+            if (r2.ok) previewData = await r2.json();
+          }
+        } catch (_) {}
+      }
+      if (backendError || !previewData) {
+        show('6e');
+      } else {
+        renderLockedResults(previewData);
+        await completeAnimation();
+        show('6');
+      }
     } else {
       // Advance animation to 100% and wait for the display to catch up
       // (at most ~400ms at 1.5%/60ms) before navigating to results.
