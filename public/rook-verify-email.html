@@ -91,7 +91,9 @@
     const isV2 = new URLSearchParams(window.location.search).get('ob') === 'v2';
     const isV3 = new URLSearchParams(window.location.search).get('ob') === 'v3';
     const isV4 = new URLSearchParams(window.location.search).get('ob') === 'v4';
+    const isV5 = new URLSearchParams(window.location.search).get('ob') === 'v5';
     const v3Path = new URLSearchParams(window.location.search).get('path') || 'a';
+    if (isV5) { window.location.href = 'rook-onboarding-v5.html?ob=v5_verified'; return; }
     if (isV4) { window.location.href = `rook-onboarding-v4.html?ob=v4_verified&path=${v3Path}`; return; }
     if (isV3) { window.location.href = `rook-onboarding-v3.html?ob=v3_verified&path=${v3Path}`; return; }
     if (isV2) {

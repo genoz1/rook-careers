@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ROOK — Find Your Next Medical Sales Role</title>
+<link rel="icon" href="favicon.ico">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--navy:#062d55;--blue:#0877d1;--green:#1a7a50;--muted:#587283;--line:#dbe8f0;--ink:#0d2035;--bg:#f4f9fd;--paper:#fff;--radius:16px;--input-radius:11px;}
+body{font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:0 0 60px}
+.shell{width:100%;max-width:480px;padding:0 20px}
+.bar{display:flex;align-items:center;justify-content:space-between;padding:22px 0 0}
+.brand{display:flex;align-items:center;gap:10px;text-decoration:none}
+.rookmark{width:34px;height:34px;border-radius:10px;background:linear-gradient(145deg,var(--navy),var(--blue));color:#fff;display:grid;place-items:center;font-family:Georgia,serif;font-size:21px}
+.brand-name{font-size:19px;font-weight:900;letter-spacing:.08em;color:var(--navy)}
+.step-label{font-size:12px;color:var(--muted);font-weight:600}
+.progress-rail{height:3px;background:var(--line);border-radius:99px;margin:14px 0 0;overflow:hidden}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--blue),var(--green));border-radius:99px;transition:width .4s ease;width:0%}
+.screen{display:none;padding-top:32px;animation:fadeUp .25s ease}
+.screen.active{display:block}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.eyebrow{font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--blue);margin-bottom:10px}
+h2{font-size:clamp(27px,5vw,36px);font-weight:900;line-height:1.1;letter-spacing:-.03em;color:var(--navy);margin-bottom:12px}
+.lead{font-size:15px;color:var(--muted);line-height:1.6;margin-bottom:22px}
+.field{margin-top:18px}
+.field label{display:block;font-size:13px;font-weight:700;color:var(--ink);margin-bottom:7px}
+input[type=text],input[type=email],input[type=password]{width:100%;padding:13px 14px;border:1.5px solid var(--line);border-radius:var(--input-radius);font:inherit;font-size:16px;color:var(--ink);background:var(--paper);transition:border-color .15s;outline:none;-webkit-appearance:none}
+input:focus{border-color:var(--blue)}
+.err{font-size:13px;color:#c0392b;margin-top:6px;display:none}
+.err.show{display:block}
+.choices{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.choice{display:flex;align-items:center;gap:12px;padding:13px 14px;border:1.5px solid var(--line);border-radius:var(--input-radius);cursor:pointer;background:var(--paper);transition:border-color .15s,background .15s}
+.choice input{width:16px;height:16px;accent-color:var(--blue);flex-shrink:0}
+.choice:has(input:checked){border-color:var(--blue);background:#f0f8ff}
+.choice-label{font-size:14px;font-weight:600;color:var(--ink)}
+.choice-sub{font-size:12px;color:var(--muted)}
+.btn-primary{display:block;width:100%;padding:15px;border:none;border-radius:12px;background:linear-gradient(110deg,var(--navy),var(--blue));color:#fff;font:inherit;font-size:15px;font-weight:700;cursor:pointer;margin-top:20px;transition:opacity .15s}
+.btn-primary:disabled{opacity:.55;cursor:not-allowed}
+.btn-back{background:none;border:none;color:var(--muted);font:inherit;font-size:14px;cursor:pointer;padding:0;display:flex;align-items:center;gap:6px;margin-top:16px}
+.trust{display:flex;align-items:center;justify-content:center;gap:6px;font-size:11.5px;color:var(--muted);margin-top:14px;text-align:center;line-height:1.5}
+.status-box{background:#f4f9fd;border:1.5px solid var(--line);border-radius:var(--radius);padding:18px;margin:20px 0}
+.status-row{display:flex;align-items:center;gap:10px;padding:8px 0;font-size:14px;font-weight:600;color:var(--muted)}
+.status-row.done{color:var(--ink)}
+.status-row.done .status-icon{color:var(--green)}
+.status-icon{font-size:16px;width:20px;text-align:center;flex-shrink:0}
+.status-spinner{width:16px;height:16px;border:2px solid var(--line);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+.resend-row{text-align:center;margin-top:14px;font-size:13px;color:var(--muted)}
+.resend-row button{background:none;border:none;color:var(--blue);font:inherit;font-weight:700;cursor:pointer;font-size:13px}
+.result-banner{background:linear-gradient(110deg,#eef7f1,#f0f8ff);border:1.5px solid #b8dfc8;border-radius:var(--radius);padding:14px 16px;margin-bottom:20px;font-size:13px;font-weight:700;color:var(--green)}
+.job-card{border:1.5px solid var(--line);border-radius:var(--radius);padding:16px;margin-top:12px;background:var(--paper)}
+.job-card-top{display:flex;align-items:flex-start;gap:12px}
+.score-badge{background:#eef7f1;color:#1a6b40;border-radius:10px;padding:10px 8px;text-align:center;min-width:60px;flex-shrink:0}
+.score-badge .pct{font-size:22px;font-weight:900;line-height:1;display:block}
+.score-badge small{font-size:10px;font-weight:700;letter-spacing:.05em}
+.job-title{font-size:14px;font-weight:800;color:var(--navy);margin-bottom:3px;line-height:1.3}
+.job-loc{font-size:12px;color:var(--muted);margin-bottom:6px}
+.job-reason{font-size:12px;color:#1a6b40;font-weight:600}
+.job-lock{font-size:12px;color:var(--muted);margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+.trial-box{background:#f4f9fd;border:1.5px solid var(--line);border-radius:var(--radius);padding:18px;margin:18px 0}
+.trial-price{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px}
+.trial-price span{font-size:15px;font-weight:700;color:var(--navy)}
+.trial-price strong{font-size:32px;font-weight:900;color:var(--navy)}
+.trial-price small{font-size:13px;color:var(--muted);font-weight:500}
+.trial-feature{display:flex;align-items:flex-start;gap:10px;margin-top:10px;font-size:13px;color:var(--ink)}
+.trial-check{color:var(--green);font-weight:700;flex-shrink:0}
+.fine{font-size:11px;color:var(--muted);text-align:center;margin-top:12px;line-height:1.6}
+.sk{background:linear-gradient(90deg,#eef1f6 25%,#e4e9f1 37%,#eef1f6 63%);background-size:400% 100%;animation:shimmer 1.4s ease infinite;border-radius:6px}
+.sk-card{border:1.5px solid var(--line);border-radius:var(--radius);padding:16px;margin-top:12px;display:flex;gap:12px}
+@keyframes shimmer{0%{background-position:100% 50%}100%{background-position:0 50%}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="bar">
+    <a class="brand" href="/"><div class="rookmark">♜</div><span class="brand-name">ROOK</span></a>
+    <span class="step-label" id="stepLabel"></span>
+  </div>
+  <div class="progress-rail"><div class="progress-fill" id="progressFill"></div></div>
+
+  <!-- Welcome -->
+  <div class="screen active" id="s-welcome">
+    <div class="eyebrow">Medical sales careers</div>
+    <h2>Your experience.<br>Your next opportunity.</h2>
+    <p class="lead">Ranked medical sales jobs matched to where you want to work. Four quick questions, your email, and your results are ready.</p>
+    <div style="margin:24px 0 8px;display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;gap:12px;align-items:flex-start">
+        <div style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#062d55,#0877d1);color:#fff;display:grid;place-items:center;font-size:13px;font-weight:800;flex-shrink:0">1</div>
+        <div><div style="font-size:14px;font-weight:700;color:var(--navy)">Tell us where you want to work</div><div style="font-size:13px;color:var(--muted);margin-top:2px">Your location, specialty, and a few quick questions.</div></div>
+      </div>
+      <div style="display:flex;gap:12px;align-items:flex-start">
+        <div style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#062d55,#0877d1);color:#fff;display:grid;place-items:center;font-size:13px;font-weight:800;flex-shrink:0">2</div>
+        <div><div style="font-size:14px;font-weight:700;color:var(--navy)">Verify your email</div><div style="font-size:13px;color:var(--muted);margin-top:2px">We'll calculate your match scores while you verify — usually under 30 seconds.</div></div>
+      </div>
+      <div style="display:flex;gap:12px;align-items:flex-start">
+        <div style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#062d55,#0877d1);color:#fff;display:grid;place-items:center;font-size:13px;font-weight:800;flex-shrink:0">3</div>
+        <div><div style="font-size:14px;font-weight:700;color:var(--navy)">See your ranked matches</div><div style="font-size:13px;color:var(--muted);margin-top:2px">Real scores, real jobs. No payment until you decide to start a trial.</div></div>
+      </div>
+    </div>
+    <button class="btn-primary" id="btnWelcomeStart">Find my next opportunity</button>
+    <div class="trust">Preview your matches free — no card until you start your trial · $29/month after</div>
+  </div>
+
+  <!-- Location -->
+  <div class="screen" id="s-details">
+    <div class="eyebrow">Your search area</div>
+    <h2>Where do you want<br>to work?</h2>
+    <p class="lead">We'll find medical sales roles near you and rank them to your background.</p>
+    <div class="field">
+      <label for="locationInput">City, state or ZIP code</label>
+      <div style="position:relative">
+        <input type="text" id="locationInput" placeholder="e.g. Orlando, FL or 34484" autocomplete="off" aria-label="Job-search location" style="width:100%;padding:13px 14px;border:1.5px solid var(--line);border-radius:var(--input-radius);font:inherit;font-size:16px;color:var(--ink);background:var(--paper);outline:none;-webkit-appearance:none;transition:border-color .15s">
+        <ul id="locationList" hidden style="position:absolute;top:100%;left:0;right:0;z-index:200;background:#fff;border:1.5px solid var(--blue);border-top:none;border-radius:0 0 12px 12px;margin:0;padding:4px 0;list-style:none;max-height:220px;overflow-y:auto;box-shadow:0 8px 20px rgba(7,44,80,.12)"></ul>
+      </div>
+      <div id="locationStatus" style="font-size:12px;color:var(--muted);min-height:18px;margin-top:4px"></div>
+    </div>
+    <div class="err" id="detailsErr"></div>
+    <button class="btn-primary" id="btnDetailsNext" disabled>Continue</button>
+  </div>
+
+  <!-- Industry -->
+  <div class="screen" id="s-industry">
+    <div class="eyebrow">Your background</div>
+    <h2>Where is your strongest experience?</h2>
+    <p class="lead">Choose the area that best describes you.</p>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px" id="industryChoices">
+      <label class="choice"><input type="radio" name="industry" value="Medical Device"><div><div class="choice-label">⚕ Medical device</div><div class="choice-sub">Capital equipment, surgical, DME</div></div></label>
+      <label class="choice"><input type="radio" name="industry" value="Diagnostics"><div><div class="choice-label">⌁ Diagnostics &amp; laboratory</div><div class="choice-sub">Clinical, molecular, pathology</div></div></label>
+      <label class="choice"><input type="radio" name="industry" value="Pharmaceutical"><div><div class="choice-label">✚ Pharmaceuticals</div><div class="choice-sub">Specialty, hospital, primary care</div></div></label>
+      <label class="choice"><input type="radio" name="industry" value="Veterinary"><div><div class="choice-label">♧ Animal health</div><div class="choice-sub">Veterinary, diagnostics, distribution</div></div></label>
+      <label class="choice"><input type="radio" name="industry" value="Breaking In"><div><div class="choice-label">↗ Breaking into medical sales</div><div class="choice-sub">Transferable sales experience</div></div></label>
+    </div>
+    <button class="btn-primary" id="btnIndustryNext" style="margin-top:20px" disabled>Continue</button>
+    <button class="btn-back" onclick="goBack()">← Back</button>
+  </div>
+
+  <!-- Years -->
+  <div class="screen" id="s-years">
+    <div class="eyebrow">Your experience</div>
+    <h2>How many years in sales?</h2>
+    <p class="lead">Helps ROOK match you to the right seniority level.</p>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
+      <label class="choice"><input type="radio" name="years" value="0"><div class="choice-label">Less than 1 year</div></label>
+      <label class="choice"><input type="radio" name="years" value="2"><div class="choice-label">1–3 years</div></label>
+      <label class="choice"><input type="radio" name="years" value="5.5"><div class="choice-label">4–7 years</div></label>
+      <label class="choice"><input type="radio" name="years" value="10"><div class="choice-label">8 or more years</div></label>
+    </div>
+    <button class="btn-primary" id="btnYearsNext" style="margin-top:20px" disabled>Continue</button>
+    <button class="btn-back" onclick="goBack()">← Back</button>
+  </div>
+
+  <!-- Territory -->
+  <div class="screen" id="s-territory">
+    <div class="eyebrow">Your search</div>
+    <h2>What kind of territory works for you?</h2>
+    <p class="lead">Select all that apply.</p>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
+      <label class="choice"><input type="checkbox" name="territory" value="local"><div><div class="choice-label">🏠 Local territory</div><div class="choice-sub">Home most nights</div></div></label>
+      <label class="choice"><input type="checkbox" name="territory" value="regional"><div><div class="choice-label">◎ Regional territory</div><div class="choice-sub">Some overnight travel</div></div></label>
+      <label class="choice"><input type="checkbox" name="territory" value="national"><div><div class="choice-label">✈ Large or national territory</div><div class="choice-sub">Frequent travel is fine</div></div></label>
+      <label class="choice"><input type="checkbox" name="territory" value="remote"><div><div class="choice-label">☁ Remote or inside sales</div></div></label>
+    </div>
+    <button class="btn-primary" id="btnTerritoryNext" style="margin-top:20px" disabled>Continue</button>
+    <button class="btn-back" onclick="goBack()">← Back</button>
+  </div>
+
+  <!-- Email -->
+  <div class="screen" id="s-email">
+    <div class="eyebrow">Almost there</div>
+    <h2>Find your matches.</h2>
+    <p class="lead">Enter your email and we'll send a secure sign-in link. Your personalized match scores will be ready by the time you verify.</p>
+    <div class="field" style="margin-top:8px">
+      <label for="emailInput">Email address</label>
+      <input type="email" id="emailInput" placeholder="you@example.com" autocomplete="email" spellcheck="false">
+    </div>
+    <div class="err" id="emailErr"></div>
+    <button class="btn-primary" id="btnEmailNext" style="margin-top:20px">Find My Matches</button>
+    <div class="trust" style="margin-top:14px">🔒 No password yet · No payment until you choose a trial</div>
+    <button class="btn-back" onclick="goBack()">← Back</button>
+  </div>
+
+  <!-- Check email -->
+  <div class="screen" id="s-check-email">
+    <div style="font-size:42px;text-align:center;margin-bottom:16px">📬</div>
+    <div class="eyebrow" style="text-align:center">Your next step is in your inbox</div>
+    <h2 style="text-align:center">Check your email.</h2>
+    <p class="lead" style="text-align:center">Open the secure sign-in link to see your results.</p>
+    <div class="status-box">
+      <div class="status-row done"><span class="status-icon">✓</span>Location and preferences saved</div>
+      <div class="status-row active" id="scoringRow"><div class="status-spinner"></div>Calculating your match scores…</div>
+      <div class="status-row" id="readyRow"><span class="status-icon" style="color:var(--muted)">◌</span>Results ready when you verify</div>
+    </div>
+    <p style="font-size:12px;color:var(--muted);text-align:center;margin-top:4px">Scores are based on your location and experience — no résumé needed. Add one later for even better accuracy.</p>
+    <div class="resend-row">Didn't get it? <button id="btnResend">Send again</button></div>
+    <button class="btn-back" id="btnEmailBack" style="width:100%;justify-content:center;margin-top:8px">← Change email address</button>
+  </div>
+
+  <!-- Scored results -->
+  <div class="screen" id="s-results-a">
+    <div class="result-banner" id="resultBanner">✓ Email verified · Match scores ready</div>
+    <div class="eyebrow">Your personalized shortlist</div>
+    <h2 id="resultsHeadline">Your matches are ready.</h2>
+    <p class="lead">Ranked by your location and experience. Employer names unlock when your trial starts.</p>
+    <div id="jobCardsA"></div>
+    <button class="btn-primary" id="btnResultsNext" style="margin-top:20px">Continue to my free trial</button>
+    <p style="font-size:12px;color:var(--muted);text-align:center;margin-top:12px">Next: secure your account, then review trial terms.</p>
+  </div>
+
+  <!-- Password -->
+  <div class="screen" id="s-password">
+    <div class="eyebrow">Secure your account</div>
+    <h2>Create a password.</h2>
+    <p class="lead">Your results are saved. Set a password so you can sign in next time.</p>
+    <div class="field">
+      <label for="passwordInput">Password</label>
+      <input type="password" id="passwordInput" placeholder="8 or more characters" autocomplete="new-password" minlength="8">
+    </div>
+    <div class="err" id="passwordErr"></div>
+    <button class="btn-primary" id="btnSetPassword">Secure my account</button>
+  </div>
+
+  <!-- Trial -->
+  <div class="screen" id="s-trial">
+    <div class="eyebrow">Full access for 3 days</div>
+    <h2>Make your next move.</h2>
+    <p class="lead">Unlock employer names and application links. Explore on your terms.</p>
+    <div class="trial-box">
+      <div class="trial-price"><span>ROOK Membership</span><div><strong>$0</strong> <small>today</small></div></div>
+      <div class="trial-feature"><span class="trial-check">✓</span>Employer names and application links</div>
+      <div class="trial-feature"><span class="trial-check">✓</span>Save jobs and set up alerts</div>
+      <div class="trial-feature"><span class="trial-check">✓</span>Upload your résumé for even better scores</div>
+    </div>
+    <div class="err" id="trialErr"></div>
+    <button class="btn-primary" id="btnStartTrial">Start my free 3-day trial</button>
+    <div class="fine">Card required. Then $29/month unless you cancel before your trial ends.</div>
+    <button class="btn-back" id="btnTrialBack" style="width:100%;text-align:center;justify-content:center;margin-top:8px">← Back to my results</button>
+  </div>
+
+</div>
+<script src="rook-location-widget.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="rook-config.js"></script>
+<script src="rook-attribution.js"></script>
+<script>
+(async () => {
+
+let sb;
+try {
+  sb = window.supabase.createClient(window.ROOK_CONFIG.SUPABASE_URL, window.ROOK_CONFIG.SUPABASE_ANON_KEY);
+} catch(e) {
+  console.warn('[ROOK] Supabase init failed:', e.message);
+  const _s = m => () => Promise.resolve({data:{},error:{message:m}});
+  sb = { auth: { getSession:_s('unavailable'), signUp:_s('unavailable'), updateUser:_s('unavailable'), resend:_s('unavailable'), onAuthStateChange:()=>({data:{subscription:{unsubscribe:()=>{}}}}) }};
+}
+
+// ── State ──────────────────────────────────────────────────────────────────
+let currentScreen = 'welcome';
+let selectedLocation = null;
+const sel = { industry: null, years: null, territories: [] };
+
+const PROGRESS = {
+  welcome:0, details:15, industry:35, years:55, territory:75,
+  email:88, 'check-email':92, 'results-a':100, password:100, trial:100
+};
+const LABELS = {
+  welcome:'', details:'Step 1 of 4', industry:'Step 2 of 4',
+  years:'Step 3 of 4', territory:'Step 4 of 4',
+  email:'', 'check-email':'', 'results-a':'', password:'', trial:''
+};
+const BACK_MAP = {
+  details:'welcome', industry:'details', years:'industry',
+  territory:'years', email:'territory'
+};
+
+function show(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  const el = document.getElementById('s-' + name);
+  if (el) el.classList.add('active');
+  currentScreen = name;
+  document.getElementById('stepLabel').textContent = LABELS[name] || '';
+  document.getElementById('progressFill').style.width = (PROGRESS[name] || 0) + '%';
+  window.scrollTo(0, 0);
+}
+function goBack() { const p = BACK_MAP[currentScreen]; if (p) show(p); }
+window.goBack = goBack;
+window.rookShow = show;
+
+function escapeHtml(s) {
+  return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function showErr(id, msg) { const el = document.getElementById(id); if (el) { el.textContent = msg; el.classList.add('show'); } }
+function clearErr(id) { const el = document.getElementById(id); if (el) { el.textContent = ''; el.classList.remove('show'); } }
+
+// ── Welcome ────────────────────────────────────────────────────────────────
+document.getElementById('btnWelcomeStart').addEventListener('click', () => show('details'));
+
+// ── Location widget ────────────────────────────────────────────────────────
+const _locInput = document.getElementById('locationInput');
+const _locList  = document.getElementById('locationList');
+if (_locInput && _locList && typeof RookLocationWidget !== 'undefined') {
+  RookLocationWidget.init({
+    inputEl: _locInput, listEl: _locList,
+    onSelect: s => {
+      selectedLocation = s;
+      const el = document.getElementById('locationStatus');
+      if (el) el.textContent = s.label;
+      const btn = document.getElementById('btnDetailsNext');
+      if (btn) btn.disabled = false;
+    },
+    onClear: () => {
+      selectedLocation = null;
+      const el = document.getElementById('locationStatus');
+      if (el) el.textContent = '';
+      const btn = document.getElementById('btnDetailsNext');
+      if (btn) btn.disabled = true;
+    },
+  });
+}
+
+// ── Location → Industry ────────────────────────────────────────────────────
+document.getElementById('btnDetailsNext').addEventListener('click', () => {
+  clearErr('detailsErr');
+  if (!selectedLocation) return showErr('detailsErr', 'Please select a location from the dropdown.');
+  show('industry');
+});
+
+// ── Industry ───────────────────────────────────────────────────────────────
+document.getElementById('s-industry').addEventListener('click', e => {
+  const c = e.target.closest('.choice');
+  if (!c) return;
+  const r = c.querySelector('input[name="industry"]');
+  if (!r) return;
+  r.checked = true;
+  sel.industry = r.value;
+  document.getElementById('btnIndustryNext').disabled = false;
+});
+document.getElementById('btnIndustryNext').addEventListener('click', () => show('years'));
+
+// ── Years ──────────────────────────────────────────────────────────────────
+document.getElementById('s-years').addEventListener('click', e => {
+  const c = e.target.closest('.choice');
+  if (!c) return;
+  const r = c.querySelector('input[name="years"]');
+  if (!r) return;
+  r.checked = true;
+  sel.years = parseFloat(r.value);
+  document.getElementById('btnYearsNext').disabled = false;
+});
+document.getElementById('btnYearsNext').addEventListener('click', () => show('territory'));
+
+// ── Territory ──────────────────────────────────────────────────────────────
+document.getElementById('s-territory').addEventListener('click', e => {
+  const c = e.target.closest('.choice');
+  if (!c) return;
+  setTimeout(() => {
+    sel.territories = [...document.querySelectorAll('#s-territory input[name="territory"]:checked')].map(el => el.value);
+    document.getElementById('btnTerritoryNext').disabled = sel.territories.length === 0;
+  }, 0);
+});
+document.getElementById('btnTerritoryNext').addEventListener('click', () => show('email'));
+
+// ── Email → signup ─────────────────────────────────────────────────────────
+document.getElementById('btnEmailNext').addEventListener('click', async () => {
+  clearErr('emailErr');
+  const em = document.getElementById('emailInput').value.trim();
+  if (!em || !em.includes('@')) return showErr('emailErr', 'Please enter a valid email address.');
+  const btn = document.getElementById('btnEmailNext');
+  btn.disabled = true; btn.textContent = 'Sending…';
+  await startSignUpAndSend(em);
+  btn.disabled = false; btn.textContent = 'Find My Matches';
+});
+
+async function startSignUpAndSend(email) {
+  try {
+    const tempPass = crypto.randomUUID();
+    const { data, error } = await sb.auth.signUp({
+      email,
+      password: tempPass,
+      options: { emailRedirectTo: `${window.location.origin}/rook-verify-email.html?ob=v5` }
+    });
+    if (error) return showErr('emailErr', error.message);
+    const uid = data?.user?.id;
+    if (!uid) return showErr('emailErr', 'Account creation failed. Please try again.');
+
+    // Save questionnaire + location to DB immediately — works cross-browser
+    const payload = {
+      user_id: uid,
+      trigger_scoring: true,
+    };
+    if (selectedLocation) {
+      payload.home_city           = selectedLocation.city   || null;
+      payload.home_state          = selectedLocation.state  || null;
+      payload.home_zip            = selectedLocation.zip    || null;
+      payload.home_lat            = selectedLocation.lat    != null ? selectedLocation.lat : null;
+      payload.home_lng            = selectedLocation.lng    != null ? selectedLocation.lng : null;
+      payload.home_location_label = selectedLocation.label  || null;
+    }
+    if (sel.industry && sel.industry !== 'Breaking In') payload.desired_industries = [sel.industry];
+    if (sel.years != null)        payload.total_sales_years          = Number(sel.years);
+    if (sel.territories.length)   payload.territory_size_preferences = sel.territories;
+    if (sel.territories.length)   payload.territory_size_preference  = sel.territories[0];
+    if (sel.territories.length)   payload.work_style = sel.territories.length === 1 && sel.territories[0] === 'remote' ? 'remote' : 'field';
+    Object.assign(payload, rookGetStoredAttribution ? rookGetStoredAttribution() : {});
+
+    fetch('/api/profile/prefill', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload),
+    }).catch(() => {});
+
+    show('check-email');
+
+    // Animate the scoring status row after a few seconds
+    setTimeout(() => {
+      const scoringRow = document.getElementById('scoringRow');
+      const readyRow   = document.getElementById('readyRow');
+      if (scoringRow) {
+        scoringRow.classList.add('done');
+        scoringRow.innerHTML = '<span class="status-icon">✓</span>Match scores calculated';
+      }
+      if (readyRow) {
+        readyRow.classList.add('done');
+        readyRow.innerHTML = '<span class="status-icon">✓</span>Results ready — check your email';
+      }
+    }, 8000);
+
+  } catch(err) {
+    showErr('emailErr', 'Something went wrong. Please try again.');
+    console.error(err);
+  }
+}
+
+// ── Resend ─────────────────────────────────────────────────────────────────
+document.getElementById('btnResend').addEventListener('click', async () => {
+  const btn = document.getElementById('btnResend');
+  const em = document.getElementById('emailInput').value.trim();
+  btn.textContent = 'Sending…'; btn.disabled = true;
+  await sb.auth.resend({ type: 'signup', email: em }).catch(() => {});
+  btn.textContent = 'Sent — check your inbox';
+  setTimeout(() => { btn.textContent = 'Send again'; btn.disabled = false; }, 5000);
+});
+document.getElementById('btnEmailBack').addEventListener('click', () => show('email'));
+
+// ── Results ────────────────────────────────────────────────────────────────
+function cleanLocation(job) {
+  const city = job.city || ''; const state = job.state || ''; const r = job.location_raw || '';
+  if (city && state) return city + ', ' + state;
+  if (city || state) return city || state;
+  if (!r) return '';
+  if (/^remote$/i.test(r.trim())) return 'Remote';
+  const fp = r.match(/^[A-Z]{2}-([A-Za-z ]+)-(FIELD|TERRITORY|NATIONAL|REGIONAL)/i);
+  if (fp) return fp[1].trim() + ' · Territory';
+  return r.replace(/[-_]/g,' ').replace(/\s+/g,' ').trim();
+}
+
+async function loadAndShowResults(token) {
+  document.getElementById('jobCardsA').innerHTML = [1,2,3].map(() =>
+    '<div class="sk-card"><div class="sk" style="width:60px;height:60px;border-radius:10px;flex-shrink:0"></div><div style="flex:1"><div class="sk" style="height:16px;width:70%;margin-bottom:10px"></div><div class="sk" style="height:12px;width:45%"></div></div></div>'
+  ).join('');
+  show('results-a');
+
+  try {
+    const res = await fetch('/api/onboarding/match-preview', { headers: { Authorization: `Bearer ${token}` } });
+    const data = res.ok ? await res.json() : null;
+    const jobs = data?.top_matches || [];
+
+    if (jobs.length) {
+      const top = jobs[0]?.overall_score;
+      document.getElementById('resultsHeadline').textContent =
+        top >= 85 ? 'You have excellent matches.' :
+        top >= 70 ? 'You have strong matches.' : 'Your matches are ready.';
+    }
+
+    document.getElementById('jobCardsA').innerHTML = jobs.slice(0, 3).map(job => `
+      <div class="job-card">
+        <div class="job-card-top">
+          <div class="score-badge"><span class="pct">${job.overall_score}</span><small>%</small></div>
+          <div>
+            <div class="job-title">${escapeHtml(job.title || 'Medical Sales Role')}</div>
+            <div class="job-loc">${escapeHtml(cleanLocation(job) || 'Location on file')}</div>
+            ${job.reasons?.[0] ? `<div class="job-reason">${escapeHtml(job.reasons[0])}</div>` : ''}
+          </div>
+        </div>
+        <div class="job-lock">🔒 Employer and application link unlock when your trial starts</div>
+      </div>`).join('') || '<p style="color:var(--muted);font-size:14px;text-align:center;padding:20px 0">Your matches are loading. Try refreshing in a moment.</p>';
+
+  } catch(err) {
+    console.error('[results]', err.message);
+  }
+}
+
+document.getElementById('btnResultsNext').addEventListener('click', () => show('password'));
+document.getElementById('btnTrialBack').addEventListener('click', () => show('results-a'));
+
+// ── Password ───────────────────────────────────────────────────────────────
+document.getElementById('btnSetPassword').addEventListener('click', async () => {
+  clearErr('passwordErr');
+  const pw = document.getElementById('passwordInput').value;
+  if (pw.length < 8) return showErr('passwordErr', 'Password must be at least 8 characters.');
+  const btn = document.getElementById('btnSetPassword');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  const { error } = await sb.auth.updateUser({ password: pw });
+  if (error) { showErr('passwordErr', error.message); btn.disabled = false; btn.textContent = 'Secure my account'; return; }
+  show('trial');
+});
+
+// ── Stripe ─────────────────────────────────────────────────────────────────
+document.getElementById('btnStartTrial').addEventListener('click', async () => {
+  clearErr('trialErr');
+  const btn = document.getElementById('btnStartTrial');
+  btn.disabled = true; btn.textContent = 'Loading checkout…';
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) throw new Error('Please sign in again.');
+    const res = await fetch('/api/stripe/create-checkout-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+    });
+    const d = await res.json();
+    if (!res.ok || !d.url) throw new Error(d.error || 'Checkout unavailable.');
+    window.location.href = d.url;
+  } catch(err) {
+    showErr('trialErr', err.message);
+    btn.disabled = false; btn.textContent = 'Start my free 3-day trial';
+  }
+});
+
+// ── Startup routing ────────────────────────────────────────────────────────
+(async () => {
+  const params = new URLSearchParams(window.location.search);
+  const ob = params.get('ob');
+
+  if (ob === 'v5_verified' || ob === 'v4_verified' || ob === 'v3_verified') {
+    const { data: { session } } = await sb.auth.getSession().catch(() => ({ data: { session: null } }));
+    if (!session) { show('welcome'); return; }
+    await loadAndShowResults(session.access_token);
+    return;
+  }
+
+  // Already signed in with a subscription → dashboard
+  const { data: { session } } = await sb.auth.getSession().catch(() => ({ data: { session: null } }));
+  if (session) {
+    try {
+      const pr = await fetch('/api/profile', { headers: { Authorization: `Bearer ${session.access_token}` } });
+      const profile = pr.ok ? await pr.json() : null;
+      if (profile?.subscription_status) { window.location.href = 'rook-dashboard.html'; return; }
+    } catch(_) {}
+  }
+
+  show('welcome');
+})();
+
+})();
+</script>
+</body>
+</html>

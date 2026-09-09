@@ -206,7 +206,7 @@ router.post("/profile/prefill", requireConfig, async (req, res) => {
 
   const { user_id, desired_industries, total_sales_years, territory_size_preferences,
     territory_size_preference, work_style, home_city, home_state, home_zip,
-    home_lat, home_lng, home_location_label } = req.body;
+    home_lat, home_lng, home_location_label, trigger_scoring } = req.body;
 
   if (!user_id || typeof user_id !== "string" || !/^[0-9a-f-]{36}$/.test(user_id)) {
     return res.status(400).json({ ok: false, error: "Invalid user_id" });
@@ -233,6 +233,20 @@ router.post("/profile/prefill", requireConfig, async (req, res) => {
       .upsert(payload, { onConflict: "user_id" });
     if (error) throw error;
     console.log(`[profile/prefill] saved for uid=${user_id.slice(0,8)} location=${home_state || "none"}`);
+
+    // When the client requests scoring (v5 onboarding — questionnaire-only path),
+    // trigger scoreAndStoreForCandidate in background so results are ready
+    // before the user clicks their verification link.
+    if (trigger_scoring && home_lat) {
+      const { data: profile } = await supabaseAdmin.from("candidate_profiles")
+        .select("*").eq("user_id", user_id).maybeSingle();
+      if (profile) {
+        scoreAndStoreForCandidate(supabaseAdmin, profile)
+          .then(r => console.log(`[profile/prefill] scored ${r?.scoredCount || 0} jobs for uid=${user_id.slice(0,8)}`))
+          .catch(err => console.error("[profile/prefill] scoring:", err.message));
+      }
+    }
+
     res.json({ ok: true });
   } catch (err) {
     console.error("[profile/prefill]", err.message);
