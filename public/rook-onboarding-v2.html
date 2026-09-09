@@ -996,13 +996,13 @@
   async function saveProfileNow() {
     try {
       const { data: { session } } = await sb.auth.getSession().catch(() => ({ data: { session: null } }));
-      if (!session) return;
+      if (!session) { console.warn('[saveProfileNow] no session'); return; }
       const payload = {
         desired_industries: sel.industry && sel.industry !== 'Breaking In' ? [sel.industry] : [],
         total_sales_years:  sel.years != null ? Number(sel.years) : null,
-        territory_size_preferences: sel.territories.length > 0 ? sel.territories : null,
-        territory_size_preference:  sel.territories[0] || null,
-        work_style: (sel.territories.length === 1 && sel.territories[0] === 'remote') ? 'remote' : 'field',
+        territory_size_preferences: (sel.territories || []).length > 0 ? sel.territories : null,
+        territory_size_preference:  (sel.territories || [])[0] || null,
+        work_style: (sel.territories && sel.territories.length === 1 && sel.territories[0] === 'remote') ? 'remote' : 'field',
         ...(sel.location ? {
           home_city:           sel.location.city  || null,
           home_state:          sel.location.state || null,
@@ -1013,12 +1013,20 @@
         } : {}),
         ...rookGetStoredAttribution(),
       };
-      await fetch('/api/profile', {
+      console.log('[saveProfileNow] saving:', JSON.stringify({
+        industry: payload.desired_industries,
+        years: payload.total_sales_years,
+        territories: payload.territory_size_preferences,
+        has_location: !!(sel.location),
+        home_state: payload.home_state,
+        home_lat: payload.home_lat,
+      }));
+      const res = await fetch('/api/profile', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
         body: JSON.stringify(payload),
       });
-      console.log('[saveProfileNow] questionnaire saved before résumé upload');
+      console.log('[saveProfileNow] response:', res.status);
     } catch (err) {
       console.warn('[saveProfileNow] failed (non-fatal):', err.message);
     }
@@ -1133,7 +1141,14 @@
     const btn = document.getElementById('btnResumePostUpload');
     const statusDiv = document.getElementById('resumePostStatus');
     btn.disabled = true; btn.textContent = 'Uploading…';
-    if (statusDiv) { statusDiv.style.display = 'block'; statusDiv.textContent = 'Uploading your résumé…'; }
+    if (statusDiv) {
+      statusDiv.style.display = 'block';
+      statusDiv.textContent = 'Uploading your résumé… (this takes 10–20 seconds)';
+    }
+    // Update status message partway through to reassure user it's still working
+    const stillWorking = setTimeout(() => {
+      if (statusDiv) statusDiv.textContent = 'Analyzing your experience with AI… almost done';
+    }, 8000);
     try {
       const { data: { session } } = await sb.auth.getSession();
       console.log('[resume-post] session:', !!session, 'file:', resumePostFile?.name);
@@ -1147,10 +1162,12 @@
       });
       console.log('[resume-post] upload status:', res.status);
       if (!res.ok) throw new Error('Upload failed (' + res.status + ')');
+      clearTimeout(stillWorking);
       if (statusDiv) statusDiv.textContent = 'Résumé uploaded! Taking you to your dashboard…';
       safeGtag('event', 'resume_uploaded', { method: 'post_checkout' });
       setTimeout(() => { window.location.href = 'rook-dashboard.html'; }, 800);
     } catch (err) {
+      clearTimeout(stillWorking);
       console.error('[resume-post] error:', err.message);
       btn.disabled = false; btn.textContent = 'Upload & Go to Dashboard';
       if (statusDiv) statusDiv.style.display = 'none';
