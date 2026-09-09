@@ -956,10 +956,30 @@ async function loadAndShowResultsB(token) {
     '<div class="sk-card"><div style="flex:1"><div class="sk" style="height:16px;width:70%;margin-bottom:10px"></div><div class="sk" style="height:12px;width:45%"></div></div></div>'
   ).join('');
 
+  // Use selectedLocation if available (same browser as signup).
+  // If null (verification opened in a different browser like iOS Safari),
+  // fall back to location saved in the profile during prefill.
+  let lat = selectedLocation?.lat;
+  let lng = selectedLocation?.lng;
+  let stateAbbr = selectedLocation?.stateAbbr;
+
+  if (!lat || !lng) {
+    try {
+      const pr = await fetch('/api/profile', { headers: { Authorization: `Bearer ${token}` } });
+      if (pr.ok) {
+        const profile = await pr.json();
+        lat = profile.home_lat;
+        lng = profile.home_lng;
+        // home_state is full name e.g. "Idaho" — API accepts state name too
+        if (profile.home_state && !stateAbbr) stateAbbr = profile.home_state;
+      }
+    } catch (_) {}
+  }
+
   const _p = new URLSearchParams({ limit: '3' });
-  if (selectedLocation?.lat) _p.set('near_lat', selectedLocation.lat);
-  if (selectedLocation?.lng) _p.set('near_lng', selectedLocation.lng);
-  if (selectedLocation?.stateAbbr) _p.set('near_state', selectedLocation.stateAbbr);
+  if (lat)       _p.set('near_lat',   lat);
+  if (lng)       _p.set('near_lng',   lng);
+  if (stateAbbr) _p.set('near_state', stateAbbr);
   const res = await fetch('/api/jobs?' + _p.toString(), {});
   if (res.ok) {
     const data = await res.json();
