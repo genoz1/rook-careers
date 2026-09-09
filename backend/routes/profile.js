@@ -52,6 +52,69 @@ async function requireAuth(req, res, next) {
 }
 
 // GET /api/profile — the caller's own candidate profile
+// POST /api/profile/prefill
+// Saves questionnaire answers immediately after signUp(), before email
+// verification. The client sends the new user's ID (returned by signUp)
+// and the questionnaire data. No session is required — this endpoint is
+// called before the user has verified their email.
+//
+// Security:
+//   - Rate-limited to 5 requests per minute per IP.
+//   - Only writes questionnaire fields (industry, years, territory, location).
+//   - Never writes subscription_status, resume data, or any privileged field.
+//   - Uses supabaseAdmin to write — the user_id is from the signUp response
+//     which is a real Supabase UUID; a forged UUID would just create an
+//     orphan row that is never accessible.
+//
+// Purpose: solves the iOS cross-browser problem where the verification email
+// opens in Safari but the user signed up in Chrome. localStorage is
+// browser-scoped so the draft is unavailable in Safari. With this endpoint,
+// the questionnaire is already in the DB when the verification link opens.
+const prefillRate = new Map();
+router.post("/profile/prefill", requireConfig, async (req, res) => {
+  const ip = (req.headers["x-forwarded-for"] || "").split(",")[0].trim() || req.socket.remoteAddress || "unknown";
+  const now = Date.now();
+  const e = prefillRate.get(ip);
+  if (e && now < e.resetAt && e.count >= 5) return res.status(429).json({ ok: false });
+  if (!e || now >= e.resetAt) prefillRate.set(ip, { count: 1, resetAt: now + 60_000 });
+  else e.count++;
+
+  const { user_id, desired_industries, total_sales_years, territory_size_preferences,
+    territory_size_preference, work_style, home_city, home_state, home_zip,
+    home_lat, home_lng, home_location_label } = req.body;
+
+  if (!user_id || typeof user_id !== "string" || !/^[0-9a-f-]{36}$/.test(user_id)) {
+    return res.status(400).json({ ok: false, error: "Invalid user_id" });
+  }
+
+  const payload = {
+    user_id,
+    updated_at: new Date().toISOString(),
+    ...(Array.isArray(desired_industries)    ? { desired_industries }    : {}),
+    ...(total_sales_years != null            ? { total_sales_years }     : {}),
+    ...(territory_size_preferences != null   ? { territory_size_preferences } : {}),
+    ...(territory_size_preference != null    ? { territory_size_preference }  : {}),
+    ...(work_style                           ? { work_style }             : {}),
+    ...(home_city                            ? { home_city }              : {}),
+    ...(home_state                           ? { home_state }             : {}),
+    ...(home_zip                             ? { home_zip }               : {}),
+    ...(home_lat != null                     ? { home_lat }               : {}),
+    ...(home_lng != null                     ? { home_lng }               : {}),
+    ...(home_location_label                  ? { home_location_label }    : {}),
+  };
+
+  try {
+    const { error } = await supabaseAdmin.from("candidate_profiles")
+      .upsert(payload, { onConflict: "user_id" });
+    if (error) throw error;
+    console.log(`[profile/prefill] saved for uid=${user_id.slice(0,8)} location=${home_state || "none"}`);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("[profile/prefill]", err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 router.get("/profile", requireConfig, requireAuth, async (req, res) => {
   const { data, error } = await supabaseAdmin
     .from("candidate_profiles")

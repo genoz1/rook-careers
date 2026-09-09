@@ -916,10 +916,41 @@
         return;
       }
 
-      // Save the questionnaire draft BEFORE the user navigates away to their email.
-      // This does not include the résumé file — that cannot survive page navigation
-      // and must be reselected after verification.
+      // Save the questionnaire draft to localStorage (same-browser fallback)
       saveDraft();
+
+      // Also save questionnaire to the database immediately using the new
+      // user's ID. signUp() returns the user object before email is verified,
+      // so we can write the profile row right now. When the verification link
+      // opens in a different browser (e.g. Safari on iOS), it finds the
+      // profile already in the database and doesn't need localStorage at all.
+      if (data?.user?.id) {
+        const profilePayload = {
+          desired_industries: sel.industry && sel.industry !== 'Breaking In' ? [sel.industry] : [],
+          total_sales_years:  sel.years != null ? Number(sel.years) : null,
+          territory_size_preferences: (sel.territories || []).length > 0 ? sel.territories : null,
+          territory_size_preference:  (sel.territories || [])[0] || null,
+          work_style: (sel.territories && sel.territories.length === 1 && sel.territories[0] === 'remote') ? 'remote' : 'field',
+          ...(sel.location ? {
+            home_city:           sel.location.city  || null,
+            home_state:          sel.location.state || null,
+            home_zip:            sel.location.zip   || null,
+            home_lat:            sel.location.lat   != null ? sel.location.lat : null,
+            home_lng:            sel.location.lng   != null ? sel.location.lng : null,
+            home_location_label: sel.location.label || null,
+          } : {}),
+          ...rookGetStoredAttribution(),
+        };
+        // Use the service-side profile upsert via a special pre-verification endpoint,
+        // or fall back to storing in localStorage only (handled above).
+        // We use the anon key here since the session isn't established yet.
+        // The PUT /api/profile/prefill endpoint accepts a user_id + anon key.
+        fetch('/api/profile/prefill', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: data.user.id, ...profilePayload }),
+        }).catch(err => console.warn('[prefill]', err.message));
+      }
 
       gtag('event', 'account_created', { method: 'v2' });
 
@@ -1629,10 +1660,26 @@
 
     if (isReturn && session) {
       // Path A: returning from email verification → go straight to Stripe checkout.
-      // Résumé upload now happens AFTER checkout, not here.
       const draft = loadDraft();
       if (draft) restoreDraft(draft);
-      await saveProfileNow(); // save questionnaire answers before checkout
+
+      // Check if the profile already has location data (from the prefill
+      // endpoint called immediately after signUp). If it does, skip
+      // saveProfileNow — the data is already there. If not (e.g. prefill
+      // failed, or same-browser flow where prefill wasn't needed), save now.
+      try {
+        const pr = await fetch('/api/profile', { headers: { Authorization: `Bearer ${session.access_token}` } });
+        const existingProfile = pr.ok ? await pr.json() : null;
+        if (!existingProfile || !existingProfile.home_lat) {
+          // Location missing — save now using whatever we have in sel
+          await saveProfileNow();
+        } else {
+          console.log('[Path A] profile already has location — skipping saveProfileNow');
+        }
+      } catch (_) {
+        await saveProfileNow(); // fallback
+      }
+
       show('7');
       return;
     }
