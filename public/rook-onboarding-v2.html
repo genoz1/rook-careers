@@ -329,10 +329,9 @@
            Demonstrates that real jobs exist before asking for account creation. -->
       <section class="screen" data-step="3c">
         <div class="content">
-          <div class="eyebrow">Your area</div>
-          <h2 id="previewHeadline">Finding roles near you…</h2>
+          <h2 id="previewHeadline">Jobs in your area</h2>
           <div id="previewCards3c" style="margin:14px 0"></div>
-          <p style="font-size:13px;color:var(--muted);text-align:center;margin:8px 0 20px" id="previewNote3c"></p>
+          <p style="font-size:14px;color:var(--muted);text-align:center;margin:4px 0 16px" id="previewNote3c"></p>
           <div class="actions">
             <button class="back" onclick="goBack()">Back</button>
             <button class="primary" id="btnPreview3cNext">Create Account to Unlock</button>
@@ -1015,17 +1014,22 @@
 
     try {
       const params = new URLSearchParams();
-      if (sel.industry && sel.industry !== 'Breaking In') params.set('industry', sel.industry);
       if (sel.location?.stateAbbr) params.set('state', sel.location.stateAbbr);
-      const res  = await fetch('/api/onboarding/job-preview?' + params.toString());
+      // Try with industry first, fall back to state-only if no results
+      if (sel.industry && sel.industry !== 'Breaking In') params.set('industry', sel.industry);
+      let res  = await fetch('/api/onboarding/job-preview?' + params.toString());
+      let data2 = res.ok ? await res.json() : null;
+      // If no jobs with industry filter, try state-only
+      if ((!data2?.jobs?.length) && sel.industry && sel.location?.stateAbbr) {
+        const p2 = new URLSearchParams(); p2.set('state', sel.location.stateAbbr);
+        res = await fetch('/api/onboarding/job-preview?' + p2.toString());
+      }
       const data = res.ok ? await res.json() : null;
       const jobs = data?.jobs || [];
       const count = data?.total_count || jobs.length;
 
       const loc = sel.location?.label || (sel.location?.stateAbbr ? sel.location.stateAbbr : 'your area');
-      if (headEl) headEl.textContent = count > 0
-        ? `${count.toLocaleString()}+ roles available near ${loc}`
-        : `Roles available in ${loc}`;
+      if (headEl) headEl.textContent = `Jobs in your area`;
 
       cardsEl.innerHTML = '';
       if (!jobs.length) {
