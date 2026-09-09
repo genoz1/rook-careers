@@ -1370,12 +1370,16 @@ router.get("/onboarding/match-preview", requireConfig, requireAuth, async (req, 
         .from('candidate_job_matches')
         .select(`
           overall_score, excellent_match, recommendation, reasons,
-          jobs!inner(id, title_normalized, title_original, city, state, company_name)
+          jobs!inner(id, title_normalized, title_original, city, state, location_raw, company_name)
         `)
         .eq('candidate_id', profile.id)
         .gt('overall_score', 0)
         .order('overall_score', { ascending: false })
         .limit(3);
+
+      if (pcErr) {
+        console.error(`[match-preview] uid=${userId.slice(0,8)} precomputed join error: ${pcErr.message}`);
+      }
 
       if (!pcErr && precomputed?.length >= 1) {
         const { count } = await supabaseAdmin
@@ -1399,6 +1403,7 @@ router.get("/onboarding/match-preview", requireConfig, requireAuth, async (req, 
             title:   safeTitle,
             city:    job?.city  || null,
             state:   job?.state || null,
+            location_raw: job?.location_raw || null,
             reasons: (row.reasons || []).slice(0, 2),
           };
         });

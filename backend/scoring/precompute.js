@@ -40,12 +40,25 @@ const UPSERT_BATCH_SIZE = 500; // keeps individual requests to Supabase a reason
 // preview request hits the cache rather than waiting 40+ seconds.
 let _activeJobsListCache = null;
 let _activeJobsListExpiry = 0;
+// In-flight deduplication: if two callers (e.g. scoreAndStoreForCandidate
+// and match-preview running simultaneously) both find a cold cache, the
+// second waits for the first's fetch to complete rather than starting its
+// own parallel 17-page fetch. Without this, two simultaneous cold calls
+// each do the full sequential fetch independently — doubling the DB load
+// and both taking 30-40s instead of one taking 30-40s and the other waiting.
+let _activeJobsListInFlight = null;
 
 async function fetchActiveJobs(supabase) {
   const now = Date.now();
   if (_activeJobsListCache && now < _activeJobsListExpiry) {
     return _activeJobsListCache;
   }
+  // Deduplicate concurrent cold-cache callers: return the same Promise
+  // so only one 17-page fetch runs at a time.
+  if (_activeJobsListInFlight) {
+    return _activeJobsListInFlight;
+  }
+  const fetchPromise = (async () => {
   // Paginated fetch — Supabase/PostgREST caps a single query at 1000
   // rows by default, and a plain .select("*") with no .range() silently
   // truncates rather than erroring. With ATS + Adzuna ingestion now
@@ -112,6 +125,15 @@ async function fetchActiveJobs(supabase) {
   _activeJobsListCache = deduped;
   _activeJobsListExpiry = Date.now() + 10 * 60 * 1000;
   return deduped;
+  })(); // end fetchPromise IIFE
+
+  _activeJobsListInFlight = fetchPromise;
+  try {
+    const result = await fetchPromise;
+    return result;
+  } finally {
+    _activeJobsListInFlight = null;
+  }
 }
 
 async function scoreAndStoreForCandidate(supabase, profile, activeJobs = null) {

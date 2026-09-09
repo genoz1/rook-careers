@@ -682,7 +682,7 @@ function renderJobCardsA(jobs) {
         <div class="score-badge"><span class="pct">${job.overall_score}</span><small>%</small></div>
         <div>
           <div class="job-title">${escapeHtml(job.title || 'Medical Sales Role')}</div>
-          <div class="job-loc">${escapeHtml([job.city, job.state].filter(Boolean).join(', ') || 'Location not listed')}</div>
+          <div class="job-loc">${escapeHtml([job.city, job.state].filter(Boolean).join(', ') || job.location_raw || 'Location on file')}</div>
           ${job.reasons?.[0] ? `<div class="job-reason">${escapeHtml(job.reasons[0])}</div>` : ''}
         </div>
       </div>
