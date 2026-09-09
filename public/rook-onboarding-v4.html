@@ -404,53 +404,65 @@ function clearErr(id) {
   if (el) { el.textContent = ''; el.classList.remove('show'); }
 }
 
-// ── Location widget ────────────────────────────────────────────────────────
-let selectedLocation = null; // {label, city, state, stateAbbr, zip, lat, lng}
+// ── Welcome button — wired first so it always works ────────────────────────
+document.getElementById('btnWelcomeStart').addEventListener('click', () => show('details'));
 
-RookLocationWidget.init({
-  inputEl: document.getElementById('locationInput'),
-  listEl:  document.getElementById('locationList'),
-  onSelect: (suggestion) => {
-    selectedLocation = suggestion;
-    document.getElementById('locationStatus').textContent = suggestion.label;
-    document.getElementById('btnDetailsNext').disabled = false;
-    prefetchJobPreview(); // start fetching jobs immediately
-  },
-  onClear: () => {
-    selectedLocation = null;
-    document.getElementById('locationStatus').textContent = '';
-    document.getElementById('btnDetailsNext').disabled = true;
-  },
-});
+// ── Location widget ────────────────────────────────────────────────────────
+let selectedLocation = null;
+
+const _locInput = document.getElementById('locationInput');
+const _locList  = document.getElementById('locationList');
+if (_locInput && _locList && typeof RookLocationWidget !== 'undefined') {
+  RookLocationWidget.init({
+    inputEl: _locInput,
+    listEl:  _locList,
+    onSelect: (suggestion) => {
+      selectedLocation = suggestion;
+      const statusEl = document.getElementById('locationStatus');
+      if (statusEl) statusEl.textContent = suggestion.label;
+      const nextBtn = document.getElementById('btnDetailsNext');
+      if (nextBtn) nextBtn.disabled = false;
+      prefetchJobPreview();
+    },
+    onClear: () => {
+      selectedLocation = null;
+      const statusEl = document.getElementById('locationStatus');
+      if (statusEl) statusEl.textContent = '';
+      const nextBtn = document.getElementById('btnDetailsNext');
+      if (nextBtn) nextBtn.disabled = true;
+    },
+  });
+}
+
 const resumeInput = document.getElementById('resumeFileInput');
 const fileChip    = document.getElementById('fileChip');
 const uploadZone  = document.getElementById('uploadZone');
 
-resumeInput.addEventListener('change', e => {
-  const f = e.target.files[0];
-  if (!f) return;
-  const ext = f.name.split('.').pop().toLowerCase();
-  if (!['pdf','doc','docx'].includes(ext)) return;
-  if (f.size > 10 * 1024 * 1024) return;
-  resumeFile = f;
-  fileChip.style.display = 'flex';
-  uploadZone.style.display = 'none';
-  document.getElementById('fileName').textContent = f.name;
-  document.getElementById('btnDetailsNext').textContent = 'Find My Matches';
-  document.getElementById('btnSkipResume').style.display = 'none';
-});
-
-uploadZone.addEventListener('dragover', e => e.preventDefault());
-uploadZone.addEventListener('drop', e => {
-  e.preventDefault();
-  const f = e.dataTransfer.files[0];
-  if (f) {
-    const dt = new DataTransfer();
-    dt.items.add(f);
-    resumeInput.files = dt.files;
-    resumeInput.dispatchEvent(new Event('change'));
+if (resumeInput) {
+  resumeInput.addEventListener('change', e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    const ext = f.name.split('.').pop().toLowerCase();
+    if (!['pdf','doc','docx'].includes(ext)) return;
+    if (f.size > 10 * 1024 * 1024) return;
+    resumeFile = f;
+    if (fileChip) fileChip.style.display = 'flex';
+    if (uploadZone) uploadZone.style.display = 'none';
+    document.getElementById('fileName').textContent = f.name;
+    const btnNext = document.getElementById('btnResumeNext');
+    if (btnNext) btnNext.style.display = 'block';
+    const skipBtn = document.getElementById('btnSkipResume');
+    if (skipBtn) skipBtn.style.display = 'none';
+  });
+  if (uploadZone) {
+    uploadZone.addEventListener('dragover', e => e.preventDefault());
+    uploadZone.addEventListener('drop', e => {
+      e.preventDefault();
+      const f = e.dataTransfer.files[0];
+      if (f) { const dt = new DataTransfer(); dt.items.add(f); resumeInput.files = dt.files; resumeInput.dispatchEvent(new Event('change')); }
+    });
   }
-});
+}
 
 document.getElementById('btnSkipResume').addEventListener('click', () => {
   resumeFile = null;
@@ -516,7 +528,6 @@ function prefetchJobPreview() {
     .then(r => r.ok ? r.json() : null)
     .catch(() => null);
 }
-document.getElementById('btnWelcomeStart').addEventListener('click', () => show('details'));
 
 // ── Details next ───────────────────────────────────────────────────────────
 document.getElementById('btnDetailsNext').addEventListener('click', () => {
