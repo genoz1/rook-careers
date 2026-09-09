@@ -720,7 +720,8 @@
     show('3');
   });
   document.getElementById('btnTerrNext').addEventListener('click', () => {
-    gtag('event', 'onboarding_step_completed', { step: 3, territories: sel.territories });
+    if (editPrefsMode) return; // handled by the edit-mode listener instead
+    safeGtag('event', 'onboarding_step_completed', { step: 3, territories: sel.territories });
     show('4');
   });
 
@@ -1633,12 +1634,14 @@
     const isReturn       = params.get('ob') === 'v2_return';
     const isResumeUpload = params.get('ob') === 'resume_upload';
     const isEditPrefs    = params.get('edit') === 'preferences';
+    let   editPrefsMode  = false; // set to true when in preferences-edit flow
 
     const { data: { session } } = await sb.auth.getSession()
       .catch(() => ({ data: { session: null } }));
 
     // Edit preferences: authenticated user editing industry/years/territory
     if (isEditPrefs && session) {
+      editPrefsMode = true;
       // Load existing profile values into sel so current selections are pre-filled
       try {
         const pr = await fetch('/api/profile', { headers: { Authorization: `Bearer ${session.access_token}` } });
@@ -1675,6 +1678,8 @@
               method: 'PUT',
               headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${s.access_token}` },
               body: JSON.stringify({
+                // Only update the three preference fields — never send location
+                // fields so they are not overwritten with null.
                 desired_industries: sel.industry && sel.industry !== 'Breaking In' ? [sel.industry] : [],
                 total_sales_years: sel.years != null ? Number(sel.years) : null,
                 territory_size_preferences: sel.territories.length > 0 ? sel.territories : null,
