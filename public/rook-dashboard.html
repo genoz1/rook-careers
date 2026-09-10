@@ -1187,7 +1187,11 @@
     // way every other job on ROOK is.
     const isRecruiterPosted = job.source_type === 'recruiter_posted';
     const isAgencySourced = job.source_type === 'agency_aggregated';
-    const rowStyle = (isRecruiterPosted || isAgencySourced) ? 'border-left:4px solid #7C3AED; background:#FAF8FF;' : '';
+    const rowStyle = (isRecruiterPosted || isAgencySourced)
+      ? 'border-left:4px solid #7C3AED; background:#FAF8FF;'
+      : hoursOld <= 72
+        ? 'border-left:4px solid #FB8C00; background:#FFFBF5;'
+        : '';
 
     // 🔥 Just Posted badge — shown for 72 hours after first_seen_at
     const firstSeen = job.first_seen_at ? new Date(job.first_seen_at) : null;
