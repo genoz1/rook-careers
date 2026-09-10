@@ -3,7 +3,7 @@
 // free text (description, ai_analysis) — so there is no path for an
 // employer name or unsupported claim to end up in the post copy.
 
-function buildPostCopy(candidate) {
+function buildPostCopy(candidate, platform = "linkedin") {
   const lines = [];
   lines.push(candidate.title);
 
@@ -22,7 +22,7 @@ function buildPostCopy(candidate) {
   lines.push("");
   lines.push("See the employer and complete job details on ROOK.");
   lines.push("Start your 3-day free trial:");
-  lines.push(candidate.public_url);
+  lines.push(platform === "facebook" ? (candidate.public_url_facebook || candidate.public_url) : (candidate.public_url_linkedin || candidate.public_url));
 
   return lines.join("\n");
 }

@@ -638,9 +638,14 @@ function buildCandidateResponse(job, spacingSecret) {
   const sanitizedTitle = sanitizeTitleForSocial(job.title_original, job.company_name);
   const normalizedLocation = normalizeLocationForSocial(job.location_raw);
   const dedupedLocation = dedupeLocationAgainstTitle(sanitizedTitle, normalizedLocation);
+  const baseUrl = `https://rookcareers.com/jobs/${job.id}`;
   return {
     job_id: job.id,
-    public_url: `https://rookcareers.com/jobs/${job.id}`,
+    // Base URL without UTM — used for validation checks
+    public_url: `${baseUrl}?utm_source=linkedin&utm_medium=social&utm_campaign=organic`,
+    // Per-platform URLs with UTM tracking
+    public_url_linkedin: `${baseUrl}?utm_source=linkedin&utm_medium=social&utm_campaign=organic`,
+    public_url_facebook: `${baseUrl}?utm_source=facebook&utm_medium=social&utm_campaign=organic`,
     title: sanitizedTitle, // public social display only — job.title_original and the real job page are never altered
     location_display: dedupedLocation,
     territory_display: job.territory || null,

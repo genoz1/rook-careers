@@ -191,7 +191,9 @@ async function runValidationOnly(config, deps = {}) {
   // ever attempts the live test, rather than only discovering it then.
   const mediaPreflight = await (deps.preflightCheckMedia || preflightCheckMedia)(uploaded.publicUrl);
 
-  const postCopy = buildPostCopy(candidate);
+  const postCopyLinkedIn = buildPostCopy(candidate, "linkedin");
+  const postCopyFacebook = buildPostCopy(candidate, "facebook");
+  const postCopy = postCopyLinkedIn; // default
 
   return {
     ok: true,
@@ -302,13 +304,15 @@ async function runControlledLiveTest(config, { confirmLive } = {}, deps = {}) {
     };
   }
 
-  const postCopy = buildPostCopy(candidate);
+  const postCopyLinkedIn = buildPostCopy(candidate, "linkedin");
+  const postCopyFacebook = buildPostCopy(candidate, "facebook");
+  const postCopy = postCopyLinkedIn; // default
   const results = { facebook: null, linkedin: null };
 
   if (!alreadyPosted.facebook) {
     try {
       const post = await createPostFn(config.bufferAccessToken, {
-        channelId: channels.facebook.id, text: postCopy, photoUrl: uploaded.publicUrl, mode: "shareNow",
+        channelId: channels.facebook.id, text: postCopyFacebook, photoUrl: uploaded.publicUrl, mode: "shareNow",
         // Direct fix: Buffer's schema requires this field for Facebook
         // (FacebookPostMetadataInput.type: PostTypeFacebook!,
         // non-nullable) — its absence is exactly the reported
@@ -329,7 +333,7 @@ async function runControlledLiveTest(config, { confirmLive } = {}, deps = {}) {
       // Facebook's does) — left exactly as before, no metadata added,
       // per direct instruction to keep it unchanged unless required.
       const post = await createPostFn(config.bufferAccessToken, {
-        channelId: channels.linkedin.id, text: postCopy, photoUrl: uploaded.publicUrl, mode: "shareNow",
+        channelId: channels.linkedin.id, text: postCopyLinkedIn, photoUrl: uploaded.publicUrl, mode: "shareNow",
       });
       results.linkedin = { status: "sent", bufferPostId: post?.id || null, channelId: channels.linkedin.id };
     } catch (err) {
@@ -536,7 +540,9 @@ async function runScheduledSlot(slot, dateStr, config, deps = {}) {
     return { ok: false, stage: "media_preflight", slot, dateStr, runKey, jobId: topJob.id, reason: mediaPreflight.reason, historyRecorded: !preflightHistoryError };
   }
 
-  const postCopy = buildPostCopy(candidate);
+  const postCopyLinkedIn = buildPostCopy(candidate, "linkedin");
+  const postCopyFacebook = buildPostCopy(candidate, "facebook");
+  const postCopy = postCopyLinkedIn; // default
   const results = { facebook: null, linkedin: null };
 
   // Direct instruction: if one platform succeeds and the other fails,
@@ -547,7 +553,7 @@ async function runScheduledSlot(slot, dateStr, config, deps = {}) {
   if (!alreadyDoneThisRun.facebook && !alreadyPostedElsewhere.facebook) {
     try {
       const post = await createPostFn(config.bufferAccessToken, {
-        channelId: channels.facebook.id, text: postCopy, photoUrl: uploaded.publicUrl,
+        channelId: channels.facebook.id, text: postCopyFacebook, photoUrl: uploaded.publicUrl,
         mode: "customScheduled", dueAt: scheduledForUtc,
         metadata: { facebook: { type: "post" } },
       });
@@ -563,7 +569,7 @@ async function runScheduledSlot(slot, dateStr, config, deps = {}) {
   if (!alreadyDoneThisRun.linkedin && !alreadyPostedElsewhere.linkedin) {
     try {
       const post = await createPostFn(config.bufferAccessToken, {
-        channelId: channels.linkedin.id, text: postCopy, photoUrl: uploaded.publicUrl,
+        channelId: channels.linkedin.id, text: postCopyLinkedIn, photoUrl: uploaded.publicUrl,
         mode: "customScheduled", dueAt: scheduledForUtc,
       });
       results.linkedin = { status: "scheduled", bufferPostId: post?.id || null, channelId: channels.linkedin.id };
