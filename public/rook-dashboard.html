@@ -1188,6 +1188,14 @@
     const isRecruiterPosted = job.source_type === 'recruiter_posted';
     const isAgencySourced = job.source_type === 'agency_aggregated';
     const rowStyle = (isRecruiterPosted || isAgencySourced) ? 'border-left:4px solid #7C3AED; background:#FAF8FF;' : '';
+
+    // 🔥 Just Posted badge — shown for 72 hours after first_seen_at
+    const firstSeen = job.first_seen_at ? new Date(job.first_seen_at) : null;
+    const hoursOld = firstSeen ? (Date.now() - firstSeen.getTime()) / (1000 * 60 * 60) : 999;
+    const justPostedBadge = hoursOld <= 72
+      ? `<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;background:#FFF3E0;color:#E65100;border:1px solid #FFB74D;margin-bottom:6px;">🔥 Just Posted</span>`
+      : '';
+
     const recruiterBadge = isRecruiterPosted
       ? `<span style="font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:99px; background:#7C3AED18; color:#7C3AED; text-transform:uppercase; letter-spacing:0.02em;">Posted by Recruiter</span>`
       : isAgencySourced
@@ -1243,6 +1251,7 @@
       <div class="job-row" data-job-id="${escapeHtml(job.id)}" style="${rowStyle}">
         <div class="score-ring" style="--pct:${scorePct};"><span>${scoreDisplay}</span></div>
         <div class="job-info">
+          ${justPostedBadge}
           <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
             <h4 style="margin:0;">${escapeHtml(job.title_original || job.title_normalized || 'Untitled role')}</h4>
             ${newBadge}

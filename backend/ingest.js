@@ -145,6 +145,14 @@ async function ingestEmployer(employer) {
     .not("ai_analysis", "is", null);
   const existingAiAnalysisBySourceId = new Map((existingAnalysisRows || []).map((r) => [r.source_job_id, r.ai_analysis]));
 
+  // All existing source IDs for this employer — used to detect new jobs
+  // so first_seen_at is only set on insert, never overwritten on update.
+  const { data: existingSourceRows } = await supabase
+    .from("jobs")
+    .select("source_job_id")
+    .eq("employer_id", employer.id);
+  const existingSourceIds = new Set((existingSourceRows || []).map((r) => r.source_job_id));
+
   // Cap how many NEW AI analyses (job analysis + embedding) happen per
   // employer per run. Some employers post hundreds of relevant jobs
   // (Abbott alone had 559 in one run) — without a cap, a single massive
@@ -211,8 +219,8 @@ async function ingestEmployer(employer) {
         // correctly comes back false here; see the follow-up update
         // right after analysis completes below for how it becomes
         // eligible the same run once that analysis exists.
-        { ...job, last_seen_at: new Date().toISOString(), social_eligible: safeEvaluateSocialEligibilityForIngestion({ ...job, ai_analysis: existingAiAnalysisBySourceId.get(job.source_job_id) || null }) },
-        { onConflict: "employer_id,source_job_id" }
+        { ...job, last_seen_at: new Date().toISOString(), social_eligible: safeEvaluateSocialEligibilityForIngestion({ ...job, ai_analysis: existingAiAnalysisBySourceId.get(job.source_job_id) || null }), ...(!existingSourceIds.has(job.source_job_id) ? { first_seen_at: new Date().toISOString() } : {}) },
+        { onConflict: "employer_id,source_job_id", ignoreDuplicates: false }
       )
       .select()
       .single();
