@@ -48,21 +48,17 @@ app.use("/", require("./backend/routes/publicPages"));
 // HTML files must revalidate on every request — no stale cached
 // layouts served after a deployment. JS/CSS/images can be cached
 // safely since they're content-addressed by filename.
-// v5 is the current onboarding — redirect earlier versions to it
+// v4 is the current onboarding — redirect earlier versions to it
 app.get("/rook-onboarding.html", (req, res) => {
   const qs = Object.keys(req.query).length ? "?" + new URLSearchParams(req.query).toString() : "";
-  res.redirect(301, "/rook-onboarding-v5.html" + qs);
+  res.redirect(301, "/rook-onboarding-v4.html" + qs);
 });
 app.get("/rook-onboarding-v4.html", (req, res) => {
-  const ob = req.query.ob;
-  if (ob === "v4_verified") return res.sendFile(require("path").join(__dirname, "public", "rook-onboarding-v4.html"));
-  const qs = Object.keys(req.query).length ? "?" + new URLSearchParams(req.query).toString() : "";
-  res.redirect(301, "/rook-onboarding-v5.html" + qs);
+  return res.sendFile(require("path").join(__dirname, "public", "rook-onboarding-v4.html"));
 });
 app.get("/rook-onboarding-v2.html", (req, res) => {
   const ob   = req.query.ob;
   const edit = req.query.edit;
-  // Keep v2 for flows that depend on its specific routing
   if (ob === "v2_return" || ob === "resume_upload" || edit === "preferences") {
     return res.sendFile(path.join(__dirname, "public", "rook-onboarding-v2.html"));
   }
