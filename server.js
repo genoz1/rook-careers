@@ -60,10 +60,10 @@ app.get("/rook-onboarding-v4.html", (req, res) => {
   res.redirect(301, "/rook-onboarding-v5.html" + qs);
 });
 app.get("/rook-onboarding-v2.html", (req, res) => {
-  // v2 return flow uses ?ob=v2_return — keep that working for any
-  // outstanding verification emails that already went out.
-  const ob = req.query.ob;
-  if (ob === "v2_return" || ob === "resume_upload") {
+  const ob   = req.query.ob;
+  const edit = req.query.edit;
+  // Keep v2 for flows that depend on its specific routing
+  if (ob === "v2_return" || ob === "resume_upload" || edit === "preferences") {
     return res.sendFile(path.join(__dirname, "public", "rook-onboarding-v2.html"));
   }
   const qs = Object.keys(req.query).length ? "?" + new URLSearchParams(req.query).toString() : "";
