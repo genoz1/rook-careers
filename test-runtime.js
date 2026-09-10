@@ -106,7 +106,7 @@ process.exit(allPass ? 0 : 1);
 // to surface errors that only appear at runtime inside event handlers.
 const CLICK_TEST_FILES = ['public/rook-onboarding-v4.html'];
 if (process.argv[2] !== '--no-click') {
-  const puppeteer = (() => { try { return require('puppeteer'); } catch(_) { return null; } })();
+  const puppeteer = (() => { try { return require('/home/claude/.npm-global/lib/node_modules/@mermaid-js/mermaid-cli/node_modules/puppeteer'); } catch(_) { return null; } })();
   if (puppeteer) {
     (async () => {
       const CHROME = '/home/claude/.cache/puppeteer/chrome/linux-131.0.6778.204/chrome-linux64/chrome';
