@@ -354,6 +354,12 @@ select.field-select:focus{border-color:var(--blue)}
 <script>
 (async () => {
 
+// ── Loading overlay ────────────────────────────────────────────────────────
+function hideLoading() {
+  const el = document.getElementById('rook-loading');
+  if (el) el.style.display = 'none';
+}
+
 // Initialize Supabase client. On the live site this always succeeds.
 // The try/catch protects against edge cases (ad blockers, slow CDN) so
 // a failed load doesn't crash all button listeners.
@@ -831,6 +837,7 @@ document.getElementById('btnStartTrial').addEventListener('click', async () => {
     }
   }
 
+  hideLoading();
   show('welcome');
 })();
 
