@@ -616,7 +616,25 @@ async function startSignUpAndSend(prefs = null) {
       }
     });
 
-    if (error) { showErr('teaserErr', error.message); btn.disabled = false; btn.textContent = path === 'a' ? 'Find My Matches' : 'Find opportunities & email my link'; return; }
+    if (error) {
+      btn.disabled = false;
+      btn.textContent = 'Find My Matches';
+      // Supabase returns "User already registered" for existing confirmed emails.
+      // Rather than showing a cryptic error, offer to send a sign-in link.
+      const isExisting = /already registered|already exists|email.*taken/i.test(error.message);
+      if (isExisting) {
+        showErr('teaserErr', 'An account with that email already exists. We\'ll send you a sign-in link.');
+        // Send a magic link so they can log straight in
+        await sb.auth.signInWithOtp({
+          email: email(),
+          options: { emailRedirectTo: `${window.location.origin}/rook-verify-email.html?ob=v4&path=${path}` }
+        }).catch(() => {});
+        show('check-email');
+      } else {
+        showErr('teaserErr', error.message);
+      }
+      return;
+    }
 
     const uid = data?.user?.id;
     if (!uid) { showErr('teaserErr', 'Account creation failed. Please try again.'); btn.disabled = false; return; }
