@@ -30,15 +30,22 @@ async function ensureBucketExists(supabaseAdmin) {
   const { data: buckets, error: listError } = await supabaseAdmin.storage.listBuckets();
   if (listError) throw new Error(`Could not list Storage buckets: ${listError.message}`);
 
-  if ((buckets || []).some((b) => b.name === BUCKET_NAME)) return;
+  if ((buckets || []).some((b) => b.name === BUCKET_NAME)) {
+    // Bucket exists — update allowed MIME types to reflect current config.
+    // This handles the case where the bucket was created with a narrower
+    // set (e.g. image/png only) before a format change (e.g. to JPEG).
+    await supabaseAdmin.storage.updateBucket(BUCKET_NAME, {
+      public: true,
+      allowedMimeTypes: ALLOWED_MIME_TYPES,
+    });
+    return;
+  }
 
   const { error: createError } = await supabaseAdmin.storage.createBucket(BUCKET_NAME, {
     public: true,
     allowedMimeTypes: ALLOWED_MIME_TYPES,
   });
   if (createError) {
-    // A concurrent run creating the same bucket a moment earlier is
-    // not a real failure — idempotent by design, not by luck.
     const alreadyExists = /already exists/i.test(createError.message || "");
     if (!alreadyExists) {
       throw new Error(`Could not create Storage bucket "${BUCKET_NAME}": ${createError.message}`);
