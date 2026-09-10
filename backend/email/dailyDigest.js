@@ -1,46 +1,24 @@
-// Daily match digest — the email itself (styled the way real job-board
-// digest emails work, e.g. MedReps' daily email) and the per-candidate
-// logic that decides what goes in it.
-//
-// Sends each candidate's top 10 overall matches (by precomputed
-// overall_score), regardless of whether they're newly seen or have
-// been sitting in their match list for a while - a candidate's best
-// real opportunities don't stop being worth surfacing just because
-// nothing new happened to appear since yesterday.
-//
-// A candidate with zero qualifying jobs this run gets no email at all —
-// an empty "no matches today" email has no value and just trains people
-// to ignore ROOK's emails.
+// Daily match digest — sends each candidate their top 5 newly posted
+// jobs (first_seen_at in last 24 hours, scored by match quality).
+// Falls back to the 5 most recently ingested jobs if nothing new today.
+// Score is not shown in the email — it determines the list but isn't
+// displayed. Subject line adapts to reflect new vs recent.
 
 const { sendEmail } = require("./resend");
 const { mentionsNonUsCountry, hasFullAccess } = require("../matching");
 const { scrubCompanyNameFromText, redactForNonSubscriber } = require("../routes/jobs");
 
-// 60, not 70 ("Stretch Apply" tier) — chosen after testing against a
-// realistic minimal profile (just home_state + minimum_base_salary, no
-// résumé/travel/industry data yet) showed a job that correctly matched
-// location and was freshly posted, with only unmapped compensation data
-// on the job's side, scoring 68% — just under 70. Most real ROOK
-// profiles won't have every optional field filled in, so a 70+ cutoff
-// would silently exclude genuinely reasonable matches with no visible
-// error. 60 stays well above "Skip" territory while not punishing
-// candidates for gaps that are the job posting's fault, not theirs.
 const MIN_SCORE_TO_INCLUDE = 60;
-const MAX_JOBS_PER_EMAIL = 10;
+const MAX_JOBS_PER_EMAIL = 5;
 
 function escapeHtml(str) {
-  return String(str).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  return String(str).replace(/[&<>'"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
-function renderDigestHtml({ name, jobs, appBaseUrl, subscribed }) {
+function renderDigestHtml({ name, jobs, appBaseUrl, subscribed, hasNewJobs }) {
   const rows = jobs
     .map((job) => {
       const comp = job.compensation_text || (job.salary_min ? `$${job.salary_min}${job.salary_max ? "–$" + job.salary_max : "+"}` : "");
-      // A non-subscribed recipient's jobs have already been through
-      // redactForNonSubscriber, which sets subscription_required and
-      // strips company_name/source_url — this just decides what the
-      // row and button say/link to based on that, the same "who's
-      // hiring" gate the Dashboard and every other surface use.
       const detailUrl = job.subscription_required
         ? `${appBaseUrl}/rook-pricing.html`
         : `${appBaseUrl}/rook-job-analysis.html?job=${encodeURIComponent(job.id)}`;
@@ -48,14 +26,13 @@ function renderDigestHtml({ name, jobs, appBaseUrl, subscribed }) {
         ? `<span style="color:#7C3AED; font-weight:600;">🔒 Subscribe to see who's hiring</span> · ${escapeHtml(job.location_raw || "")}${comp ? " · " + escapeHtml(comp) : ""}`
         : `${escapeHtml(job.company_name || "")} · ${escapeHtml(job.location_raw || "")}${comp ? " · " + escapeHtml(comp) : ""}`;
       const buttonLabel = job.subscription_required ? "Unlock" : "View Job";
+      const isNew = job.first_seen_at && (Date.now() - new Date(job.first_seen_at).getTime()) < 24 * 60 * 60 * 1000;
+      const newBadge = isNew ? `<span style="display:inline-block; background:#FFF3E0; color:#E65100; font-size:10px; font-weight:700; padding:2px 7px; border-radius:99px; border:1px solid #FFB74D; margin-left:6px; vertical-align:middle;">🔥 Just Posted</span>` : "";
       return `
         <tr>
           <td style="padding:18px 0; border-bottom:1px solid #E3E8F0;">
-            <a href="${detailUrl}" style="color:#1463FF; font-size:16px; font-weight:600; text-decoration:none;">${escapeHtml(job.title_original || "Untitled role")}</a>
-            <div style="font-size:13px; color:#5B6B85; margin-top:4px;">
-              ${companyLine}
-            </div>
-            ${job.match?.overall_score != null ? `<div style="font-size:12px; color:#12B8A6; font-weight:600; margin-top:4px;">${job.match.overall_score}% match${job.match.recommendation ? " · " + escapeHtml(job.match.recommendation) : ""}</div>` : ""}
+            <a href="${detailUrl}" style="color:#1463FF; font-size:16px; font-weight:600; text-decoration:none;">${escapeHtml(job.title_original || "Untitled role")}${newBadge}</a>
+            <div style="font-size:13px; color:#5B6B85; margin-top:5px;">${companyLine}</div>
           </td>
           <td width="110" style="padding:18px 0; border-bottom:1px solid #E3E8F0; text-align:right; vertical-align:top; white-space:nowrap;">
             <a href="${detailUrl}" style="background:#071E41; color:#fff; padding:10px 18px; border-radius:6px; font-size:13px; font-weight:600; text-decoration:none; white-space:nowrap; display:inline-block;">${buttonLabel}</a>
@@ -65,8 +42,10 @@ function renderDigestHtml({ name, jobs, appBaseUrl, subscribed }) {
     .join("");
 
   const introLine = subscribed
-    ? `<p style="margin:0; font-size:14px; color:#5B6B85;">Here ${jobs.length === 1 ? "is" : "are"} ${jobs.length} new match${jobs.length === 1 ? "" : "es"} for you today:</p>`
-    : `<p style="margin:0; font-size:14px; color:#5B6B85;">${jobs.length === 1 ? "This role is" : `These ${jobs.length} roles are`} still waiting for you — subscribe to see who's hiring and apply directly:</p>`;
+    ? hasNewJobs
+      ? `<p style="margin:0; font-size:14px; color:#5B6B85;">New roles posted in your area — matched to your background:</p>`
+      : `<p style="margin:0; font-size:14px; color:#5B6B85;">Your top matches, updated daily:</p>`
+    : `<p style="margin:0; font-size:14px; color:#5B6B85;">${jobs.length === 1 ? "This role is" : `These ${jobs.length} roles are`} waiting for you — subscribe to see who's hiring and apply directly:</p>`;
 
   const footerLine = subscribed
     ? `<a href="${appBaseUrl}/rook-dashboard.html" style="color:#1463FF; font-size:13px; font-weight:600; text-decoration:none;">See all your matches on ROOK →</a>`
@@ -74,106 +53,113 @@ function renderDigestHtml({ name, jobs, appBaseUrl, subscribed }) {
 
   return `
     <div style="font-family:-apple-system,Helvetica,Arial,sans-serif; max-width:600px; margin:0 auto; background:#fff;">
-      <div style="background:#071E41; padding:24px; text-align:center;">
-        <span style="color:#fff; font-size:20px; font-weight:700; letter-spacing:0.02em;">ROOK</span>
+
+      <!-- Header -->
+      <div style="background:linear-gradient(135deg, #071E41 0%, #0B2A5C 100%); padding:32px 24px; text-align:center;">
+        <div style="margin-bottom:6px;">
+          <span style="color:#fff; font-size:30px; font-weight:800; letter-spacing:0.1em; font-family:Georgia,serif;">ROOK</span>
+        </div>
+        <div style="color:#7BAFD4; font-size:11px; font-weight:600; letter-spacing:0.18em; text-transform:uppercase;">Medical &amp; Veterinary Sales Careers</div>
       </div>
-      <div style="background:#F5F7FA; padding:20px 24px; text-align:center;">
-        <p style="margin:0 0 4px; font-size:15px; color:#071E41;">Hello ${escapeHtml(name || "there")},</p>
+
+      <!-- Intro -->
+      <div style="background:#F5F7FA; padding:20px 24px; text-align:center; border-bottom:1px solid #E3E8F0;">
+        <p style="margin:0 0 6px; font-size:16px; font-weight:600; color:#071E41;">Hello ${escapeHtml(name || "there")},</p>
         ${introLine}
       </div>
+
+      <!-- Job rows -->
       <table width="100%" cellpadding="0" cellspacing="0" style="padding:0 24px;">
         ${rows}
       </table>
-      <div style="padding:24px; text-align:center;">
+
+      <!-- Footer -->
+      <div style="padding:28px 24px; text-align:center; border-top:1px solid #E3E8F0; margin-top:4px;">
         ${footerLine}
+        <p style="margin:16px 0 0; font-size:11px; color:#9BAABB;">You're receiving this because you have an active ROOK account.<br>Manage preferences from your dashboard.</p>
       </div>
+
     </div>`;
 }
 
-/**
- * Build and send one candidate's daily digest, if they have qualifying
- * new matches. Returns a status object rather than throwing on "nothing
- * to send" — that's an expected, common outcome, not an error.
- */
 async function sendDigestForCandidate(supabase, profile, appBaseUrl) {
   if (!profile.email) return { sent: false, reason: "no_email" };
   if (profile.digest_enabled === false) return { sent: false, reason: "opted_out" };
 
-  // Direct instruction: show the candidate's top matches overall, not
-  // just ones newly seen since the last digest - a candidate whose best
-  // real opportunities haven't changed day to day shouldn't get an
-  // empty inbox just because nothing new happened to appear.
-  //
-  // Reads from the same precomputed candidate_job_matches table the
-  // Dashboard uses, rather than re-scoring every active job (~6,000+)
-  // fresh inside this script for every candidate - reuses the work
-  // precompute-scores.js already did, stays consistent with what the
-  // candidate sees on their Dashboard, and scales the same way the
-  // Dashboard's own speed fix did tonight.
-  const { data: matchRows, error } = await supabase
+  const cutoff24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+  // ── Step 1: Try newly ingested jobs (first_seen_at in last 24 hours) ──
+  const { data: newMatchRows, error: newErr } = await supabase
     .from("candidate_job_matches")
     .select("*, jobs!inner(*)")
     .eq("candidate_id", profile.id)
     .eq("dismissed", false)
     .eq("jobs.status", "active")
     .eq("jobs.moderation_status", "approved")
+    .gte("jobs.first_seen_at", cutoff24h)
     .order("overall_score", { ascending: false })
-    // Fetches a larger pool than the final email needs, not just
-    // MAX_JOBS_PER_EMAIL directly - foreign jobs get filtered out
-    // below, and doing that after an exact-count fetch could leave a
-    // digest with fewer than 10 jobs (or fewer than truly available)
-    // if any of the top-scored rows happened to be foreign postings.
     .limit(MAX_JOBS_PER_EMAIL * 4);
 
-  if (error) throw new Error(`Could not load matches for digest: ${error.message}`);
+  if (newErr) throw new Error(`Could not load new matches: ${newErr.message}`);
 
-  // Explicit, firm instruction: foreign jobs should never show up
-  // anywhere, including here - the one deliberate exception to the
-  // broader "let all jobs show" rule used everywhere else. A genuine
-  // exclusion, not a low score, so it's guaranteed regardless of how
-  // scoring itself is tuned.
-  const domesticRows = (matchRows || []).filter((row) => !mentionsNonUsCountry(row.jobs?.location_raw, row.jobs?.job_lng, row.jobs?.title_original));
+  const freshDomestic = (newMatchRows || []).filter(
+    (r) => !mentionsNonUsCountry(r.jobs?.location_raw, r.jobs?.job_lng, r.jobs?.title_original)
+  );
+  const freshScored = freshDomestic
+    .filter((r) => (r.overall_score ?? -1) >= MIN_SCORE_TO_INCLUDE)
+    .slice(0, MAX_JOBS_PER_EMAIL);
 
-  const scored = domesticRows
-    .filter((row) => (row.overall_score ?? -1) >= MIN_SCORE_TO_INCLUDE)
-    .slice(0, MAX_JOBS_PER_EMAIL)
-    .map((row) => ({
-      ...row.jobs,
-      match: {
-        overall_score: row.overall_score,
-        excellent_match: row.overall_score >= 85,
-        recommendation: row.recommendation,
-        reasons: row.strong_match_reasons || row.reasons || [],
-        concerns: row.concerns || [],
-      },
-    }));
+  let matchRows = freshScored;
+  let hasNewJobs = freshScored.length > 0;
 
-  if (scored.length === 0) return { sent: false, reason: "no_qualifying_matches" };
+  // ── Step 2: Fall back to most recently ingested if not enough new ──
+  if (matchRows.length < MAX_JOBS_PER_EMAIL) {
+    const { data: recentRows, error: recentErr } = await supabase
+      .from("candidate_job_matches")
+      .select("*, jobs!inner(*)")
+      .eq("candidate_id", profile.id)
+      .eq("dismissed", false)
+      .eq("jobs.status", "active")
+      .eq("jobs.moderation_status", "approved")
+      .order("jobs.first_seen_at", { ascending: false })
+      .limit(MAX_JOBS_PER_EMAIL * 4);
 
-  // Direct instruction: a candidate who finished onboarding but never
-  // subscribed should keep getting this daily email, with real jobs
-  // and their real match score as the enticement, but the "who's
-  // hiring" reveal and the direct job link stay behind the same
-  // full-access gate as everywhere else — reusing redactForNonSubscriber
-  // exactly as the Dashboard does, not a separate implementation. A
-  // trialing candidate has full access already (see matching.js's
-  // hasFullAccess), so they get the same real, unmasked digest an
-  // active subscriber does — there's nothing to nudge them toward
-  // joining, they're already in.
+    if (recentErr) throw new Error(`Could not load recent matches: ${recentErr.message}`);
+
+    const existingIds = new Set(matchRows.map((r) => r.jobs?.id));
+    const recentDomestic = (recentRows || []).filter(
+      (r) =>
+        !existingIds.has(r.jobs?.id) &&
+        !mentionsNonUsCountry(r.jobs?.location_raw, r.jobs?.job_lng, r.jobs?.title_original) &&
+        (r.overall_score ?? -1) >= MIN_SCORE_TO_INCLUDE
+    );
+    matchRows = [...matchRows, ...recentDomestic].slice(0, MAX_JOBS_PER_EMAIL);
+  }
+
+  if (matchRows.length === 0) return { sent: false, reason: "no_qualifying_matches" };
+
+  const scored = matchRows.map((row) => ({
+    ...row.jobs,
+    match: {
+      overall_score: row.overall_score,
+      excellent_match: row.overall_score >= 85,
+      recommendation: row.recommendation,
+    },
+  }));
+
   const hasAccess = hasFullAccess(profile);
   const emailJobs = hasAccess ? scored : scored.map(redactForNonSubscriber);
 
-  const html = renderDigestHtml({ name: profile.name, jobs: emailJobs, appBaseUrl, subscribed: hasAccess });
+  const html = renderDigestHtml({ name: profile.name, jobs: emailJobs, appBaseUrl, subscribed: hasAccess, hasNewJobs });
+
+  const subjectNew = `🔥 ${freshScored.length} new medical sales job${freshScored.length === 1 ? "" : "s"} posted near you`;
+  const subjectFallback = `Your top ${scored.length} medical sales match${scored.length === 1 ? "" : "es"} on ROOK`;
+  const subjectNonSub = `${scored.length} job${scored.length === 1 ? "" : "s"} waiting for you on ROOK — see who's hiring`;
+
   await sendEmail({
     to: profile.email,
-    subject: hasAccess
-      ? `${scored.length} top match${scored.length === 1 ? "" : "es"} on ROOK`
-      : `${scored.length} job${scored.length === 1 ? "" : "s"} waiting for you on ROOK — see who's hiring`,
+    subject: hasAccess ? (hasNewJobs ? subjectNew : subjectFallback) : subjectNonSub,
     html,
-    // Intentionally no replyTo: this is a no-reply digest. Candidate
-    // replies land wherever DIGEST_FROM_EMAIL's mailbox is configured
-    // (or nowhere, if it's a pure sending address) rather than Gene's
-    // personal inbox.
   });
 
   return { sent: true, jobCount: scored.length };
