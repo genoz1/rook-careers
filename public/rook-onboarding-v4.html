@@ -660,53 +660,7 @@ async function startSignUpAndSend(prefs = null) {
   }
 }
 
-// ── Background résumé upload ───────────────────────────────────────────────
-async function startBackgroundUpload(uid) {
-  uploadPhase = 'uploading';
-  uploadStarted = true;
-  updateCheckEmailUI();
-
-  const fd = new FormData();
-  fd.append('user_id', uid);
-  fd.append('resume', resumeFile);
-  if (selectedLocation?.zip) fd.append('zip', selectedLocation.zip);
-  if (selectedLocation?.lat != null) fd.append('lat', selectedLocation.lat);
-  if (selectedLocation?.lng != null) fd.append('lng', selectedLocation.lng);
-
-  try {
-    const res = await fetch('/api/onboarding/pre-verify-upload', { method: 'POST', body: fd });
-    if (!res.ok) { uploadPhase = 'failed'; updateCheckEmailUI(); return; }
-    uploadPhase = 'done';
-    updateCheckEmailUI();
-
-    // Start polling for analysis completion
-    pollStatus(uid);
-  } catch (err) {
-    uploadPhase = 'failed';
-    updateCheckEmailUI();
-    console.error('[upload]', err.message);
-  }
-}
-
-let pollInterval = null;
-function pollStatus(uid) {
-  if (pollInterval) return;
-  pollInterval = setInterval(async () => {
-    try {
-      const res = await fetch(`/api/onboarding/pre-verify-status/${uid}`);
-      const data = res.ok ? await res.json() : null;
-      if (!data) return;
-      analysisStatus  = data.analysis_status;
-      scoringReady    = data.scoring_ready;
-      hasResume       = data.has_resume;
-      updateCheckEmailUI();
-      if (data.scoring_ready || data.analysis_status === 'failed') {
-        clearInterval(pollInterval);
-        pollInterval = null;
-      }
-    } catch (_) {}
-  }, 3000);
-}
+// (résumé upload and polling removed — v4 uses questionnaire-only flow)
 
 function updateCheckEmailUI() {
   const box = document.getElementById('statusBox');
@@ -937,23 +891,7 @@ async function loadAndShowResultsB(token) {
   }
 }
 
-async function waitForScoring(uid, token) {
-  let attempts = 0;
-  const maxAttempts = 20; // 60 seconds
-  return new Promise(resolve => {
-    const interval = setInterval(async () => {
-      attempts++;
-      const res = await fetch(`/api/onboarding/pre-verify-status/${uid}`).catch(() => null);
-      const data = res?.ok ? await res.json() : null;
-
-      if (data?.scoring_ready || data?.analysis_status === 'failed' || attempts >= maxAttempts) {
-        clearInterval(interval);
-        await loadAndShowResultsA(token);
-        resolve();
-      }
-    }, 3000);
-  });
-}
+// (waitForScoring removed — not needed without résumé processing)
 
 // After results, next is password screen
 document.getElementById('btnResultsANext').addEventListener('click', () => show('password'));
