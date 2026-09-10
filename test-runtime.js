@@ -100,3 +100,61 @@ process.exit(allPass ? 0 : 1);
 
 // These are known browser-only globals not needed in the stub
 // Add them to suppress false failures in dashboard tests
+
+// ── Button click simulation — catches ReferenceErrors inside handlers ──────
+// Run this after the static checks. Simulates clicking through the onboarding
+// to surface errors that only appear at runtime inside event handlers.
+const CLICK_TEST_FILES = ['public/rook-onboarding-v4.html'];
+if (process.argv[2] !== '--no-click') {
+  const puppeteer = (() => { try { return require('puppeteer'); } catch(_) { return null; } })();
+  if (puppeteer) {
+    (async () => {
+      const CHROME = '/home/claude/.cache/puppeteer/chrome/linux-131.0.6778.204/chrome-linux64/chrome';
+      const errors = [];
+      const b = await puppeteer.launch({args:['--no-sandbox','--disable-web-security'],executablePath:CHROME});
+      const p = await b.newPage();
+      await p.setViewport({width:390,height:844});
+      await p.setRequestInterception(true);
+      p.on('request', r => r.url().startsWith('file://') ? r.continue().catch(()=>{}) : r.respond({status:200,body:''}).catch(()=>{}));
+      p.on('pageerror', e => {
+        if (!e.message.includes('Supabase') && !e.message.includes('unavailable') && !e.message.includes('ROOK_CONFIG'))
+          errors.push(e.message.slice(0, 120));
+      });
+      await p.goto('file:///home/claude/rook-careers/public/rook-onboarding-v4.html', {waitUntil:'domcontentloaded', timeout:15000});
+      await new Promise(r=>setTimeout(r,1500));
+
+      // Simulate full click-through including the submit button
+      await p.evaluate(() => window.rookShow && window.rookShow('details'));
+      await new Promise(r=>setTimeout(r,200));
+      await p.evaluate(() => {
+        window.selectedLocation = {city:'Tampa',state:'Florida',stateAbbr:'FL',zip:'33601',lat:27.9,lng:-82.5,label:'Tampa, FL'};
+        document.getElementById('btnDetailsNext').disabled = false;
+        document.getElementById('btnDetailsNext').click();
+      });
+      await new Promise(r=>setTimeout(r,200));
+      await p.evaluate(() => { document.querySelector('[name="industry"]').checked=true; document.getElementById('btnIndustryNext').disabled=false; document.getElementById('btnIndustryNext').click(); });
+      await new Promise(r=>setTimeout(r,200));
+      await p.evaluate(() => { document.querySelector('[name="years"]').checked=true; document.getElementById('btnYearsNext').disabled=false; document.getElementById('btnYearsNext').click(); });
+      await new Promise(r=>setTimeout(r,200));
+      await p.evaluate(() => { document.querySelector('[name="territory"]').checked=true; document.getElementById('btnTerritoryNext').disabled=false; document.getElementById('btnTerritoryNext').click(); });
+      await new Promise(r=>setTimeout(r,200));
+      // Fill email and click submit — this is where resumeFile bug would have thrown
+      await p.evaluate(() => {
+        document.getElementById('emailInput').value = 'test@example.com';
+        document.getElementById('btnResumeNext').click();
+      });
+      await new Promise(r=>setTimeout(r,500));
+
+      await p.close(); await b.close();
+
+      if (errors.length) {
+        console.log('✗ CLICK TEST page errors:');
+        errors.forEach(e => console.log('  ', e));
+        console.log('\nFAILURES — do not push');
+        process.exit(1);
+      } else {
+        console.log('✓ Click-through test: no runtime errors');
+      }
+    })().catch(e => { console.error('Click test error:', e.message); process.exit(1); });
+  }
+}
