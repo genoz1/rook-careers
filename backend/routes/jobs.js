@@ -1383,9 +1383,11 @@ router.get("/onboarding/match-preview", requireConfig, requireAuth, async (req, 
 
       // If no pre-computed scores yet, scoring may still be writing.
       // Retry for up to 20 seconds (10 × 2s) before falling back to
-      // in-memory scoring. This handles the case where the user verified
-      // their email before background scoring completed.
-      if (!pcErr && !precomputed?.length) {
+      // in-memory scoring — BUT only if the user has a résumé, since
+      // without one there's no background scoring job and we'd just
+      // waste 20 seconds waiting for scores that will never arrive.
+      const hasResume = profile.resume_url || profile.resume_uploaded_at;
+      if (!pcErr && !precomputed?.length && hasResume) {
         for (let attempt = 0; attempt < 10; attempt++) {
           await new Promise(r => setTimeout(r, 2000));
           const { data: retry, error: retryErr } = await supabaseAdmin
