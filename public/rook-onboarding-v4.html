@@ -618,23 +618,18 @@ async function startSignUpAndSend(prefs = null) {
 
     // Supabase email enumeration protection: existing emails don't return
     // an error — they return success with identities:[] (empty array).
-    // Detect this and send a magic link to log them in instead.
     const isExistingUser = !error && data?.user?.identities?.length === 0;
 
-    if (error || isExistingUser) {
+    if (error) {
       btn.disabled = false;
       btn.textContent = 'Find My Matches';
-      const isExisting = isExistingUser || /already registered|already exists|email.*taken/i.test(error?.message || '');
-      if (isExisting) {
-        showErr('teaserErr', 'That email already has an account. Sending you a sign-in link now…');
-        await sb.auth.signInWithOtp({
-          email: email(),
-          options: { emailRedirectTo: `${window.location.origin}/rook-verify-email.html?ob=v4&path=${path}` }
-        }).catch(() => {});
-        show('check-email');
-      } else {
-        showErr('teaserErr', error.message);
-      }
+      showErr('teaserErr', error.message);
+      return;
+    }
+
+    if (isExistingUser) {
+      // Already has an account — send them to login, not through onboarding
+      window.location.href = 'rook-login.html?reason=existing';
       return;
     }
 

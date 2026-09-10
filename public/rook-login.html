@@ -201,7 +201,12 @@
   // Stays on the (already-default-active) sign-in tab.
   if (new URLSearchParams(window.location.search).get('verified') === '1') {
     setMsg('Email verified — you can now sign in.', 'success');
-    window.history.replaceState({}, '', 'rook-login.html'); // drop the query param so a later refresh doesn't re-show this
+    window.history.replaceState({}, '', 'rook-login.html');
+  }
+
+  if (new URLSearchParams(window.location.search).get('reason') === 'existing') {
+    setMsg('You already have a ROOK account. Sign in below to access your dashboard.', 'success');
+    window.history.replaceState({}, '', 'rook-login.html');
   }
 
   // No auth call here was protected against hanging forever — if
