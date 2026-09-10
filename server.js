@@ -49,9 +49,15 @@ app.use("/", require("./backend/routes/publicPages"));
 // layouts served after a deployment. JS/CSS/images can be cached
 // safely since they're content-addressed by filename.
 // v4 is the current onboarding — redirect earlier versions to it
+// Using 302 (temporary) not 301 (permanent) so browsers don't cache the redirect
 app.get("/rook-onboarding.html", (req, res) => {
   const qs = Object.keys(req.query).length ? "?" + new URLSearchParams(req.query).toString() : "";
-  res.redirect(301, "/rook-onboarding-v4.html" + qs);
+  res.redirect(302, "/rook-onboarding-v4.html" + qs);
+});
+// v5 was created by a previous session — redirect it to v4
+app.get("/rook-onboarding-v5.html", (req, res) => {
+  const qs = Object.keys(req.query).length ? "?" + new URLSearchParams(req.query).toString() : "";
+  res.redirect(302, "/rook-onboarding-v4.html" + qs);
 });
 app.get("/rook-onboarding-v4.html", (req, res) => {
   return res.sendFile(require("path").join(__dirname, "public", "rook-onboarding-v4.html"));
@@ -63,7 +69,7 @@ app.get("/rook-onboarding-v2.html", (req, res) => {
     return res.sendFile(path.join(__dirname, "public", "rook-onboarding-v2.html"));
   }
   const qs = Object.keys(req.query).length ? "?" + new URLSearchParams(req.query).toString() : "";
-  res.redirect(301, "/rook-onboarding-v4.html" + qs);
+  res.redirect(302, "/rook-onboarding-v4.html" + qs);
 });
 app.get("/rook-onboarding-v3.html", (req, res) => {
   const ob = req.query.ob;
@@ -71,7 +77,7 @@ app.get("/rook-onboarding-v3.html", (req, res) => {
     return res.sendFile(path.join(__dirname, "public", "rook-onboarding-v3.html"));
   }
   const qs = Object.keys(req.query).length ? "?" + new URLSearchParams(req.query).toString() : "";
-  res.redirect(301, "/rook-onboarding-v4.html" + qs);
+  res.redirect(302, "/rook-onboarding-v4.html" + qs);
 });
 
 app.use(express.static(path.join(__dirname, "public"), {
