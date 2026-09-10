@@ -578,7 +578,12 @@ document.getElementById('btnResumeNext').addEventListener('click', async () => {
   clearErr('teaserErr');
   const em = document.getElementById('emailInput').value.trim();
   if (!em || !em.includes('@')) return showErr('teaserErr', 'Please enter a valid email address.');
-  path = resumeFile ? 'a' : 'b';
+  // v4 has no résumé upload step (see "State" comment above) — path is
+  // always 'b'. The old `resumeFile ? 'a' : 'b'` check referenced a variable
+  // that was never declared anywhere in this file, which threw a
+  // ReferenceError the instant this handler ran — meaning the button did
+  // nothing at all, silently, before ever reaching the actual sign-up logic.
+  path = 'b';
   const btn = document.getElementById('btnResumeNext');
   btn.disabled = true; btn.textContent = 'Sending…';
   await startSignUpAndSend();
