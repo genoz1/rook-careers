@@ -10,7 +10,8 @@
 // Dependency-injectable httpFetch so this is fully testable without
 // any real network call.
 
-const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const PNG_SIGNATURE  = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const JPEG_SIGNATURE = Buffer.from([0xff, 0xd8, 0xff]);
 
 /**
  * @param {string} url - the exact public URL to verify
@@ -24,10 +25,6 @@ async function preflightCheckMedia(url, { httpFetch = fetch } = {}) {
     return { ok: false, reason: `Could not reach media URL: ${err.message}` };
   }
 
-  // redirect: "manual" surfaces a redirect as a 3xx status rather than
-  // silently following it — direct instruction: the URL must be
-  // fetchable "without... redirects." A genuinely stable, direct URL
-  // should never need one.
   if (res.status >= 300 && res.status < 400) {
     return { ok: false, reason: `Media URL redirected (HTTP ${res.status}) instead of serving the file directly` };
   }
@@ -36,8 +33,9 @@ async function preflightCheckMedia(url, { httpFetch = fetch } = {}) {
   }
 
   const contentType = typeof res.headers?.get === "function" ? res.headers.get("content-type") : res.headers?.["content-type"];
-  if (!contentType || !contentType.toLowerCase().startsWith("image/png")) {
-    return { ok: false, reason: `Media URL returned Content-Type "${contentType || "(none)"}", expected image/png` };
+  const ct = (contentType || "").toLowerCase();
+  if (!ct.startsWith("image/png") && !ct.startsWith("image/jpeg")) {
+    return { ok: false, reason: `Media URL returned Content-Type "${contentType || "(none)"}", expected image/png or image/jpeg` };
   }
 
   const arrayBuffer = await res.arrayBuffer();
@@ -45,8 +43,10 @@ async function preflightCheckMedia(url, { httpFetch = fetch } = {}) {
   if (buffer.length === 0) {
     return { ok: false, reason: "Media URL returned an empty body" };
   }
-  if (!buffer.subarray(0, 8).equals(PNG_SIGNATURE)) {
-    return { ok: false, reason: "Media URL body does not start with a valid PNG signature" };
+  const isPng  = buffer.subarray(0, 8).equals(PNG_SIGNATURE);
+  const isJpeg = buffer.subarray(0, 3).equals(JPEG_SIGNATURE);
+  if (!isPng && !isJpeg) {
+    return { ok: false, reason: "Media URL body is not a valid PNG or JPEG image" };
   }
 
   return { ok: true, contentType, byteLength: buffer.length };
