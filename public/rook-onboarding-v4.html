@@ -279,7 +279,7 @@ select.field-select:focus{border-color:var(--blue)}
 
   <!-- ── Screen 4a: Scored results (path A) ── --></p>
   <div class="screen" id="s-results-a">
-    <div class="result-banner" id="resultBannerA">✓ Email verified · Résumé analyzed</div>
+    <div class="result-banner" id="resultBannerA">✓ Email verified · Preferences saved</div>
     <div class="eyebrow">Your personalized shortlist</div>
     <h2 id="resultsHeadlineA">You have excellent matches.</h2>
     <p class="lead">Ranked using your location and preferences. Employer names and application links unlock with your trial.</p>
@@ -754,7 +754,7 @@ function renderJobCardsA(jobs) {
         <div class="score-badge"><span class="pct">${job.overall_score}</span><small>%</small></div>
         <div>
           <div class="job-title">${escapeHtml(job.title || 'Medical Sales Role')}</div>
-          <div class="job-loc">${escapeHtml([job.city, job.state].filter(Boolean).join(', ') || (job.location_raw ? job.location_raw.split(',').slice(0,2).join(',').trim() : '') || 'Location on file')}</div>
+          <div class="job-loc">${escapeHtml(cleanLocation(job) || 'Location on file')}</div>
           ${job.reasons?.[0] ? `<div class="job-reason">${escapeHtml(job.reasons[0])}</div>` : ''}
         </div>
       </div>
