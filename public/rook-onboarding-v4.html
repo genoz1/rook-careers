@@ -866,11 +866,10 @@ async function loadAndShowResultsA(token) {
   const data = res.ok ? await res.json() : null;
   if (data?.top_matches?.length) {
     renderJobCardsA(data.top_matches.map(m => ({
-      overall_score: m.overall_score,
-      title: m.title,
-      city: m.city,
-      state: m.state,
-      reasons: m.reasons
+      overall_score:    m.overall_score,
+      title:            m.title,
+      location_display: m.location_display,
+      reasons:          m.reasons
     })));
   }
 }
