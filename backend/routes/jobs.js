@@ -400,7 +400,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
       // redacted list rather than erroring or showing nothing.
       let fallbackQuery = supabaseAnon
         .from("jobs")
-        .select(JOB_LIST_COLUMNS)
+        .select(JOB_LIST_COLUMNS_NO_DESCRIPTION)
         .eq("status", "active")
         .eq("moderation_status", "approved")
         .order("date_posted", { ascending: false })
@@ -419,7 +419,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
 
     const { data: boxJobs, error: boxError } = await supabaseAnon
       .from("jobs")
-      .select(JOB_LIST_COLUMNS)
+      .select(JOB_LIST_COLUMNS_NO_DESCRIPTION)
       .eq("status", "active")
       .eq("moderation_status", "approved")
       .gte("job_lat", nearLat - latDelta)
@@ -439,7 +439,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     // dropped, just scored through scoreJob()'s own honest fallback.
     let noCoordsQuery = supabaseAnon
       .from("jobs")
-      .select(JOB_LIST_COLUMNS)
+      .select(JOB_LIST_COLUMNS_NO_DESCRIPTION)
       .eq("status", "active")
       .eq("moderation_status", "approved")
       .is("job_lat", null);
@@ -541,7 +541,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
 
     const { data: boxJobs, error: boxError } = await supabaseAdmin
       .from("jobs")
-      .select(JOB_LIST_COLUMNS)
+      .select(JOB_LIST_COLUMNS_NO_DESCRIPTION)
       .eq("status", "active")
       .eq("moderation_status", "approved")
       .gte("job_lat", nearLat - latDelta)
@@ -566,7 +566,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     // real-coordinates case above, just without an exact mile figure.
     let noCoordsQuery = supabaseAdmin
       .from("jobs")
-      .select(JOB_LIST_COLUMNS)
+      .select(JOB_LIST_COLUMNS_NO_DESCRIPTION)
       .eq("status", "active")
       .eq("moderation_status", "approved")
       .is("job_lat", null);
@@ -618,27 +618,61 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     });
   }
 
-  // Reported directly, with concrete side-by-side evidence: Job Search's
-  // live-scoring path (below, for an explicitly searched location)
-  // showed correct, current results, while this default path - reading
-  // pre-computed scores from candidate_job_matches - kept showing scores
-  // that didn't match what the current scoring code actually produces.
-  // Root cause: candidate_job_matches only gets refreshed by a SEPARATE
-  // deployable component (the precompute-scores job), which can end up
-  // running stale, cached code independently of the web service even
-  // when the web service itself has the latest fixes - exactly what
-  // happened here. Benchmarked at 6,000 scoreJob() calls in ~240ms
-  // (synchronous, in-memory, no per-job I/O), so scoring the whole
-  // active pool live on every request is genuinely fast enough - this
-  // now works exactly like the near_lat/near_lng explore path already
-  // proven correct above, just locked to the candidate's own real home
-  // location instead of a manually explored one. Eliminates the
-  // separate-component staleness risk entirely for the main candidate-
-  // facing paths (Dashboard, Job Search's default view) - if the web
-  // service has the current code, results are always current.
+  // ── Fast path: precomputed scores ─────────────────────────────────────────
+  // Read from candidate_job_matches (pre-scored nightly) if scores exist.
+  // Falls back to live scoring below when no scores are found (new users).
+  // Staleness is handled by the nightly precompute job — scores are at most
+  // 24 hours old, which is acceptable for job matching.
+  // Only skip precomputed for keyword searches (live scoring needed for
+  // relevance) or when the user explicitly explores a different location.
+  if (!keyword && !industry && !state) {
+    const { data: precomputedRows, error: pcError } = await supabaseAdmin
+      .from("candidate_job_matches")
+      .select(`overall_score, preference_fit, candidate_fit, excellent_match, recommendation, reasons, saved, dismissed, job_id, jobs!inner(${JOB_LIST_COLUMNS_NO_DESCRIPTION})`)
+      .eq("candidate_id", profile.id)
+      .eq("jobs.status", "active")
+      .eq("jobs.moderation_status", "approved")
+      .not("overall_score", "is", null)
+      .eq("dismissed", false)
+      .order("overall_score", { ascending: false })
+      .limit(Number(limit));
+
+    if (!pcError && precomputedRows && precomputedRows.length > 0) {
+      // Trigger background refresh if scores are older than 25 hours
+      const oldestScore = precomputedRows.find(r => r.updated_at);
+      if (oldestScore) {
+        const ageHours = (Date.now() - new Date(oldestScore.updated_at).getTime()) / 3600000;
+        if (ageHours > 25) {
+          scoreAndStoreForCandidate(supabaseAdmin, profile).catch(err =>
+            console.error("[bg-rescore]", err.message)
+          );
+        }
+      }
+
+      const { appStatusByJob, noteFor } = await loadEmployerHistory(profile.id);
+
+      const results = precomputedRows
+        .filter(r => !mentionsNonUsCountry(r.jobs.location_raw, r.jobs.job_lng, r.jobs.title_original))
+        .map(row => ({
+          ...attachDistance(row.jobs, profile),
+          match: matchFromRow(row),
+          saved: row.saved || false,
+          application_status: appStatusByJob.get(row.job_id) || null,
+          employer_note: noteFor(row.jobs),
+        }));
+
+      return res.json({
+        jobs: (hasFullAccess(profile) ? results : results.map(redactForNonSubscriber)).map(stripUnusedDescriptionFields),
+        scoring_in_progress: false,
+        from_precomputed: true,
+      });
+    }
+  }
+
+  // ── Live scoring fallback (new users, keyword search, no precomputed scores) ──
   let liveQuery = supabaseAdmin
     .from("jobs")
-    .select(JOB_LIST_COLUMNS)
+    .select(JOB_LIST_COLUMNS_NO_DESCRIPTION)
     .eq("status", "active")
     .eq("moderation_status", "approved");
   if (industry) liveQuery = liveQuery.eq("industry", industry);
