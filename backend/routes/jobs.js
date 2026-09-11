@@ -1545,8 +1545,13 @@ router.get("/onboarding/match-preview", requireConfig, requireAuth, async (req, 
     if (profile.home_lat != null && profile.home_lng != null) {
       const latDelta = 300 / 69;
       const lngDelta = 300 / (69 * Math.max(0.1, Math.cos((profile.home_lat * Math.PI) / 180)));
+      // Null-coordinate jobs: only include if they match the user's home state
+      // so a Texas user doesn't see Ohio jobs with no coordinates
+      const stateFilter = profile.home_state
+        ? `and(job_lat.is.null,state.eq.${profile.home_state})`
+        : `job_lat.is.null`;
       jobQuery = jobQuery.or(
-        `job_lat.is.null,remote_status.eq.remote,and(job_lat.gte.${profile.home_lat - latDelta},job_lat.lte.${profile.home_lat + latDelta},job_lng.gte.${profile.home_lng - lngDelta},job_lng.lte.${profile.home_lng + lngDelta})`
+        `remote_status.eq.remote,${stateFilter},and(job_lat.gte.${profile.home_lat - latDelta},job_lat.lte.${profile.home_lat + latDelta},job_lng.gte.${profile.home_lng - lngDelta},job_lng.lte.${profile.home_lng + lngDelta})`
       );
     }
 

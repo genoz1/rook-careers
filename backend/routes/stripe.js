@@ -266,7 +266,7 @@ router.post("/stripe/create-setup-intent", requireConfig, requireAuth, async (re
       metadata: { user_id: req.user.id },
     });
 
-    res.json({ client_secret: setupIntent.client_secret });
+    res.json({ client_secret: setupIntent.client_secret, customer_id: customerId });
   } catch (err) {
     console.error("create-setup-intent failed:", err.message);
     res.status(500).json({ error: err.message });
@@ -280,33 +280,40 @@ router.post("/stripe/create-setup-intent", requireConfig, requireAuth, async (re
 // but without the redirect.
 router.post("/stripe/create-subscription-from-setup", requireConfig, requireAuth, async (req, res) => {
   try {
-    const { payment_method_id } = req.body;
+    const { payment_method_id, customer_id } = req.body;
     if (!payment_method_id) return res.status(400).json({ error: "payment_method_id required" });
 
     const trialDays = getTrialPeriodDays();
 
-    // Get customer ID
-    const { data: profile } = await supabaseAdmin
-      .from("candidate_profiles")
-      .select("stripe_customer_id")
-      .eq("user_id", req.user.id)
-      .maybeSingle();
+    // Use customer_id passed from the frontend (returned by create-setup-intent)
+    // which avoids a second DB lookup that was silently failing when the
+    // profile row didn't have stripe_customer_id populated yet.
+    let customerId = customer_id;
+    if (!customerId) {
+      // Fallback: look up from DB in case frontend didn't pass it
+      const { data: profile } = await supabaseAdmin
+        .from("candidate_profiles")
+        .select("stripe_customer_id")
+        .eq("user_id", req.user.id)
+        .maybeSingle();
+      customerId = profile?.stripe_customer_id;
+    }
 
-    if (!profile?.stripe_customer_id) {
+    if (!customerId) {
       return res.status(400).json({ error: "No Stripe customer found. Please restart checkout." });
     }
 
     // Attach payment method to customer and set as default
     await stripe.paymentMethods.attach(payment_method_id, {
-      customer: profile.stripe_customer_id,
+      customer: customerId,
     });
-    await stripe.customers.update(profile.stripe_customer_id, {
+    await stripe.customers.update(customerId, {
       invoice_settings: { default_payment_method: payment_method_id },
     });
 
     // Create subscription with trial
     const subParams = {
-      customer: profile.stripe_customer_id,
+      customer: customerId,
       items: [{ price: process.env.STRIPE_PRICE_ID_MONTHLY }],
       default_payment_method: payment_method_id,
       metadata: { user_id: req.user.id },
@@ -325,7 +332,7 @@ router.post("/stripe/create-subscription-from-setup", requireConfig, requireAuth
         subscription_status: "trialing",
         trial_started_at: new Date().toISOString(),
         stripe_subscription_id: subscription.id,
-        stripe_customer_id: profile.stripe_customer_id,
+        stripe_customer_id: customerId,
         updated_at: new Date().toISOString(),
       }, { onConflict: "user_id" });
 

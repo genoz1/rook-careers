@@ -483,6 +483,7 @@
       });
       const data = await res.json();
       if (!res.ok || !data.client_secret) throw new Error(data.error || 'Could not initialize payment.');
+      const customerId = data.customer_id;
 
       // 2. Confirm the setup intent with the card
       const { setupIntent, error } = await stripe.confirmCardSetup(data.client_secret, {
@@ -491,14 +492,15 @@
 
       if (error) throw new Error(error.message);
 
-      // 3. Tell server to create the trial subscription with this payment method
+      // 3. Tell server to create the trial subscription — pass customer_id
+      // so the server never needs a second DB lookup (which was failing silently)
       const subRes = await fetch('/api/stripe/create-subscription-from-setup', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({ payment_method_id: setupIntent.payment_method }),
+        body: JSON.stringify({ payment_method_id: setupIntent.payment_method, customer_id: customerId }),
       });
       const subData = await subRes.json();
       if (!subRes.ok) throw new Error(subData.error || 'Could not start trial.');

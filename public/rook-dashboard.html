@@ -276,7 +276,10 @@
   <div class="profile-gate-card">
     <h2 id="profileGateTitle">Finish setting up your profile</h2>
     <p id="profileGateBody">We can't score jobs against your background yet — a couple of things are still missing.</p>
+    <!-- Inline resume upload — no navigation to another page -->
+    <input type="file" id="profileGateResumeInput" accept=".pdf,.doc,.docx" style="display:none">
     <a class="btn-primary" href="rook-settings.html" id="profileGateLink" style="background:var(--royal); color:#fff;">Complete My Profile →</a>
+    <div id="profileGateUploadStatus" style="display:none;font-size:13px;color:var(--royal);font-weight:600;margin-top:8px;text-align:center;"></div>
     <button type="button" class="dismiss" id="profileGateDismiss">Continue browsing</button>
   </div>
 </div>
@@ -627,7 +630,34 @@
         if (missingResume && !missingLocation) {
           title.textContent = 'Make your matches more personal';
           body.textContent = 'Right now your opportunities are based on your location and preferences. Upload your résumé for personalized match scores.';
-          if (link) { link.textContent = 'Upload résumé'; link.href = 'rook-onboarding-v2.html?ob=resume_upload'; }
+          const fileInput = document.getElementById('profileGateResumeInput');
+          const statusEl = document.getElementById('profileGateUploadStatus');
+          if (link) {
+            link.textContent = 'Upload résumé';
+            link.removeAttribute('href');
+            link.style.cursor = 'pointer';
+            link.onclick = (e) => { e.preventDefault(); fileInput && fileInput.click(); };
+          }
+          if (fileInput) {
+            fileInput.onchange = async () => {
+              const file = fileInput.files[0];
+              if (!file) return;
+              if (link) { link.textContent = 'Uploading…'; link.style.opacity = '0.6'; link.onclick = null; }
+              if (statusEl) { statusEl.style.display = 'block'; statusEl.textContent = '📤 Uploading your résumé…'; }
+              try {
+                const token = await rookGetAccessToken();
+                const fd = new FormData();
+                fd.append('resume', file);
+                const r = await fetch('/api/resume', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd });
+                if (!r.ok) throw new Error('Upload failed');
+                if (statusEl) statusEl.textContent = '✅ Résumé uploaded! Reloading your matches…';
+                setTimeout(() => window.location.reload(), 1200);
+              } catch (err) {
+                if (link) { link.textContent = 'Try again'; link.style.opacity = '1'; link.onclick = (e) => { e.preventDefault(); fileInput.click(); }; }
+                if (statusEl) statusEl.textContent = '❌ Upload failed — please try again.';
+              }
+            };
+          }
         } else if (missingResume && missingLocation) {
           title.textContent = "You're missing a résumé and a primary location";
           body.textContent = "Without these, we can't score jobs against your background or rank them by real distance.";
