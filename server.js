@@ -38,6 +38,7 @@ app.use("/api", require("./backend/routes/careerIntelligence"));
 app.use("/api", require("./backend/routes/geocode"));
 app.use("/api", require("./backend/routes/recruiterPostings"));
 app.use("/api", require("./backend/routes/automation"));
+app.use("/api", require("./backend/admanager/conversions"));
 
 // Server-rendered public pages (real per-job SEO meta tags + sitemap) —
 // registered before the static file server and the SPA catch-all below,
