@@ -24,10 +24,9 @@ app.use(
   "/api/stripe/webhook",
   express.raw({ type: "application/json" })
 );
-app.use("/api", stripeRoutes);
-
-// Everything else gets normal JSON body parsing.
+// All other Stripe routes need normal JSON parsing
 app.use(express.json());
+app.use("/api", stripeRoutes);
 
 app.use("/api", require("./backend/routes/profile"));
 app.use("/api", require("./backend/routes/jobs"));
