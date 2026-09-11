@@ -329,10 +329,9 @@ router.post("/stripe/create-subscription-from-setup", requireConfig, requireAuth
       .from("candidate_profiles")
       .upsert({
         user_id: req.user.id,
+        stripe_customer_id: customerId,
         subscription_status: "trialing",
         trial_started_at: new Date().toISOString(),
-        stripe_subscription_id: subscription.id,
-        stripe_customer_id: customerId,
         updated_at: new Date().toISOString(),
       }, { onConflict: "user_id" });
 
