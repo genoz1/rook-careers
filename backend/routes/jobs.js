@@ -645,15 +645,17 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
       .limit(Number(limit));
 
     if (!pcError && precomputedRows && precomputedRows.length > 0) {
-      // Trigger background refresh if scores are older than 25 hours
-      const oldestScore = precomputedRows.find(r => r.updated_at);
-      if (oldestScore) {
-        const ageHours = (Date.now() - new Date(oldestScore.updated_at).getTime()) / 3600000;
-        if (ageHours > 25) {
-          scoreAndStoreForCandidate(supabaseAdmin, profile).catch(err =>
-            console.error("[bg-rescore]", err.message)
-          );
-        }
+      // Always trigger background rescore if scores are older than 1 hour.
+      // Serves precomputed scores instantly, refreshes in background so
+      // customers never see stale distances or outdated job coordinates.
+      const newestScore = precomputedRows.find(r => r.updated_at);
+      const ageHours = newestScore
+        ? (Date.now() - new Date(newestScore.updated_at).getTime()) / 3600000
+        : 999;
+      if (ageHours > 1) {
+        scoreAndStoreForCandidate(supabaseAdmin, profile).catch(err =>
+          console.error("[bg-rescore]", err.message)
+        );
       }
 
       const { appStatusByJob, noteFor } = await loadEmployerHistory(profile.id);
