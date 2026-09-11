@@ -91,7 +91,7 @@ function pageShell({ title, description, canonicalUrl, ogImage, bodyHtml, jsonLd
 <body>
   <div class="topbar">
     <a href="/" class="logo"><img src="/assets/rook-icon-192.png" alt="ROOK" style="height:22px; width:auto;">ROOK</a>
-    <a href="/rook-login.html" class="btn btn-outline">Log In</a>
+    <a href="/rook-login.html?return=${encodeURIComponent(canonicalUrl)}" class="btn btn-outline">Log In</a>
   </div>
   <div class="container">
     ${bodyHtml}

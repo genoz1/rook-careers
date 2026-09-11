@@ -209,6 +209,12 @@
     window.history.replaceState({}, '', 'rook-login.html');
   }
 
+  // Save ?return= URL so rookRouteAfterLogin redirects back after login
+  const returnUrl = new URLSearchParams(window.location.search).get('return');
+  if (returnUrl) {
+    try { sessionStorage.setItem('rook_login_return', returnUrl); } catch (_) {}
+  }
+
   // No auth call here was protected against hanging forever — if
   // Supabase's SMTP relay is slow or failing (it tries to send a
   // confirmation/reset email as part of these same requests), the

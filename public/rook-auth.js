@@ -13,13 +13,12 @@ async function rookGetAccessToken() {
 }
 
 // Redirects to the login page if there's no active session.
-// Call this at the top of any page that requires the user to be signed in.
-// loginPage defaults to the candidate login page — pass
-// "rook-recruiter-login.html" from recruiter pages so a signed-out
-// recruiter lands on the correct login screen, not the candidate one.
+// Saves the current page URL so rookRouteAfterLogin can return here.
 async function rookRequireAuth(loginPage = "rook-login.html") {
   const token = await rookGetAccessToken();
   if (!token) {
+    // Save current URL so login can redirect back after success
+    try { sessionStorage.setItem("rook_login_return", window.location.href); } catch (_) {}
     window.location.href = loginPage;
     return null;
   }
@@ -140,6 +139,20 @@ async function rookPopulateSidebar() {
 // Routes to rook-onboarding-v2.html (Stage 2) for new users.
 // Existing subscribers and trialing users with a profile go to the dashboard.
 async function rookRouteAfterLogin() {
+  // Restore the page the user was trying to reach before being sent to login
+  try {
+    const returnUrl = sessionStorage.getItem("rook_login_return");
+    if (returnUrl) {
+      sessionStorage.removeItem("rook_login_return");
+      const url = new URL(returnUrl);
+      // Only redirect back to safe ROOK pages — not login itself
+      if (url.origin === window.location.origin && !url.pathname.includes('rook-login')) {
+        window.location.href = returnUrl;
+        return;
+      }
+    }
+  } catch (_) {}
+
   try {
     const res = await rookApiFetch('/profile');
     const profile = res.ok ? await res.json() : null;

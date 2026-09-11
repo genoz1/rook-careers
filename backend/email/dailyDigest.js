@@ -21,7 +21,7 @@ function renderDigestHtml({ name, jobs, appBaseUrl, subscribed, hasNewJobs }) {
       const comp = job.compensation_text || (job.salary_min ? `$${job.salary_min}${job.salary_max ? "–$" + job.salary_max : "+"}` : "");
       const detailUrl = job.subscription_required
         ? `${appBaseUrl}/rook-pricing.html`
-        : `${appBaseUrl}/rook-job-analysis.html?job=${encodeURIComponent(job.id)}`;
+        : `${appBaseUrl}/jobs/${encodeURIComponent(job.id)}`;
       const companyLine = job.subscription_required
         ? `<span style="color:#7C3AED; font-weight:600;">🔒 Subscribe to see who's hiring</span> · ${escapeHtml(job.location_raw || "")}${comp ? " · " + escapeHtml(comp) : ""}`
         : `${escapeHtml(job.company_name || "")} · ${escapeHtml(job.location_raw || "")}${comp ? " · " + escapeHtml(comp) : ""}`;
