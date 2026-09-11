@@ -277,27 +277,27 @@ select.field-select:focus{border-color:var(--blue)}
     <button class="btn-back" id="btnEmailBack">← Change email address</button>
   </div>
 
-  <!-- ── Screen 4a: Scored results (path A) ── -->
+  <!-- ── Screen 4a: Scored results (path A) ── --></p>
   <div class="screen" id="s-results-a">
     <div class="result-banner" id="resultBannerA">✓ Email verified · Résumé analyzed</div>
     <div class="eyebrow">Your personalized shortlist</div>
-    <h2 id="resultsHeadlineA">See where you fit.</h2>
+    <h2 id="resultsHeadlineA">You have excellent matches.</h2>
     <p class="lead">Ranked using your résumé and preferred location. Employer names and application links unlock with your trial.</p>
     <div id="jobCardsA"></div>
     <button class="btn-primary" id="btnResultsANext">Continue to my free trial</button>
-    <p style="font-size:12px;color:var(--muted);text-align:center;margin-top:12px">Next: secure your account, then review trial terms.</p>
+    <p style="font-size:12px;color:var(--muted);text-align:center;margin-top:12px">No commitment during your 3-day trial · Card required to start</p>
   </div>
 
   <!-- ── Screen 4b: Preference results (path B) ── -->
   <div class="screen" id="s-results-b">
     <div class="result-banner">✓ Email verified · Preferences saved</div>
-    <div class="eyebrow">A starting point for your search</div>
-    <h2>Opportunities worth exploring.</h2>
-    <p class="lead">Based on your location and preferences. These are not résumé-based match scores.</p>
+    <div class="eyebrow">Your personalized shortlist</div>
+    <h2>You have excellent matches.</h2>
+    <p class="lead">Ranked using your location and preferences. Employer names and application links unlock with your trial.</p>
     <div id="jobCardsB"></div>
     <button class="btn-primary" id="btnResultsBNext">Continue to my free trial</button>
     <button class="btn-back" id="btnAddResume" style="width:100%;text-align:center;margin-top:4px;justify-content:center;color:var(--blue)">Add résumé for personalized scores</button>
-    <p style="font-size:12px;color:var(--muted);text-align:center;margin-top:12px">A résumé is optional for browsing. Card required for trial.</p>
+    <p style="font-size:12px;color:var(--muted);text-align:center;margin-top:12px">No commitment during your 3-day trial · Card required to start</p>
   </div>
 
   <!-- ── Screen 5: Set password ── -->
@@ -754,7 +754,7 @@ function renderJobCardsA(jobs) {
         <div class="score-badge"><span class="pct">${job.overall_score}</span><small>%</small></div>
         <div>
           <div class="job-title">${escapeHtml(job.title || 'Medical Sales Role')}</div>
-          <div class="job-loc">${escapeHtml([job.city, job.state].filter(Boolean).join(', ') || job.location_raw || 'Location on file')}</div>
+          <div class="job-loc">${escapeHtml([job.city, job.state].filter(Boolean).join(', ') || (job.location_raw ? job.location_raw.split(',').slice(0,2).join(',').trim() : '') || 'Location on file')}</div>
           ${job.reasons?.[0] ? `<div class="job-reason">${escapeHtml(job.reasons[0])}</div>` : ''}
         </div>
       </div>
