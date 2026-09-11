@@ -311,17 +311,25 @@ router.post("/stripe/create-subscription-from-setup", requireConfig, requireAuth
 
     const subscription = await stripe.subscriptions.create(subParams);
 
-    // Update profile — same fields as webhook sets on checkout.session.completed
-    await supabaseAdmin
+    // Update profile — use upsert so it works even if the row doesn't exist yet
+    const { error: profileErr } = await supabaseAdmin
       .from("candidate_profiles")
-      .update({
+      .upsert({
+        user_id: req.user.id,
         subscription_status: "trialing",
         trial_started_at: new Date().toISOString(),
         stripe_subscription_id: subscription.id,
-      })
-      .eq("user_id", req.user.id);
+        stripe_customer_id: profile.stripe_customer_id,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "user_id" });
 
-    res.json({ ok: true, subscription_id: subscription.id });
+    if (profileErr) {
+      console.error("create-subscription-from-setup profile update failed:", profileErr.message);
+      // Don't fail the request — Stripe subscription was created, webhook will sync
+    }
+
+    console.log(`[checkout] uid=${req.user.id.slice(0,8)} subscription=${subscription.id} status=${subscription.status}`);
+    res.json({ ok: true, subscription_id: subscription.id, status: subscription.status });
   } catch (err) {
     console.error("create-subscription-from-setup failed:", err.message);
     res.status(500).json({ error: err.message });
