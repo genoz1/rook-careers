@@ -1499,24 +1499,28 @@ router.get("/onboarding/match-preview", requireConfig, requireAuth, async (req, 
     }
 
     // ── Slow path: in-memory scoring (no pre-computed scores yet) ──
-    const allActiveJobs = await fetchActiveJobs(supabaseAdmin);
-    const tFetch = Date.now();
+    // Use a direct SQL bounding box query instead of fetchActiveJobs (which
+    // loads ALL 5,000+ jobs into memory). This cuts the fetch to ~300-400
+    // jobs and works even on a cold server with no warm cache.
+    const SCORE_COLS = "id, title_original, title_normalized, company_name, location_raw, job_lat, job_lng, city, state, remote_status, employment_type, travel_percentage, salary_min, salary_max, compensation_text, ai_analysis, date_posted, last_seen_at";
 
-    // Pre-filter to 300-mile bounding box before scoring — cuts 5,000+
-    // jobs to ~300-400 for most candidates. Always include remote jobs
-    // and jobs with no coordinates so they're never accidentally excluded.
-    const activeJobs = (profile.home_lat != null && profile.home_lng != null)
-      ? (() => {
-          const latDelta = 300 / 69;
-          const lngDelta = 300 / (69 * Math.max(0.1, Math.cos((profile.home_lat * Math.PI) / 180)));
-          return allActiveJobs.filter(job =>
-            job.job_lat == null ||
-            job.remote_status === 'remote' ||
-            (Math.abs(job.job_lat - profile.home_lat) <= latDelta &&
-             Math.abs(job.job_lng - profile.home_lng) <= lngDelta)
-          );
-        })()
-      : allActiveJobs;
+    let jobQuery = supabaseAdmin
+      .from("jobs")
+      .select(SCORE_COLS)
+      .eq("status", "active")
+      .eq("moderation_status", "approved");
+
+    if (profile.home_lat != null && profile.home_lng != null) {
+      const latDelta = 300 / 69;
+      const lngDelta = 300 / (69 * Math.max(0.1, Math.cos((profile.home_lat * Math.PI) / 180)));
+      jobQuery = jobQuery.or(
+        `job_lat.is.null,remote_status.eq.remote,and(job_lat.gte.${profile.home_lat - latDelta},job_lat.lte.${profile.home_lat + latDelta},job_lng.gte.${profile.home_lng - lngDelta},job_lng.lte.${profile.home_lng + lngDelta})`
+      );
+    }
+
+    const { data: activeJobs, error: jobFetchErr } = await jobQuery.limit(500);
+    if (jobFetchErr) throw new Error(`match-preview job fetch failed: ${jobFetchErr.message}`);
+    const tFetch = Date.now();
 
     // Diagnostic: log which scoring inputs are present for this user.
     // candidate_fit = null when resume_structured is absent, reducing
