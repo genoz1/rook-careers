@@ -936,8 +936,31 @@
       }
 
       if (selectedIndustries.length > 0) {
-        const text = `${job.title_original || ''} ${job.description_text || ''}`.toLowerCase();
-        const matchesAny = selectedIndustries.some((ind) => text.includes(ind));
+        // Industry groups — a filter selection matches several related DB values
+        // because the AI uses specific sub-categories (e.g. "Reference Laboratory")
+        // that users wouldn't know to search for.
+        const INDUSTRY_GROUPS = {
+          'diagnostics': ['diagnostics', 'reference laboratory', 'molecular', 'point-of-care', 'lab', 'pathology', 'clinical laboratory'],
+          'medical device': ['medical device', 'capital equipment', 'surgical', 'dme', 'consumables'],
+          'pharmaceutical': ['pharmaceutical', 'pharma', 'biotech', 'life sciences', 'specialty pharma'],
+          'veterinary': ['veterinary', 'animal health', 'vet'],
+        };
+
+        const jobIndustry = (job.industry || '').toLowerCase();
+        const jobCategory = (job.category || '').toLowerCase();
+        const jobTitle = (job.title_original || '').toLowerCase();
+        const jobCompany = (job.company_name || '').toLowerCase();
+
+        const matchesAny = selectedIndustries.some((ind) => {
+          // Expand the filter value to its group of related terms
+          const group = INDUSTRY_GROUPS[ind] || [ind];
+          return group.some((term) =>
+            jobIndustry.includes(term) ||
+            jobCategory.includes(term) ||
+            jobTitle.includes(term) ||
+            jobCompany.includes(term)
+          );
+        });
         if (!matchesAny) return false;
       }
 
