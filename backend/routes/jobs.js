@@ -1381,6 +1381,40 @@ const PREVIEW_CACHE_TTL_MS  = 5 * 60 * 1000; // 5 minutes
 const previewCache    = new Map(); // userId → { result, expiresAt }
 const previewInFlight = new Map(); // userId → Promise
 
+// Extract a displayable location string from a job, with multiple fallbacks.
+// Used in match-preview where location_raw can be null even when coordinates exist.
+function jobLocationDisplay(job) {
+  const city  = job?.city  || '';
+  const state = job?.state || '';
+  const raw   = job?.location_raw || '';
+  const title = job?.title_original || '';
+
+  if (city && state) return `${city}, ${state}`;
+  if (city)  return city;
+  if (state) return state;
+
+  if (raw) {
+    if (/^remote$/i.test(raw.trim())) return 'Remote';
+    // "City, ST" or "City, State" already clean
+    const commaMatch = raw.match(/^([A-Za-z][A-Za-z .'-]+),\s*([A-Z]{2}|[A-Za-z]+)(?:,.*)?$/);
+    if (commaMatch) return `${commaMatch[1].trim()}, ${commaMatch[2].trim()}`;
+    // "United States-State-City" or "USA-FL-City"
+    const dashMatch = raw.match(/(?:United States?|USA?)-([A-Za-z]+(?:\s+[A-Za-z]+)*)-([A-Za-z]+(?:\s+[A-Za-z]+)*)/i);
+    if (dashMatch) return `${dashMatch[2].trim()}, ${dashMatch[1].trim()}`;
+    // Single state name or abbreviation
+    if (/^[A-Za-z ]{2,30}$/.test(raw.trim())) return raw.trim();
+  }
+
+  // Last resort: extract "City, ST" or "City, State" from job title
+  const titleLoc = title.match(/[–-]\s*([A-Za-z][A-Za-z .'-]+,\s*[A-Z]{2})/);
+  if (titleLoc) return titleLoc[1].trim();
+  // State name in title
+  const titleState = title.match(/(North |South |East |West )?(?:Florida|Texas|California|New York|Ohio|Georgia|Illinois|Virginia|North Carolina|South Carolina|Pennsylvania|Michigan|Tennessee|Washington|Massachusetts|Colorado|Arizona|Minnesota|Indiana|Missouri|Wisconsin|Maryland|Connecticut|Nevada|Louisiana|Alabama|Kentucky|Oregon|Oklahoma|New Mexico|Utah|Iowa|Arkansas|Kansas|Nebraska|Mississippi)/i);
+  if (titleState) return titleState[0].trim();
+
+  return '';
+}
+
 router.get("/onboarding/match-preview", requireConfig, requireAuth, async (req, res) => {
   const userId = req.user.id;
 
@@ -1460,7 +1494,7 @@ router.get("/onboarding/match-preview", requireConfig, requireAuth, async (req, 
               const job = row.jobs;
               const rawTitle = job?.title_normalized || job?.title_original || null;
               const safeTitle = (rawTitle && job?.company_name) ? (scrubCompanyNameFromText(rawTitle, job.company_name) || rawTitle) : rawTitle;
-              return { overall_score: Math.round(row.overall_score), excellent_match: Boolean(row.excellent_match), recommendation: row.recommendation || null, title: safeTitle, city: job?.city || null, state: job?.state || null, location_raw: job?.location_raw || null, reasons: (row.reasons || []).slice(0, 2) };
+              return { overall_score: Math.round(row.overall_score), excellent_match: Boolean(row.excellent_match), recommendation: row.recommendation || null, title: safeTitle, location_display: jobLocationDisplay(job), reasons: (row.reasons || []).slice(0, 2) };
             }), scoring_complete: true, from_precomputed: true };
           }
           if (retryErr) break; // join failing — go to in-memory
@@ -1487,9 +1521,7 @@ router.get("/onboarding/match-preview", requireConfig, requireAuth, async (req, 
             excellent_match: Boolean(row.excellent_match),
             recommendation:  row.recommendation || null,
             title:   safeTitle,
-            city:    job?.city  || null,
-            state:   job?.state || null,
-            location_raw: job?.location_raw || null,
+            location_display: jobLocationDisplay(job),
             reasons: (row.reasons || []).slice(0, 2),
           };
         });
@@ -1559,9 +1591,7 @@ router.get("/onboarding/match-preview", requireConfig, requireAuth, async (req, 
         recommendation:  r.score.recommendation || null,
         // Preview-safe job detail
         title:        safeTitle,
-        city:         job.city         || null,
-        state:        job.state        || null,
-        location_raw: job.location_raw || null,
+        location_display: jobLocationDisplay(job),
         reasons: (r.score.reasons || []).slice(0, 2),
       };
     });
