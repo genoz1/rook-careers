@@ -233,16 +233,104 @@ router.get("/jobs/:id", async (req, res, next) => {
 // defeating the point. searchTerms are matched against title and
 // description text (case-insensitive, OR'd together) to decide which
 // real jobs appear on each category page.
+// Category definitions — each category maps to a description and a list
+// of company slugs pulled from the employers table. Companies grouped by
+// the industry they primarily serve. Update companySlugs as new employers
+// are added to the DB.
 const CATEGORIES = {
-  "medical-sales-jobs": { label: "Medical Sales Jobs", searchTerms: ["medical sales", "medical device sales", "healthcare sales"] },
-  "pharmaceutical-sales-jobs": { label: "Pharmaceutical Sales Jobs", searchTerms: ["pharmaceutical", "pharma sales"] },
-  "medical-device-sales-jobs": { label: "Medical Device Sales Jobs", searchTerms: ["medical device", "device sales", "surgical device"] },
-  "diagnostics-sales-jobs": { label: "Diagnostics & Laboratory Sales Jobs", searchTerms: ["diagnostic", "laboratory sales", "lab sales"] },
-  "veterinary-sales-jobs": { label: "Veterinary Sales Jobs", searchTerms: ["veterinary", "vet sales"] },
-  "animal-health-sales-jobs": { label: "Animal Health Sales Jobs", searchTerms: ["animal health"] },
-  "territory-sales-manager-jobs": { label: "Territory Sales Manager Jobs", searchTerms: ["territory manager", "territory sales", "territory representative"] },
-  "key-account-manager-jobs": { label: "Key Account Manager Jobs", searchTerms: ["key account manager", "key account executive"] },
-  "capital-equipment-sales-jobs": { label: "Capital Equipment Sales Jobs", searchTerms: ["capital equipment"] },
+  "medical-sales-jobs": {
+    label: "Medical Sales Jobs",
+    description: "ROOK sources medical sales jobs directly from employer career sites across medical device, diagnostics, pharmaceutical, and specialty healthcare companies.",
+    companySlugs: [
+      // Medical device
+      "stryker","medtronic","abbott","boston-scientific","edwards-lifesciences",
+      "becton-dickinson","zimmer-biomet","insulet","integra-lifesciences",
+      "natus-medical","artivion","acutus-medical","agiliti",
+      // Diagnostics & lab
+      "quest-diagnostics","labcorp","biodesix","foundation-medicine",
+      "guardant-health","neogenomics","exact-sciences","tempus","caris-life-sciences",
+      "natera","somalogic","veracyte","genalyte","biocryst-pharmaceuticals",
+      // Pharma / biotech
+      "abbvie","pfizer","johnson-johnson","eli-lilly","astrazeneca","merck",
+      "bristol-myers-squibb","amgen","gilead","regeneron","biogen","vertex",
+      "novo-nordisk","boehringer-ingelheim","astellas-pharma","daiichi-sankyo",
+      "lundbeck","chiesi-usa","leo-pharma","ipsen","moderna","argenx",
+      "madrigal-pharmaceuticals","united-therapeutics","travere-therapeutics",
+      "xeris-biopharma","exelixis","halozyme","almirall","axsome-therapeutics",
+      "bridgebio-pharma","sobi","eisai","ionis-pharmaceuticals",
+      "catalyst-pharmaceuticals","rhythm-pharmaceuticals","beone-medicines",
+      // Specialty
+      "hologic","invacare","cardinal-health","henry-schein","mckesson",
+    ],
+  },
+  "pharmaceutical-sales-jobs": {
+    label: "Pharmaceutical Sales Jobs",
+    description: "ROOK pulls pharmaceutical sales jobs directly from top pharma and biotech employer career sites — no job board middlemen.",
+    companySlugs: [
+      "abbvie","pfizer","johnson-johnson","eli-lilly","astrazeneca","merck",
+      "bristol-myers-squibb","amgen","gilead","regeneron","biogen","vertex",
+      "novo-nordisk","boehringer-ingelheim","astellas-pharma","daiichi-sankyo",
+      "lundbeck","chiesi-usa","leo-pharma","ipsen","moderna","argenx",
+      "madrigal-pharmaceuticals","united-therapeutics","travere-therapeutics",
+      "xeris-biopharma","exelixis","halozyme","almirall","axsome-therapeutics",
+      "bridgebio-pharma","sobi","eisai","ionis-pharmaceuticals",
+      "catalyst-pharmaceuticals","rhythm-pharmaceuticals","beone-medicines",
+      "sun-pharma",
+    ],
+  },
+  "medical-device-sales-jobs": {
+    label: "Medical Device Sales Jobs",
+    description: "ROOK sources medical device sales jobs directly from manufacturer career sites — capital equipment, surgical, implantables, diagnostics, and more.",
+    companySlugs: [
+      "stryker","medtronic","abbott","boston-scientific","edwards-lifesciences",
+      "becton-dickinson","zimmer-biomet","insulet","integra-lifesciences",
+      "natus-medical","artivion","agiliti","hologic","invacare",
+    ],
+  },
+  "diagnostics-sales-jobs": {
+    label: "Diagnostics & Laboratory Sales Jobs",
+    description: "ROOK pulls diagnostics and laboratory sales jobs directly from employer career sites — clinical, molecular, pathology, genomics, and point-of-care.",
+    companySlugs: [
+      "quest-diagnostics","labcorp","biodesix","foundation-medicine",
+      "guardant-health","neogenomics","exact-sciences","tempus","caris-life-sciences",
+      "natera","somalogic","veracyte","biocryst-pharmaceuticals","eisai",
+    ],
+  },
+  "veterinary-sales-jobs": {
+    label: "Veterinary Sales Jobs",
+    description: "ROOK sources veterinary and animal health sales jobs directly from employer career sites — diagnostics, pharmaceuticals, nutrition, and practice management.",
+    companySlugs: [
+      "idexx","zoetis","hills-pet-nutrition","royal-canin","purina-pro-plan",
+      "elanco","merck-animal-health","boehringer-ingelheim","virbac","phibro",
+      "dechra","patterson-companies","henry-schein-animal-health",
+    ],
+  },
+  "animal-health-sales-jobs": {
+    label: "Animal Health Sales Jobs",
+    description: "ROOK sources animal health sales jobs directly from top employer career sites.",
+    companySlugs: [
+      "idexx","zoetis","elanco","merck-animal-health","boehringer-ingelheim",
+      "virbac","phibro","dechra","hills-pet-nutrition","royal-canin",
+    ],
+  },
+  "territory-sales-manager-jobs": {
+    label: "Territory Sales Manager Jobs",
+    description: "ROOK matches territory sales manager openings directly from employer career sites across medical, pharma, and veterinary companies.",
+    companySlugs: [], // show all companies — no specific subset
+  },
+  "key-account-manager-jobs": {
+    label: "Key Account Manager Jobs",
+    description: "ROOK sources key account manager jobs from employer career sites across the medical, pharma, and healthcare industry.",
+    companySlugs: [],
+  },
+  "capital-equipment-sales-jobs": {
+    label: "Capital Equipment Sales Jobs",
+    description: "ROOK pulls capital equipment sales jobs directly from manufacturer career sites.",
+    companySlugs: [
+      "stryker","medtronic","boston-scientific","zimmer-biomet",
+      "agiliti","hologic","invacare","integra-lifesciences",
+    ],
+  },
 };
 
 // GET /jobs/category/:slug — a real, server-rendered landing page per
@@ -256,62 +344,61 @@ router.get("/jobs/category/:slug", async (req, res, next) => {
   const category = CATEGORIES[req.params.slug];
   if (!category || !isConfigured) return next();
 
-  const orFilter = category.searchTerms
-    .flatMap((term) => [`title_original.ilike.%${term}%`, `description_text.ilike.%${term}%`])
-    .join(",");
+  // Query active employers matching this category's company slug list.
+  // If the category has no specific slugs (e.g. territory-manager), show
+  // all active employers sorted by name.
+  let employerQuery = supabaseAnon
+    .from("employers")
+    .select("company_name, company_slug, active")
+    .eq("active", true)
+    .order("company_name", { ascending: true });
 
-  const { data: jobs } = await supabaseAnon
-    .from("jobs")
-    .select("id, title_original, location_raw, compensation_text, salary_min, salary_max, date_posted")
-    .eq("status", "active")
-    .eq("moderation_status", "approved")
-    .or(orFilter)
-    .not("location_raw", "ilike", "%United Kingdom%")
-    .not("location_raw", "ilike", "%Canada%")
-    .not("location_raw", "ilike", "%Australia%")
-    .not("location_raw", "ilike", "%Germany%")
-    .not("location_raw", "ilike", "%France%")
-    .not("location_raw", "ilike", "%Netherlands%")
-    .order("date_posted", { ascending: false })
-    .limit(40);
+  if (category.companySlugs && category.companySlugs.length > 0) {
+    employerQuery = employerQuery.in("company_slug", category.companySlugs);
+  }
 
-  const jobRows = jobs || [];
+  const { data: employers } = await employerQuery;
+  const companyList = employers || [];
+
   const canonicalUrl = `${APP_BASE_URL}/jobs/category/${req.params.slug}`;
-  const metaDescription = `Browse ${jobRows.length} real, currently open ${category.label.toLowerCase()} on ROOK — sourced directly from employer career sites. Sign up to see the employer and apply.`.slice(0, 300);
-
+  const metaDescription = `ROOK sources ${category.label.toLowerCase()} directly from ${companyList.length}+ employer career sites — scored against your real background. Sign up to see your matches.`.slice(0, 300);
   const otherCategories = Object.entries(CATEGORIES).filter(([slug]) => slug !== req.params.slug);
 
   const trialDays = getTrialPeriodDays();
   const ctaBlock = trialDays > 0
-    ? `<div style="color:#fff; font-size:15px; font-weight:700; margin-bottom:2px;">${trialDays} days free, then $29/month</div>
-      <div style="color:#B9C4DB; font-size:13px; font-weight:600; margin-bottom:18px;">Cancel anytime.</div>
+    ? `<div style="color:#fff;font-size:15px;font-weight:700;margin-bottom:2px;">${trialDays} days free, then $29/month</div>
+      <div style="color:#B9C4DB;font-size:13px;font-weight:600;margin-bottom:18px;">Cancel anytime.</div>
       <a href="/rook-onboarding-v4.html" class="btn btn-primary">Start Your ${trialDays}-Day Free Trial</a>
-      <div style="color:#8B96AB; font-size:12px; margin-top:10px;">$0 today. Full ROOK access during your trial.</div>`
-    : `<div style="color:#fff; font-size:15px; font-weight:700; margin-bottom:18px;">$29/month · Cancel anytime</div>
+      <div style="color:#8B96AB;font-size:12px;margin-top:10px;">$0 today. Full ROOK access during your trial.</div>`
+    : `<div style="color:#fff;font-size:15px;font-weight:700;margin-bottom:18px;">$29/month · Cancel anytime</div>
       <a href="/rook-onboarding-v4.html" class="btn btn-primary">Get Started</a>
-      <div style="color:#8B96AB; font-size:12px; margin-top:10px;">One membership. Full ROOK access.</div>`;
+      <div style="color:#8B96AB;font-size:12px;margin-top:10px;">One membership. Full ROOK access.</div>`;
+
+  const companyGrid = companyList.length > 0
+    ? `<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:32px;">
+        ${companyList.map(c => `<div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px 18px;font-size:14px;font-weight:600;color:var(--navy);">${escapeHtml(c.company_name)}</div>`).join("")}
+      </div>`
+    : `<p style="color:var(--muted);font-size:14px;margin-bottom:32px;">We're actively adding more employers in this category — check back soon.</p>`;
 
   const bodyHtml = `
-    <h1 style="font-size:28px; margin-bottom:10px;">${escapeHtml(category.label)}</h1>
-    <p style="color:var(--muted); font-size:14.5px; margin-bottom:28px;">${jobRows.length} real, currently open role${jobRows.length === 1 ? "" : "s"} — pulled directly from employer career sites, not a stale aggregator.</p>
-    ${jobRows.length === 0 ? `<div style="color:var(--muted); font-size:14.5px; padding:40px 0; text-align:center;">No open roles in this category right now — check back soon, or <a href="/rook-browse.html" style="color:var(--royal); font-weight:600;">browse all open roles</a>.</div>` : ""}
-    ${jobRows.map((job) => {
-      const comp = job.compensation_text || (job.salary_min ? `$${job.salary_min}${job.salary_max ? "–$" + job.salary_max : "+"}` : "");
-      return `
-      <a href="/jobs/${escapeHtml(job.id)}" style="display:block; background:#fff; border:1px solid var(--border); border-radius:var(--radius); padding:18px 20px; margin-bottom:12px;">
-        <div style="font-weight:700; font-size:15px; margin-bottom:4px;">${escapeHtml(job.title_original || "Untitled role")}</div>
-        <div style="color:var(--muted); font-size:13px;">${escapeHtml(job.location_raw || "")}${comp ? " · " + escapeHtml(comp) : ""}</div>
-      </a>`;
-    }).join("")}
-    <div style="background:var(--navy); border-radius:var(--radius); padding:28px 24px; text-align:center; margin-top:32px;">
-      <h3 style="color:#fff; font-size:19px; margin-bottom:8px;">Ready to see who's hiring?</h3>
-      <p style="color:#B9C4DB; font-size:13.5px; margin-bottom:14px;">See the employer, apply directly, and get every role scored against your experience.</p>
+    <h1 style="font-size:28px;margin-bottom:10px;">${escapeHtml(category.label)}</h1>
+    <p style="color:var(--muted);font-size:14.5px;margin-bottom:24px;">${escapeHtml(category.description)}</p>
+
+    <div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:14px;">
+      ${companyList.length} Companies We Source From
+    </div>
+    ${companyGrid}
+
+    <div style="background:var(--navy);border-radius:var(--radius);padding:28px 24px;text-align:center;margin-bottom:36px;">
+      <h3 style="color:#fff;font-size:19px;margin-bottom:8px;">See which roles match your background</h3>
+      <p style="color:#B9C4DB;font-size:13.5px;margin-bottom:14px;">ROOK scores every open role at these companies against your experience, location, and preferences — so you see your best matches first.</p>
       ${ctaBlock}
     </div>
-    <div style="margin-top:36px;">
-      <div style="font-size:12.5px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.02em; margin-bottom:12px;">Browse other categories</div>
-      <div style="display:flex; flex-wrap:wrap; gap:8px;">
-        ${otherCategories.map(([slug, c]) => `<a href="/jobs/category/${slug}" style="font-size:13px; color:var(--royal); background:rgba(20,99,255,0.08); padding:7px 14px; border-radius:99px; font-weight:600;">${escapeHtml(c.label)}</a>`).join("")}
+
+    <div>
+      <div style="font-size:12.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.02em;margin-bottom:12px;">Browse other categories</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;">
+        ${otherCategories.map(([slug, c]) => `<a href="/jobs/category/${slug}" style="font-size:13px;color:var(--royal);background:rgba(20,99,255,0.08);padding:7px 14px;border-radius:99px;font-weight:600;">${escapeHtml(c.label)}</a>`).join("")}
       </div>
     </div>
   `;
