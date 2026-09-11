@@ -522,7 +522,14 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
   // bugs to ever find, not two.
   const nearLat = req.query.near_lat != null ? Number(req.query.near_lat) : profile.home_lat;
   const nearLng = req.query.near_lng != null ? Number(req.query.near_lng) : profile.home_lng;
-  if (nearLat != null && nearLng != null && !Number.isNaN(nearLat) && !Number.isNaN(nearLng)) {
+  // If near_lat/near_lng matches the user's home location (within 0.01°),
+  // use precomputed scores for instant load. Only use live scoring when
+  // the user is genuinely exploring a different location.
+  const isHomeLocation = profile.home_lat != null &&
+    Math.abs(nearLat - profile.home_lat) < 0.01 &&
+    Math.abs(nearLng - profile.home_lng) < 0.01;
+
+  if (nearLat != null && nearLng != null && !Number.isNaN(nearLat) && !Number.isNaN(nearLng) && !isHomeLocation) {
     const EXPLORE_RADIUS_MILES = 300;
     // Reported directly as genuinely slow: fetching ALL ~2,500+ active
     // jobs via fetchActiveJobs (paginated, full columns) and THEN
@@ -625,7 +632,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
   // 24 hours old, which is acceptable for job matching.
   // Only skip precomputed for keyword searches (live scoring needed for
   // relevance) or when the user explicitly explores a different location.
-  if (!keyword && !industry && !state) {
+  if (!keyword && !industry && !state && (isHomeLocation || req.query.near_lat == null)) {
     const { data: precomputedRows, error: pcError } = await supabaseAdmin
       .from("candidate_job_matches")
       .select(`overall_score, preference_fit, candidate_fit, excellent_match, recommendation, reasons, saved, dismissed, job_id, jobs!inner(${JOB_LIST_COLUMNS_NO_DESCRIPTION})`)
