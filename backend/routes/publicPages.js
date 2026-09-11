@@ -27,6 +27,22 @@ function escapeHtml(str) {
   return String(str || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+// Extract "City, ST" from raw location strings like
+// "Tampa, Florida, United States" or "Tampa, FL, US"
+function shortLocation(raw) {
+  if (!raw) return null;
+  const STATE_ABBR = { Florida:"FL",Texas:"TX",California:"CA","New York":"NY",Ohio:"OH",Illinois:"IL",Georgia:"GA","North Carolina":"NC",Michigan:"MI",Pennsylvania:"PA",Tennessee:"TN",Virginia:"VA",Washington:"WA",Massachusetts:"MA",Arizona:"AZ",Colorado:"CO",Minnesota:"MN","New Jersey":"NJ",Indiana:"IN",Missouri:"MO",Maryland:"MD",Wisconsin:"WI",Connecticut:"CT",Nevada:"NV",Louisiana:"LA",Alabama:"AL","South Carolina":"SC",Kentucky:"KY",Oregon:"OR",Oklahoma:"OK","New Mexico":"NM",Utah:"UT",Iowa:"IA",Arkansas:"AR",Kansas:"KS",Nebraska:"NE","West Virginia":"WV",Idaho:"ID","New Hampshire":"NH",Maine:"ME",Montana:"MT",Delaware:"DE","North Dakota":"ND","South Dakota":"SD",Alaska:"AK",Vermont:"VT",Wyoming:"WY","Rhode Island":"RI",Hawaii:"HI",Mississippi:"MS" };
+  const parts = raw.split(",").map(s => s.trim()).filter(s => s && !/^(United States?|US|USA)$/i.test(s));
+  if (parts.length === 0) return null;
+  const city = parts[0];
+  const stateRaw = parts[1] || "";
+  if (/^[A-Z]{2}$/.test(stateRaw)) return `${city}, ${stateRaw}`;
+  const abbr = STATE_ABBR[stateRaw];
+  if (abbr) return `${city}, ${abbr}`;
+  if (stateRaw.length > 0 && stateRaw.length <= 20) return `${city}, ${stateRaw}`;
+  return city;
+}
+
 // Shared page chrome (nav, footer, styles) so the job page and sitemap-
 // adjacent pages look like the rest of ROOK rather than a bare document.
 function pageShell({ title, description, canonicalUrl, ogImage, bodyHtml, jsonLd }) {
@@ -142,19 +158,10 @@ router.get("/jobs/:id", async (req, res, next) => {
 
   const title = job.title_original || job.title_normalized || "Open role";
   const comp = job.compensation_text || (job.salary_min ? `$${job.salary_min}${job.salary_max ? "–$" + job.salary_max : "+"}` : "");
+  const locShort = shortLocation(job.location_raw);
+  const titleWithLoc = locShort ? `${title} in ${locShort}` : title;
 
   // Structured teaser built from the AI-extracted job attributes
-  // instead of a raw description excerpt. Real bug this replaces:
-  // job postings almost always name the employer in their own opening
-  // sentence ("Abbott is a global healthcare leader...") — scrubbing
-  // that string out of free text is inherently fragile (misses
-  // nicknames, abbreviations, slightly different phrasing), so instead
-  // of trying to sanitize prose, this shows only categorical data that
-  // can never leak identity in the first place: industry, product
-  // focus, seniority level, travel expectation. This also sidesteps a
-  // second real bug — raw un-decoded HTML entities (literal "&nbsp;"
-  // text) sometimes present in ingested description_text, which were
-  // showing up as visibly broken text on the page.
   const ai = job.ai_analysis || {};
   const teaserFacts = [];
   if (Array.isArray(ai.required_industries) && ai.required_industries.length) teaserFacts.push(`Industry: ${ai.required_industries[0]}`);
@@ -170,57 +177,80 @@ router.get("/jobs/:id", async (req, res, next) => {
     : "Full role details — including responsibilities, requirements, and who's hiring — are visible after you sign up.";
 
   const canonicalUrl = `${APP_BASE_URL}/jobs/${job.id}`;
-  const metaDescription = `${title} — ${job.location_raw || ""}${comp ? " — " + comp : ""}. See the employer and apply on ROOK.`.slice(0, 300);
+  const metaDescription = `${titleWithLoc}${comp ? " — " + comp : ""}. See the employer and apply on ROOK — medical & veterinary sales careers.`.slice(0, 300);
 
-  // schema.org JobPosting — the markup Google Jobs rich results look
-  // for. hiringOrganization is intentionally generic here, same "not
-  // revealed until sign-up" principle as everything else on this page —
-  // worth knowing that omitting the real employer name may mean this
-  // doesn't qualify for the full Google Jobs rich-result treatment,
-  // which is a real tradeoff of the gating strategy, not a bug. Basic
-  // organic indexing isn't affected by that either way. The
-  // "description" field here uses the same safe structured teaser as
-  // the visible page, not the raw description_text — that field was
-  // leaking the real employer name into structured data even though it
-  // was never rendered visibly on the page itself.
+  // Fetch similar jobs for internal linking — same state, different job
+  let similarJobsHtml = "";
+  try {
+    const stateGuess = (job.location_raw || "").split(",").map(s => s.trim()).filter(s => /^[A-Z]{2}$/.test(s))[0]
+      || (job.location_raw || "").split(",")[1]?.trim() || null;
+    const similarQuery = supabaseAnon
+      .from("jobs")
+      .select("id, title_original, location_raw, company_name")
+      .eq("status", "active")
+      .eq("moderation_status", "approved")
+      .neq("id", job.id)
+      .limit(4);
+    const { data: similar } = stateGuess
+      ? await similarQuery.ilike("location_raw", `%${stateGuess}%`)
+      : await similarQuery;
+    if (similar && similar.length > 0) {
+      similarJobsHtml = `
+      <div style="margin-top:32px;">
+        <div style="font-size:12.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:12px;">Similar Roles</div>
+        ${similar.map(s => `
+          <a href="/jobs/${escapeHtml(s.id)}" style="display:block;background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:8px;">
+            <div style="font-weight:600;font-size:14px;margin-bottom:3px;">${escapeHtml(s.title_original || "Open role")}</div>
+            <div style="font-size:12.5px;color:var(--muted);">${escapeHtml(s.location_raw || "")}</div>
+          </a>`).join("")}
+      </div>`;
+    }
+  } catch (_) {}
+
+  // JSON-LD JobPosting with complete fields for Google Jobs
   const jsonLd = {
     "@context": "https://schema.org/",
     "@type": "JobPosting",
-    title,
-    description: escapeHtml(preview),
+    title: titleWithLoc,
+    description: preview,
     datePosted: job.date_posted || undefined,
-    hiringOrganization: { "@type": "Organization", name: "Confidential — join ROOK to reveal" },
-    jobLocation: job.location_raw ? { "@type": "Place", address: job.location_raw } : undefined,
-    employmentType: "FULL_TIME",
+    validThrough: job.expires_at || undefined,
+    hiringOrganization: { "@type": "Organization", name: "See employer on ROOK", sameAs: APP_BASE_URL },
+    jobLocation: locShort ? { "@type": "Place", address: { "@type": "PostalAddress", addressLocality: locShort.split(",")[0]?.trim(), addressRegion: locShort.split(",")[1]?.trim(), addressCountry: "US" } } : undefined,
+    employmentType: job.employment_type === "Contract" ? "CONTRACTOR" : "FULL_TIME",
+    ...(job.salary_min ? { baseSalary: { "@type": "MonetaryAmount", currency: "USD", value: { "@type": "QuantitativeValue", minValue: job.salary_min, maxValue: job.salary_max || undefined, unitText: "YEAR" } } } : {}),
+    directApply: false,
+    url: `${APP_BASE_URL}/jobs/${job.id}`,
   };
 
   const trialDays = getTrialPeriodDays();
   const ctaBlock = trialDays > 0
-    ? `<div style="color:#fff; font-size:15px; font-weight:700; margin-bottom:2px;">${trialDays} days free, then $29/month</div>
-      <div style="color:#B9C4DB; font-size:13px; font-weight:600; margin-bottom:18px;">Cancel anytime.</div>
+    ? `<div style="color:#fff;font-size:15px;font-weight:700;margin-bottom:2px;">${trialDays} days free, then $29/month</div>
+      <div style="color:#B9C4DB;font-size:13px;font-weight:600;margin-bottom:18px;">Cancel anytime.</div>
       <a href="/rook-onboarding-v4.html" class="btn btn-primary">Start Your ${trialDays}-Day Free Trial</a>
-      <div style="color:#8B96AB; font-size:12px; margin-top:10px;">$0 today. Full ROOK access during your trial.</div>`
-    : `<div style="color:#fff; font-size:15px; font-weight:700; margin-bottom:18px;">$29/month · Cancel anytime</div>
+      <div style="color:#8B96AB;font-size:12px;margin-top:10px;">$0 today. Full ROOK access during your trial.</div>`
+    : `<div style="color:#fff;font-size:15px;font-weight:700;margin-bottom:18px;">$29/month · Cancel anytime</div>
       <a href="/rook-onboarding-v4.html" class="btn btn-primary">Get Started</a>
-      <div style="color:#8B96AB; font-size:12px; margin-top:10px;">One membership. Full ROOK access.</div>`;
+      <div style="color:#8B96AB;font-size:12px;margin-top:10px;">One membership. Full ROOK access.</div>`;
 
   const bodyHtml = `
-    <div style="background:rgba(20,99,255,0.08); color:var(--royal); display:inline-flex; align-items:center; gap:6px; font-size:12.5px; font-weight:600; padding:6px 12px; border-radius:999px; margin-bottom:16px;">🔒 Employer revealed with ROOK access</div>
-    <h1 style="font-size:28px; margin-bottom:10px;">${escapeHtml(title)}</h1>
-    <div style="font-size:14.5px; color:var(--muted); margin-bottom:24px;">${escapeHtml(job.location_raw || "")}${comp ? " · " + escapeHtml(comp) : ""}${job.date_posted ? " · Posted " + escapeHtml(job.date_posted) : ""}</div>
-    <div style="background:#fff; border:1px solid var(--border); border-radius:var(--radius); padding:24px; margin-bottom:24px; font-size:14.5px; line-height:1.7; color:var(--navy);">
+    <div style="background:rgba(20,99,255,0.08);color:var(--royal);display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;padding:6px 12px;border-radius:999px;margin-bottom:16px;">🔒 Employer revealed with ROOK access</div>
+    <h1 style="font-size:28px;margin-bottom:10px;">${escapeHtml(titleWithLoc)}</h1>
+    <div style="font-size:14.5px;color:var(--muted);margin-bottom:24px;">${escapeHtml(job.location_raw || "")}${comp ? " · " + escapeHtml(comp) : ""}${job.date_posted ? " · Posted " + escapeHtml(job.date_posted) : ""}</div>
+    <div style="background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:24px;margin-bottom:24px;font-size:14.5px;line-height:1.7;color:var(--navy);">
       ${escapeHtml(preview)}
-      <div style="margin-top:16px; padding-top:16px; border-top:1px dashed var(--border); color:var(--muted); font-style:italic;">ROOK members see the employer, full opportunity details, direct application link, and personalized match score.</div>
+      <div style="margin-top:16px;padding-top:16px;border-top:1px dashed var(--border);color:var(--muted);font-style:italic;">ROOK members see the employer, full opportunity details, direct application link, and personalized match score.</div>
     </div>
-    <div style="background:var(--navy); border-radius:var(--radius); padding:28px 24px; text-align:center;">
-      <h3 style="color:#fff; font-size:19px; margin-bottom:8px;">Ready to see who's hiring?</h3>
-      <p style="color:#B9C4DB; font-size:13.5px; margin-bottom:14px;">See the employer, apply directly, and get this job — and every other opportunity — scored against your experience.</p>
+    <div style="background:var(--navy);border-radius:var(--radius);padding:28px 24px;text-align:center;">
+      <h3 style="color:#fff;font-size:19px;margin-bottom:8px;">Ready to see who's hiring?</h3>
+      <p style="color:#B9C4DB;font-size:13.5px;margin-bottom:14px;">See the employer, apply directly, and get this job — and every other opportunity — scored against your experience.</p>
       ${ctaBlock}
     </div>
-    <div style="text-align:center; margin-top:20px;"><a href="/rook-browse.html" style="color:var(--royal); font-size:13px; font-weight:600;">← Back to all open roles</a></div>
+    ${similarJobsHtml}
+    <div style="text-align:center;margin-top:24px;"><a href="/rook-browse.html" style="color:var(--royal);font-size:13px;font-weight:600;">← Browse all open roles</a></div>
   `;
 
-  res.send(pageShell({ title: `${title} — ROOK`, description: metaDescription, canonicalUrl, bodyHtml, jsonLd }));
+  res.send(pageShell({ title: `${titleWithLoc} — ROOK`, description: metaDescription, canonicalUrl, bodyHtml, jsonLd }));
 });
 
 // Real, curated set of job categories for server-rendered landing
@@ -238,7 +268,11 @@ router.get("/jobs/:id", async (req, res, next) => {
 // the industry they primarily serve. Update companySlugs as new employers
 // are added to the DB.
 const CATEGORIES = {
-  "medical-sales-jobs": {
+  "medical-sales-jobs": { longContent: `<p>Medical sales is one of the most rewarding and well-compensated career paths in healthcare. Representatives work directly with physicians, hospital systems, surgical centers, and clinical labs to introduce products that improve patient outcomes — from surgical instruments and diagnostic equipment to specialty pharmaceuticals and biologics.</p>
+<p><strong>Compensation:</strong> Medical sales roles typically offer a base salary of $60,000–$90,000 plus commission, with total compensation ranging from $90,000 to $180,000+ for experienced reps in competitive specialties like oncology, orthopedics, and cardiovascular. Device and capital equipment roles often carry the highest earning potential.</p>
+<p><strong>What employers look for:</strong> Most hiring managers prioritize a track record of quota attainment, clinical selling experience, and the ability to build long-term relationships with decision-makers. A clinical background (nursing, lab science, or physical therapy) is a significant advantage for specialty roles. Territory management and CRM fluency are expected at most levels.</p>
+<p>ROOK pulls these openings directly from employer career sites — so you see roles at Abbott, Stryker, Quest Diagnostics, Tempus, and hundreds of other companies before they saturate the job boards.</p>`,
+
     label: "Medical Sales Jobs",
     description: "ROOK sources medical sales jobs directly from employer career sites across medical device, diagnostics, pharmaceutical, and specialty healthcare companies.",
     companySlugs: [
@@ -263,7 +297,11 @@ const CATEGORIES = {
       "hologic","invacare","cardinal-health","henry-schein","mckesson",
     ],
   },
-  "pharmaceutical-sales-jobs": {
+  "pharmaceutical-sales-jobs": { longContent: `<p>Pharmaceutical sales representatives promote prescription medications to physicians, nurse practitioners, and other prescribers. The role requires deep product and disease-state knowledge, the ability to navigate complex healthcare relationships, and a consultative approach to changing prescribing behavior — particularly in specialty areas like oncology, neurology, immunology, and rare disease.</p>
+<p><strong>Compensation:</strong> Entry-level pharma reps typically earn $55,000–$75,000 base, with total compensation of $80,000–$120,000 including bonus. Specialty and rare-disease roles at companies like argenx, Travere, or United Therapeutics often pay $120,000–$200,000+ in total comp given the complexity of the sale and small patient populations.</p>
+<p><strong>What employers look for:</strong> A bachelor's degree is standard; science-related fields are preferred but not required. Demonstrated sales success — whether in pharma, device, or another industry — matters more than the degree itself. Companies like Pfizer, AbbVie, and Novo Nordisk often hire from device or diagnostics backgrounds.</p>
+<p>ROOK sources these roles directly from pharma and biotech employer career sites, including many that post days before they appear on LinkedIn or Indeed.</p>`,
+
     label: "Pharmaceutical Sales Jobs",
     description: "ROOK pulls pharmaceutical sales jobs directly from top pharma and biotech employer career sites — no job board middlemen.",
     companySlugs: [
@@ -278,7 +316,11 @@ const CATEGORIES = {
       "sun-pharma",
     ],
   },
-  "medical-device-sales-jobs": {
+  "medical-device-sales-jobs": { longContent: `<p>Medical device sales representatives sell physical products used in clinical and surgical settings — from orthopedic implants and surgical robotics to cardiovascular devices, wound care, and diagnostic equipment. The role is highly technical, often requiring operating room presence and the ability to support procedures in real time.</p>
+<p><strong>Compensation:</strong> Device reps are among the highest-earning professionals in medical sales. Base salaries range from $65,000–$95,000, with total compensation of $120,000–$250,000+ for top performers in surgical specialties. Capital equipment roles (imaging, robotic surgery) often include additional commission on service contracts.</p>
+<p><strong>What employers look for:</strong> OR experience, clinical credentialing (RepTrax, Vendormate), and a history of consistent quota performance are the primary differentiators. Stryker, Medtronic, Boston Scientific, and Zimmer Biomet are among the most active hirers and typically promote from within — making entry-level associate rep roles a strong path into the field.</p>
+<p>ROOK pulls device openings directly from manufacturer career sites, giving you access to roles that match your territory and specialty before they reach the major job boards.</p>`,
+
     label: "Medical Device Sales Jobs",
     description: "ROOK sources medical device sales jobs directly from manufacturer career sites — capital equipment, surgical, implantables, diagnostics, and more.",
     companySlugs: [
@@ -287,7 +329,11 @@ const CATEGORIES = {
       "natus-medical","artivion","agiliti","hologic","invacare",
     ],
   },
-  "diagnostics-sales-jobs": {
+  "diagnostics-sales-jobs": { longContent: `<p>Diagnostics and laboratory sales roles involve selling testing platforms, reagents, molecular assays, and genomic analysis services to hospitals, independent labs, physician offices, and health systems. The category spans clinical chemistry, molecular diagnostics, pathology, point-of-care testing, and precision oncology.</p>
+<p><strong>Compensation:</strong> Diagnostics reps typically earn $70,000–$95,000 base with total compensation of $100,000–$160,000. Precision oncology and genomics roles (Foundation Medicine, Guardant Health, Tempus, Exact Sciences) often carry higher upside given longer sales cycles and larger deal sizes.</p>
+<p><strong>What employers look for:</strong> A science or clinical background is valued — medical technologists, lab scientists, and nurses transition well into diagnostics sales. For precision oncology specifically, oncology selling experience is highly sought. Quest Diagnostics, Labcorp, and major diagnostics manufacturers (Roche, Abbott, Beckman Coulter) hire continuously across all experience levels.</p>
+<p>ROOK sources these roles directly from employer career sites, including emerging genomics companies that often don't post on traditional job boards.</p>`,
+
     label: "Diagnostics & Laboratory Sales Jobs",
     description: "ROOK pulls diagnostics and laboratory sales jobs directly from employer career sites — clinical, molecular, pathology, genomics, and point-of-care.",
     companySlugs: [
@@ -296,7 +342,11 @@ const CATEGORIES = {
       "natera","somalogic","veracyte","biocryst-pharmaceuticals","eisai",
     ],
   },
-  "veterinary-sales-jobs": {
+  "veterinary-sales-jobs": { longContent: `<p>Veterinary sales professionals sell pharmaceuticals, diagnostics, nutrition, and medical equipment to veterinary practices, animal hospitals, and production animal operations. The field includes companion animal, equine, and production/food animal segments — each with distinct customer relationships and product portfolios.</p>
+<p><strong>Compensation:</strong> Veterinary sales roles typically range from $60,000–$85,000 base with total compensation of $85,000–$140,000. Senior roles at IDEXX, Zoetis, and Elanco often pay above this range given the complexity of the territory and the relationship-driven nature of the veterinary market.</p>
+<p><strong>What employers look for:</strong> A veterinary or animal science background is a significant advantage, though not always required. IDEXX in particular recruits heavily from vet tech and clinical backgrounds. Demonstrated sales success, a passion for animal health, and the ability to build trust with DVMs are the consistent hiring criteria across the segment.</p>
+<p>ROOK pulls veterinary sales openings directly from employer career sites at IDEXX, Zoetis, Elanco, Merck Animal Health, Hill's Pet Nutrition, Royal Canin, and others.</p>`,
+
     label: "Veterinary Sales Jobs",
     description: "ROOK sources veterinary and animal health sales jobs directly from employer career sites — diagnostics, pharmaceuticals, nutrition, and practice management.",
     companySlugs: [
@@ -305,7 +355,11 @@ const CATEGORIES = {
       "dechra","patterson-companies","henry-schein-animal-health",
     ],
   },
-  "animal-health-sales-jobs": {
+  "animal-health-sales-jobs": { longContent: `<p>Animal health sales spans pharmaceuticals, biologics, parasiticides, diagnostics, and nutritional products sold to veterinarians, feed dealers, and production animal operations. The segment is growing rapidly, driven by increased pet ownership, humanization of companion animals, and biosecurity demands in food animal production.</p>
+<p><strong>Compensation:</strong> Animal health reps typically earn $60,000–$90,000 base with total compensation of $85,000–$145,000. Production animal roles covering large territories often include vehicle allowances and higher commission rates given the volume-driven nature of the business.</p>
+<p><strong>What employers look for:</strong> An agricultural, veterinary, or life science background is valued, particularly for production animal roles. For companion animal roles, clinic experience and relationship skills with DVMs matter most. Zoetis, Elanco, and Merck Animal Health are the largest employers and hire at all experience levels.</p>
+<p>ROOK sources animal health openings directly from employer career sites — you'll see roles before they appear on Indeed or LinkedIn.</p>`,
+
     label: "Animal Health Sales Jobs",
     description: "ROOK sources animal health sales jobs directly from top employer career sites.",
     companySlugs: [
@@ -313,17 +367,29 @@ const CATEGORIES = {
       "virbac","phibro","dechra","hills-pet-nutrition","royal-canin",
     ],
   },
-  "territory-sales-manager-jobs": {
+  "territory-sales-manager-jobs": { longContent: `<p>Territory sales manager roles exist across every segment of medical and veterinary sales — medical device, diagnostics, pharma, and animal health. The title indicates a geography-based book of business, typically covering multiple accounts within a defined region, and often reporting to a regional or district sales manager.</p>
+<p><strong>Compensation:</strong> TSM compensation varies widely by industry and company. Device and specialty pharma TSMs typically earn $75,000–$110,000 base with total compensation of $110,000–$180,000. Diagnostics and primary care pharma roles tend toward the lower end of that range.</p>
+<p><strong>What employers look for:</strong> Consistent quota attainment (typically 100%+ for 2+ years), the ability to manage a pipeline independently, and strong CRM discipline. Companies want reps who can work without daily supervision and have demonstrated growth within their existing accounts.</p>
+<p>ROOK matches territory sales manager openings to your specific geography — so you only see roles that fit your location and background.</p>`,
+
     label: "Territory Sales Manager Jobs",
     description: "ROOK matches territory sales manager openings directly from employer career sites across medical, pharma, and veterinary companies.",
     companySlugs: [], // show all companies — no specific subset
   },
-  "key-account-manager-jobs": {
+  "key-account-manager-jobs": { longContent: `<p>Key account manager roles in medical and veterinary sales involve managing strategic relationships with large health systems, GPOs, IDNs, or national accounts. Unlike territory reps, KAMs focus on contract negotiation, formulary positioning, and executive-level relationship management across multiple sites or divisions of a single account.</p>
+<p><strong>Compensation:</strong> KAM roles are among the highest-paying in the industry, reflecting the complexity and revenue impact of the accounts managed. Base salaries typically range from $90,000–$130,000 with total compensation of $140,000–$220,000+. National account roles at large device or pharma companies often exceed this range.</p>
+<p><strong>What employers look for:</strong> A track record of managing complex, multi-stakeholder accounts; experience with GPO contracting and IDN navigation; and the ability to build relationships at the C-suite and VP level. Most employers require 5+ years of field sales success before considering candidates for KAM roles.</p>
+<p>ROOK sources KAM openings directly from employer career sites and scores them against your experience and location preferences.</p>`,
+
     label: "Key Account Manager Jobs",
     description: "ROOK sources key account manager jobs from employer career sites across the medical, pharma, and healthcare industry.",
     companySlugs: [],
   },
-  "capital-equipment-sales-jobs": {
+  "capital-equipment-sales-jobs": { longContent: `<p>Capital equipment sales involves selling large, high-value medical devices — imaging systems, surgical robots, laboratory analyzers, patient monitoring platforms, and similar equipment — to hospitals, surgery centers, and health systems. These are complex, consultative sales with long cycles (6–18 months) and multiple stakeholders including clinical, administrative, and finance decision-makers.</p>
+<p><strong>Compensation:</strong> Capital equipment reps are among the highest earners in medical sales. Base salaries range from $80,000–$120,000 with total compensation of $150,000–$300,000+ for top performers selling high-ticket systems. Commission structures often include bonuses on service contracts and consumables in addition to equipment placements.</p>
+<p><strong>What employers look for:</strong> Experience managing long sales cycles, hospital-level relationship skills, and the ability to build ROI-based business cases for C-suite buyers. Companies like Stryker, Hologic, Medtronic, and Boston Scientific are the primary hirers in this space and often prefer candidates with demonstrated device or capital sales backgrounds.</p>
+<p>ROOK pulls capital equipment openings directly from manufacturer career sites, scored against your geography and experience.</p>`,
+
     label: "Capital Equipment Sales Jobs",
     description: "ROOK pulls capital equipment sales jobs directly from manufacturer career sites.",
     companySlugs: [
@@ -384,6 +450,8 @@ router.get("/jobs/category/:slug", async (req, res, next) => {
     <h1 style="font-size:28px;margin-bottom:10px;">${escapeHtml(category.label)}</h1>
     <p style="color:var(--muted);font-size:14.5px;margin-bottom:24px;">${escapeHtml(category.description)}</p>
 
+    ${category.longContent ? `<div style="background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:24px;margin-bottom:28px;font-size:14.5px;line-height:1.8;color:var(--navy);">${category.longContent}</div>` : ""}
+
     <div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:14px;">
       ${companyList.length} Companies We Source From
     </div>
@@ -431,9 +499,12 @@ router.get("/sitemap.xml", async (req, res) => {
   }
 
   const urlEntries = [
-    ...staticUrls.map((url) => `<url><loc>${escapeHtml(url)}</loc></url>`),
+    ...staticUrls.map((url, i) => {
+      const priority = i === 0 ? "1.0" : url.includes("/jobs/category/") ? "0.8" : "0.6";
+      return `<url><loc>${escapeHtml(url)}</loc><priority>${priority}</priority></url>`;
+    }),
     ...jobUrls.map(
-      (j) => `<url><loc>${escapeHtml(j.url)}</loc>${j.lastmod ? `<lastmod>${new Date(j.lastmod).toISOString().slice(0, 10)}</lastmod>` : ""}</url>`
+      (j) => `<url><loc>${escapeHtml(j.url)}</loc><priority>0.6</priority>${j.lastmod ? `<lastmod>${new Date(j.lastmod).toISOString().slice(0, 10)}</lastmod>` : ""}<changefreq>weekly</changefreq></url>`
     ),
   ].join("\n");
 

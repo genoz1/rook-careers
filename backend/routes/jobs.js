@@ -646,6 +646,21 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
   if (keyword) {
     liveQuery = liveQuery.or(`title_original.ilike.%${keyword}%,company_name.ilike.%${keyword}%`);
   }
+
+  // Bounding box pre-filter — cuts Supabase response from 5,000+ rows
+  // to ~300-400 before any scoring happens. Applied only when the candidate
+  // has a home location; always includes remote and no-coordinate jobs so
+  // they're never accidentally excluded. Uses 300-mile box (same radius
+  // as the explore path) with a tighter SQL query rather than scoring
+  // everything in-memory first.
+  if (profile.home_lat != null && profile.home_lng != null && !keyword) {
+    const latDelta = 300 / 69;
+    const lngDelta = 300 / (69 * Math.max(0.1, Math.cos((profile.home_lat * Math.PI) / 180)));
+    liveQuery = liveQuery.or(
+      `job_lat.is.null,remote_status.eq.remote,and(job_lat.gte.${profile.home_lat - latDelta},job_lat.lte.${profile.home_lat + latDelta},job_lng.gte.${profile.home_lng - lngDelta},job_lng.lte.${profile.home_lng + lngDelta})`
+    );
+  }
+
   const { data: allMatchingJobs, error: liveError } = await liveQuery;
   if (liveError) return res.status(500).json({ error: liveError.message });
 
