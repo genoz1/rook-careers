@@ -32,6 +32,7 @@ const { fetchPaylocityJobs, normalizePaylocityJob } = require("./adapters/payloc
 const { fetchAdpJobs }    = require("./adapters/adp");
 const { fetchUkgJobs }    = require("./adapters/ukg");
 const { fetchJazzHRJobs } = require("./adapters/jazzhr");
+const { fetchSuccessFactorsJobs, normalizeSuccessFactorsJob } = require("./adapters/successfactors");
 const { analyzeJob } = require("./ai/jobAnalysis");
 const { generateEmbedding } = require("./ai/embeddings");
 const { geocodeLocation } = require("./geocoding");
@@ -116,6 +117,10 @@ async function ingestEmployer(employer) {
       // JazzHR / ApplyToJob — normalize built into adapter
       rawJobs = await fetchJazzHRJobs(employer);
       normalize = (job) => job;
+    } else if (employer.ats_type === "successfactors") {
+      const host = employer.ats_identifier.replace(/^https?:\/\//, "").replace(/\/$/, "");
+      rawJobs = await fetchSuccessFactorsJobs(employer.ats_identifier);
+      normalize = (job) => normalizeSuccessFactorsJob(job, employer, host);
     } else {
       console.log(`  Skipping — no adapter for ats_type "${employer.ats_type}"`);
       return;
