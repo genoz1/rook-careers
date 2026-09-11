@@ -184,9 +184,13 @@ router.get("/admin/employers", requireConfig, requireAuth, requireAdmin, async (
 module.exports = router;
 
 // ── Ad Manager connection test ────────────────────────────────────────────
-// GET /api/admin/admanager/test
+// GET /api/admin/admanager/test?token=YOUR_AD_MANAGER_TEST_TOKEN
 // Tests connectivity to each configured ad platform without making any changes.
-router.get("/admin/admanager/test", requireConfig, requireAuth, requireAdmin, async (req, res) => {
+router.get("/admin/admanager/test", async (req, res) => {
+  const expectedToken = process.env.AD_MANAGER_TEST_TOKEN;
+  if (!expectedToken || req.query.token !== expectedToken) {
+    return res.status(401).json({ error: "unauthorized — provide ?token=AD_MANAGER_TEST_TOKEN" });
+  }
   const results = {};
   const enabled = (process.env.AD_ENABLED_PLATFORMS || "").split(",").map(p => p.trim()).filter(Boolean);
   const mode = process.env.AD_MANAGER_MODE || "off";
