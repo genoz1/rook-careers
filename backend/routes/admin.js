@@ -182,3 +182,51 @@ router.get("/admin/employers", requireConfig, requireAuth, requireAdmin, async (
 });
 
 module.exports = router;
+
+// ── Ad Manager connection test ────────────────────────────────────────────
+// GET /api/admin/admanager/test
+// Tests connectivity to each configured ad platform without making any changes.
+router.get("/admin/admanager/test", requireConfig, requireAuth, requireAdmin, async (req, res) => {
+  const results = {};
+  const enabled = (process.env.AD_ENABLED_PLATFORMS || "").split(",").map(p => p.trim()).filter(Boolean);
+  const mode = process.env.AD_MANAGER_MODE || "off";
+
+  if (mode === "off") {
+    return res.json({ mode, message: "AD_MANAGER_MODE is 'off' — set to 'dry-run' to test connections" });
+  }
+
+  if (enabled.includes("meta") && process.env.META_ADS_ACCESS_TOKEN && process.env.META_ADS_ACCOUNT_ID) {
+    try {
+      const meta = require("../admanager/clients/meta");
+      results.meta = await meta.testConnection();
+    } catch (err) {
+      results.meta = { ok: false, error: err.message };
+    }
+  } else if (enabled.includes("meta")) {
+    results.meta = { ok: false, error: "META_ADS_ACCESS_TOKEN or META_ADS_ACCOUNT_ID not set" };
+  }
+
+  if (enabled.includes("google") && process.env.GOOGLE_ADS_CUSTOMER_ID) {
+    try {
+      const google = require("../admanager/clients/google");
+      results.google = await google.testConnection();
+    } catch (err) {
+      results.google = { ok: false, error: err.message };
+    }
+  } else if (enabled.includes("google")) {
+    results.google = { ok: false, error: "GOOGLE_ADS_CUSTOMER_ID not set" };
+  }
+
+  if (enabled.includes("reddit") && process.env.REDDIT_ADS_ACCOUNT_ID) {
+    try {
+      const reddit = require("../admanager/clients/reddit");
+      results.reddit = await reddit.testConnection();
+    } catch (err) {
+      results.reddit = { ok: false, error: err.message };
+    }
+  } else if (enabled.includes("reddit")) {
+    results.reddit = { ok: false, error: "REDDIT_ADS_ACCOUNT_ID not set" };
+  }
+
+  return res.json({ mode, enabled_platforms: enabled, connections: results });
+});
