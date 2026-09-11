@@ -1177,17 +1177,24 @@
     const btn = document.getElementById('btnResumePostUpload');
     const statusDiv = document.getElementById('resumePostStatus');
     btn.disabled = true; btn.textContent = 'Uploading…';
+
+    // Animated step-by-step progress
+    const steps = [
+      { msg: '📤 Uploading your résumé…', delay: 0 },
+      { msg: '🔍 Reading your experience and skills…', delay: 5000 },
+      { msg: '🧠 Matching against open roles…', delay: 12000 },
+      { msg: '✅ Almost done — building your dashboard…', delay: 20000 },
+    ];
     if (statusDiv) {
       statusDiv.style.display = 'block';
-      statusDiv.textContent = 'Uploading your résumé… (this takes 10–20 seconds)';
+      statusDiv.innerHTML = steps[0].msg;
     }
-    // Update status message partway through to reassure user it's still working
-    const stillWorking = setTimeout(() => {
-      if (statusDiv) statusDiv.textContent = 'Analyzing your experience with AI… almost done';
-    }, 8000);
+    const stepTimers = steps.slice(1).map(({ msg, delay }) =>
+      setTimeout(() => { if (statusDiv) statusDiv.innerHTML = msg; }, delay)
+    );
+
     try {
       const { data: { session } } = await sb.auth.getSession();
-      console.log('[resume-post] session:', !!session, 'file:', resumePostFile?.name);
       if (!session) throw new Error('No session — please refresh and try again.');
       const fd = new FormData();
       fd.append('resume', resumePostFile);
@@ -1196,15 +1203,13 @@
         headers: { Authorization: `Bearer ${session.access_token}` },
         body: fd
       });
-      console.log('[resume-post] upload status:', res.status);
+      stepTimers.forEach(clearTimeout);
       if (!res.ok) throw new Error('Upload failed (' + res.status + ')');
-      clearTimeout(stillWorking);
-      if (statusDiv) statusDiv.textContent = 'Résumé uploaded! Taking you to your dashboard…';
+      if (statusDiv) statusDiv.innerHTML = '✅ Résumé uploaded! Taking you to your dashboard…';
       safeGtag('event', 'resume_uploaded', { method: 'post_checkout' });
       setTimeout(() => { window.location.href = 'rook-dashboard.html'; }, 800);
     } catch (err) {
-      clearTimeout(stillWorking);
-      console.error('[resume-post] error:', err.message);
+      stepTimers.forEach(clearTimeout);
       btn.disabled = false; btn.textContent = 'Upload & Go to Dashboard';
       if (statusDiv) statusDiv.style.display = 'none';
       showErr('resumePostErr', err.message.includes('session') ? err.message : 'Upload failed. Please try again.');
