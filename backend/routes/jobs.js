@@ -21,7 +21,7 @@
 
 const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
-const { scoreJob, mentionsNonUsCountry, hasFullAccess } = require("../matching");
+const { scoreJob, mentionsNonUsCountry, hasFullAccess, stateAbbrFromName } = require("../matching");
 const { scoreAndStoreForCandidate, fetchActiveJobs } = require("../scoring/precompute");
 const { distanceMiles, geocodeZip } = require("../geocoding");
 const { sendEmail } = require("../email/resend");
@@ -1545,13 +1545,14 @@ router.get("/onboarding/match-preview", requireConfig, requireAuth, async (req, 
     if (profile.home_lat != null && profile.home_lng != null) {
       const latDelta = 300 / 69;
       const lngDelta = 300 / (69 * Math.max(0.1, Math.cos((profile.home_lat * Math.PI) / 180)));
-      // Null-coordinate jobs: only include if they match the user's home state
-      // so a Texas user doesn't see Ohio jobs with no coordinates
-      const stateFilter = profile.home_state
-        ? `and(job_lat.is.null,state.eq.${profile.home_state})`
+      // Null-coordinate jobs: include only if remote or in user's home state
+      // so a Texas user never sees Ohio jobs in their preview
+      const homeStateAbbr = stateAbbrFromName(profile.home_state);
+      const nullCoordFilter = homeStateAbbr
+        ? `and(job_lat.is.null,state.eq.${homeStateAbbr})`
         : `job_lat.is.null`;
       jobQuery = jobQuery.or(
-        `remote_status.eq.remote,${stateFilter},and(job_lat.gte.${profile.home_lat - latDelta},job_lat.lte.${profile.home_lat + latDelta},job_lng.gte.${profile.home_lng - lngDelta},job_lng.lte.${profile.home_lng + lngDelta})`
+        `remote_status.eq.remote,${nullCoordFilter},and(job_lat.gte.${profile.home_lat - latDelta},job_lat.lte.${profile.home_lat + latDelta},job_lng.gte.${profile.home_lng - lngDelta},job_lng.lte.${profile.home_lng + lngDelta})`
       );
     }
 
