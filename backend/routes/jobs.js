@@ -660,15 +660,44 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
 
       const { appStatusByJob, noteFor } = await loadEmployerHistory(profile.id);
 
-      const results = precomputedRows
+      let results = precomputedRows
         .filter(r => !mentionsNonUsCountry(r.jobs.location_raw, r.jobs.job_lng, r.jobs.title_original))
-        .map(row => ({
-          ...attachDistance(row.jobs, profile),
-          match: matchFromRow(row),
-          saved: row.saved || false,
-          application_status: appStatusByJob.get(row.job_id) || null,
-          employer_note: noteFor(row.jobs),
-        }));
+        .map(row => {
+          const withDist = attachDistance(row.jobs, profile);
+          const match = matchFromRow(row);
+
+          // Detect stale scores: if the stored reason says "X miles from you"
+          // but the actual distance is >50mi different, the job's coordinates
+          // changed since scoring. Rescore it live right now so the customer
+          // never sees a 225mi job ranked #1 because of stale 24mi coordinates.
+          const storedDistReason = (match?.reasons || []).find(r => /miles? from you/i.test(r));
+          const actualMiles = withDist.distance_miles;
+          if (storedDistReason && actualMiles != null) {
+            const storedMiles = parseFloat(storedDistReason.match(/[\d.]+/)?.[0] || '0');
+            if (Math.abs(storedMiles - actualMiles) > 50) {
+              // Coordinates changed — rescore this job live
+              const liveScore = scoreJob(row.jobs, profile);
+              return {
+                ...withDist,
+                match: liveScore,
+                saved: row.saved || false,
+                application_status: appStatusByJob.get(row.job_id) || null,
+                employer_note: noteFor(row.jobs),
+              };
+            }
+          }
+
+          return {
+            ...withDist,
+            match,
+            saved: row.saved || false,
+            application_status: appStatusByJob.get(row.job_id) || null,
+            employer_note: noteFor(row.jobs),
+          };
+        })
+        .sort((a, b) => (b.match?.overall_score ?? -1) - (a.match?.overall_score ?? -1));
+
+      if (!keyword) results = results.slice(0, Number(limit));
 
       return res.json({
         jobs: (hasFullAccess(profile) ? results : results.map(redactForNonSubscriber)).map(stripUnusedDescriptionFields),
