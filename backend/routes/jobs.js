@@ -1562,7 +1562,17 @@ router.get("/onboarding/match-preview", requireConfig, requireAuth, async (req, 
 
   try {
     const result = await scoringPromise;
-    // Cache for 5 minutes — covers double-clicks, refreshes, multiple tabs.
+
+    // Kick off a full background score+store immediately after the slow-path
+    // live scoring completes. By the time the user finishes the trial setup
+    // flow (password, pricing, Stripe — typically 60-120 seconds), scores
+    // will be stored in candidate_job_matches and the dashboard will use the
+    // fast precomputed path instead of live scoring again.
+    if (!result.from_precomputed) {
+      scoreAndStoreForCandidate(supabaseAdmin, profile).catch(err =>
+        console.error(`[match-preview bg-score] uid=${userId.slice(0,8)}: ${err.message}`)
+      );
+    }
     previewCache.set(userId, { result, expiresAt: Date.now() + PREVIEW_CACHE_TTL_MS });
     res.json(result);
   } catch (err) {
