@@ -226,6 +226,108 @@ function _resetPortalConfigCheckForTests() {
   portalConfigCheckedThisProcess = false;
 }
 
+// POST /api/stripe/create-setup-intent
+// Creates a Stripe SetupIntent so the embedded checkout (rook-checkout.html)
+// can collect card details directly on our domain without redirecting to
+// Stripe-hosted checkout. The intent is confirmed client-side by Stripe.js,
+// then the resulting payment_method_id is sent to create-subscription-from-setup.
+router.post("/stripe/create-setup-intent", requireConfig, requireAuth, async (req, res) => {
+  try {
+    // Find or create a Stripe customer for this user
+    const { data: profile } = await supabaseAdmin
+      .from("candidate_profiles")
+      .select("stripe_customer_id, email")
+      .eq("user_id", req.user.id)
+      .maybeSingle();
+
+    let customerId = profile?.stripe_customer_id;
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: req.user.email,
+        metadata: { user_id: req.user.id },
+      });
+      customerId = customer.id;
+      await supabaseAdmin
+        .from("candidate_profiles")
+        .update({ stripe_customer_id: customerId })
+        .eq("user_id", req.user.id);
+    }
+
+    const setupIntent = await stripe.setupIntents.create({
+      customer: customerId,
+      payment_method_types: ["card"],
+      usage: "off_session",
+      metadata: { user_id: req.user.id },
+    });
+
+    res.json({ client_secret: setupIntent.client_secret });
+  } catch (err) {
+    console.error("create-setup-intent failed:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/stripe/create-subscription-from-setup
+// After Stripe.js confirms the SetupIntent client-side, the frontend sends
+// the resulting payment_method_id here. We attach it to the customer and
+// create the trial subscription — same logic as the hosted checkout flow
+// but without the redirect.
+router.post("/stripe/create-subscription-from-setup", requireConfig, requireAuth, async (req, res) => {
+  try {
+    const { payment_method_id } = req.body;
+    if (!payment_method_id) return res.status(400).json({ error: "payment_method_id required" });
+
+    const trialDays = getTrialPeriodDays();
+
+    // Get customer ID
+    const { data: profile } = await supabaseAdmin
+      .from("candidate_profiles")
+      .select("stripe_customer_id")
+      .eq("user_id", req.user.id)
+      .maybeSingle();
+
+    if (!profile?.stripe_customer_id) {
+      return res.status(400).json({ error: "No Stripe customer found. Please restart checkout." });
+    }
+
+    // Attach payment method to customer and set as default
+    await stripe.paymentMethods.attach(payment_method_id, {
+      customer: profile.stripe_customer_id,
+    });
+    await stripe.customers.update(profile.stripe_customer_id, {
+      invoice_settings: { default_payment_method: payment_method_id },
+    });
+
+    // Create subscription with trial
+    const subParams = {
+      customer: profile.stripe_customer_id,
+      items: [{ price: process.env.STRIPE_PRICE_ID_MONTHLY }],
+      default_payment_method: payment_method_id,
+      metadata: { user_id: req.user.id },
+    };
+    if (trialDays > 0) {
+      subParams.trial_period_days = trialDays;
+    }
+
+    const subscription = await stripe.subscriptions.create(subParams);
+
+    // Update profile — same fields as webhook sets on checkout.session.completed
+    await supabaseAdmin
+      .from("candidate_profiles")
+      .update({
+        subscription_status: "trialing",
+        trial_started_at: new Date().toISOString(),
+        stripe_subscription_id: subscription.id,
+      })
+      .eq("user_id", req.user.id);
+
+    res.json({ ok: true, subscription_id: subscription.id });
+  } catch (err) {
+    console.error("create-subscription-from-setup failed:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/stripe/create-portal-session
 // Called from Settings → Subscription's "Update Payment Method" button.
 // Uses Stripe's own hosted billing portal — the candidate updates their
@@ -237,12 +339,6 @@ function _resetPortalConfigCheckForTests() {
 // Stripe's portal already knows how to show/cancel a trial subscription,
 // nothing ROOK-specific needed here for that.
 router.post("/stripe/create-portal-session", requireConfig, requireAuth, async (req, res) => {
-  // Whole handler wrapped in one try/catch now, not just the Stripe
-  // call — a failure in the database lookup itself, or the response
-  // never reaching res.json() for any other reason, was producing a
-  // genuinely empty response body. The frontend's res.json() call then
-  // threw its own confusing "Unexpected end of JSON input" instead of
-  // ever showing the real problem. Every path out of this handler now
   // guarantees a real JSON body, even in a failure this code didn't
   // anticipate.
   try {

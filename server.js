@@ -81,6 +81,18 @@ app.get("/rook-onboarding-v3.html", (req, res) => {
   res.redirect(302, "/rook-onboarding-v4.html" + qs);
 });
 
+// Serve rook-config.js dynamically so STRIPE_PUBLISHABLE_KEY is injected
+// from env without being hardcoded in the static file.
+app.get("/rook-config.js", (req, res) => {
+  res.type("application/javascript");
+  res.send(`window.ROOK_CONFIG = {
+  SUPABASE_URL: ${JSON.stringify(process.env.SUPABASE_URL || "")},
+  SUPABASE_ANON_KEY: ${JSON.stringify(process.env.SUPABASE_ANON_KEY || "")},
+  API_BASE: "/api",
+  STRIPE_PUBLISHABLE_KEY: ${JSON.stringify(process.env.STRIPE_PUBLISHABLE_KEY || "")},
+};`);
+});
+
 app.use(express.static(path.join(__dirname, "public"), {
   setHeaders(res, filePath) {
     if (filePath.endsWith(".html")) {
