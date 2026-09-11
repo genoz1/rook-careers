@@ -376,13 +376,14 @@
   /* ── Dashboard/Search: job rows → reference jobcard style ──── */
   .job-row{
     border:1px solid #dce7f0 !important; border-radius:18px !important;
-    background:#fff !important; padding:15px !important; margin-bottom:10px !important;
+    padding:15px !important; margin-bottom:10px !important;
     display:block !important;
     /* override grid layout */
     grid-template-columns:unset !important; gap:unset !important;
     align-items:unset !important;
   }
-  .job-row .score-ring{ display:none !important; }
+  .job-row .score-ring{ display:flex !important; float:right !important; margin:0 0 8px 10px !important; width:46px !important; height:46px !important; font-size:12px !important; }
+  .job-row .score-ring span{ font-size:11px !important; font-weight:800 !important; }
   .job-row .job-info{ min-width:0 !important; }
   .job-row .job-info h4{
     font-size:16px !important; line-height:1.2 !important;
