@@ -247,10 +247,16 @@ router.post("/stripe/create-setup-intent", requireConfig, requireAuth, async (re
         metadata: { user_id: req.user.id },
       });
       customerId = customer.id;
-      await supabaseAdmin
+      // Use upsert so this never silently fails if the profile row
+      // doesn't exist yet at this exact moment
+      const { error: saveErr } = await supabaseAdmin
         .from("candidate_profiles")
-        .update({ stripe_customer_id: customerId })
-        .eq("user_id", req.user.id);
+        .upsert({
+          user_id: req.user.id,
+          stripe_customer_id: customerId,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "user_id" });
+      if (saveErr) console.error("create-setup-intent stripe_customer_id save failed:", saveErr.message);
     }
 
     const setupIntent = await stripe.setupIntents.create({
