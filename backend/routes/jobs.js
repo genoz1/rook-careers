@@ -1513,9 +1513,10 @@ router.get("/onboarding/match-preview", requireConfig, requireAuth, async (req, 
         excellent_match: Boolean(r.score.excellent_match),
         recommendation:  r.score.recommendation || null,
         // Preview-safe job detail
-        title:  safeTitle,
-        city:   job.city  || null,
-        state:  job.state || null,
+        title:        safeTitle,
+        city:         job.city         || null,
+        state:        job.state        || null,
+        location_raw: job.location_raw || null,
         reasons: (r.score.reasons || []).slice(0, 2),
       };
     });
