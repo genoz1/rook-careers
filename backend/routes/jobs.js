@@ -1458,8 +1458,24 @@ router.get("/onboarding/match-preview", requireConfig, requireAuth, async (req, 
     }
 
     // ── Slow path: in-memory scoring (no pre-computed scores yet) ──
-    const activeJobs = await fetchActiveJobs(supabaseAdmin);
+    const allActiveJobs = await fetchActiveJobs(supabaseAdmin);
     const tFetch = Date.now();
+
+    // Pre-filter to 300-mile bounding box before scoring — cuts 5,000+
+    // jobs to ~300-400 for most candidates. Always include remote jobs
+    // and jobs with no coordinates so they're never accidentally excluded.
+    const activeJobs = (profile.home_lat != null && profile.home_lng != null)
+      ? (() => {
+          const latDelta = 300 / 69;
+          const lngDelta = 300 / (69 * Math.max(0.1, Math.cos((profile.home_lat * Math.PI) / 180)));
+          return allActiveJobs.filter(job =>
+            job.job_lat == null ||
+            job.remote_status === 'remote' ||
+            (Math.abs(job.job_lat - profile.home_lat) <= latDelta &&
+             Math.abs(job.job_lng - profile.home_lng) <= lngDelta)
+          );
+        })()
+      : allActiveJobs;
 
     // Diagnostic: log which scoring inputs are present for this user.
     // candidate_fit = null when resume_structured is absent, reducing
