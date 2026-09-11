@@ -145,3 +145,44 @@ router.get("/adtrack/summary", async (req, res) => {
 });
 
 module.exports = router;
+
+/**
+ * GET /api/adtrack/test?token=AD_MANAGER_TEST_TOKEN
+ * No-auth connection test for ad platforms.
+ */
+router.get("/adtrack/test", async (req, res) => {
+  const expected = process.env.AD_MANAGER_TEST_TOKEN;
+  if (!expected || req.query.token !== expected) {
+    return res.status(401).json({ error: "provide ?token=AD_MANAGER_TEST_TOKEN value" });
+  }
+  const results = {};
+  const mode = process.env.AD_MANAGER_MODE || "off";
+  const enabled = (process.env.AD_ENABLED_PLATFORMS || "").split(",").map(p => p.trim()).filter(Boolean);
+
+  if (mode === "off") {
+    return res.json({ mode, message: "Set AD_MANAGER_MODE=dry-run to test connections" });
+  }
+
+  if (enabled.includes("meta") && process.env.META_ADS_ACCESS_TOKEN && process.env.META_ADS_ACCOUNT_ID) {
+    try { results.meta = await require("./clients/meta").testConnection(); }
+    catch (e) { results.meta = { ok: false, error: e.message }; }
+  } else {
+    results.meta = { ok: false, error: "META env vars not set or not in AD_ENABLED_PLATFORMS" };
+  }
+
+  if (enabled.includes("google") && process.env.GOOGLE_ADS_CUSTOMER_ID) {
+    try { results.google = await require("./clients/google").testConnection(); }
+    catch (e) { results.google = { ok: false, error: e.message }; }
+  } else {
+    results.google = { ok: false, error: "GOOGLE env vars not set or not in AD_ENABLED_PLATFORMS" };
+  }
+
+  if (enabled.includes("reddit") && process.env.REDDIT_ADS_ACCOUNT_ID) {
+    try { results.reddit = await require("./clients/reddit").testConnection(); }
+    catch (e) { results.reddit = { ok: false, error: e.message }; }
+  } else {
+    results.reddit = { ok: false, error: "REDDIT env vars not set or not in AD_ENABLED_PLATFORMS" };
+  }
+
+  return res.json({ mode, enabled, connections: results });
+});
