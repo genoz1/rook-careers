@@ -45,7 +45,7 @@ function shortLocation(raw) {
 
 // Shared page chrome (nav, footer, styles) so the job page and sitemap-
 // adjacent pages look like the rest of ROOK rather than a bare document.
-function pageShell({ title, description, canonicalUrl, ogImage, bodyHtml, jsonLd }) {
+function pageShell({ title, description, canonicalUrl, ogImage, bodyHtml, jsonLd, jobId }) {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -96,6 +96,29 @@ function pageShell({ title, description, canonicalUrl, ogImage, bodyHtml, jsonLd
   <div class="container">
     ${bodyHtml}
   </div>
+  <script src="/rook-config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  ${jobId ? `<script>
+  (async () => {
+    try {
+      const sb = window.supabase.createClient(
+        window.ROOK_CONFIG.SUPABASE_URL,
+        window.ROOK_CONFIG.SUPABASE_ANON_KEY
+      );
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session) return;
+      const res = await fetch('/api/profile', {
+        headers: { Authorization: 'Bearer ' + session.access_token }
+      });
+      if (!res.ok) return;
+      const profile = await res.json();
+      const status = profile.subscription_status;
+      if (status === 'active' || status === 'trialing') {
+        window.location.replace('/rook-job-analysis.html?job=${escapeHtml(jobId)}');
+      }
+    } catch (_) {}
+  })();
+  </script>` : ''}
 </body>
 </html>`;
 }
@@ -250,7 +273,7 @@ router.get("/jobs/:id", async (req, res, next) => {
     <div style="text-align:center;margin-top:24px;"><a href="/rook-browse.html" style="color:var(--royal);font-size:13px;font-weight:600;">← Browse all open roles</a></div>
   `;
 
-  res.send(pageShell({ title: `${titleWithLoc} — ROOK`, description: metaDescription, canonicalUrl, bodyHtml, jsonLd }));
+  res.send(pageShell({ title: `${titleWithLoc} — ROOK`, description: metaDescription, canonicalUrl, bodyHtml, jsonLd, jobId: req.params.id }));
 });
 
 // Real, curated set of job categories for server-rendered landing
