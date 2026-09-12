@@ -577,51 +577,38 @@ function scoreJob(job, profile) {
     prefMax += 15;
     dataPointsPossible++;
     dataPointsAvailable++;
-    const jobText = `${job.title_original || ""} ${job.description_text || ""} ${job.ai_analysis?.industry || ""} ${job.ai_analysis?.product_category || ""}`.toLowerCase();
-    // Reported directly, with a concrete case: "Veterinary / Animal
-    // Health" as a whole never matches ordinary job text, since no
-    // real posting phrases it as that exact compound string with a
-    // slash — a description that says "veterinary clinics" or "animal
-    // health customers" (this job's own AI-extracted customer type was
-    // literally "Veterinarians") was silently scoring zero on stated
-    // industry interest. Splits each chip on "/" and other separators
-    // so "Veterinary / Animal Health" checks for "veterinary" OR
-    // "animal health" independently — the other four industry chips
-    // (Diagnostics, Medical Device, Capital Equipment, Pharmaceutical)
-    // are single terms already and are unaffected by this change.
+
+    // Use the clean job.industry column — same approach as the job search
+    // page filter. Never use description_text: staffing agencies like CMR
+    // mention every industry they recruit for in their descriptions, which
+    // falsely matched "diagnostics" for a pharma job and inflated its score.
+    // Fall back to ai_analysis.industry when the column is null.
+    const jobIndustry = (job.industry || job.ai_analysis?.industry || "").toLowerCase();
+
     const matchedIndustry = profile.desired_industries.find((ind) =>
       String(ind)
         .toLowerCase()
         .split(/\s*[\/,&]\s*/)
         .filter(Boolean)
-        .some((term) => jobText.includes(term))
+        .some((term) => jobIndustry.includes(term))
     );
+
     if (matchedIndustry) {
       prefScore += 15;
       reasons.push(`Matches your stated interest in ${matchedIndustry}`);
     } else {
       // Industry not a stated preference but also not avoided.
-      // A nearby role in an adjacent field is still worth considering —
-      // don't score it as a zero just because the industry label differs.
+      // A nearby role in an adjacent field is still worth considering.
       prefScore += 8;
     }
+
     if (Array.isArray(profile.industries_to_avoid) && profile.industries_to_avoid.length > 0) {
-      // Reported directly via audit: the Settings UI promises "We'll
-      // filter these out" for industries a candidate marks to avoid,
-      // but this only ever added a soft warning concern - the job
-      // still scored and displayed normally otherwise (one example hit
-      // 98% despite matching an avoided industry). That's a real
-      // promise-vs-behavior mismatch, not just an under-scoring nuance
-      // like the desired-industries case above deserves a much harder
-      // response: an industry the candidate explicitly asked to avoid
-      // should behave like the non-US-country exclusion - hard
-      // disqualified and score-capped, not merely flagged.
       const avoided = profile.industries_to_avoid.find((ind) =>
         String(ind)
           .toLowerCase()
           .split(/\s*[\/,&]\s*/)
           .filter(Boolean)
-          .some((term) => jobText.includes(term))
+          .some((term) => jobIndustry.includes(term))
       );
       if (avoided) {
         concerns.push(`Mentions ${avoided}, which you asked to avoid`);
