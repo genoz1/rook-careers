@@ -22,7 +22,7 @@
 const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
 const { scoreJob, mentionsNonUsCountry, hasFullAccess, stateAbbrFromName } = require("../matching");
-const { scoreAndStoreForCandidate, fetchActiveJobs } = require("../scoring/precompute");
+const { scoreAndStoreForCandidate, fetchActiveJobs, CURRENT_SCORING_VERSION } = require("../scoring/precompute");
 const { distanceMiles, geocodeZip } = require("../geocoding");
 const { sendEmail } = require("../email/resend");
 
@@ -645,14 +645,17 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
       .limit(Number(limit));
 
     if (!pcError && precomputedRows && precomputedRows.length > 0) {
-      // Always trigger background rescore if scores are older than 1 hour.
-      // Serves precomputed scores instantly, refreshes in background so
-      // customers never see stale distances or outdated job coordinates.
+      // Rescore if: (a) scoring logic changed since scores were stored,
+      // detected by profile.scoring_version vs CURRENT_SCORING_VERSION, or
+      // (b) scores are older than 1 hour (catches stale coordinates etc).
+      // Version mismatch fires immediately on first dashboard load after
+      // a scoring logic deploy — no manual preference change required.
+      const needsVersionRescore = (profile.scoring_version || 0) < CURRENT_SCORING_VERSION;
       const newestScore = precomputedRows.find(r => r.updated_at);
       const ageHours = newestScore
         ? (Date.now() - new Date(newestScore.updated_at).getTime()) / 3600000
         : 999;
-      if (ageHours > 1) {
+      if (needsVersionRescore || ageHours > 1) {
         scoreAndStoreForCandidate(supabaseAdmin, profile).catch(err =>
           console.error("[bg-rescore]", err.message)
         );
@@ -1475,7 +1478,7 @@ router.post("/onboarding/anonymous-preview", requireConfig, async (req, res) => 
       territory_size_preference: (territories || ["local"])[0],
     };
 
-    const SCORE_COLS = "id, title_original, title_normalized, location_raw, job_lat, job_lng, city, state, remote_status, employment_type, travel_percentage, salary_min, salary_max, compensation_text, ai_analysis, date_posted, first_seen_at";
+    const SCORE_COLS = "id, title_original, title_normalized, location_raw, job_lat, job_lng, city, state, industry, remote_status, employment_type, travel_percentage, salary_min, salary_max, compensation_text, ai_analysis, date_posted, first_seen_at";
     const latDelta = 300 / 69;
     const lngDelta = 300 / (69 * Math.max(0.1, Math.cos((profile.home_lat * Math.PI) / 180)));
     const homeStateAbbr = stateAbbrFromName(profile.home_state);
@@ -1667,7 +1670,7 @@ router.get("/onboarding/match-preview", requireConfig, requireAuth, async (req, 
     // Use a direct SQL bounding box query instead of fetchActiveJobs (which
     // loads ALL 5,000+ jobs into memory). This cuts the fetch to ~300-400
     // jobs and works even on a cold server with no warm cache.
-    const SCORE_COLS = "id, title_original, title_normalized, company_name, location_raw, job_lat, job_lng, city, state, remote_status, employment_type, travel_percentage, salary_min, salary_max, compensation_text, ai_analysis, date_posted, last_seen_at";
+    const SCORE_COLS = "id, title_original, title_normalized, company_name, location_raw, job_lat, job_lng, city, state, industry, remote_status, employment_type, travel_percentage, salary_min, salary_max, compensation_text, ai_analysis, date_posted, last_seen_at";
 
     let jobQuery = supabaseAdmin
       .from("jobs")

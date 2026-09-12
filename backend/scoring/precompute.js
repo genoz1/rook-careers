@@ -23,6 +23,15 @@
 const { scoreJob } = require("../matching");
 const { distanceMiles } = require("../geocoding");
 
+// Increment whenever scoring logic changes requiring all stored scores
+// to be refreshed. Dashboard compares profile.scoring_version to this
+// and rescores immediately on next load if they don't match — no manual
+// preference change needed after a scoring logic deploy.
+// History:
+//   1 — baseline
+//   2 — industry matching switched from description_text to job.industry column
+const CURRENT_SCORING_VERSION = 2;
+
 // Maximum radius for scoring in-person roles.
 // Remote jobs and jobs with no coordinates are always included.
 const SCORE_RADIUS_MILES = 200;
@@ -103,7 +112,7 @@ async function _doFetchActiveJobs(supabase) {
   // seek straight to the right rows instead of scanning past others to
   // find them — see ROOK-Setup-Guide.pdf / ask Claude for the exact SQL.
   const PAGE_SIZE = 150;
-  const JOB_COLUMNS = "id, title_original, description_text, location_raw, job_lat, job_lng, compensation_text, salary_min, salary_max, ai_analysis, job_embedding, remote_status, travel_percentage, date_posted, last_seen_at";
+  const JOB_COLUMNS = "id, title_original, description_text, location_raw, job_lat, job_lng, industry, compensation_text, salary_min, salary_max, ai_analysis, job_embedding, remote_status, travel_percentage, date_posted, last_seen_at";
   let activeJobs = [];
   for (let from = 0; ; from += PAGE_SIZE) {
     const { data: page, error } = await supabase
@@ -251,11 +260,11 @@ async function scoreAndStoreForCandidate(supabase, profile, activeJobs = null) {
   // this doesn't throw and undo that.
   const { error: markError } = await supabase
     .from("candidate_profiles")
-    .update({ last_scored_at: now })
+    .update({ last_scored_at: now, scoring_version: CURRENT_SCORING_VERSION })
     .eq("id", profile.id);
   if (markError) console.error(`Could not update last_scored_at for candidate ${profile.id}: ${markError.message}`);
 
   return { scoredCount: rows.length };
 }
 
-module.exports = { scoreAndStoreForCandidate, fetchActiveJobs };
+module.exports = { scoreAndStoreForCandidate, fetchActiveJobs, CURRENT_SCORING_VERSION };
