@@ -37,6 +37,31 @@ const { analyzeJob } = require("./ai/jobAnalysis");
 const { generateEmbedding } = require("./ai/embeddings");
 const { geocodeLocation } = require("./geocoding");
 
+// Extract a clean, geocodable location string from a job's location_raw.
+// Job boards use many formats: "USA - Florida - Orlando", "Remote - Georgia",
+// "Melbourne, FL, us", pipe-delimited multi-city lists, etc.
+// Returns the best single location string, or null if not geocodable.
+function extractGeocodableLocation(locationRaw) {
+  if (!locationRaw || !locationRaw.trim()) return null;
+  let loc = locationRaw.split("|")[0].trim();
+  // Skip useless placeholders
+  if (/^(\d+\s+Locations?|Field\s+(Sales|Worker)\s*\()/i.test(loc)) return null;
+  // Strip "Remote - " prefix → "Remote - Georgia" becomes "Georgia"
+  loc = loc.replace(/^Remote\s*[-–]\s*/i, "").trim();
+  // "USA - State - City" or "United States - State - City" → "City, State"
+  const usaDash = loc.match(/^(?:USA?|United States?)\s*[-–]\s*([A-Za-z ]+?)\s*[-–]\s*([A-Za-z][A-Za-z0-9 .]+)/i);
+  if (usaDash) {
+    const state = usaDash[1].trim();
+    const city = usaDash[2].replace(/[-–].*$/, "").trim();
+    return city.length > 1 ? `${city}, ${state}` : state;
+  }
+  // Remove trailing ", us" / ", United States" country suffixes
+  loc = loc.replace(/,\s*(us|usa|united states?)$/i, "").trim();
+  // Skip if ends in a non-US 2-letter country code (e.g. ", no", ", de", ", cn")
+  if (/,\s*[a-z]{2}$/i.test(loc) && !/,\s*(fl|ga|tx|ny|ca|oh|il|pa|nc|va|wa|ma|co|az|mi|tn|or|nj|md|mn|sc|al|la|wi|mo|ct|ok|ar|ia|ms|ks|ne|nv|id|mt|nd|sd|wv|wy|vt|nh|me|de|ri|ak|hi)$/i.test(loc)) return null;
+  return loc.length > 2 ? loc : null;
+}
+
 // Use the SERVICE ROLE key here, never the anon key — ingestion writes
 // to the jobs table and must bypass row-level security intentionally.
 const supabase = createClient(
@@ -275,29 +300,20 @@ async function ingestEmployer(employer) {
       }
     }
 
-    if (upsertedRow.job_lat == null && upsertedRow.location_raw) {
+    // Always re-geocode from location_raw — never trust coordinates from job boards.
+    // Job boards frequently provide wrong coordinates (company HQ instead of job
+    // location, incorrect geocoding, etc.) which causes jobs to appear in the wrong
+    // city for candidates. We extract a clean, geocodable location string from
+    // location_raw and use that as the source of truth.
+    if (upsertedRow.location_raw) {
       try {
-        // Reported directly: multi-location Workday postings ("Virginia
-        // - Richmond | Virginia - Fairfax | Maryland - Baltimore | ...")
-        // were still scoring as if nearby - geocoding the WHOLE
-        // pipe-delimited string at once isn't a real address a geocoder
-        // can resolve, so it silently returned nothing, leaving these
-        // jobs to fall back to the less precise state-text-matching
-        // scoring path instead of a real distance. Geocoding just the
-        // first listed location (a clean "City, State, Country" string
-        // on its own) gives a real coordinate to score distance against
-        // - not necessarily the single closest of everywhere the req is
-        // open, but a genuine, usable point instead of none at all.
-        const firstLocation = upsertedRow.location_raw.split("|")[0].trim();
-        const coords = await geocodeLocation(firstLocation);
-        if (coords) {
-          await supabase.from("jobs").update({ job_lat: coords.lat, job_lng: coords.lng }).eq("id", upsertedRow.id);
+        const geoLoc = extractGeocodableLocation(upsertedRow.location_raw);
+        if (geoLoc) {
+          const coords = await geocodeLocation(geoLoc);
+          if (coords) {
+            await supabase.from("jobs").update({ job_lat: coords.lat, job_lng: coords.lng }).eq("id", upsertedRow.id);
+          }
         }
-        // A null result (e.g. messy location text like "Multiple US
-        // Locations" that Nominatim can't resolve) is expected and fine
-        // — proximity scoring is a bonus on top of state-matching, not a
-        // requirement, so a job with no coordinates just doesn't get
-        // that bonus rather than breaking anything.
       } catch (err) {
         console.error(`  Geocoding failed for "${job.location_raw}": ${err.message}`);
       }
