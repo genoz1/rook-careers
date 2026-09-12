@@ -761,11 +761,7 @@
           document.getElementById('locationLabel').textContent = pendingLocation.label || pendingLocation.zip || '—';
           editor.style.display = 'none';
           row.style.display = 'flex';
-          // Rescore immediately with new location then reload jobs
-          btnSave.textContent = 'Updating matches…';
-          try {
-            await rookApiFetch('/profile/rescore', { method: 'POST' });
-          } catch (_) {}
+          // Reload jobs with new location
           loadJobs();
         } catch (err) {
           document.getElementById('dashLocStatus').textContent = 'Could not save. Try again.';

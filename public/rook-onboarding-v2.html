@@ -1699,11 +1699,7 @@
               }),
             });
             // Await rescore so dashboard shows fresh scores immediately
-            btn.textContent = 'Updating your matches…';
-            await fetch('/api/profile/rescore', {
-              method: 'POST',
-              headers: { Authorization: `Bearer ${s.access_token}` },
-            }).catch(() => {});
+            btn.textContent = 'Saving…';
           }
         } catch (_) {}
         window.location.href = 'rook-dashboard.html';

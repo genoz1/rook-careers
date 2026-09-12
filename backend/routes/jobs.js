@@ -22,7 +22,7 @@
 const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
 const { scoreJob, mentionsNonUsCountry, hasFullAccess, stateAbbrFromName } = require("../matching");
-const { scoreAndStoreForCandidate, fetchActiveJobs, CURRENT_SCORING_VERSION } = require("../scoring/precompute");
+const { fetchActiveJobs } = require("../scoring/precompute");
 const { distanceMiles, geocodeZip } = require("../geocoding");
 const { sendEmail } = require("../email/resend");
 
@@ -627,90 +627,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
 
   // ── Fast path: precomputed scores ─────────────────────────────────────────
   // Read from candidate_job_matches (pre-scored nightly) if scores exist.
-  // Falls back to live scoring below when no scores are found (new users).
-  // Staleness is handled by the nightly precompute job — scores are at most
-  // 24 hours old, which is acceptable for job matching.
-  // Only skip precomputed for keyword searches (live scoring needed for
-  // relevance) or when the user explicitly explores a different location.
-  if (!keyword && !industry && !state && (isHomeLocation || req.query.near_lat == null)) {
-    const { data: precomputedRows, error: pcError } = await supabaseAdmin
-      .from("candidate_job_matches")
-      .select(`overall_score, preference_fit, candidate_fit, excellent_match, recommendation, reasons, saved, dismissed, job_id, jobs!inner(${JOB_LIST_COLUMNS_NO_DESCRIPTION})`)
-      .eq("candidate_id", profile.id)
-      .eq("jobs.status", "active")
-      .eq("jobs.moderation_status", "approved")
-      .not("overall_score", "is", null)
-      .eq("dismissed", false)
-      .order("overall_score", { ascending: false })
-      .limit(Number(limit));
-
-    if (!pcError && precomputedRows && precomputedRows.length > 0) {
-      // Rescore if: (a) scoring logic changed since scores were stored,
-      // detected by profile.scoring_version vs CURRENT_SCORING_VERSION, or
-      // (b) scores are older than 1 hour (catches stale coordinates etc).
-      // Version mismatch fires immediately on first dashboard load after
-      // a scoring logic deploy — no manual preference change required.
-      const needsVersionRescore = (profile.scoring_version || 0) < CURRENT_SCORING_VERSION;
-      const newestScore = precomputedRows.find(r => r.updated_at);
-      const ageHours = newestScore
-        ? (Date.now() - new Date(newestScore.updated_at).getTime()) / 3600000
-        : 999;
-      if (needsVersionRescore || ageHours > 1) {
-        scoreAndStoreForCandidate(supabaseAdmin, profile).catch(err =>
-          console.error("[bg-rescore]", err.message)
-        );
-      }
-
-      const { appStatusByJob, noteFor } = await loadEmployerHistory(profile.id);
-
-      let results = precomputedRows
-        .filter(r => !mentionsNonUsCountry(r.jobs.location_raw, r.jobs.job_lng, r.jobs.title_original))
-        .map(row => {
-          const withDist = attachDistance(row.jobs, profile);
-          const match = matchFromRow(row);
-
-          // Detect stale scores: if the stored reason says "X miles from you"
-          // but the actual distance is >50mi different, the job's coordinates
-          // changed since scoring. Rescore it live right now so the customer
-          // never sees a 225mi job ranked #1 because of stale 24mi coordinates.
-          const storedDistReason = (match?.reasons || []).find(r => /miles? from you/i.test(r));
-          const actualMiles = withDist.distance_miles;
-          if (storedDistReason && actualMiles != null) {
-            const storedMiles = parseFloat(storedDistReason.match(/[\d.]+/)?.[0] || '0');
-            if (Math.abs(storedMiles - actualMiles) > 50) {
-              // Coordinates changed — rescore this job live
-              const liveScore = scoreJob(row.jobs, profile);
-              return {
-                ...withDist,
-                match: liveScore,
-                saved: row.saved || false,
-                application_status: appStatusByJob.get(row.job_id) || null,
-                employer_note: noteFor(row.jobs),
-              };
-            }
-          }
-
-          return {
-            ...withDist,
-            match,
-            saved: row.saved || false,
-            application_status: appStatusByJob.get(row.job_id) || null,
-            employer_note: noteFor(row.jobs),
-          };
-        })
-        .sort((a, b) => (b.match?.overall_score ?? -1) - (a.match?.overall_score ?? -1));
-
-      if (!keyword) results = results.slice(0, Number(limit));
-
-      return res.json({
-        jobs: (hasFullAccess(profile) ? results : results.map(redactForNonSubscriber)).map(stripUnusedDescriptionFields),
-        scoring_in_progress: false,
-        from_precomputed: true,
-      });
-    }
-  }
-
-  // ── Live scoring fallback (new users, keyword search, no precomputed scores) ──
+  // ── Live scoring — 300-mile bounding box, always fresh ──
   let liveQuery = supabaseAdmin
     .from("jobs")
     .select(JOB_LIST_COLUMNS_NO_DESCRIPTION)
@@ -1748,14 +1665,6 @@ router.get("/onboarding/match-preview", requireConfig, requireAuth, async (req, 
 
     // Kick off a full background score+store immediately after the slow-path
     // live scoring completes. By the time the user finishes the trial setup
-    // flow (password, pricing, Stripe — typically 60-120 seconds), scores
-    // will be stored in candidate_job_matches and the dashboard will use the
-    // fast precomputed path instead of live scoring again.
-    if (!result.from_precomputed) {
-      scoreAndStoreForCandidate(supabaseAdmin, profile).catch(err =>
-        console.error(`[match-preview bg-score] uid=${userId.slice(0,8)}: ${err.message}`)
-      );
-    }
     previewCache.set(userId, { result, expiresAt: Date.now() + PREVIEW_CACHE_TTL_MS });
     res.json(result);
   } catch (err) {
