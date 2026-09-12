@@ -1512,6 +1512,12 @@ router.post("/onboarding/anonymous-preview", requireConfig, async (req, res) => 
 
     // Same tiebreaker as dashboard sort — industry match ratio + inside sales penalty
     function _anonProxyScore(job) {
+      const ANON_INDUSTRY_TERMS = {
+        diagnostics:      ['diagnostics','reference laboratory','molecular','point-of-care','lab','pathology','clinical laboratory'],
+        pharmaceutical:   ['pharmaceutical','pharma','biotech','life sciences','specialty pharma'],
+        'medical device': ['medical device','capital equipment','surgical','dme','consumables'],
+        veterinary:       ['veterinary','animal health','vet'],
+      };
       const title   = (job.title_original || '').toLowerCase();
       const empType = (job.employment_type || '').toLowerCase();
       const isInsideSales = title.includes('inside sales') || empType === 'inside';
@@ -1521,7 +1527,7 @@ router.post("/onboarding/anonymous-preview", requireConfig, async (req, res) => 
       const prodCats = (job.ai_analysis?.product_categories || []).map(s => s.toLowerCase());
       if (!prodCats.length) return 0;
       const desired = profile.desired_industries || [];
-      const terms = desired.flatMap(ind => (_INDUSTRY_TERMS[ind.toLowerCase().trim()] || [ind.toLowerCase()]));
+      const terms = desired.flatMap(ind => (ANON_INDUSTRY_TERMS[ind.toLowerCase().trim()] || [ind.toLowerCase()]));
       const matched = prodCats.filter(p => terms.some(t => p.includes(t))).length;
       return matched / prodCats.length;
     }
