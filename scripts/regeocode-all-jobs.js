@@ -53,16 +53,27 @@ function saveProgress(progress) {
 
 async function run() {
   console.log("Fetching all active approved jobs...");
-  const { data: jobs, error } = await supabase
-    .from("jobs")
-    .select("id, title_original, location_raw, job_lat, job_lng")
-    .eq("status", "active")
-    .eq("moderation_status", "approved")
-    .not("location_raw", "is", null)
-    .order("id");
-
-  if (error) { console.error("DB error:", error.message); process.exit(1); }
-  console.log(`Found ${jobs.length} jobs total.\n`);
+  const allJobs = [];
+  const PAGE = 1000;
+  let from = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from("jobs")
+      .select("id, title_original, location_raw, job_lat, job_lng")
+      .eq("status", "active")
+      .eq("moderation_status", "approved")
+      .not("location_raw", "is", null)
+      .order("id")
+      .range(from, from + PAGE - 1);
+    if (error) { console.error("DB error:", error.message); process.exit(1); }
+    if (!data || data.length === 0) break;
+    allJobs.push(...data);
+    process.stdout.write(`\r  Fetched ${allJobs.length} jobs...`);
+    if (data.length < PAGE) break;
+    from += PAGE;
+  }
+  const jobs = allJobs;
+  console.log(`\nFound ${jobs.length} jobs total.\n`);
 
   const progress = loadProgress();
   let { lastIndex, updated, skipped, failed, foreign } = progress;
