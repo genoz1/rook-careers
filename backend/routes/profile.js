@@ -501,4 +501,23 @@ router.get("/resume-url", requireConfig, requireAuth, async (req, res) => {
   }
 });
 
+// POST /api/auth/confirm-email
+// Used by v6 signup flow. Supabase has email confirmation enabled,
+// so after signUp the session is null. This endpoint uses the service
+// role key to immediately confirm the email so signInWithPassword works.
+// No auth required — caller must provide the user_id from signUp response.
+router.post("/auth/confirm-email", requireConfig, async (req, res) => {
+  const { user_id } = req.body || {};
+  if (!user_id) return res.status(400).json({ error: "user_id required" });
+  try {
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(user_id, {
+      email_confirm: true,
+    });
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ confirmed: true });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

@@ -385,16 +385,24 @@ async function loadAnonymousMatches(territories) {
 
 // ── Create account button ─────────────────────────────────────────────────
 document.getElementById('btnCreateAccount').addEventListener('click', () => {
-  // Save questionnaire answers so signup page can prefill the profile
-  const industry   = document.querySelector('input[name="industry"]:checked')?.value;
-  const years      = document.querySelector('input[name="years"]:checked')?.value;
+  const industry    = document.querySelector('input[name="industry"]:checked')?.value;
+  const years       = document.querySelector('input[name="years"]:checked')?.value;
   const territories = [...document.querySelectorAll('input[name="territory"]:checked')].map(c => c.value);
+  // Also save the match results so signup page can show the same job cards
+  const matchCards = [...document.querySelectorAll('.match-card')];
+  const matches = matchCards.map(card => ({
+    overall_score: parseInt(card.querySelector('.match-score span')?.textContent) || 0,
+    title: card.querySelector('.match-title')?.textContent || '',
+    location_display: card.querySelector('.match-location')?.textContent || '',
+    reasons: [card.querySelector('.match-reason')?.textContent?.replace(/^✓\s*/,'') || ''].filter(Boolean),
+  }));
   try {
     sessionStorage.setItem('rook_v6_state', JSON.stringify({
       location: selectedLocation,
       industry,
       years: years != null ? Number(years) : null,
       territories,
+      matches,
     }));
   } catch(_) {}
   window.location.href = 'rook-onboarding-v6-signup.html';
