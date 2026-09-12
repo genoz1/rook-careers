@@ -1510,7 +1510,22 @@ router.post("/onboarding/anonymous-preview", requireConfig, async (req, res) => 
       return true;
     }
 
-    // Word-for-word copy of dashboard scoring + sort
+    // Same tiebreaker as dashboard sort — industry match ratio + inside sales penalty
+    function _anonProxyScore(job) {
+      const title   = (job.title_original || '').toLowerCase();
+      const empType = (job.employment_type || '').toLowerCase();
+      const isInsideSales = title.includes('inside sales') || empType === 'inside';
+      const wantsField = (profile.territory_size_preferences || []).some(t => ['local','regional'].includes(t)) &&
+        !(profile.territory_size_preferences || []).includes('remote');
+      if (isInsideSales && wantsField) return -0.1;
+      const prodCats = (job.ai_analysis?.product_categories || []).map(s => s.toLowerCase());
+      if (!prodCats.length) return 0;
+      const desired = profile.desired_industries || [];
+      const terms = desired.flatMap(ind => (_INDUSTRY_TERMS[ind.toLowerCase().trim()] || [ind.toLowerCase()]));
+      const matched = prodCats.filter(p => terms.some(t => p.includes(t))).length;
+      return matched / prodCats.length;
+    }
+
     const scored = (jobs || [])
       .filter(j => !mentionsNonUsCountry(j.location_raw, j.job_lng, j.title_original))
       .filter(j => titleLocSanityPass(j))
@@ -1518,10 +1533,17 @@ router.post("/onboarding/anonymous-preview", requireConfig, async (req, res) => 
         const distMi = j.job_lat != null
           ? Math.round(distanceMiles(profile.home_lat, profile.home_lng, j.job_lat, j.job_lng))
           : null;
-        return { job: j, score: scoreJob(j, profile), distMi };
+        return { job: j, score: scoreJob(j, profile), distMi, proxy: _anonProxyScore(j) };
       })
       .filter(r => r.score.overall_score >= 50)
-      .sort((a, b) => b.score.overall_score - a.score.overall_score)
+      .sort((a, b) => {
+        const sc = b.score.overall_score - a.score.overall_score;
+        if (sc !== 0) return sc;
+        const rc = b.proxy - a.proxy;
+        if (Math.abs(rc) > 0.01) return rc;
+        const ad = a.distMi ?? 9999, bd = b.distMi ?? 9999;
+        return ad - bd;
+      })
       .slice(0, 3);
 
     const top3 = scored.map(({ job, score, distMi }) => {
