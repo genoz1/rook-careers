@@ -1493,24 +1493,51 @@ router.post("/onboarding/anonymous-preview", requireConfig, async (req, res) => 
 
     if (error) throw new Error(error.message);
 
+    // Title-location sanity check: if a job title mentions a specific region
+    // (e.g. "South Florida") but the stored coordinates place it only 49 miles
+    // away from a user in Oxford FL, the coordinates are wrong. Filter it out
+    // so bad data doesn't surface misleading results.
+    const TITLE_LOCATION_CHECKS = {
+      'south florida': { lat: 25.9,  lng: -80.3  },
+      'miami':         { lat: 25.77, lng: -80.19 },
+      'fort lauderdale': { lat: 26.12, lng: -80.14 },
+      'palm beach':    { lat: 26.71, lng: -80.05 },
+      'pensacola':     { lat: 30.42, lng: -87.22 },
+      'tallahassee':   { lat: 30.44, lng: -84.28 },
+      'jacksonville':  { lat: 30.33, lng: -81.66 },
+    };
+    function titleLocationSanityPass(title, computedDistMiles) {
+      if (!title || computedDistMiles == null) return true;
+      const lower = title.toLowerCase();
+      for (const [kw, coords] of Object.entries(TITLE_LOCATION_CHECKS)) {
+        if (lower.includes(kw)) {
+          const actual = distanceMiles(profile.home_lat, profile.home_lng, coords.lat, coords.lng);
+          if (Math.abs(actual - computedDistMiles) > 80) return false;
+        }
+      }
+      return true;
+    }
+
     const scored = (jobs || [])
       .filter(j => !mentionsNonUsCountry(j.location_raw, j.job_lng, j.title_original))
-      .map(j => ({ job: j, score: scoreJob(j, profile) }))
+      .map(j => {
+        const distMi = j.job_lat != null
+          ? Math.round(distanceMiles(profile.home_lat, profile.home_lng, j.job_lat, j.job_lng))
+          : null;
+        return { job: j, score: scoreJob(j, profile), distMi };
+      })
       .filter(r => r.score.overall_score >= 50)
+      .filter(r => titleLocationSanityPass(r.job.title_original, r.distMi))
       .sort((a, b) => b.score.overall_score - a.score.overall_score)
       .slice(0, 3);
 
-    const top3 = scored.map(({ job, score }) => {
-      const distMiles = job.job_lat != null
-        ? Math.round(distanceMiles(profile.home_lat, profile.home_lng, job.job_lat, job.job_lng))
-        : null;
+    const top3 = scored.map(({ job, score, distMi }) => {
       return {
         overall_score: Math.round(score.overall_score),
         title: job.title_original || job.title_normalized || "Medical Sales Role",
         location_display: jobLocationDisplay(job),
-        distance_miles: distMiles,
-        reasons: (score.reasons || []).slice(0, 1),
-        // Never return: company_name, apply_url, id, or any PII
+        distance_miles: distMi,
+        reasons: (score.reasons || []).filter(r => !/miles? from you/i.test(r)).slice(0, 1),
       };
     });
 

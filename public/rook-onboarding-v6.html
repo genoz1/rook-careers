@@ -91,6 +91,20 @@
   <div class="screen active" id="s-welcome">
     <h2 style="font-size:26px;line-height:1.2;margin-bottom:8px;">Over 100+ people<br>are clicking Apply<br>on <span style="color:#DC2626;">LinkedIn.</span></h2>
     <p class="lead">To them, you're just a number.</p>
+    <div style="position:relative;border:1px solid #e0e0e0;border-radius:10px;padding:14px 16px;background:#fff;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,0.07);">
+      <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:8px;">
+        <div style="width:38px;height:38px;background:#e8f0fe;border-radius:6px;flex-shrink:0;"></div>
+        <div style="flex:1;padding-top:2px;font-size:14px;font-weight:700;color:#0A66C2;line-height:1.3;">Strategic Accounts Executive – Physician Office</div>
+      </div>
+      <div style="font-size:11.5px;color:#666;margin-bottom:2px;">Orlando, FL · Reposted 4 days ago</div>
+      <div style="margin-top:5px;position:relative;display:inline-block;">
+        <span style="background:#FFF3CD;border-radius:4px;padding:2px 5px;font-size:11.5px;color:#333;">Over 100 people clicked apply</span>
+        <svg style="position:absolute;top:-8px;left:-8px;overflow:visible;pointer-events:none;" width="210" height="40" viewBox="0 0 210 40">
+          <path d="M 185,5 C 200,1 208,10 206,20 C 204,30 190,37 165,38 C 130,40 70,38 38,35 C 12,33 1,26 2,17 C 3,8 18,3 48,2 C 85,0 155,2 185,5 Z"
+            fill="none" stroke="#DC2626" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+    </div>
     <div style="background:#EEF6FF;border:1px solid #BFDBFE;border-radius:10px;padding:12px 14px;margin-bottom:20px;display:flex;align-items:center;gap:8px">
       <span style="font-size:20px;flex-shrink:0">🎯</span>
       <span style="font-size:13px;color:#1D4ED8;font-weight:600;line-height:1.4">ROOK shows you which jobs you actually match — directly from employer career sites.</span>
@@ -334,8 +348,10 @@ async function loadAnonymousMatches(territories) {
         const pct = job.overall_score || 0;
         const distLine = job.distance_miles != null
           ? `<div class="match-location">About ${job.distance_miles} miles from you</div>` : '';
-        const reason = job.reasons?.[0]
-          ? `<div class="match-reason">✓ ${escapeHtml(job.reasons[0])}</div>` : '';
+        // Don't show reason if it just repeats the distance line
+        const reasonText = job.reasons?.[0] || '';
+        const reason = reasonText && !/miles? from you/i.test(reasonText)
+          ? `<div class="match-reason">✓ ${escapeHtml(reasonText)}</div>` : '';
         return `
           <div class="match-card">
             <div class="match-score" style="--pct:${pct}"><span>${pct}%</span></div>
