@@ -397,23 +397,21 @@ function scoreJob(job, profile) {
       prefScore -= 25;
       concerns.push(`About ${Math.round(miles)} miles away — far outside typical territory range`);
     }
-  } else if (isRemoteLabeled) {
-    const wantsLocalOnly = (profile.territory_size_preferences || []).length > 0 &&
-      !(profile.territory_size_preferences || []).some(t => ["regional","national","remote"].includes(t));
-    if (wantsLocalOnly) {
-      prefScore -= 5;
-      concerns.push("Remote role — you prefer local territory");
-    } else {
-      reasons.push("Remote-friendly role");
-    }
   } else {
-    const inHomeState = homeStateAbbr && locationMentionsState(job.location_raw, homeStateAbbr);
-    if (inHomeState) {
-      prefScore -= 5;
-      reasons.push("Location matches your home state (exact distance not yet available)");
+    // No real coordinates. remote_status is irrelevant in medical sales
+    // (field reps have no office). What matters is WHERE the territory is.
+    const _locRawLower = (job.location_raw || "").toLowerCase();
+    const _homeStateName = (profile.home_state || "").toLowerCase();
+    const inHomeStateNoCoords = (homeStateAbbr && locationMentionsState(job.location_raw, homeStateAbbr)) ||
+      (_homeStateName.length > 2 && _locRawLower.includes(_homeStateName));
+
+    if (inHomeStateNoCoords) {
+      reasons.push("Territory in your home state");
+    } else if (_locRawLower.length > 0) {
+      prefScore -= 25;
+      concerns.push("Territory appears to be outside your area");
     } else {
-      prefScore -= 15;
-      if (job.location_raw) concerns.push(`Location (${job.location_raw}) may be outside your area`);
+      prefScore -= 5;
     }
   }
 
@@ -874,13 +872,17 @@ function scoreJob(job, profile) {
   if (candidate_fit != null) candidate_fit = Math.min(candidate_fit, candCap);
   if (preference_fit != null) preference_fit = Math.min(preference_fit, prefCap);
 
+  // Overall score:
+  // - No resume: preference_fit only (location + onboarding answers)
+  // - Resume uploaded: 70% preference_fit + 30% candidate_fit
+  //   Qualifications refine the score but location/industry stay dominant.
   let overall_score;
-  if (candidate_fit != null && preference_fit != null) {
-    overall_score = Math.round((candidate_fit + preference_fit) / 2);
-  } else if (candidate_fit != null) {
-    overall_score = candidate_fit;
+  if (preference_fit != null && candidate_fit != null) {
+    overall_score = Math.round(0.7 * preference_fit + 0.3 * candidate_fit);
   } else if (preference_fit != null) {
     overall_score = preference_fit;
+  } else if (candidate_fit != null) {
+    overall_score = candidate_fit;
   } else {
     overall_score = null;
   }
