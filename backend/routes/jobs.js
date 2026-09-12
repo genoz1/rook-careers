@@ -628,6 +628,27 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
   // ── Fast path: precomputed scores ─────────────────────────────────────────
   // Read from candidate_job_matches (pre-scored nightly) if scores exist.
   // ── Live scoring — 300-mile bounding box, always fresh ──
+  //
+  // !! DO NOT REPLACE THIS WITH PRECOMPUTED SCORES !!
+  //
+  // Precomputed scores were used here previously and caused repeated,
+  // hard-to-debug problems:
+  //   - Stale industry matching (CMR Pharma scored 94% for Diagnostics users
+  //     because its description mentioned 'diagnostics' — stored score never
+  //     updated when scoring logic changed)
+  //   - Scores stayed wrong until a rescore ran — could be hours or days
+  //   - Required complex rescore endpoints, scoring_version tracking,
+  //     background refresh logic, and cache invalidation — all fragile
+  //
+  // The live scoring path fetches ~300-400 jobs via SQL bounding box
+  // and scores them in-memory in milliseconds. It is fast enough.
+  // Scores are always current. There is no staleness to manage.
+  //
+  // If you are considering precomputed scores for performance: measure
+  // first. The bounding box query is already indexed and fast. Do not
+  // reintroduce precomputed scores without explicit written approval
+  // from Gene and a full staleness management plan reviewed in advance.
+  //
   let liveQuery = supabaseAdmin
     .from("jobs")
     .select(JOB_LIST_COLUMNS_NO_DESCRIPTION)
