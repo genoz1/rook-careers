@@ -465,17 +465,22 @@ function scoreJob(job, profile) {
     veterinary:       ["veterinary", "animal health", "vet"],
   };
 
+  // Use product_categories as primary signal — what the job SELLS.
+  // required_industries lists what backgrounds are accepted, which is too
+  // broad (a pharma job may accept diagnostics reps, but it is still pharma).
+  // Fall back to required_industries only when product_categories is empty.
+  const _aiProd = (job.ai_analysis?.product_categories   || []).map(s => String(s).toLowerCase());
   const _aiReq  = (job.ai_analysis?.required_industries  || []).map(s => String(s).toLowerCase());
   const _aiPref = (job.ai_analysis?.preferred_industries || []).map(s => String(s).toLowerCase());
-  const _aiProd = (job.ai_analysis?.product_categories   || []).map(s => String(s).toLowerCase());
-  const _aiAll  = [..._aiReq, ..._aiPref, ..._aiProd];
-  const hasIndustryData = _aiAll.length > 0;
+  const _primaryList = _aiProd.length > 0 ? _aiProd : [..._aiReq, ..._aiPref];
+  const _aiAll  = [..._aiProd, ..._aiReq, ..._aiPref];
+  const hasIndustryData = _primaryList.length > 0;
 
   if (Array.isArray(profile.desired_industries) && profile.desired_industries.length > 0 && hasIndustryData) {
     const matchedIndustry = profile.desired_industries.find((ind) => {
       const key   = String(ind).toLowerCase().trim();
       const group = INDUSTRY_GROUPS[key] || [key];
-      return group.some((term) => _aiAll.some(s => s.includes(term)));
+      return group.some((term) => _primaryList.some(s => s.includes(term)));
     });
     if (matchedIndustry) {
       reasons.push(`Matches your interest in ${matchedIndustry}`);
