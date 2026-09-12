@@ -1680,6 +1680,10 @@
       // Override Territory Continue button — save and go back to dashboard
       document.getElementById('btnTerrNext').addEventListener('click', async () => {
         // Save updated preferences
+        const btn = document.getElementById('btnTerrNext');
+        const origText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Saving…';
         try {
           const { data: { session: s } } = await sb.auth.getSession();
           if (s) {
@@ -1687,8 +1691,6 @@
               method: 'PUT',
               headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${s.access_token}` },
               body: JSON.stringify({
-                // Only update the three preference fields — never send location
-                // fields so they are not overwritten with null.
                 desired_industries: sel.industry && sel.industry !== 'Breaking In' ? [sel.industry] : [],
                 total_sales_years: sel.years != null ? Number(sel.years) : null,
                 territory_size_preferences: sel.territories.length > 0 ? sel.territories : null,
@@ -1696,6 +1698,12 @@
                 work_style: (sel.territories.length === 1 && sel.territories[0] === 'remote') ? 'remote' : 'field',
               }),
             });
+            // Await rescore so dashboard shows fresh scores immediately
+            btn.textContent = 'Updating your matches…';
+            await fetch('/api/profile/rescore', {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${s.access_token}` },
+            }).catch(() => {});
           }
         } catch (_) {}
         window.location.href = 'rook-dashboard.html';

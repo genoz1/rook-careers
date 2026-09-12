@@ -336,6 +336,26 @@ router.put("/profile", requireConfig, requireAuth, async (req, res) => {
     });
 });
 
+// POST /api/profile/rescore
+// Awaits a full rescore for the current user and returns when done.
+// Called after preference changes so the dashboard can reload jobs
+// with fresh scores immediately rather than waiting up to an hour.
+router.post("/profile/rescore", requireConfig, requireAuth, async (req, res) => {
+  try {
+    const { data: profile } = await supabaseAdmin
+      .from("candidate_profiles")
+      .select("*")
+      .eq("user_id", req.user.id)
+      .maybeSingle();
+    if (!profile) return res.status(404).json({ error: "Profile not found" });
+    const { scoredCount } = await scoreAndStoreForCandidate(supabaseAdmin, profile);
+    res.json({ ok: true, scored: scoredCount });
+  } catch (err) {
+    console.error(`[rescore] uid=${req.user.id.slice(0,8)}: ${err.message}`);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/resume — upload a résumé, extract its text, and run AI
 // analysis to produce structured data the matching engine can use
 // (industries, product categories, customer types, seniority, etc.).

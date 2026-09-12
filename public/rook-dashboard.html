@@ -761,8 +761,11 @@
           document.getElementById('locationLabel').textContent = pendingLocation.label || pendingLocation.zip || '—';
           editor.style.display = 'none';
           row.style.display = 'flex';
-          // Reload jobs with new location — loadJobs re-fetches the profile
-          // and uses the freshly saved lat/lng for ranking
+          // Rescore immediately with new location then reload jobs
+          btnSave.textContent = 'Updating matches…';
+          try {
+            await rookApiFetch('/profile/rescore', { method: 'POST' });
+          } catch (_) {}
           loadJobs();
         } catch (err) {
           document.getElementById('dashLocStatus').textContent = 'Could not save. Try again.';
@@ -1059,26 +1062,9 @@
     } else if (sortBy === 'newest') {
       visible.sort((a, b) => new Date(b.date_posted || b.first_seen_at || 0) - new Date(a.date_posted || a.first_seen_at || 0));
     } else {
-      // Reported directly for the same behavior on Job Search: a
-      // legitimately-scoring far-away job could outrank a closer,
-      // only-slightly-lower job, since distance previously only broke
-      // an EXACT score tie. Bucket scores into 8-point bands for
-      // sorting purposes only (the displayed score itself is
-      // unchanged) - within the same band, distance decides; a
-      // genuinely much better match in a higher band still wins
-      // regardless of distance. Same approach as rook-search.html.
-      visible.sort((a, b) => {
-        const SCORE_BAND_WIDTH = 8;
-        const bandA = Math.floor((a.match?.overall_score ?? -1) / SCORE_BAND_WIDTH);
-        const bandB = Math.floor((b.match?.overall_score ?? -1) / SCORE_BAND_WIDTH);
-        if (bandA !== bandB) return bandB - bandA;
-        const aDist = isRemoteJob(a) ? null : a.distance_miles;
-        const bDist = isRemoteJob(b) ? null : b.distance_miles;
-        if (aDist == null && bDist == null) return 0;
-        if (aDist == null) return 1;
-        if (bDist == null) return -1;
-        return aDist - bDist;
-      });
+      // Sort strictly by score — highest first, nothing else.
+      // Distance has its own dedicated sort option.
+      visible.sort((a, b) => (b.match?.overall_score ?? -1) - (a.match?.overall_score ?? -1));
     }
 
     // Direct instruction: the Dashboard only ever fetched (and showed)
