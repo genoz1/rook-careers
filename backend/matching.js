@@ -565,20 +565,42 @@ function scoreJob(job, profile) {
     dataPointsPossible++;
     dataPointsAvailable++;
 
-    // Use the clean job.industry column — same approach as the job search
-    // page filter. Never use description_text: staffing agencies like CMR
-    // mention every industry they recruit for in their descriptions, which
-    // falsely matched "diagnostics" for a pharma job and inflated its score.
-    // Fall back to ai_analysis.industry when the column is null.
-    const jobIndustry = (job.industry || job.ai_analysis?.industry || "").toLowerCase();
+    // Industry matching — same INDUSTRY_GROUPS expansion as rook-search.html.
+    // Checks job.industry column, job.category, job.title, job.company_name
+    // (same as the search page filter), then falls back to ai_analysis arrays
+    // (required_industries, preferred_industries, product_categories) which
+    // the AI extracted from the job description.
+    // Never uses description_text — staffing agencies like CMR mention every
+    // industry they recruit for in their descriptions, which falsely matched
+    // "diagnostics" for a pharma job. ai_analysis.required_industries = ["Pharmaceutical"]
+    // for CMR, correctly excluding it for Diagnostics users.
+    const INDUSTRY_GROUPS = {
+      diagnostics:    ["diagnostics", "reference laboratory", "molecular", "point-of-care", "lab", "pathology", "clinical laboratory"],
+      "medical device": ["medical device", "capital equipment", "surgical", "dme", "consumables"],
+      pharmaceutical: ["pharmaceutical", "pharma", "biotech", "life sciences", "specialty pharma"],
+      veterinary:     ["veterinary", "animal health", "vet"],
+    };
 
-    const matchedIndustry = profile.desired_industries.find((ind) =>
-      String(ind)
-        .toLowerCase()
-        .split(/\s*[\/,&]\s*/)
-        .filter(Boolean)
-        .some((term) => jobIndustry.includes(term))
-    );
+    const _jobIndustry = (job.industry || "").toLowerCase();
+    const _jobCategory = (job.category || "").toLowerCase();
+    const _jobTitle    = (job.title_original || "").toLowerCase();
+    const _jobCompany  = (job.company_name || "").toLowerCase();
+    const _aiReq       = (job.ai_analysis?.required_industries  || []).map(s => String(s).toLowerCase());
+    const _aiPref      = (job.ai_analysis?.preferred_industries || []).map(s => String(s).toLowerCase());
+    const _aiProd      = (job.ai_analysis?.product_categories   || []).map(s => String(s).toLowerCase());
+    const _aiAll       = [..._aiReq, ..._aiPref, ..._aiProd];
+
+    const matchedIndustry = profile.desired_industries.find((ind) => {
+      const key   = String(ind).toLowerCase().trim();
+      const group = INDUSTRY_GROUPS[key] || String(ind).toLowerCase().split(/\s*[\/,&]\s*/).filter(Boolean);
+      return group.some((term) =>
+        _jobIndustry.includes(term) ||
+        _jobCategory.includes(term) ||
+        _jobTitle.includes(term)    ||
+        _jobCompany.includes(term)  ||
+        _aiAll.some(s => s.includes(term))
+      );
+    });
 
     if (matchedIndustry) {
       prefScore += 39;
@@ -590,13 +612,17 @@ function scoreJob(job, profile) {
     }
 
     if (Array.isArray(profile.industries_to_avoid) && profile.industries_to_avoid.length > 0) {
-      const avoided = profile.industries_to_avoid.find((ind) =>
-        String(ind)
-          .toLowerCase()
-          .split(/\s*[\/,&]\s*/)
-          .filter(Boolean)
-          .some((term) => jobIndustry.includes(term))
-      );
+      const avoided = profile.industries_to_avoid.find((ind) => {
+        const avoidKey   = String(ind).toLowerCase().trim();
+        const avoidGroup = INDUSTRY_GROUPS[avoidKey] || [avoidKey];
+        return avoidGroup.some((term) =>
+          _jobIndustry.includes(term) ||
+          _jobCategory.includes(term) ||
+          _jobTitle.includes(term)    ||
+          _jobCompany.includes(term)  ||
+          _aiAll.some(s => s.includes(term))
+        );
+      });
       if (avoided) {
         concerns.push(`Mentions ${avoided}, which you asked to avoid`);
         hardDisqualifier = true;
