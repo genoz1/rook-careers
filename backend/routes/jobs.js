@@ -1442,30 +1442,23 @@ router.post("/onboarding/anonymous-preview", requireConfig, async (req, res) => 
       territory_size_preference: (territories || ["local"])[0],
     };
 
-    const SCORE_COLS = "id, title_original, title_normalized, company_name, location_raw, job_lat, job_lng, city, state, industry, remote_status, employment_type, travel_percentage, salary_min, salary_max, compensation_text, ai_analysis, date_posted, first_seen_at";
+    // ── Exact same SQL + scoring as dashboard live path ──────────────────
     const latDelta = 300 / 69;
     const lngDelta = 300 / (69 * Math.max(0.1, Math.cos((profile.home_lat * Math.PI) / 180)));
-    const homeStateAbbr = stateAbbrFromName(profile.home_state);
-    const nullCoordFilter = homeStateAbbr
-      ? `and(job_lat.is.null,state.eq.${homeStateAbbr})`
-      : `job_lat.is.null`;
 
     const { data: jobs, error } = await supabaseAdmin
       .from("jobs")
-      .select(SCORE_COLS)
+      .select(JOB_LIST_COLUMNS_NO_DESCRIPTION)
       .eq("status", "active")
       .eq("moderation_status", "approved")
-      .or(`remote_status.eq.remote,${nullCoordFilter},and(job_lat.gte.${profile.home_lat - latDelta},job_lat.lte.${profile.home_lat + latDelta},job_lng.gte.${profile.home_lng - lngDelta},job_lng.lte.${profile.home_lng + lngDelta})`)
+      .or(`job_lat.is.null,remote_status.eq.remote,and(job_lat.gte.${profile.home_lat - latDelta},job_lat.lte.${profile.home_lat + latDelta},job_lng.gte.${profile.home_lng - lngDelta},job_lng.lte.${profile.home_lng + lngDelta})`)
       .limit(400);
 
     if (error) throw new Error(error.message);
 
-    // Title-location sanity check: if a job title mentions a specific region
-    // (e.g. "South Florida") but the stored coordinates place it only 49 miles
-    // away from a user in Oxford FL, the coordinates are wrong. Filter it out
-    // so bad data doesn't surface misleading results.
-    const TITLE_LOCATION_CHECKS = {
-      'south florida': { lat: 25.9,  lng: -80.3  },
+    // Word-for-word copy of dashboard titleLocSanityPass
+    const TITLE_LOC_CHECKS = {
+      'south florida': { lat: 25.9, lng: -80.3 },
       'miami':         { lat: 25.77, lng: -80.19 },
       'fort lauderdale': { lat: 26.12, lng: -80.14 },
       'palm beach':    { lat: 26.71, lng: -80.05 },
@@ -1473,20 +1466,23 @@ router.post("/onboarding/anonymous-preview", requireConfig, async (req, res) => 
       'tallahassee':   { lat: 30.44, lng: -84.28 },
       'jacksonville':  { lat: 30.33, lng: -81.66 },
     };
-    function titleLocationSanityPass(title, computedDistMiles) {
-      if (!title || computedDistMiles == null) return true;
-      const lower = title.toLowerCase();
-      for (const [kw, coords] of Object.entries(TITLE_LOCATION_CHECKS)) {
-        if (lower.includes(kw)) {
+    function titleLocSanityPass(job) {
+      if (!job.job_lat || !profile?.home_lat) return true;
+      const title = (job.title_original || '').toLowerCase();
+      const computedDist = distanceMiles(profile.home_lat, profile.home_lng, job.job_lat, job.job_lng);
+      for (const [kw, coords] of Object.entries(TITLE_LOC_CHECKS)) {
+        if (title.includes(kw)) {
           const actual = distanceMiles(profile.home_lat, profile.home_lng, coords.lat, coords.lng);
-          if (Math.abs(actual - computedDistMiles) > 80) return false;
+          if (Math.abs(actual - computedDist) > 80) return false;
         }
       }
       return true;
     }
 
+    // Word-for-word copy of dashboard scoring + sort
     const scored = (jobs || [])
       .filter(j => !mentionsNonUsCountry(j.location_raw, j.job_lng, j.title_original))
+      .filter(j => titleLocSanityPass(j))
       .map(j => {
         const distMi = j.job_lat != null
           ? Math.round(distanceMiles(profile.home_lat, profile.home_lng, j.job_lat, j.job_lng))
@@ -1494,7 +1490,6 @@ router.post("/onboarding/anonymous-preview", requireConfig, async (req, res) => 
         return { job: j, score: scoreJob(j, profile), distMi };
       })
       .filter(r => r.score.overall_score >= 50)
-      .filter(r => titleLocationSanityPass(r.job.title_original, r.distMi))
       .sort((a, b) => b.score.overall_score - a.score.overall_score)
       .slice(0, 3);
 
