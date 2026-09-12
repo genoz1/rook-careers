@@ -359,298 +359,117 @@ function scoreJob(job, profile) {
   let locationForcedStrong = false; // set when the job is within 60 miles — see the distance block below
 
   // ============================================================
-  // PREFERENCE FIT — would the candidate want this job
+  // PREFERENCE FIT — deduction model
+  // ============================================================
+  // Every job starts at 100. Points deducted only for confirmed mismatches.
+  // Missing data never penalises — unknown is not wrong.
   // ============================================================
 
-  // --- Location (up to 35 points) ---
-  //
-  // Distance is now the PRIMARY signal when both sides have real
-  // coordinates — state matching is only a FALLBACK for when a ZIP or a
-  // job's coordinates aren't available yet (common early on, or for
-  // messy job-location text that fails to geocode). State boundaries
-  // are an administrative convenience, not a real proxy for how far a
-  // job actually is — someone near the FL/GA border could have a job
-  // just across the state line that's genuinely closer than one on the
-  // far side of their own state, and treating that as a hard
-  // disqualifier (as the state-only version of this did) was a real,
-  // reported flaw, not a hypothetical one.
-  prefMax += 48;
-  dataPointsPossible++;
-  const _locPrefBefore = prefScore;
+  prefMax = 100;
+  prefScore = 100;
+  distanceMultiplier = 1;
 
-  // A candidate can accept jobs from their home state AND any additional
-  // states they've explicitly said they want to see (preferred_states).
-  // In the distance-primary path below, this set no longer gates
-  // location outright — it's what keeps a genuinely FAR job from being a
-  // hard disqualifier if it's somewhere the candidate said they're open
-  // to (or willing to relocate for), rather than being the main signal.
-  const acceptedStateAbbrs = new Set();
-  const homeStateAbbr = stateAbbrFromName(profile.home_state);
-  if (homeStateAbbr) acceptedStateAbbrs.add(homeStateAbbr);
-  for (const s of profile.preferred_states || []) {
-    const abbr = stateAbbrFromName(s);
-    if (abbr) acceptedStateAbbrs.add(abbr);
-  }
-  if (acceptedStateAbbrs.size > 0) dataPointsAvailable++;
-
-  // Remote no longer bypasses distance scoring. Direct correction from
-  // industry experience: in field/outside sales, "remote" means "no
-  // office to report to," not "location doesn't matter" — a "Remote —
-  // North Carolina" posting is still tied to a real NC territory. The
-  // previous version gave every remote-labeled job a flat 28/35 points
-  // regardless of actual distance, which is exactly why unrelated jobs
-  // in NC, Michigan, and CA were all scoring similarly high for a
-  // Florida candidate — the real distance was never being considered at
-  // all. Now every job with real coordinates goes through the same
-  // distance-primary scoring below, remote or not; "remote" is kept as
-  // a purely informational callout, not a score input.
   const isRemoteLabeled = /remote/i.test(job.location_raw || "") || job.remote_status === "remote";
   const mentionsForeignCountry = mentionsNonUsCountry(job.location_raw, job.job_lng, job.title_original);
-
+  const homeStateAbbr = stateAbbrFromName(profile.home_state);
   const hasRealCoordinates = profile.home_lat != null && profile.home_lng != null && job.job_lat != null && job.job_lng != null;
 
+  // ── Distance ──────────────────────────────────────────────────────────
   if (mentionsForeignCountry) {
-    concerns.push(`Location (${job.location_raw}) appears to be outside the United States`);
+    prefScore -= 40;
     hardDisqualifier = true;
-    prefCap = Math.min(prefCap, 65);
+    prefCap = Math.min(prefCap, 60);
+    concerns.push(`Location (${job.location_raw}) appears to be outside the United States`);
   } else if (hasRealCoordinates) {
-    // --- Distance-primary path ---
-    dataPointsAvailable++;
     const miles = distanceMiles(profile.home_lat, profile.home_lng, job.job_lat, job.job_lng);
-    const inAcceptedRegion = acceptedStateAbbrs.size === 0 || [...acceptedStateAbbrs].some((abbr) => locationMentionsState(job.location_raw, abbr));
-
-    // Two-tier distance model based on field-sales territory norms:
-    //   0-60 mi    Full score. Core territory, home most nights.
-    //   60-150 mi  Slight discount. Field reps routinely drive this far;
-    //              150-mile territories are normal in medical sales.
-    //   150-300 mi Meaningful penalty — regular overnight travel.
-    //   300+ mi    Very low — outside realistic territory range.
-    // "Remote" is NOT treated as a distance bypass. In field sales,
-    // "remote" means no required office, not work-from-anywhere.
-    if (miles <= 60) {
-      locationForcedStrong = true;
-      prefScore += 48;
-      distanceMultiplier = 1.0;
+    if (miles <= 50) {
+      reasons.push(`About ${Math.round(miles)} miles from you`);
+    } else if (miles <= 100) {
+      prefScore -= 5;
       reasons.push(`About ${Math.round(miles)} miles from you`);
     } else if (miles <= 150) {
-      const ratio = (miles - 60) / 90;
-      prefScore += Math.round(48 - ratio * 8); // 48→40 pts (gentle drop)
-      distanceMultiplier = 1.0 - ratio * 0.07; // 1.0→0.93 (slight penalty)
+      prefScore -= 10;
       reasons.push(`About ${Math.round(miles)} miles from you — within typical territory range`);
     } else if (miles <= 300) {
-      const ratio = (miles - 150) / 150;
-      prefScore += Math.round(40 - ratio * 27); // 40→13 pts
-      distanceMultiplier = 0.88 - ratio * 0.48; // 0.88→0.40
+      prefScore -= 15;
       concerns.push(`About ${Math.round(miles)} miles away — would likely require overnight travel`);
     } else {
-      prefScore += 3;
-      distanceMultiplier = 0.25;
+      prefScore -= 25;
       concerns.push(`About ${Math.round(miles)} miles away — far outside typical territory range`);
     }
-  } else if (acceptedStateAbbrs.size > 0 && [...acceptedStateAbbrs].some((abbr) => locationMentionsState(job.location_raw, abbr))) {
-    // --- Fallback: no real coordinates on one or both sides, so fall
-    // back to state-matching. Reasonable when a ZIP hasn't been set yet,
-    // or a job's location text failed to geocode - notably including
-    // Workday's generic "N Locations" placeholder for multi-site reqs,
-    // which is real text but carries no usable coordinates at all.
-    //
-    // Reported directly: several Abbott/Elanco-style "N Locations"
-    // postings genuinely far from home (Virginia, Ohio, the Carolinas
-    // for a Florida candidate) were still scoring 72% - this whole
-    // branch never got the distance-multiplier treatment added to the
-    // real-coordinates path above, so a job landing here could dilute
-    // to a deceptively high overall score exactly the same way the
-    // 900-mile Chicago job did before that fix. distanceMultiplier
-    // applied here too now, calibrated to the genuine uncertainty of
-    // each case rather than a real measured distance.
-    const matchedAbbr = [...acceptedStateAbbrs].find((abbr) => locationMentionsState(job.location_raw, abbr));
-    prefScore += 26;
-    distanceMultiplier = 0.8;
-    reasons.push(
-      matchedAbbr === homeStateAbbr
-        ? "Location matches your home state (exact distance not yet available for this job)"
-        : `Location matches one of your preferred states (${matchedAbbr}) — exact distance not yet available`
-    );
-  } else if (profile.willing_to_relocate) {
-    prefScore += 19;
-    distanceMultiplier = 0.55;
-    reasons.push("You've indicated openness to relocation");
+  } else if (isRemoteLabeled) {
+    const wantsLocalOnly = (profile.territory_size_preferences || []).length > 0 &&
+      !(profile.territory_size_preferences || []).some(t => ["regional","national","remote"].includes(t));
+    if (wantsLocalOnly) {
+      prefScore -= 5;
+      concerns.push("Remote role — you prefer local territory");
+    } else {
+      reasons.push("Remote-friendly role");
+    }
   } else {
-    // Reported directly, confirmed with an exact math match (100%
-    // candidate_fit + 43% preference_fit = 71.5, rounds to the exact
-    // 72% reported): this branch used to require
-    // acceptedStateAbbrs.size > 0 - meaning if that set was ever
-    // genuinely empty (home_state not resolving to a valid
-    // abbreviation, and no preferred_states set either), EVERY branch
-    // in this whole chain got skipped, leaving distanceMultiplier
-    // silently stuck at its untouched default of 1 - a completely
-    // unpenalized location, worse than even the fallback's "matches
-    // your state" case. A true catch-all now: no real coordinates, no
-    // state match, not willing to relocate, for whatever reason -
-    // treated the same as the confirmed-far real-coordinates case,
-    // since there's no genuine information here suggesting otherwise.
-    if (job.location_raw) {
-      concerns.push(`Location (${job.location_raw}) may be outside your preferred states`);
-    }
-    distanceMultiplier = 0.25;
-  }
-
-  // Purely informational — does not add or remove points. Being able to
-  // work from home has real value to a candidate, it's just not the
-  // same thing as "distance doesn't matter," which is what this used to
-  // mean before the fix above.
-  if (isRemoteLabeled && !mentionsForeignCountry) {
-    reasons.push("Remote-friendly role");
-  }
-
-  cat.location_prefs.max += 48;
-  cat.location_prefs.score += (prefScore - _locPrefBefore);
-  if (hardDisqualifier && prefCap <= 65) catGap.add("location_prefs");
-
-  // --- Compensation (informational only — 3 points max) ---
-  // Salary in medical sales is negotiable and posted ranges rarely reflect
-  // final comp. A published salary should never outweigh industry match.
-  // Surfaced in reasons/concerns for visibility but contributes minimally
-  // to the score so it never causes a pharma job to outscore a diagnostics
-  // job just because it posted a number.
-  const jobSalary = extractSalaryFigure(job);
-  const _compBefore = prefScore;
-  if (jobSalary) {
-    reasons.push(`Published compensation: ${job.compensation_text || '$' + Math.round(jobSalary / 1000) + 'k'}`);
-    prefMax += 3;
-    dataPointsPossible++;
-    dataPointsAvailable++;
-    if (profile.minimum_base_salary) {
-      if (jobSalary >= profile.minimum_base_salary) {
-        prefScore += 3;
-      } else if (jobSalary >= profile.minimum_base_salary * 0.85) {
-        prefScore += 1;
-        concerns.push("Compensation may be slightly below your stated minimum");
-      } else {
-        concerns.push("Compensation appears well below your stated minimum");
-      }
+    const inHomeState = homeStateAbbr && locationMentionsState(job.location_raw, homeStateAbbr);
+    if (inHomeState) {
+      prefScore -= 5;
+      reasons.push("Location matches your home state (exact distance not yet available)");
     } else {
-      prefScore += 2; // salary published but no minimum set — slight positive signal
+      prefScore -= 15;
+      if (job.location_raw) concerns.push(`Location (${job.location_raw}) may be outside your area`);
     }
   }
 
-  cat.location_prefs.max += 3;
-  cat.location_prefs.score += (prefScore - _compBefore);
+  cat.location_prefs.max = 100;
+  cat.location_prefs.score = prefScore;
 
-  // --- Travel fit (up to 12 points) ---
-  const jobTravel = extractJobTravelPercentage(job);
-  const _travelBefore = prefScore;
-  if (profile.maximum_travel_percentage != null && jobTravel != null) {
-    prefMax += 12;
-    dataPointsPossible++;
-    dataPointsAvailable++;
-    if (jobTravel <= profile.maximum_travel_percentage) {
-      prefScore += 12;
-      reasons.push(`Travel (${jobTravel}%) is within your stated limit`);
-    } else if (jobTravel <= profile.maximum_travel_percentage + 15) {
-      prefScore += 5;
-      concerns.push(`Travel (${jobTravel}%) is somewhat above your stated limit`);
-    } else {
-      concerns.push(`Travel (${jobTravel}%) is well above your stated limit`);
-    }
-  }
+  // ── Industry ──────────────────────────────────────────────────────────
+  // Only deduct if ai_analysis has industry data AND it doesn't match.
+  // No data → no deduction.
+  const INDUSTRY_GROUPS = {
+    diagnostics:      ["diagnostics", "reference laboratory", "molecular", "point-of-care", "lab", "pathology", "clinical laboratory"],
+    "medical device": ["medical device", "capital equipment", "surgical", "dme", "consumables"],
+    pharmaceutical:   ["pharmaceutical", "pharma", "biotech", "life sciences", "specialty pharma"],
+    veterinary:       ["veterinary", "animal health", "vet"],
+  };
 
-  cat.location_prefs.max += 12;
-  cat.location_prefs.score += Math.max(0, prefScore - _travelBefore);
+  const _aiReq  = (job.ai_analysis?.required_industries  || []).map(s => String(s).toLowerCase());
+  const _aiPref = (job.ai_analysis?.preferred_industries || []).map(s => String(s).toLowerCase());
+  const _aiProd = (job.ai_analysis?.product_categories   || []).map(s => String(s).toLowerCase());
+  const _aiAll  = [..._aiReq, ..._aiPref, ..._aiProd];
+  const hasIndustryData = _aiAll.length > 0;
 
-  // --- Onboarding-stated industry interest (up to 15 points) ---
-  const _indInterestBefore = prefScore;
-  if (Array.isArray(profile.desired_industries) && profile.desired_industries.length > 0) {
-    prefMax += 39;
-    dataPointsPossible++;
-    dataPointsAvailable++;
-
-    // Industry matching — same INDUSTRY_GROUPS expansion as rook-search.html.
-    // Checks job.industry column, job.category, job.title, job.company_name
-    // (same as the search page filter), then falls back to ai_analysis arrays
-    // (required_industries, preferred_industries, product_categories) which
-    // the AI extracted from the job description.
-    // Never uses description_text — staffing agencies like CMR mention every
-    // industry they recruit for in their descriptions, which falsely matched
-    // "diagnostics" for a pharma job. ai_analysis.required_industries = ["Pharmaceutical"]
-    // for CMR, correctly excluding it for Diagnostics users.
-    const INDUSTRY_GROUPS = {
-      diagnostics:    ["diagnostics", "reference laboratory", "molecular", "point-of-care", "lab", "pathology", "clinical laboratory"],
-      "medical device": ["medical device", "capital equipment", "surgical", "dme", "consumables"],
-      pharmaceutical: ["pharmaceutical", "pharma", "biotech", "life sciences", "specialty pharma"],
-      veterinary:     ["veterinary", "animal health", "vet"],
-    };
-
-    const _jobIndustry = (job.industry || "").toLowerCase();
-    const _jobCategory = (job.category || "").toLowerCase();
-    const _jobTitle    = (job.title_original || "").toLowerCase();
-    const _jobCompany  = (job.company_name || "").toLowerCase();
-    const _aiReq       = (job.ai_analysis?.required_industries  || []).map(s => String(s).toLowerCase());
-    const _aiPref      = (job.ai_analysis?.preferred_industries || []).map(s => String(s).toLowerCase());
-    const _aiProd      = (job.ai_analysis?.product_categories   || []).map(s => String(s).toLowerCase());
-    const _aiAll       = [..._aiReq, ..._aiPref, ..._aiProd];
-
+  if (Array.isArray(profile.desired_industries) && profile.desired_industries.length > 0 && hasIndustryData) {
     const matchedIndustry = profile.desired_industries.find((ind) => {
       const key   = String(ind).toLowerCase().trim();
-      const group = INDUSTRY_GROUPS[key] || String(ind).toLowerCase().split(/\s*[\/,&]\s*/).filter(Boolean);
-      return group.some((term) =>
-        _jobIndustry.includes(term) ||
-        _jobCategory.includes(term) ||
-        _jobTitle.includes(term)    ||
-        _jobCompany.includes(term)  ||
-        _aiAll.some(s => s.includes(term))
-      );
+      const group = INDUSTRY_GROUPS[key] || [key];
+      return group.some((term) => _aiAll.some(s => s.includes(term)));
     });
-
     if (matchedIndustry) {
-      prefScore += 39;
-      reasons.push(`Matches your stated interest in ${matchedIndustry}`);
+      reasons.push(`Matches your interest in ${matchedIndustry}`);
     } else {
-      // Industry not a stated preference but also not avoided.
-      // A nearby role in an adjacent field is still worth considering.
-      prefScore += 7;
-    }
-
-    if (Array.isArray(profile.industries_to_avoid) && profile.industries_to_avoid.length > 0) {
-      const avoided = profile.industries_to_avoid.find((ind) => {
-        const avoidKey   = String(ind).toLowerCase().trim();
-        const avoidGroup = INDUSTRY_GROUPS[avoidKey] || [avoidKey];
-        return avoidGroup.some((term) =>
-          _jobIndustry.includes(term) ||
-          _jobCategory.includes(term) ||
-          _jobTitle.includes(term)    ||
-          _jobCompany.includes(term)  ||
-          _aiAll.some(s => s.includes(term))
-        );
-      });
-      if (avoided) {
-        concerns.push(`Mentions ${avoided}, which you asked to avoid`);
-        hardDisqualifier = true;
-        prefCap = Math.min(prefCap, 40);
-      }
+      prefScore -= 10;
+      concerns.push("Industry may not match your stated preference");
     }
   }
 
-  cat.industry_product.max += 39;
-  cat.industry_product.score += (prefScore - _indInterestBefore);
-
-  // --- Job freshness (up to 8 points) ---
-  // Only added to prefMax when the job has a date to measure.
-  // Without a date, freshness is unknown — not a zero.
-  const referenceDate = job.last_seen_at || job.date_posted;
-  if (referenceDate) {
-    prefMax += 8;
-    const ageDays = (Date.now() - new Date(referenceDate).getTime()) / (1000 * 60 * 60 * 24);
-    if (ageDays <= 3) {
-      prefScore += 8;
-      reasons.push("Posted or verified in the last few days");
-    } else if (ageDays <= 14) {
-      prefScore += 5;
-    } else if (ageDays <= 30) {
-      prefScore += 2;
+  if (Array.isArray(profile.industries_to_avoid) && profile.industries_to_avoid.length > 0 && hasIndustryData) {
+    const avoided = profile.industries_to_avoid.find((ind) => {
+      const key   = String(ind).toLowerCase().trim();
+      const group = INDUSTRY_GROUPS[key] || [key];
+      return group.some((term) => _aiAll.some(s => s.includes(term)));
+    });
+    if (avoided) {
+      concerns.push(`Mentions ${avoided}, which you asked to avoid`);
+      hardDisqualifier = true;
+      prefCap = Math.min(prefCap, 40);
     }
-    // Jobs older than 30 days earn 0 freshness points but don't reduce
-    // the denominator — 0/8 vs nothing: honest that it's stale.
+  }
+
+  cat.industry_product.max = 100;
+  cat.industry_product.score = prefScore;
+
+  // ── Salary — informational only, no scoring impact ───────────────────
+  const jobSalary = extractSalaryFigure(job);
+  if (jobSalary) {
+    reasons.push(`Published compensation: ${job.compensation_text || "$" + Math.round(jobSalary / 1000) + "k"}`);
   }
 
   // ============================================================
@@ -1091,7 +910,7 @@ function scoreJob(job, profile) {
   // openness to relocating there) leaves a real, visible, honestly-low
   // score, not an exclusion.
   if (overall_score != null) {
-    overall_score = Math.round(overall_score * distanceMultiplier);
+    overall_score = Math.round(overall_score);
   }
 
   const availabilityRatio = dataPointsPossible > 0 ? dataPointsAvailable / dataPointsPossible : 0;

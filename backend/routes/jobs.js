@@ -1442,7 +1442,7 @@ router.post("/onboarding/anonymous-preview", requireConfig, async (req, res) => 
       territory_size_preference: (territories || ["local"])[0],
     };
 
-    const SCORE_COLS = "id, title_original, title_normalized, location_raw, job_lat, job_lng, city, state, industry, remote_status, employment_type, travel_percentage, salary_min, salary_max, compensation_text, ai_analysis, date_posted, first_seen_at";
+    const SCORE_COLS = "id, title_original, title_normalized, company_name, location_raw, job_lat, job_lng, city, state, industry, remote_status, employment_type, travel_percentage, salary_min, salary_max, compensation_text, ai_analysis, date_posted, first_seen_at";
     const latDelta = 300 / 69;
     const lngDelta = 300 / (69 * Math.max(0.1, Math.cos((profile.home_lat * Math.PI) / 180)));
     const homeStateAbbr = stateAbbrFromName(profile.home_state);

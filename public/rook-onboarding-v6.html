@@ -383,10 +383,21 @@ async function loadAnonymousMatches(territories) {
   }
 }
 
-// ── Create account button (placeholder for now) ──────────────────────────────
+// ── Create account button ─────────────────────────────────────────────────
 document.getElementById('btnCreateAccount').addEventListener('click', () => {
-  // TODO: wire to email signup screen in next phase
-  window.location.href = 'rook-onboarding-v4.html';
+  // Save questionnaire answers so signup page can prefill the profile
+  const industry   = document.querySelector('input[name="industry"]:checked')?.value;
+  const years      = document.querySelector('input[name="years"]:checked')?.value;
+  const territories = [...document.querySelectorAll('input[name="territory"]:checked')].map(c => c.value);
+  try {
+    sessionStorage.setItem('rook_v6_state', JSON.stringify({
+      location: selectedLocation,
+      industry,
+      years: years != null ? Number(years) : null,
+      territories,
+    }));
+  } catch(_) {}
+  window.location.href = 'rook-onboarding-v6-signup.html';
 });
 
 })();
