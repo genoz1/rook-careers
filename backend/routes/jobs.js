@@ -100,36 +100,6 @@ async function loadCandidateId(req, res, next) {
 const JOB_LIST_COLUMNS = "id, source_job_id, employer_id, source_type, source_url, application_url, title_original, title_normalized, company_name, description_html, description_text, ai_analysis, location_raw, job_lat, job_lng, city, state, region, territory, remote_status, employment_type, category, subcategory, industry, product_type, sales_type, experience_min_years, experience_max_years, salary_min, salary_max, compensation_text, travel_percentage, overnight_travel, required_skills, preferred_skills, required_experience, preferred_experience, degree_required, certifications, date_posted, first_seen_at, last_seen_at, status, source_verified, moderation_status, recruiter_name, recruiter_email, recruiter_company, recruiter_contact_method, recruiter_id, created_at, updated_at";
 const JOB_LIST_COLUMNS_NO_DESCRIPTION = JOB_LIST_COLUMNS.split(", ").filter((c) => c !== "description_html" && c !== "description_text").join(", ");
 
-// Shared title-location sanity check — used by both dashboard and v6 preview.
-// Filters jobs where stored coordinates conflict with the city named in the title.
-// e.g. "Clinical Account Executive, Jacksonville" stored at 49mi from Oxford FL
-// when Jacksonville is actually 99mi away → bad data, filtered out.
-const TITLE_LOC_CHECKS = {
-  'south florida':   { lat: 25.9,  lng: -80.3  },
-  'miami':           { lat: 25.77, lng: -80.19 },
-  'fort lauderdale': { lat: 26.12, lng: -80.14 },
-  'palm beach':      { lat: 26.71, lng: -80.05 },
-  'pensacola':       { lat: 30.42, lng: -87.22 },
-  'tallahassee':     { lat: 30.44, lng: -84.28 },
-  'jacksonville':    { lat: 30.33, lng: -81.66 },
-  'sarasota':        { lat: 27.33, lng: -82.53 },
-  'naples':          { lat: 26.14, lng: -81.79 },
-  'fort myers':      { lat: 26.64, lng: -81.87 },
-  'daytona':         { lat: 29.21, lng: -81.02 },
-};
-function titleLocSanityPassShared(job, homeLat, homeLng) {
-  if (!job.job_lat || homeLat == null || homeLng == null) return true;
-  const title = (job.title_original || '').toLowerCase();
-  const computedDist = distanceMiles(homeLat, homeLng, job.job_lat, job.job_lng);
-  for (const [kw, coords] of Object.entries(TITLE_LOC_CHECKS)) {
-    if (title.includes(kw)) {
-      const actual = distanceMiles(homeLat, homeLng, coords.lat, coords.lng);
-      if (Math.abs(actual - computedDist) > 40) return false;
-    }
-  }
-  return true;
-}
-
 function attachDistance(job, profile) {
   const hasCoords = profile?.home_lat != null && profile?.home_lng != null && job.job_lat != null && job.job_lng != null;
   return {
@@ -715,10 +685,34 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
   const dismissedJobIds = new Set((statusRows || []).filter((r) => r.dismissed).map((r) => r.job_id));
 
   // Title-location sanity check — same as anonymous preview.
+  // Filters jobs where stored coordinates are wrong (e.g. "South Florida"
+  // job with coordinates near Oxford FL, 49mi away instead of 225mi).
+  const TITLE_LOC_CHECKS = {
+    'south florida': { lat: 25.9, lng: -80.3 },
+    'miami':         { lat: 25.77, lng: -80.19 },
+    'fort lauderdale': { lat: 26.12, lng: -80.14 },
+    'palm beach':    { lat: 26.71, lng: -80.05 },
+    'pensacola':     { lat: 30.42, lng: -87.22 },
+    'tallahassee':   { lat: 30.44, lng: -84.28 },
+    'jacksonville':  { lat: 30.33, lng: -81.66 },
+  };
+  function titleLocSanityPass(job) {
+    if (!job.job_lat || !profile?.home_lat) return true;
+    const title = (job.title_original || '').toLowerCase();
+    const computedDist = distanceMiles(profile.home_lat, profile.home_lng, job.job_lat, job.job_lng);
+    for (const [kw, coords] of Object.entries(TITLE_LOC_CHECKS)) {
+      if (title.includes(kw)) {
+        const actual = distanceMiles(profile.home_lat, profile.home_lng, coords.lat, coords.lng);
+        if (Math.abs(actual - computedDist) > 40) return false;
+      }
+    }
+    return true;
+  }
+
   let rows = (allMatchingJobs || [])
     .filter((job) => !dismissedJobIds.has(job.id))
     .filter((job) => !mentionsNonUsCountry(job.location_raw, job.job_lng, job.title_original))
-    .filter((job) => titleLocSanityPassShared(job, profile?.home_lat, profile?.home_lng))
+    .filter((job) => titleLocSanityPass(job))
     .map((job) => ({ jobs: job, job_id: job.id, overall_score: null, saved: savedJobIds.has(job.id), _liveMatch: scoreJob(job, profile) }))
     .sort((a, b) => (b._liveMatch?.overall_score ?? -1) - (a._liveMatch?.overall_score ?? -1));
   if (!keyword) rows = rows.slice(0, Number(limit));
@@ -1470,9 +1464,33 @@ router.post("/onboarding/anonymous-preview", requireConfig, async (req, res) => 
     // (e.g. "South Florida") but the stored coordinates place it only 49 miles
     // away from a user in Oxford FL, the coordinates are wrong. Filter it out
     // so bad data doesn't surface misleading results.
+    const TITLE_LOCATION_CHECKS = {
+      'south florida': { lat: 25.9,  lng: -80.3  },
+      'miami':         { lat: 25.77, lng: -80.19 },
+      'fort lauderdale': { lat: 26.12, lng: -80.14 },
+      'palm beach':    { lat: 26.71, lng: -80.05 },
+      'pensacola':     { lat: 30.42, lng: -87.22 },
+      'tallahassee':   { lat: 30.44, lng: -84.28 },
+      'jacksonville':  { lat: 30.33, lng: -81.66 },
+      'sarasota':      { lat: 27.33, lng: -82.53 },
+      'naples':        { lat: 26.14, lng: -81.79 },
+      'fort myers':    { lat: 26.64, lng: -81.87 },
+      'daytona':       { lat: 29.21, lng: -81.02 },
+    };
+    function titleLocationSanityPass(title, computedDistMiles) {
+      if (!title || computedDistMiles == null) return true;
+      const lower = title.toLowerCase();
+      for (const [kw, coords] of Object.entries(TITLE_LOCATION_CHECKS)) {
+        if (lower.includes(kw)) {
+          const actual = distanceMiles(profile.home_lat, profile.home_lng, coords.lat, coords.lng);
+          if (Math.abs(actual - computedDistMiles) > 40) return false;
+        }
+      }
+      return true;
+    }
+
     const scored = (jobs || [])
       .filter(j => !mentionsNonUsCountry(j.location_raw, j.job_lng, j.title_original))
-      .filter(j => titleLocSanityPassShared(j, profile.home_lat, profile.home_lng))
       .map(j => {
         const distMi = j.job_lat != null
           ? Math.round(distanceMiles(profile.home_lat, profile.home_lng, j.job_lat, j.job_lng))
@@ -1480,6 +1498,7 @@ router.post("/onboarding/anonymous-preview", requireConfig, async (req, res) => 
         return { job: j, score: scoreJob(j, profile), distMi };
       })
       .filter(r => r.score.overall_score >= 50)
+      .filter(r => titleLocationSanityPass(r.job.title_original, r.distMi))
       .sort((a, b) => b.score.overall_score - a.score.overall_score)
       .slice(0, 3);
 
