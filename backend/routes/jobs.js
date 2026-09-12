@@ -670,7 +670,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     const latDelta = 300 / 69;
     const lngDelta = 300 / (69 * Math.max(0.1, Math.cos((profile.home_lat * Math.PI) / 180)));
     liveQuery = liveQuery.or(
-      `job_lat.is.null,and(job_lat.gte.${profile.home_lat - latDelta},job_lat.lte.${profile.home_lat + latDelta},job_lng.gte.${profile.home_lng - lngDelta},job_lng.lte.${profile.home_lng + lngDelta})`
+      `job_lat.is.null,remote_status.eq.remote,and(job_lat.gte.${profile.home_lat - latDelta},job_lat.lte.${profile.home_lat + latDelta},job_lng.gte.${profile.home_lng - lngDelta},job_lng.lte.${profile.home_lng + lngDelta})`
     );
   }
 
@@ -703,7 +703,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     for (const [kw, coords] of Object.entries(TITLE_LOC_CHECKS)) {
       if (title.includes(kw)) {
         const actual = distanceMiles(profile.home_lat, profile.home_lng, coords.lat, coords.lng);
-        if (Math.abs(actual - computedDist) > 40) return false;
+        if (Math.abs(actual - computedDist) > 80) return false;
       }
     }
     return true;
@@ -1455,7 +1455,7 @@ router.post("/onboarding/anonymous-preview", requireConfig, async (req, res) => 
       .select(SCORE_COLS)
       .eq("status", "active")
       .eq("moderation_status", "approved")
-      .or(`${nullCoordFilter},and(job_lat.gte.${profile.home_lat - latDelta},job_lat.lte.${profile.home_lat + latDelta},job_lng.gte.${profile.home_lng - lngDelta},job_lng.lte.${profile.home_lng + lngDelta})`)
+      .or(`remote_status.eq.remote,${nullCoordFilter},and(job_lat.gte.${profile.home_lat - latDelta},job_lat.lte.${profile.home_lat + latDelta},job_lng.gte.${profile.home_lng - lngDelta},job_lng.lte.${profile.home_lng + lngDelta})`)
       .limit(400);
 
     if (error) throw new Error(error.message);
@@ -1472,10 +1472,6 @@ router.post("/onboarding/anonymous-preview", requireConfig, async (req, res) => 
       'pensacola':     { lat: 30.42, lng: -87.22 },
       'tallahassee':   { lat: 30.44, lng: -84.28 },
       'jacksonville':  { lat: 30.33, lng: -81.66 },
-      'sarasota':      { lat: 27.33, lng: -82.53 },
-      'naples':        { lat: 26.14, lng: -81.79 },
-      'fort myers':    { lat: 26.64, lng: -81.87 },
-      'daytona':       { lat: 29.21, lng: -81.02 },
     };
     function titleLocationSanityPass(title, computedDistMiles) {
       if (!title || computedDistMiles == null) return true;
@@ -1483,7 +1479,7 @@ router.post("/onboarding/anonymous-preview", requireConfig, async (req, res) => 
       for (const [kw, coords] of Object.entries(TITLE_LOCATION_CHECKS)) {
         if (lower.includes(kw)) {
           const actual = distanceMiles(profile.home_lat, profile.home_lng, coords.lat, coords.lng);
-          if (Math.abs(actual - computedDistMiles) > 40) return false;
+          if (Math.abs(actual - computedDistMiles) > 80) return false;
         }
       }
       return true;
@@ -1656,7 +1652,7 @@ router.get("/onboarding/match-preview", requireConfig, requireAuth, async (req, 
         ? `and(job_lat.is.null,state.eq.${homeStateAbbr})`
         : `job_lat.is.null`;
       jobQuery = jobQuery.or(
-        `${nullCoordFilter},and(job_lat.gte.${profile.home_lat - latDelta},job_lat.lte.${profile.home_lat + latDelta},job_lng.gte.${profile.home_lng - lngDelta},job_lng.lte.${profile.home_lng + lngDelta})`
+        `remote_status.eq.remote,${nullCoordFilter},and(job_lat.gte.${profile.home_lat - latDelta},job_lat.lte.${profile.home_lat + latDelta},job_lng.gte.${profile.home_lng - lngDelta},job_lng.lte.${profile.home_lng + lngDelta})`
       );
     }
 

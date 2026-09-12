@@ -914,13 +914,14 @@ function scoreJob(job, profile) {
   if (candidate_fit != null) candidate_fit = Math.min(candidate_fit, candCap);
   if (preference_fit != null) preference_fit = Math.min(preference_fit, prefCap);
 
-  // Overall score = preference_fit only.
-  // Ranking is based purely on location + onboarding answers — consistent
-  // between v6 preview (no resume) and dashboard (with resume).
-  // candidate_fit is displayed as "Qualifications" on the card but never
-  // affects sort order. Resume tells you how you qualify, not where you rank.
+  // Overall score:
+  // - No resume: preference_fit only (location + onboarding answers)
+  // - Resume uploaded: 70% preference_fit + 30% candidate_fit
+  //   Qualifications refine the score but location/industry stay dominant.
   let overall_score;
-  if (preference_fit != null) {
+  if (preference_fit != null && candidate_fit != null) {
+    overall_score = Math.round(0.7 * preference_fit + 0.3 * candidate_fit);
+  } else if (preference_fit != null) {
     overall_score = preference_fit;
   } else if (candidate_fit != null) {
     overall_score = candidate_fit;
