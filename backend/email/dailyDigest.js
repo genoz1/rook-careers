@@ -19,13 +19,20 @@ function renderDigestHtml({ name, jobs, appBaseUrl, subscribed, hasNewJobs }) {
   const rows = jobs
     .map((job) => {
       const comp = job.compensation_text || (job.salary_min ? `$${job.salary_min}${job.salary_max ? "–$" + job.salary_max : "+"}` : "");
-      const detailUrl = job.subscription_required
-        ? `${appBaseUrl}/rook-pricing.html`
-        : `${appBaseUrl}/jobs/${encodeURIComponent(job.id)}`;
+
+      // Subscribers always go straight to the full unmasked job analysis page.
+      // Non-subscribers go to the public SSR job page with the trial CTA.
+      // This means no redirect logic is needed — the right page is linked directly.
+      const detailUrl = subscribed
+        ? `${appBaseUrl}/rook-job-analysis.html?job=${encodeURIComponent(job.id)}`
+        : job.subscription_required
+          ? `${appBaseUrl}/rook-pricing.html`
+          : `${appBaseUrl}/jobs/${encodeURIComponent(job.id)}`;
+
       const companyLine = job.subscription_required
         ? `<span style="color:#7C3AED; font-weight:600;">🔒 Subscribe to see who's hiring</span> · ${escapeHtml(job.location_raw || "")}${comp ? " · " + escapeHtml(comp) : ""}`
         : `${escapeHtml(job.company_name || "")} · ${escapeHtml(job.location_raw || "")}${comp ? " · " + escapeHtml(comp) : ""}`;
-      const buttonLabel = job.subscription_required ? "Unlock" : "View Job";
+      const buttonLabel = subscribed ? "View Job" : (job.subscription_required ? "Unlock" : "View Job");
       const isNew = job.first_seen_at && (Date.now() - new Date(job.first_seen_at).getTime()) < 24 * 60 * 60 * 1000;
       const newBadge = isNew ? `<span style="display:inline-block; background:#FFF3E0; color:#E65100; font-size:10px; font-weight:700; padding:2px 7px; border-radius:99px; border:1px solid #FFB74D; margin-left:6px; vertical-align:middle;">🔥 Just Posted</span>` : "";
       return `
