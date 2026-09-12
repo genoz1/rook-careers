@@ -670,7 +670,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     const latDelta = 300 / 69;
     const lngDelta = 300 / (69 * Math.max(0.1, Math.cos((profile.home_lat * Math.PI) / 180)));
     liveQuery = liveQuery.or(
-      `job_lat.is.null,remote_status.eq.remote,and(job_lat.gte.${profile.home_lat - latDelta},job_lat.lte.${profile.home_lat + latDelta},job_lng.gte.${profile.home_lng - lngDelta},job_lng.lte.${profile.home_lng + lngDelta})`
+      `job_lat.is.null,and(job_lat.gte.${profile.home_lat - latDelta},job_lat.lte.${profile.home_lat + latDelta},job_lng.gte.${profile.home_lng - lngDelta},job_lng.lte.${profile.home_lng + lngDelta})`
     );
   }
 
@@ -1455,7 +1455,7 @@ router.post("/onboarding/anonymous-preview", requireConfig, async (req, res) => 
       .select(SCORE_COLS)
       .eq("status", "active")
       .eq("moderation_status", "approved")
-      .or(`remote_status.eq.remote,${nullCoordFilter},and(job_lat.gte.${profile.home_lat - latDelta},job_lat.lte.${profile.home_lat + latDelta},job_lng.gte.${profile.home_lng - lngDelta},job_lng.lte.${profile.home_lng + lngDelta})`)
+      .or(`${nullCoordFilter},and(job_lat.gte.${profile.home_lat - latDelta},job_lat.lte.${profile.home_lat + latDelta},job_lng.gte.${profile.home_lng - lngDelta},job_lng.lte.${profile.home_lng + lngDelta})`)
       .limit(400);
 
     if (error) throw new Error(error.message);
@@ -1652,7 +1652,7 @@ router.get("/onboarding/match-preview", requireConfig, requireAuth, async (req, 
         ? `and(job_lat.is.null,state.eq.${homeStateAbbr})`
         : `job_lat.is.null`;
       jobQuery = jobQuery.or(
-        `remote_status.eq.remote,${nullCoordFilter},and(job_lat.gte.${profile.home_lat - latDelta},job_lat.lte.${profile.home_lat + latDelta},job_lng.gte.${profile.home_lng - lngDelta},job_lng.lte.${profile.home_lng + lngDelta})`
+        `${nullCoordFilter},and(job_lat.gte.${profile.home_lat - latDelta},job_lat.lte.${profile.home_lat + latDelta},job_lng.gte.${profile.home_lng - lngDelta},job_lng.lte.${profile.home_lng + lngDelta})`
       );
     }
 
