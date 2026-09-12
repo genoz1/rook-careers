@@ -577,7 +577,7 @@ function scoreJob(job, profile) {
     prefMax += 15;
     dataPointsPossible++;
     dataPointsAvailable++;
-    const jobText = `${job.title_original || ""} ${job.description_text || ""}`.toLowerCase();
+    const jobText = `${job.title_original || ""} ${job.description_text || ""} ${job.ai_analysis?.industry || ""} ${job.ai_analysis?.product_category || ""}`.toLowerCase();
     // Reported directly, with a concrete case: "Veterinary / Animal
     // Health" as a whole never matches ordinary job text, since no
     // real posting phrases it as that exact compound string with a
