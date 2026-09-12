@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex">
+  <title>Find Medical Sales Jobs — ROOK</title>
+  <link rel="icon" href="assets/favicon.ico" sizes="any">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="rook-mobile.css">
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --navy:#062d55;--blue:#0877d1;--teal:#12b8a6;--muted:#587283;
+      --line:#dbe8f0;--ink:#0d2035;--bg:#f4f9fd;--paper:#fff;
+      --radius:16px;--input-radius:12px;
+    }
+    body{font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:0 0 60px}
+    .rookmark{width:34px;height:34px;border-radius:10px;background:linear-gradient(145deg,var(--navy),var(--blue));color:#fff;display:grid;place-items:center;font-family:Georgia,serif;font-size:21px}
+    .brand-name{font-size:19px;font-weight:900;letter-spacing:.08em;color:var(--navy)}
+    .topbar{width:100%;max-width:480px;display:flex;align-items:center;justify-content:space-between;padding:18px 20px 0}
+    .progress-wrap{width:100%;max-width:480px;padding:12px 20px 0;display:flex;align-items:center;gap:10px}
+    .progress-bar{flex:1;height:4px;background:var(--line);border-radius:99px;overflow:hidden}
+    .progress-fill{height:100%;background:linear-gradient(90deg,var(--blue),var(--teal));border-radius:99px;transition:width .4s}
+    .step-label{font-size:12px;font-weight:600;color:var(--muted);white-space:nowrap}
+    .shell{width:100%;max-width:480px;padding:28px 20px 0}
+    .screen{display:none}.screen.active{display:block}
+    h2{font-size:26px;font-weight:800;color:var(--navy);line-height:1.2;margin-bottom:8px}
+    .eyebrow{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--teal);margin-bottom:10px}
+    .lead{font-size:15px;color:var(--muted);line-height:1.6;margin-bottom:20px}
+    .btn-primary{display:block;width:100%;padding:15px;background:var(--blue);color:#fff;font:700 16px Inter,sans-serif;border:none;border-radius:99px;cursor:pointer;text-align:center;transition:opacity .15s}
+    .btn-primary:hover{opacity:.9}
+    .btn-primary:disabled{opacity:.45;cursor:not-allowed}
+    .btn-back{background:none;border:none;color:var(--muted);font-size:14px;font-weight:500;cursor:pointer;padding:12px 0;display:flex;align-items:center;gap:4px}
+    .trust{font-size:12px;color:var(--muted);text-align:center;margin-top:12px;line-height:1.5}
+    .field{margin-bottom:14px}
+    .field label{display:block;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+    .field input{width:100%;padding:13px 14px;border:1.5px solid var(--line);border-radius:var(--input-radius);font:inherit;font-size:16px;color:var(--ink);background:var(--paper);outline:none;-webkit-appearance:none;transition:border-color .15s}
+    .field input:focus{border-color:var(--blue)}
+    .choice{display:flex;align-items:center;gap:12px;padding:14px 16px;background:var(--paper);border:1.5px solid var(--line);border-radius:var(--radius);cursor:pointer;transition:border-color .15s}
+    .choice:has(input:checked){border-color:var(--blue);background:#f0f7ff}
+    .choice input{accent-color:var(--blue);width:18px;height:18px;flex-shrink:0}
+    .choice-label{font-size:15px;font-weight:700;color:var(--ink)}
+    .choice-sub{font-size:12px;color:var(--muted);margin-top:2px}
+    .err{font-size:13px;color:#c0392b;font-weight:600;min-height:18px;margin-bottom:8px}
+
+    /* ── Skeleton ── */
+    .sk-card{display:flex;align-items:center;gap:14px;padding:16px;background:var(--paper);border:1.5px solid var(--line);border-radius:var(--radius);margin-bottom:10px}
+    .sk{background:linear-gradient(90deg,#e8f1fb 25%,#d0e4f7 50%,#e8f1fb 75%);background-size:200% 100%;animation:shimmer 1.4s infinite;border-radius:8px}
+    @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+    /* ── Match cards (anonymous) ── */
+    .match-card{background:var(--paper);border:1.5px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:10px;display:flex;gap:14px;align-items:flex-start}
+    .match-score{width:46px;height:46px;border-radius:50%;background:conic-gradient(var(--blue) calc(var(--pct)*1%),var(--line) 0);display:flex;align-items:center;justify-content:center;flex-shrink:0;position:relative}
+    .match-score::before{content:'';position:absolute;inset:5px;background:#fff;border-radius:50%}
+    .match-score span{position:relative;z-index:1;font-size:11px;font-weight:800;color:var(--navy)}
+    .match-body{flex:1;min-width:0}
+    .match-title{font-size:15px;font-weight:800;color:var(--navy);margin-bottom:3px;line-height:1.3}
+    .match-employer{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:5px;margin-bottom:4px}
+    .match-location{font-size:12px;color:var(--muted)}
+    .match-reason{font-size:11.5px;color:#1a7a50;font-weight:600;margin-top:4px}
+    .lock-blur{filter:blur(4px);user-select:none;color:var(--ink);font-weight:700;font-size:12px}
+
+    /* ── Results screen ── */
+    .result-headline{font-size:28px;font-weight:900;color:var(--navy);line-height:1.15;margin-bottom:6px}
+    .result-sub{font-size:14px;color:var(--muted);line-height:1.6;margin-bottom:20px}
+    .signup-box{background:var(--navy);border-radius:var(--radius);padding:20px;margin-bottom:16px;text-align:center}
+    .signup-box p{color:rgba(255,255,255,.7);font-size:13px;margin-bottom:14px;line-height:1.5}
+    .signup-box .btn-signup{display:block;width:100%;padding:14px;background:linear-gradient(135deg,#1463ff,var(--teal));color:#fff;font:700 15px Inter,sans-serif;border:none;border-radius:99px;cursor:pointer;transition:opacity .15s}
+    .signup-box .btn-signup:hover{opacity:.9}
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div style="display:flex;align-items:center;gap:9px">
+    <div class="rookmark">♜</div>
+    <span class="brand-name">ROOK</span>
+  </div>
+</div>
+
+<div class="progress-wrap">
+  <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+  <div class="step-label" id="stepLabel"></div>
+</div>
+
+<div class="shell">
+
+  <!-- Welcome -->
+  <div class="screen active" id="s-welcome">
+    <h2 style="font-size:26px;line-height:1.2;margin-bottom:8px;">Over 100+ people<br>are clicking Apply<br>on <span style="color:#DC2626;">LinkedIn.</span></h2>
+    <p class="lead">To them, you're just a number.</p>
+    <div style="background:#EEF6FF;border:1px solid #BFDBFE;border-radius:10px;padding:12px 14px;margin-bottom:20px;display:flex;align-items:center;gap:8px">
+      <span style="font-size:20px;flex-shrink:0">🎯</span>
+      <span style="font-size:13px;color:#1D4ED8;font-weight:600;line-height:1.4">ROOK shows you which jobs you actually match — directly from employer career sites.</span>
+    </div>
+    <button class="btn-primary" id="btnWelcomeStart">See my matches</button>
+    <div class="trust">Answer 4 quick questions · See real matches · No email until you're ready</div>
+  </div>
+
+  <!-- Location -->
+  <div class="screen" id="s-details">
+    <div class="eyebrow">Step 1 of 4</div>
+    <h2>Where do you want<br>to work?</h2>
+    <p class="lead">We'll find medical sales roles near you.</p>
+    <div class="field">
+      <label for="locationInput">City, state or ZIP code</label>
+      <div style="position:relative">
+        <input type="text" id="locationInput" placeholder="e.g. Orlando, FL or 34484" autocomplete="off" style="width:100%;padding:13px 14px;border:1.5px solid var(--line);border-radius:var(--input-radius);font:inherit;font-size:16px;color:var(--ink);background:var(--paper);outline:none;-webkit-appearance:none;transition:border-color .15s">
+        <ul id="locationList" hidden style="position:absolute;top:100%;left:0;right:0;z-index:200;background:#fff;border:1.5px solid var(--blue);border-top:none;border-radius:0 0 12px 12px;margin:0;padding:4px 0;list-style:none;max-height:220px;overflow-y:auto;box-shadow:0 8px 20px rgba(7,44,80,.12)"></ul>
+      </div>
+      <div id="locationStatus" style="font-size:12px;color:var(--muted);min-height:18px;margin-top:4px"></div>
+    </div>
+    <div class="err" id="detailsErr"></div>
+    <button class="btn-primary" id="btnDetailsNext" disabled>Continue</button>
+  </div>
+
+  <!-- Industry -->
+  <div class="screen" id="s-industry">
+    <div class="eyebrow">Step 2 of 4</div>
+    <h2>Where is your strongest experience?</h2>
+    <p class="lead">Choose the area that best describes you.</p>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
+      <label class="choice"><input type="radio" name="industry" value="Medical Device"><div><div class="choice-label">⚕ Medical device</div><div class="choice-sub">Capital equipment, surgical, DME</div></div></label>
+      <label class="choice"><input type="radio" name="industry" value="Diagnostics"><div><div class="choice-label">⌁ Diagnostics &amp; laboratory</div><div class="choice-sub">Clinical, molecular, pathology</div></div></label>
+      <label class="choice"><input type="radio" name="industry" value="Pharmaceutical"><div><div class="choice-label">✚ Pharmaceuticals</div><div class="choice-sub">Specialty, hospital, primary care</div></div></label>
+      <label class="choice"><input type="radio" name="industry" value="Veterinary"><div><div class="choice-label">♧ Animal health</div><div class="choice-sub">Veterinary, diagnostics, distribution</div></div></label>
+      <label class="choice"><input type="radio" name="industry" value="Breaking In"><div><div class="choice-label">↗ Breaking into medical sales</div><div class="choice-sub">Transferable sales experience</div></div></label>
+    </div>
+    <button class="btn-primary" id="btnIndustryNext" style="margin-top:20px" disabled>Continue</button>
+    <button class="btn-back" onclick="goBack()">← Back</button>
+  </div>
+
+  <!-- Years -->
+  <div class="screen" id="s-years">
+    <div class="eyebrow">Step 3 of 4</div>
+    <h2>How many years in sales?</h2>
+    <p class="lead">Helps ROOK match you with the right seniority level.</p>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
+      <label class="choice"><input type="radio" name="years" value="0"><div class="choice-label">Less than 1 year</div></label>
+      <label class="choice"><input type="radio" name="years" value="2"><div class="choice-label">1–3 years</div></label>
+      <label class="choice"><input type="radio" name="years" value="5.5"><div class="choice-label">4–7 years</div></label>
+      <label class="choice"><input type="radio" name="years" value="10"><div class="choice-label">8 or more years</div></label>
+    </div>
+    <button class="btn-primary" id="btnYearsNext" style="margin-top:20px" disabled>Continue</button>
+    <button class="btn-back" onclick="goBack()">← Back</button>
+  </div>
+
+  <!-- Territory -->
+  <div class="screen" id="s-territory">
+    <div class="eyebrow">Step 4 of 4</div>
+    <h2>What kind of territory works for you?</h2>
+    <p class="lead">Select all that apply.</p>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
+      <label class="choice"><input type="checkbox" name="territory" value="local"><div><div class="choice-label">🏠 Local territory</div><div class="choice-sub">Home most nights</div></div></label>
+      <label class="choice"><input type="checkbox" name="territory" value="regional"><div><div class="choice-label">◎ Regional territory</div><div class="choice-sub">Some overnight travel</div></div></label>
+      <label class="choice"><input type="checkbox" name="territory" value="national"><div><div class="choice-label">✈ Large or national territory</div><div class="choice-sub">Frequent travel is fine</div></div></label>
+      <label class="choice"><input type="checkbox" name="territory" value="remote"><div><div class="choice-label">☁ Remote or inside sales</div></div></label>
+    </div>
+    <div class="err" id="territoryErr"></div>
+    <button class="btn-primary" id="btnTerritoryNext" style="margin-top:20px" disabled>Find My Matches</button>
+    <button class="btn-back" onclick="goBack()">← Back</button>
+  </div>
+
+  <!-- Anonymous Matches Preview -->
+  <div class="screen" id="s-matches-preview">
+    <div class="eyebrow" id="matchesEyebrow">Your personalized shortlist</div>
+    <div class="result-headline" id="matchesHeadline">Finding your matches…</div>
+    <p class="result-sub" id="matchesSub">Ranked using your location and preferences.</p>
+    <div id="matchCards">
+      <!-- Skeleton -->
+      <div class="sk-card"><div class="sk" style="width:46px;height:46px;border-radius:50%;flex-shrink:0"></div><div style="flex:1"><div class="sk" style="height:15px;width:70%;margin-bottom:8px"></div><div class="sk" style="height:12px;width:45%"></div></div></div>
+      <div class="sk-card"><div class="sk" style="width:46px;height:46px;border-radius:50%;flex-shrink:0"></div><div style="flex:1"><div class="sk" style="height:15px;width:70%;margin-bottom:8px"></div><div class="sk" style="height:12px;width:45%"></div></div></div>
+      <div class="sk-card"><div class="sk" style="width:46px;height:46px;border-radius:50%;flex-shrink:0"></div><div style="flex:1"><div class="sk" style="height:15px;width:70%;margin-bottom:8px"></div><div class="sk" style="height:12px;width:45%"></div></div></div>
+    </div>
+    <div class="signup-box" id="signupBox" style="display:none">
+      <p>Create your free account to see which companies are hiring and apply directly.</p>
+      <button class="btn-signup" id="btnCreateAccount">Create free account to see who's hiring →</button>
+    </div>
+    <p class="trust" id="matchesTrust" style="display:none">No card required to create an account · $29/month if you start a trial · Cancel anytime</p>
+    <button class="btn-back" id="btnMatchesBack" style="display:none" onclick="goBack()">← Back</button>
+  </div>
+
+</div>
+
+<script src="rook-location-widget.js"></script>
+<script>
+(async () => {
+
+// ── State ──────────────────────────────────────────────────────────────────
+let currentScreen = 'welcome';
+let selectedLocation = null;
+
+const BACK_MAP = {
+  details: 'welcome',
+  industry: 'details',
+  years: 'industry',
+  territory: 'years',
+  'matches-preview': 'territory',
+};
+
+const PROGRESS = {
+  welcome: 0, details: 15, industry: 35, years: 55, territory: 75, 'matches-preview': 95
+};
+const LABELS = {
+  welcome: '', details: 'Step 1 of 4', industry: 'Step 2 of 4',
+  years: 'Step 3 of 4', territory: 'Step 4 of 4', 'matches-preview': ''
+};
+
+function show(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  const el = document.getElementById('s-' + name);
+  if (el) el.classList.add('active');
+  currentScreen = name;
+  document.getElementById('stepLabel').textContent = LABELS[name] || '';
+  document.getElementById('progressFill').style.width = (PROGRESS[name] || 0) + '%';
+  window.scrollTo(0, 0);
+}
+function escapeHtml(str) {
+  return String(str || '').replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function showErr(id, msg) { const e = document.getElementById(id); if(e){e.textContent=msg;} }
+function clearErr(id)     { const e = document.getElementById(id); if(e){e.textContent='';} }
+
+function goBack() {
+  const prev = BACK_MAP[currentScreen];
+  if (prev) show(prev);
+}
+window.goBack = goBack;
+
+// ── Welcome ─────────────────────────────────────────────────────────────────
+document.getElementById('btnWelcomeStart').addEventListener('click', () => show('details'));
+
+// ── Location ────────────────────────────────────────────────────────────────
+const _locInput = document.getElementById('locationInput');
+const _locList  = document.getElementById('locationList');
+if (_locInput && _locList && typeof RookLocationWidget !== 'undefined') {
+  RookLocationWidget.init({
+    inputEl: _locInput, listEl: _locList,
+    onSelect: (s) => {
+      selectedLocation = s;
+      const st = document.getElementById('locationStatus');
+      if (st) st.textContent = s.label;
+      const nb = document.getElementById('btnDetailsNext');
+      if (nb) nb.disabled = false;
+    },
+    onClear: () => {
+      selectedLocation = null;
+      const nb = document.getElementById('btnDetailsNext');
+      if (nb) nb.disabled = true;
+    },
+  });
+}
+document.getElementById('btnDetailsNext').addEventListener('click', () => {
+  clearErr('detailsErr');
+  if (!selectedLocation) return showErr('detailsErr', 'Please select a location from the dropdown.');
+  show('industry');
+});
+
+// ── Industry ────────────────────────────────────────────────────────────────
+document.querySelectorAll('input[name="industry"]').forEach(r =>
+  r.addEventListener('change', () => {
+    document.getElementById('btnIndustryNext').disabled = false;
+  })
+);
+document.getElementById('btnIndustryNext').addEventListener('click', () => show('years'));
+
+// ── Years ───────────────────────────────────────────────────────────────────
+document.querySelectorAll('input[name="years"]').forEach(r =>
+  r.addEventListener('change', () => {
+    document.getElementById('btnYearsNext').disabled = false;
+  })
+);
+document.getElementById('btnYearsNext').addEventListener('click', () => show('territory'));
+
+// ── Territory ────────────────────────────────────────────────────────────────
+document.querySelectorAll('input[name="territory"]').forEach(cb =>
+  cb.addEventListener('change', () => {
+    const any = document.querySelectorAll('input[name="territory"]:checked').length > 0;
+    document.getElementById('btnTerritoryNext').disabled = !any;
+  })
+);
+document.getElementById('btnTerritoryNext').addEventListener('click', async () => {
+  clearErr('territoryErr');
+  const territories = [...document.querySelectorAll('input[name="territory"]:checked')].map(c => c.value);
+  if (!territories.length) return showErr('territoryErr', 'Please select at least one option.');
+
+  show('matches-preview');
+  await loadAnonymousMatches(territories);
+});
+
+// ── Anonymous matches ────────────────────────────────────────────────────────
+async function loadAnonymousMatches(territories) {
+  const industry = document.querySelector('input[name="industry"]:checked')?.value;
+  const years    = document.querySelector('input[name="years"]:checked')?.value;
+
+  try {
+    const res = await fetch('/api/onboarding/anonymous-preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        lat: selectedLocation?.lat,
+        lng: selectedLocation?.lng,
+        state: selectedLocation?.state || selectedLocation?.stateAbbr,
+        industry,
+        years: Number(years) || 0,
+        territories,
+      }),
+    });
+    const data = res.ok ? await res.json() : null;
+    const matches = data?.top_matches || [];
+
+    const headlineEl  = document.getElementById('matchesHeadline');
+    const subEl       = document.getElementById('matchesSub');
+    const eyebrowEl   = document.getElementById('matchesEyebrow');
+    const cardsEl     = document.getElementById('matchCards');
+    const signupEl    = document.getElementById('signupBox');
+    const trustEl     = document.getElementById('matchesTrust');
+    const backBtn     = document.getElementById('btnMatchesBack');
+
+    if (!matches.length) {
+      if (headlineEl) headlineEl.textContent = 'Matches are ready.';
+      if (subEl)      subEl.textContent = 'Create your account to see your personalized results.';
+      if (cardsEl)    cardsEl.innerHTML = '';
+    } else {
+      const count = data.count || matches.length;
+      if (eyebrowEl) eyebrowEl.textContent = 'Your personalized shortlist';
+      if (headlineEl) headlineEl.textContent = `You have ${count > 50 ? count + '+' : count} matches near you.`;
+      if (subEl)      subEl.textContent = 'Ranked by your background and location. Sign up to see who\'s hiring.';
+
+      cardsEl.innerHTML = matches.map(job => {
+        const pct = job.overall_score || 0;
+        const distLine = job.distance_miles != null
+          ? `<div class="match-location">About ${job.distance_miles} miles from you</div>` : '';
+        const reason = job.reasons?.[0]
+          ? `<div class="match-reason">✓ ${escapeHtml(job.reasons[0])}</div>` : '';
+        return `
+          <div class="match-card">
+            <div class="match-score" style="--pct:${pct}"><span>${pct}%</span></div>
+            <div class="match-body">
+              <div class="match-title">${escapeHtml(job.title)}</div>
+              <div class="match-employer">
+                🔒 <span class="lock-blur">Employer Name Hidden</span>
+              </div>
+              ${job.location_display ? `<div class="match-location">${escapeHtml(job.location_display)}</div>` : distLine}
+              ${reason}
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    if (signupEl) signupEl.style.display = 'block';
+    if (trustEl)  trustEl.style.display = 'block';
+    if (backBtn)  backBtn.style.display = 'flex';
+
+  } catch (err) {
+    const headlineEl = document.getElementById('matchesHeadline');
+    if (headlineEl) headlineEl.textContent = 'Your matches are ready.';
+    const subEl = document.getElementById('matchesSub');
+    if (subEl) subEl.textContent = 'Create your account to see your personalized results.';
+    document.getElementById('matchCards').innerHTML = '';
+    document.getElementById('signupBox').style.display = 'block';
+    document.getElementById('matchesTrust').style.display = 'block';
+    document.getElementById('btnMatchesBack').style.display = 'flex';
+  }
+}
+
+// ── Create account button (placeholder for now) ──────────────────────────────
+document.getElementById('btnCreateAccount').addEventListener('click', () => {
+  // TODO: wire to email signup screen in next phase
+  window.location.href = 'rook-onboarding-v4.html';
+});
+
+})();
+</script>
+</body>
+</html>

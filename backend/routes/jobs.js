@@ -1446,6 +1446,81 @@ function jobLocationDisplay(job) {
   return '';
 }
 
+// POST /api/onboarding/anonymous-preview
+// No auth required. Takes location + preferences in body, returns top 3
+// scored jobs with titles/locations/scores — never company names or apply links.
+// Rate-limited by IP to prevent abuse.
+const _anonPreviewCalls = new Map(); // ip → {count, resetAt}
+router.post("/onboarding/anonymous-preview", requireConfig, async (req, res) => {
+  // Rate limit: 20 calls per IP per minute
+  const ip = (req.headers["x-forwarded-for"] || "").split(",")[0].trim() || req.ip || "unknown";
+  const now = Date.now();
+  const entry = _anonPreviewCalls.get(ip) || { count: 0, resetAt: now + 60_000 };
+  if (now > entry.resetAt) { entry.count = 0; entry.resetAt = now + 60_000; }
+  entry.count++;
+  _anonPreviewCalls.set(ip, entry);
+  if (entry.count > 20) return res.status(429).json({ error: "Too many requests" });
+
+  const { lat, lng, state, industry, years, territories } = req.body || {};
+  if (!lat || !lng) return res.status(400).json({ error: "lat and lng required" });
+
+  try {
+    const profile = {
+      home_lat: Number(lat),
+      home_lng: Number(lng),
+      home_state: state || null,
+      desired_industries: industry ? [industry] : [],
+      total_sales_years: Number(years) || 0,
+      territory_size_preferences: territories || ["local", "regional"],
+      territory_size_preference: (territories || ["local"])[0],
+    };
+
+    const SCORE_COLS = "id, title_original, title_normalized, location_raw, job_lat, job_lng, city, state, remote_status, employment_type, travel_percentage, salary_min, salary_max, compensation_text, ai_analysis, date_posted, first_seen_at";
+    const latDelta = 300 / 69;
+    const lngDelta = 300 / (69 * Math.max(0.1, Math.cos((profile.home_lat * Math.PI) / 180)));
+    const homeStateAbbr = stateAbbrFromName(profile.home_state);
+    const nullCoordFilter = homeStateAbbr
+      ? `and(job_lat.is.null,state.eq.${homeStateAbbr})`
+      : `job_lat.is.null`;
+
+    const { data: jobs, error } = await supabaseAdmin
+      .from("jobs")
+      .select(SCORE_COLS)
+      .eq("status", "active")
+      .eq("moderation_status", "approved")
+      .or(`remote_status.eq.remote,${nullCoordFilter},and(job_lat.gte.${profile.home_lat - latDelta},job_lat.lte.${profile.home_lat + latDelta},job_lng.gte.${profile.home_lng - lngDelta},job_lng.lte.${profile.home_lng + lngDelta})`)
+      .limit(400);
+
+    if (error) throw new Error(error.message);
+
+    const scored = (jobs || [])
+      .filter(j => !mentionsNonUsCountry(j.location_raw, j.job_lng, j.title_original))
+      .map(j => ({ job: j, score: scoreJob(j, profile) }))
+      .filter(r => r.score.overall_score >= 50)
+      .sort((a, b) => b.score.overall_score - a.score.overall_score)
+      .slice(0, 3);
+
+    const top3 = scored.map(({ job, score }) => {
+      const distMiles = job.job_lat != null
+        ? Math.round(distanceMiles(profile.home_lat, profile.home_lng, job.job_lat, job.job_lng))
+        : null;
+      return {
+        overall_score: Math.round(score.overall_score),
+        title: job.title_original || job.title_normalized || "Medical Sales Role",
+        location_display: jobLocationDisplay(job),
+        distance_miles: distMiles,
+        reasons: (score.reasons || []).slice(0, 1),
+        // Never return: company_name, apply_url, id, or any PII
+      };
+    });
+
+    return res.json({ count: top3.length, top_matches: top3 });
+  } catch (err) {
+    console.error("[anonymous-preview]", err.message);
+    return res.status(500).json({ error: "Preview unavailable" });
+  }
+});
+
 router.get("/onboarding/match-preview", requireConfig, requireAuth, async (req, res) => {
   const userId = req.user.id;
 
