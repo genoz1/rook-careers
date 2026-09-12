@@ -369,49 +369,86 @@ function scoreJob(job, profile) {
   prefScore = 100;
   distanceMultiplier = 1;
 
-  const isRemoteLabeled = /remote/i.test(job.location_raw || "") || job.remote_status === "remote";
   const mentionsForeignCountry = mentionsNonUsCountry(job.location_raw, job.job_lng, job.title_original);
   const homeStateAbbr = stateAbbrFromName(profile.home_state);
   const hasRealCoordinates = profile.home_lat != null && profile.home_lng != null && job.job_lat != null && job.job_lng != null;
 
-  // ── Distance ──────────────────────────────────────────────────────────
+  // ── Location scoring — tier model ─────────────────────────────────────
+  // Tier 1 (0):   within 75 miles (real coords)
+  // Tier 2 (-5):  75-175 miles (real coords) | whole state | SE region
+  // Tier 3 (-15): 175-300 miles (real coords) | specific far in-state city
+  // Tier 4 (-25): 300+ miles (real coords) | specific out-of-state location
+  //
+  // No state logic — only mileage for real coordinates, and territory
+  // scope detection (city vs state vs region) for no-coordinate jobs.
+  // remote_status is irrelevant in field sales — every rep is "remote".
+
   if (mentionsForeignCountry) {
     prefScore -= 40;
     hardDisqualifier = true;
     prefCap = Math.min(prefCap, 60);
     concerns.push(`Location (${job.location_raw}) appears to be outside the United States`);
+
   } else if (hasRealCoordinates) {
+    // Real coordinates — pure mileage tiers
     const miles = distanceMiles(profile.home_lat, profile.home_lng, job.job_lat, job.job_lng);
-    if (miles <= 50) {
-      reasons.push(`About ${Math.round(miles)} miles from you`);
-    } else if (miles <= 100) {
-      prefScore -= 5;
+    if (miles <= 75) {
       reasons.push(`About ${Math.round(miles)} miles from you`);
     } else if (miles <= 150) {
-      prefScore -= 10;
-      reasons.push(`About ${Math.round(miles)} miles from you — within typical territory range`);
+      prefScore -= 5;
+      reasons.push(`About ${Math.round(miles)} miles from you`);
     } else if (miles <= 300) {
       prefScore -= 15;
-      concerns.push(`About ${Math.round(miles)} miles away — would likely require overnight travel`);
+      concerns.push(`About ${Math.round(miles)} miles away`);
     } else {
       prefScore -= 25;
-      concerns.push(`About ${Math.round(miles)} miles away — far outside typical territory range`);
+      concerns.push(`About ${Math.round(miles)} miles away — outside typical territory range`);
     }
-  } else {
-    // No real coordinates. remote_status is irrelevant in medical sales
-    // (field reps have no office). What matters is WHERE the territory is.
-    const _locRawLower = (job.location_raw || "").toLowerCase();
-    const _homeStateName = (profile.home_state || "").toLowerCase();
-    const inHomeStateNoCoords = (homeStateAbbr && locationMentionsState(job.location_raw, homeStateAbbr)) ||
-      (_homeStateName.length > 2 && _locRawLower.includes(_homeStateName));
 
-    if (inHomeStateNoCoords) {
-      reasons.push("Territory in your home state");
-    } else if (_locRawLower.length > 0) {
+  } else {
+    // No real coordinates — determine territory scope from location_raw.
+    // In medical field sales every job is effectively "remote" so we ignore
+    // that label and focus on the geographic territory described.
+    const _loc = (job.location_raw || "").toLowerCase();
+    const _homeState = (profile.home_state || "").toLowerCase();
+    const _homeAbbr = homeStateAbbr ? homeStateAbbr.toLowerCase() : "";
+
+    // Southeast region keywords → Tier 2 (-5)
+    const SE_REGIONS = ["southeast", "south region", "se region", "southern region",
+      "southeast region", "gulf coast region", "south atlantic"];
+
+    // Whole home-state coverage → Tier 2 (-5)
+    // Matches "Florida", "Remote - Florida", "FL", statewide
+    const isWholeHomeState = (_homeState.length > 2 && _loc.includes(_homeState)) ||
+      (_homeAbbr && new RegExp(`\\b${_homeAbbr}\\b`).test(_loc));
+
+    // Specific far in-state cities → Tier 3 (-15)
+    const FAR_INSTATE_CITIES = [
+      "south florida","miami","fort lauderdale","palm beach","boca raton",
+      "broward","coral gables","key west","florida keys","naples","cape coral",
+      "bonita springs","tallahassee","pensacola","panama city","destin",
+      "fort walton","sarasota","fort myers","punta gorda","port charlotte"
+    ];
+
+    if (SE_REGIONS.some(r => _loc.includes(r))) {
+      // Southeast region — Tier 2
+      prefScore -= 5;
+      reasons.push("Covers the Southeast region");
+    } else if (isWholeHomeState && !FAR_INSTATE_CITIES.some(c => _loc.includes(c))) {
+      // Whole home state, no specific far city — Tier 2
+      prefScore -= 5;
+      reasons.push("Covers your home state");
+    } else if (FAR_INSTATE_CITIES.some(c => _loc.includes(c))) {
+      // Specific far in-state city — Tier 3
+      prefScore -= 15;
+      concerns.push("Territory is in your state but far from your location");
+    } else if (_loc.length > 0) {
+      // Specific out-of-state or unrecognised location — Tier 4
       prefScore -= 25;
       concerns.push("Territory appears to be outside your area");
     } else {
-      prefScore -= 5;
+      // No location info at all — Tier 4
+      prefScore -= 25;
     }
   }
 
