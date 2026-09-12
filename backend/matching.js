@@ -374,7 +374,7 @@ function scoreJob(job, profile) {
   // far side of their own state, and treating that as a hard
   // disqualifier (as the state-only version of this did) was a real,
   // reported flaw, not a hypothetical one.
-  prefMax += 35;
+  prefMax += 48;
   dataPointsPossible++;
   const _locPrefBefore = prefScore;
 
@@ -429,17 +429,17 @@ function scoreJob(job, profile) {
     // "remote" means no required office, not work-from-anywhere.
     if (miles <= 60) {
       locationForcedStrong = true;
-      prefScore += 35;
+      prefScore += 48;
       distanceMultiplier = 1.0;
       reasons.push(`About ${Math.round(miles)} miles from you`);
     } else if (miles <= 150) {
       const ratio = (miles - 60) / 90;
-      prefScore += Math.round(35 - ratio * 5); // 35→30 pts (gentle drop)
+      prefScore += Math.round(48 - ratio * 8); // 48→40 pts (gentle drop)
       distanceMultiplier = 1.0 - ratio * 0.07; // 1.0→0.93 (slight penalty)
       reasons.push(`About ${Math.round(miles)} miles from you — within typical territory range`);
     } else if (miles <= 300) {
       const ratio = (miles - 150) / 150;
-      prefScore += Math.round(29 - ratio * 19); // 29→10 pts
+      prefScore += Math.round(40 - ratio * 27); // 40→13 pts
       distanceMultiplier = 0.88 - ratio * 0.48; // 0.88→0.40
       concerns.push(`About ${Math.round(miles)} miles away — would likely require overnight travel`);
     } else {
@@ -464,7 +464,7 @@ function scoreJob(job, profile) {
     // applied here too now, calibrated to the genuine uncertainty of
     // each case rather than a real measured distance.
     const matchedAbbr = [...acceptedStateAbbrs].find((abbr) => locationMentionsState(job.location_raw, abbr));
-    prefScore += 19;
+    prefScore += 26;
     distanceMultiplier = 0.8;
     reasons.push(
       matchedAbbr === homeStateAbbr
@@ -472,7 +472,7 @@ function scoreJob(job, profile) {
         : `Location matches one of your preferred states (${matchedAbbr}) — exact distance not yet available`
     );
   } else if (profile.willing_to_relocate) {
-    prefScore += 14;
+    prefScore += 19;
     distanceMultiplier = 0.55;
     reasons.push("You've indicated openness to relocation");
   } else {
@@ -503,52 +503,39 @@ function scoreJob(job, profile) {
     reasons.push("Remote-friendly role");
   }
 
-  cat.location_prefs.max += 35;
+  cat.location_prefs.max += 48;
   cat.location_prefs.score += (prefScore - _locPrefBefore);
   if (hardDisqualifier && prefCap <= 65) catGap.add("location_prefs");
 
-  // --- Compensation (up to 30 points) ---
-  // Only added to prefMax when the profile has a stated minimum salary.
-  // Without one, compensation is unknown — not a zero. Counting it as
-  // 0/30 would penalize candidates who simply haven't set a preference,
-  // making a perfect questionnaire match score 57% instead of 100%.
-  // The job's salary is still surfaced in reasons/concerns when available.
+  // --- Compensation (informational only — 3 points max) ---
+  // Salary in medical sales is negotiable and posted ranges rarely reflect
+  // final comp. A published salary should never outweigh industry match.
+  // Surfaced in reasons/concerns for visibility but contributes minimally
+  // to the score so it never causes a pharma job to outscore a diagnostics
+  // job just because it posted a number.
   const jobSalary = extractSalaryFigure(job);
   const _compBefore = prefScore;
-  if (profile.minimum_base_salary) {
-    // Profile has a stated minimum — comp is a meaningful data point
-    prefMax += 30;
+  if (jobSalary) {
+    reasons.push(`Published compensation: ${job.compensation_text || '$' + Math.round(jobSalary / 1000) + 'k'}`);
+    prefMax += 3;
     dataPointsPossible++;
-    if (jobSalary) dataPointsAvailable++;
-    if (profile.minimum_base_salary && jobSalary) {
+    dataPointsAvailable++;
+    if (profile.minimum_base_salary) {
       if (jobSalary >= profile.minimum_base_salary) {
-        prefScore += 30;
-        reasons.push("Compensation meets your stated minimum");
+        prefScore += 3;
       } else if (jobSalary >= profile.minimum_base_salary * 0.85) {
-        prefScore += 13;
+        prefScore += 1;
         concerns.push("Compensation may be slightly below your stated minimum");
       } else {
-        prefScore += 4;
         concerns.push("Compensation appears well below your stated minimum");
-        hardDisqualifier = true;
-        prefCap = Math.min(prefCap, 55);
       }
-    } else if (jobSalary) {
-      prefScore += 18;
     } else {
-      prefScore += 15;
-    }
-  } else {
-    // No salary preference set — don't add to prefMax, don't penalize.
-    // Still surface compensation in reasons when the job publishes it.
-    if (jobSalary) {
-      reasons.push(`Published compensation: ${job.compensation_text || '$' + Math.round(jobSalary / 1000) + 'k'}`);
+      prefScore += 2; // salary published but no minimum set — slight positive signal
     }
   }
 
-  cat.location_prefs.max += 30;
+  cat.location_prefs.max += 3;
   cat.location_prefs.score += (prefScore - _compBefore);
-  if (hardDisqualifier && prefCap <= 55) catGap.add("location_prefs");
 
   // --- Travel fit (up to 12 points) ---
   const jobTravel = extractJobTravelPercentage(job);
@@ -574,7 +561,7 @@ function scoreJob(job, profile) {
   // --- Onboarding-stated industry interest (up to 15 points) ---
   const _indInterestBefore = prefScore;
   if (Array.isArray(profile.desired_industries) && profile.desired_industries.length > 0) {
-    prefMax += 15;
+    prefMax += 39;
     dataPointsPossible++;
     dataPointsAvailable++;
 
@@ -594,12 +581,12 @@ function scoreJob(job, profile) {
     );
 
     if (matchedIndustry) {
-      prefScore += 15;
+      prefScore += 39;
       reasons.push(`Matches your stated interest in ${matchedIndustry}`);
     } else {
       // Industry not a stated preference but also not avoided.
       // A nearby role in an adjacent field is still worth considering.
-      prefScore += 8;
+      prefScore += 7;
     }
 
     if (Array.isArray(profile.industries_to_avoid) && profile.industries_to_avoid.length > 0) {
@@ -618,7 +605,7 @@ function scoreJob(job, profile) {
     }
   }
 
-  cat.industry_product.max += 15;
+  cat.industry_product.max += 39;
   cat.industry_product.score += (prefScore - _indInterestBefore);
 
   // --- Job freshness (up to 8 points) ---
@@ -694,7 +681,7 @@ function scoreJob(job, profile) {
       } else {
         candScore += 10;
       }
-      cat.industry_product.max += 25;
+      cat.industry_product.max += 39;
       cat.industry_product.score += matchedRequired ? 25 : matchedPreferred ? (jobHasRequiredList ? 16 : 25) : 10;
     }
 

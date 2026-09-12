@@ -684,9 +684,35 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
   const savedJobIds = new Set((statusRows || []).filter((r) => r.saved).map((r) => r.job_id));
   const dismissedJobIds = new Set((statusRows || []).filter((r) => r.dismissed).map((r) => r.job_id));
 
+  // Title-location sanity check — same as anonymous preview.
+  // Filters jobs where stored coordinates are wrong (e.g. "South Florida"
+  // job with coordinates near Oxford FL, 49mi away instead of 225mi).
+  const TITLE_LOC_CHECKS = {
+    'south florida': { lat: 25.9, lng: -80.3 },
+    'miami':         { lat: 25.77, lng: -80.19 },
+    'fort lauderdale': { lat: 26.12, lng: -80.14 },
+    'palm beach':    { lat: 26.71, lng: -80.05 },
+    'pensacola':     { lat: 30.42, lng: -87.22 },
+    'tallahassee':   { lat: 30.44, lng: -84.28 },
+    'jacksonville':  { lat: 30.33, lng: -81.66 },
+  };
+  function titleLocSanityPass(job) {
+    if (!job.job_lat || !profile?.home_lat) return true;
+    const title = (job.title_original || '').toLowerCase();
+    const computedDist = distanceMiles(profile.home_lat, profile.home_lng, job.job_lat, job.job_lng);
+    for (const [kw, coords] of Object.entries(TITLE_LOC_CHECKS)) {
+      if (title.includes(kw)) {
+        const actual = distanceMiles(profile.home_lat, profile.home_lng, coords.lat, coords.lng);
+        if (Math.abs(actual - computedDist) > 80) return false;
+      }
+    }
+    return true;
+  }
+
   let rows = (allMatchingJobs || [])
     .filter((job) => !dismissedJobIds.has(job.id))
     .filter((job) => !mentionsNonUsCountry(job.location_raw, job.job_lng, job.title_original))
+    .filter((job) => titleLocSanityPass(job))
     .map((job) => ({ jobs: job, job_id: job.id, overall_score: null, saved: savedJobIds.has(job.id), _liveMatch: scoreJob(job, profile) }))
     .sort((a, b) => (b._liveMatch?.overall_score ?? -1) - (a._liveMatch?.overall_score ?? -1));
   if (!keyword) rows = rows.slice(0, Number(limit));
