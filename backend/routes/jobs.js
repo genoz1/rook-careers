@@ -709,12 +709,43 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     return true;
   }
 
+  // Industry match ratio — used as tiebreaker when overall scores tie.
+  // Measures what fraction of a job's product_categories directly match
+  // the user's desired industry. BD ['Diagnostics'] = 1.0, Tempus
+  // ['Molecular Testing','Genomics'] = 0.5, pure pharma = 0.0.
+  // Proxy for candidate_fit when no resume is uploaded — ensures pure
+  // diagnostics jobs rank above oncology/genomics-adjacent jobs even
+  // without resume data. Does not affect scoring, only tie-breaking.
+  const _INDUSTRY_TERMS = {
+    diagnostics:      ['diagnostics','reference laboratory','molecular','point-of-care','lab','pathology','clinical laboratory'],
+    'medical device': ['medical device','capital equipment','surgical','dme','consumables'],
+    pharmaceutical:   ['pharmaceutical','pharma','biotech','life sciences','specialty pharma'],
+    veterinary:       ['veterinary','animal health','vet'],
+  };
+  function _industryMatchRatio(job) {
+    const desired = profile.desired_industries || [];
+    if (!desired.length) return 0;
+    const prodCats = (job.ai_analysis?.product_categories || []).map(s => s.toLowerCase());
+    if (!prodCats.length) return 0;
+    const terms = desired.flatMap(ind => _INDUSTRY_TERMS[ind.toLowerCase().trim()] || [ind.toLowerCase().trim()]);
+    const matched = prodCats.filter(p => terms.some(t => p.includes(t))).length;
+    return matched / prodCats.length;
+  }
+
   let rows = (allMatchingJobs || [])
     .filter((job) => !dismissedJobIds.has(job.id))
     .filter((job) => !mentionsNonUsCountry(job.location_raw, job.job_lng, job.title_original))
     .filter((job) => titleLocSanityPass(job))
     .map((job) => ({ jobs: job, job_id: job.id, overall_score: null, saved: savedJobIds.has(job.id), _liveMatch: scoreJob(job, profile) }))
-    .sort((a, b) => (b._liveMatch?.overall_score ?? -1) - (a._liveMatch?.overall_score ?? -1));
+    .sort((a, b) => {
+      const scoreDiff = (b._liveMatch?.overall_score ?? -1) - (a._liveMatch?.overall_score ?? -1);
+      if (scoreDiff !== 0) return scoreDiff;
+      const ratioDiff = _industryMatchRatio(b.jobs) - _industryMatchRatio(a.jobs);
+      if (Math.abs(ratioDiff) > 0.01) return ratioDiff;
+      const aDist = a.jobs.job_lat ? distanceMiles(profile.home_lat, profile.home_lng, a.jobs.job_lat, a.jobs.job_lng) : 9999;
+      const bDist = b.jobs.job_lat ? distanceMiles(profile.home_lat, profile.home_lng, b.jobs.job_lat, b.jobs.job_lng) : 9999;
+      return aDist - bDist;
+    });
   if (!keyword) rows = rows.slice(0, Number(limit));
 
   const { appStatusByJob, noteFor } = await loadEmployerHistory(profile.id);
