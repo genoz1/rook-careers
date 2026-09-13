@@ -284,7 +284,20 @@ async function ingestEmployer(employer) {
         // run re-upserts it, even though it's fully analyzable right
         // now, this run.
         const nowEligible = safeEvaluateSocialEligibilityForIngestion({ ...upsertedRow, ai_analysis: analysis });
-        await supabase.from("jobs").update({ ai_analysis: analysis, social_eligible: nowEligible }).eq("id", upsertedRow.id);
+        // If AI analysis finds no sales signals at all (no product_categories,
+        // no required_industries, no sales_motion), the job is not a sales role
+        // (e.g. admin, finance, clinical, IT). Mark it inactive so it never
+        // appears in candidate results.
+        const hasSalesSignals = (
+          (analysis?.product_categories?.length > 0) ||
+          (analysis?.required_industries?.length > 0) ||
+          (analysis?.sales_motion?.length > 0)
+        );
+        const statusUpdate = hasSalesSignals ? {} : { status: 'closed' };
+        if (!hasSalesSignals) {
+          console.log(`  Filtering non-sales job: "${job.title_original}" (no product/industry/sales_motion)`);
+        }
+        await supabase.from("jobs").update({ ai_analysis: analysis, social_eligible: nowEligible, ...statusUpdate }).eq("id", upsertedRow.id);
       } catch (err) {
         console.error(`  AI analysis failed for "${job.title_original}": ${err.message}`);
       }
