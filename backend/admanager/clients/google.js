@@ -149,6 +149,7 @@ function sanitizeResponse(obj) {
  * Fetch campaign-level performance. GAQL fields verified against v25.
  */
 async function fetchCampaignPerformance(dateRange = "TODAY") {
+  const today = new Date().toISOString().slice(0, 10);
   const gaql = `
     SELECT
       campaign.id,
@@ -166,7 +167,7 @@ async function fetchCampaignPerformance(dateRange = "TODAY") {
       metrics.all_conversions,
       metrics.view_through_conversions
     FROM campaign
-    WHERE segments.date DURING ${dateRange}
+    WHERE segments.date BETWEEN '${today}' AND '${today}'
       AND campaign.status != 'REMOVED'
     ORDER BY campaign.id
   `;
