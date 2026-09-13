@@ -151,7 +151,7 @@ async function fetchCampaignStats(campaignId, startDate, endDate) {
       body: JSON.stringify({
         data: {
           starts_at:  startDate + "T00:00:00Z",
-          ends_at:    endDate   + "T23:59:59Z",
+          ends_at:    endDate   + "T23:00:00Z",
           fields:     ["IMPRESSIONS", "CLICKS", "SPEND"],
           breakdowns: ["DATE"],
         },
