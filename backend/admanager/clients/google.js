@@ -168,7 +168,7 @@ async function fetchCampaignPerformance(dateRange = "TODAY") {
       metrics.view_through_conversions
     FROM campaign
     WHERE segments.date BETWEEN '${today}' AND '${today}'
-      AND campaign.status != 'REMOVED'
+      AND campaign.status != REMOVED
     ORDER BY campaign.id
   `;
 
@@ -211,8 +211,8 @@ async function fetchRejectedAds(campaignId) {
       campaign.id
     FROM ad_group_ad
     WHERE campaign.id = ${campaignId}
-      AND ad_group_ad.policy_summary.approval_status != 'APPROVED'
-      AND ad_group_ad.status != 'REMOVED'
+      AND ad_group_ad.policy_summary.approval_status != APPROVED
+      AND ad_group_ad.status != REMOVED
   `;
   try {
     const data = await googleAdsQuery(gaql);
