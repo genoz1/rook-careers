@@ -705,7 +705,7 @@ async function handleStripeWebhookEvent(event, { stripe, supabaseAdmin }) {
           // from.
           subscription_cancel_at: cancelAt,
         },
-        // This is the real "first successful $29 payment" moment for
+        // This is the real "first successful $19.99 payment" moment for
         // anyone who came through a trial — Stripe transitions the
         // subscription from 'trialing' to 'active' automatically when
         // the trial ends and the charge succeeds, which fires this
@@ -715,6 +715,20 @@ async function handleStripeWebhookEvent(event, { stripe, supabaseAdmin }) {
         setOnceFields: sub.status === "active"
           ? [{ gate: "subscription_started_at", fields: { subscription_started_at: new Date().toISOString() } }]
           : [],
+        onceCallback: sub.status === "active" ? async (profile) => {
+          // Log first payment as a server-side conversion event for attribution
+          try {
+            await supabaseAdmin.from("ad_conversion_events").insert({
+              event_key: `first_payment_${profile.user_id}_${sub.id}`,
+              event_type: "paid_subscription_started",
+              user_id: profile.user_id,
+              utm_source: profile.utm_source || null,
+              utm_medium: profile.utm_medium || null,
+              utm_campaign: profile.utm_campaign || null,
+              platform_inferred: profile.utm_source || "organic",
+            });
+          } catch (_) { /* dedup constraint handles re-delivery */ }
+        } : null,
         // Only invoked on an exact-timestamp tie with another event —
         // re-fetches this exact subscription live rather than trusting
         // this event's own (possibly out-of-date-by-the-time-it's-

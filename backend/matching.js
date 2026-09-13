@@ -476,17 +476,23 @@ function scoreJob(job, profile) {
   const _aiAll  = [..._aiProd, ..._aiReq, ..._aiPref];
   const hasIndustryData = _primaryList.length > 0;
 
-  if (Array.isArray(profile.desired_industries) && profile.desired_industries.length > 0 && hasIndustryData) {
-    const matchedIndustry = profile.desired_industries.find((ind) => {
-      const key   = String(ind).toLowerCase().trim();
-      const group = INDUSTRY_GROUPS[key] || [key];
-      return group.some((term) => _primaryList.some(s => s.includes(term)));
-    });
-    if (matchedIndustry) {
-      reasons.push(`Matches your interest in ${matchedIndustry}`);
+  if (Array.isArray(profile.desired_industries) && profile.desired_industries.length > 0) {
+    if (!hasIndustryData) {
+      // Job has no industry data — unknown is not confirmed wrong, but
+      // when a user has specified a preference it should rank below confirmed matches.
+      prefScore -= 10;
     } else {
-      prefScore -= 20;
-      concerns.push("Industry may not match your stated preference");
+      const matchedIndustry = profile.desired_industries.find((ind) => {
+        const key   = String(ind).toLowerCase().trim();
+        const group = INDUSTRY_GROUPS[key] || [key];
+        return group.some((term) => _primaryList.some(s => s.includes(term)));
+      });
+      if (matchedIndustry) {
+        reasons.push(`Matches your interest in ${matchedIndustry}`);
+      } else {
+        prefScore -= 20;
+        concerns.push("Industry may not match your stated preference");
+      }
     }
   }
 

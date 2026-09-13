@@ -152,15 +152,15 @@
     <div style="font-size:18px;font-weight:700;color:#12B8A6;margin-bottom:4px;">3-Day Free Trial</div>
     <div style="font-size:13px;color:#7a8fa6;margin-bottom:12px;">then</div>
     <div class="price-row">
-      <span class="price">$29</span>
+      <span class="price">$19.99</span>
       <span class="period">/ month</span>
     </div>
-    <!-- Mobile-only secondary context — always true for the $29/month plan.
+    <!-- Mobile-only secondary context — always true for the $19.99/month plan.
          Hidden on desktop via .price-subtext{display:none} below;
          shown only at max-width:880px so the desktop card is unchanged. -->
     <div class="price-subtext">Less than $1 a day</div>
     <div class="annual-note">or $249/year — save ~28%</div>
-    <!-- Empty by default (no banner) — matches the original $29-upfront
+    <!-- Empty by default (no banner) — matches the original $19.99-upfront
          design exactly when the trial is off/unset. Only filled in by
          JS below when the server reports a trial is actually active,
          so a page that never gets this far (JS disabled, fetch fails)
@@ -210,24 +210,24 @@
         // already correct English for any N and requires no change.
         const dayWord = days === 1 ? 'day' : 'days';
         const banner = document.getElementById('trialBanner');
-        banner.textContent = `${days} ${dayWord} free, then $29/month. Cancel anytime.`;
+        banner.textContent = `${days} ${dayWord} free, then $19.99/month. Cancel anytime.`;
         banner.style.display = 'block';
         const disclosure = document.getElementById('renewalDisclosure');
-        disclosure.textContent = `$0 today. Then $29/month after your ${days}-day free trial. Cancel anytime.`;
+        disclosure.textContent = `$0 today. Then $19.99/month after your ${days}-day free trial. Cancel anytime.`;
         disclosure.style.display = 'block';
         // Update mobile sticky CTA to agree with the main subscribe button
         const rmBtn = document.getElementById('rmStickyBtn');
         const rmDisclose = document.getElementById('rmStickyDisclose');
         if (rmBtn) rmBtn.textContent = `Start Your ${days}-Day Free Trial`;
-        if (rmDisclose) rmDisclose.textContent = `$0 today · Then $29/month after ${days} ${dayWord} · Cancel anytime`;
+        if (rmDisclose) rmDisclose.textContent = `$0 today · Then $19.99/month after ${days} ${dayWord} · Cancel anytime`;
         // Also show a no-trial fallback when trial is off
         document.getElementById('faqTrialAnswer').textContent =
-          `Yes. ROOK includes a ${days}-day free trial with full access. After the trial, the subscription is $29/month unless you cancel before the trial ends.`;
+          `Yes. ROOK includes a ${days}-day free trial with full access. After the trial, the subscription is $19.99/month unless you cancel before the trial ends.`;
       } else {
         // No trial — update mobile sticky to agree with paid-only wording
         const rmBtn = document.getElementById('rmStickyBtn');
         const rmDisclose = document.getElementById('rmStickyDisclose');
-        if (rmBtn) rmBtn.textContent = 'Get Full Access — $29/month';
+        if (rmBtn) rmBtn.textContent = 'Get Full Access — $19.99/month';
         if (rmDisclose) rmDisclose.textContent = 'Cancel anytime';
       }
       // trialDays === 0 (or the request fails): leave the page exactly

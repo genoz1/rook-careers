@@ -248,11 +248,11 @@ router.get("/jobs/:id", async (req, res, next) => {
 
   const trialDays = getTrialPeriodDays();
   const ctaBlock = trialDays > 0
-    ? `<div style="color:#fff;font-size:15px;font-weight:700;margin-bottom:2px;">${trialDays} days free, then $29/month</div>
+    ? `<div style="color:#fff;font-size:15px;font-weight:700;margin-bottom:2px;">${trialDays} days free, then $19.99/month</div>
       <div style="color:#B9C4DB;font-size:13px;font-weight:600;margin-bottom:18px;">Cancel anytime.</div>
       <a href="/rook-onboarding-v4.html" class="btn btn-primary">Start Your ${trialDays}-Day Free Trial</a>
       <div style="color:#8B96AB;font-size:12px;margin-top:10px;">$0 today. Full ROOK access during your trial.</div>`
-    : `<div style="color:#fff;font-size:15px;font-weight:700;margin-bottom:18px;">$29/month · Cancel anytime</div>
+    : `<div style="color:#fff;font-size:15px;font-weight:700;margin-bottom:18px;">$19.99/month · Cancel anytime</div>
       <a href="/rook-onboarding-v4.html" class="btn btn-primary">Get Started</a>
       <div style="color:#8B96AB;font-size:12px;margin-top:10px;">One membership. Full ROOK access.</div>`;
 
@@ -455,11 +455,11 @@ router.get("/jobs/category/:slug", async (req, res, next) => {
 
   const trialDays = getTrialPeriodDays();
   const ctaBlock = trialDays > 0
-    ? `<div style="color:#fff;font-size:15px;font-weight:700;margin-bottom:2px;">${trialDays} days free, then $29/month</div>
+    ? `<div style="color:#fff;font-size:15px;font-weight:700;margin-bottom:2px;">${trialDays} days free, then $19.99/month</div>
       <div style="color:#B9C4DB;font-size:13px;font-weight:600;margin-bottom:18px;">Cancel anytime.</div>
       <a href="/rook-onboarding-v4.html" class="btn btn-primary">Start Your ${trialDays}-Day Free Trial</a>
       <div style="color:#8B96AB;font-size:12px;margin-top:10px;">$0 today. Full ROOK access during your trial.</div>`
-    : `<div style="color:#fff;font-size:15px;font-weight:700;margin-bottom:18px;">$29/month · Cancel anytime</div>
+    : `<div style="color:#fff;font-size:15px;font-weight:700;margin-bottom:18px;">$19.99/month · Cancel anytime</div>
       <a href="/rook-onboarding-v4.html" class="btn btn-primary">Get Started</a>
       <div style="color:#8B96AB;font-size:12px;margin-top:10px;">One membership. Full ROOK access.</div>`;
 

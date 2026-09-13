@@ -61,6 +61,15 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
 @media(max-width:400px){.name-row,.card-row{grid-template-columns:1fr}}
 </style>
 </head>
+<!-- Google tag -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=AW-18428232873"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'AW-18428232873');
+  gtag('config', 'G-LDG2CL5Z8R');
+</script>
 <body>
 <div class="shell">
   <div class="bar">
@@ -131,7 +140,17 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
 
     <div class="err" id="formErr"></div>
     <button class="btn-primary" id="btnStartTrial">Start my free 3-day trial</button>
-    <p class="fine">Card required. Then $29/month unless you cancel before your trial ends.</p>
+    <p class="fine" id="fineText">Card required. 3 days free, then <strong>$19.99/month</strong>. Automatically renews until canceled. Cancel anytime in Settings before your trial ends to avoid being charged. <span id="firstChargeDate"></span></p>
+    <script>
+      // Show first charge date dynamically
+      (function() {
+        const d = new Date();
+        d.setDate(d.getDate() + 3);
+        const opts = { weekday: 'long', month: 'long', day: 'numeric' };
+        const el = document.getElementById('firstChargeDate');
+        if (el) el.textContent = 'First charge: ' + d.toLocaleDateString('en-US', opts) + '.';
+      })();
+    </script>
   </div>
 </div>
 
@@ -172,6 +191,10 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
 
     btn.disabled = true;
     btn.innerHTML = '<div class="spinner"></div> Creating your account…';
+    // Conversion: checkout started
+    if (typeof gtag !== 'undefined') {
+      gtag('event', 'begin_checkout', { event_category: 'conversion', event_label: 'trial_v6', value: 0 });
+    }
 
     try {
       const { data: signUpData, error: signUpErr } = await sb.auth.signUp({
@@ -244,6 +267,16 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
       if (!subRes.ok) throw new Error(subData.error || 'Could not start trial.');
 
       try { sessionStorage.removeItem('rook_v6_state'); } catch(_) {}
+      // Conversion: trial started — fires from confirmed backend action, not button click
+      if (typeof gtag !== 'undefined') {
+        gtag('event', 'conversion', {
+          send_to: 'AW-18428232873',
+          event_category: 'conversion',
+          event_label: 'trial_started',
+          value: 0.0,
+          currency: 'USD'
+        });
+      }
       window.location.href = 'rook-dashboard.html?trial=started';
     } catch (err) {
       showErr(err.message);

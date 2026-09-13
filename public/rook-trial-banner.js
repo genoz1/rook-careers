@@ -30,7 +30,7 @@
     bar.style.cssText = 'background:#071E41; color:#fff; text-align:center; padding:10px 16px; font-size:13.5px; font-weight:600; display:flex; align-items:center; justify-content:center; gap:14px; flex-wrap:wrap; position:relative; z-index:100;';
 
     const text = document.createElement('span');
-    text.textContent = `Try ROOK Free for ${days} Day${days === 1 ? '' : 's'} — Full Access. Then $29/month. Cancel Anytime.`;
+    text.textContent = `Try ROOK Free for ${days} Day${days === 1 ? '' : 's'} — Full Access. Then $19.99/month. Cancel Anytime.`;
 
     const cta = document.createElement('a');
     cta.href = 'rook-login.html?mode=signup';

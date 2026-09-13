@@ -17,6 +17,21 @@
   // runtime that supports multiple config() calls for different
   // products (Ads conversion ID, GA4 measurement ID) side by side.
   gtag('config', 'G-LDG2CL5Z8R');
+  // Fire trial_started conversion if redirected from successful signup
+  (function() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('trial') === 'started') {
+      gtag('event', 'conversion', {
+        send_to: 'AW-18428232873',
+        event_category: 'conversion',
+        event_label: 'trial_started_dashboard',
+        value: 0.0,
+        currency: 'USD'
+      });
+      // Clean URL without reloading
+      history.replaceState({}, '', window.location.pathname);
+    }
+  })();
 </script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">

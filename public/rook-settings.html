@@ -657,7 +657,7 @@ function addRegion(region) {
       const trialEndDate = currentProfile.trial_ends_at
         ? new Date(currentProfile.trial_ends_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
         : null;
-      subText.textContent = trialEndDate ? `Free Trial — Ends ${trialEndDate}, then $29/month` : 'Free Trial';
+      subText.textContent = trialEndDate ? `Free Trial — Ends ${trialEndDate}, then $19.99/month` : 'Free Trial';
     } else if (currentProfile.subscription_status === 'active' && currentProfile.subscription_cancel_at) {
       const endDate = new Date(currentProfile.subscription_cancel_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
       subText.textContent = 'Professional Plan — Canceled';
