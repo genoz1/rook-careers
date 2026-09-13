@@ -150,9 +150,10 @@ async function fetchCampaignStats(campaignId, startDate, endDate) {
       },
       body: JSON.stringify({
         data: {
-          starts_at: startDate + "T00:00:00Z",
-          ends_at:   endDate   + "T23:59:59Z",
-          fields: ["impressions", "clicks", "spend"],
+          starts_at:  startDate + "T00:00:00Z",
+          ends_at:    endDate   + "T23:59:59Z",
+          fields:     ["IMPRESSIONS", "CLICKS", "SPEND"],
+          breakdowns: ["DATE"],
         },
       }),
       signal: controller.signal,
@@ -186,13 +187,13 @@ async function fetchCampaignPerformance() {
       stats = await fetchCampaignStats(c.id, today, today);
     } catch (_) {}
 
-    // v3 /reports returns all campaigns — filter to this campaign
-    const allRows = stats?.data?.rows || stats?.data || [];
+    // v3 /reports returns {data:[{date, IMPRESSIONS, CLICKS, SPEND}]}
+    const allRows = stats?.data || [];
     const filtered = Array.isArray(allRows)
       ? allRows.filter(r => !r.campaign_id || String(r.campaign_id) === String(c.id))
       : [];
     const statsData = filtered[0] || {};
-    const spendRaw = statsData.spend ?? statsData.cost ?? 0;
+    const spendRaw = statsData.SPEND ?? statsData.spend ?? statsData.cost ?? 0;
     const spendCents = spendRaw ? Math.round(parseFloat(spendRaw) * 100) : 0;
 
     return {
@@ -207,9 +208,9 @@ async function fetchCampaignPerformance() {
       daily_budget_cents: c.daily_budget_cents || null,
       total_budget_cents: c.total_budget_cents || null,
       spend_cents: spendCents,
-      impressions: Number(statsData.impressions || 0),
-      clicks: Number(statsData.clicks || 0),
-      conversions: Number(statsData.conversions || 0),
+      impressions: Number(statsData.IMPRESSIONS ?? statsData.impressions ?? 0),
+      clicks:      Number(statsData.CLICKS      ?? statsData.clicks      ?? 0),
+      conversions: 0, // Reddit reports API does not expose conversions in basic fields
       _raw: sanitizeResponse(c),
     };
   }));
