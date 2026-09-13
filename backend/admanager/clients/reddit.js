@@ -150,9 +150,9 @@ async function fetchCampaignStats(campaignId, startDate, endDate) {
       },
       body: JSON.stringify({
         data: {
-          starts_at: startDate,
-          ends_at: endDate,
-          fields: ["impressions", "clicks", "spend", "conversions"],
+          starts_at: startDate + "T00:00:00Z",
+          ends_at:   endDate   + "T23:59:59Z",
+          fields: ["impressions", "clicks", "spend"],
         },
       }),
       signal: controller.signal,
