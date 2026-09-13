@@ -34,12 +34,13 @@ const CONFIG = {
   // Zero-spend window (hours before flagging stopped delivery)
   zero_spend_alert_hours: parseInt(process.env.AD_ZERO_SPEND_HOURS || "6"),
 
-  // Total daily budget across ALL campaigns combined (cents)
+  // Total daily budget across ALL campaigns combined (cents).
+  // Set via AD_COMBINED_DAILY_BUDGET_CENTS (already configured).
   // App is permitted to shift up to 20% of this between campaigns.
-  total_daily_budget_cap_cents: parseInt(process.env.AD_TOTAL_DAILY_BUDGET_CAP_CENTS || "2500"), // $25/day total
+  total_daily_budget_cap_cents: parseInt(process.env.AD_COMBINED_DAILY_BUDGET_CENTS || "2500"), // $25/day total
 
-  // Hard ceiling — never exceed this across all platforms (cents)
-  total_daily_budget_hard_cap_cents: parseInt(process.env.AD_TOTAL_DAILY_BUDGET_HARD_CAP_CENTS || "3000"), // $30/day max
+  // Hard ceiling = 20% above target — never exceed this across all platforms.
+  total_daily_budget_hard_cap_cents: Math.round(parseInt(process.env.AD_COMBINED_DAILY_BUDGET_CENTS || "2500") * 1.2), // $30/day max
 };
 
 // ── Helper functions ────────────────────────────────────────────────────────
@@ -205,7 +206,7 @@ function evaluateBudgetPolicy(snapshot, controls, history = {}) {
   // Hard ceiling guard: no single campaign's budget may push the portfolio
   // above $30/day total. The normal operating target is $25/day combined;
   // the extra $5 (20%) is the reallocation window for strong performers.
-  const combinedCap = parseInt(process.env.AD_TOTAL_DAILY_BUDGET_HARD_CAP_CENTS || "3000"); // $30 hard max
+  const combinedCap = Math.round(parseInt(process.env.AD_COMBINED_DAILY_BUDGET_CENTS || "2500") * 1.2); // $30 hard max (20% above $25 target)
   const maxPerCampaign = clamp(
     Math.min(controls.max_daily_budget_cents, combinedCap),
     controls.min_daily_budget_cents,
