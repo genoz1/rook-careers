@@ -165,8 +165,8 @@ input:checked + .slider:before{transform:translateX(16px)}
   <div class="section">
     <div class="section-hd"><span class="section-title">Campaigns — Live Data</span></div>
     <table>
-      <thead><tr><th>Platform</th><th>Campaign</th><th>Status</th><th>Spend</th><th>Impressions</th><th>Clicks</th><th>Conversions</th><th>CTR</th><th>CPA</th></tr></thead>
-      <tbody id="overviewTable"><tr><td colspan="9" class="loading">Loading…</td></tr></tbody>
+      <thead><tr><th>Platform</th><th>Campaign</th><th>Status</th><th>Daily Budget</th><th>Spend Today</th><th>Impressions</th><th>Clicks</th><th>Conversions</th><th>CTR</th><th>CPA</th></tr></thead>
+      <tbody id="overviewTable"><tr><td colspan="10" class="loading">Loading…</td></tr></tbody>
     </table>
   </div>
 </div>
@@ -376,6 +376,7 @@ function renderOverview(data) {
         <td>${platformIcon(pName)}${pName}</td>
         <td style="max-width:240px;font-weight:600">${c.campaign_name||c.external_campaign_id}</td>
         <td>${pillFor(c.status||c.effective_status)}</td>
+        <td style="font-weight:600">${c.daily_budget_cents ? fmtD(c.daily_budget_cents) : c.budget_cents ? fmtD(c.budget_cents) : '—'}</td>
         <td>${fmtD(c.spend_cents)}</td>
         <td>${fmtN(c.impressions)}</td>
         <td>${fmtN(c.clicks)}</td>
