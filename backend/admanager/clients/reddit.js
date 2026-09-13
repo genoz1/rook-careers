@@ -186,9 +186,12 @@ async function fetchCampaignPerformance() {
       stats = await fetchCampaignStats(c.id, today, today);
     } catch (_) {}
 
-    // v3 /reports response: { data: { rows: [...] } } or { data: [...] }
-    const rows = stats?.data?.rows || stats?.data || [];
-    const statsData = Array.isArray(rows) ? (rows[0] || {}) : {};
+    // v3 /reports returns all campaigns — filter to this campaign
+    const allRows = stats?.data?.rows || stats?.data || [];
+    const filtered = Array.isArray(allRows)
+      ? allRows.filter(r => !r.campaign_id || String(r.campaign_id) === String(c.id))
+      : [];
+    const statsData = filtered[0] || {};
     const spendRaw = statsData.spend ?? statsData.cost ?? 0;
     const spendCents = spendRaw ? Math.round(parseFloat(spendRaw) * 100) : 0;
 

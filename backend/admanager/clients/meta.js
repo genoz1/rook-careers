@@ -8,7 +8,7 @@
 // Rate limits: Standard access allows ~200 calls/hour per user token.
 // This client does not paginate — campaigns list assumed < 200 rows.
 
-const META_API_VERSION = "v19.0";
+const META_API_VERSION = "v21.0";
 const BASE_URL = `https://graph.facebook.com/${META_API_VERSION}`;
 const REQUEST_TIMEOUT_MS = 30_000;
 
@@ -111,8 +111,9 @@ async function fetchCampaignPerformance(datePreset = "today") {
       Number(actions.find((a) => a.action_type === actionType)?.value || 0);
 
     const spendCents = Math.round(parseFloat(insights.spend || "0") * 100);
-    const dailyBudgetCents = c.daily_budget ? Math.round(parseInt(c.daily_budget) / 10) : null;
-    const lifetimeBudgetCents = c.lifetime_budget ? Math.round(parseInt(c.lifetime_budget) / 10) : null;
+    // Meta returns daily_budget as a string in cents (e.g. "1000" = $10.00)
+    const dailyBudgetCents = c.daily_budget ? parseInt(c.daily_budget) : null;
+    const lifetimeBudgetCents = c.lifetime_budget ? parseInt(c.lifetime_budget) : null;
 
     return {
       platform: "meta",

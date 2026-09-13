@@ -182,6 +182,7 @@ async function fetchCampaignPerformance(dateRange = "TODAY") {
     advertising_channel:  row.campaign?.advertisingChannelType || "",
     start_date:           null,
     end_date:             null,
+    budget_resource_name: row.campaignBudget?.resourceName || null,  // needed by setCampaignBudget
     budget_micros:        row.campaignBudget?.amountMicros || 0,
     budget_cents:         Math.round((row.campaignBudget?.amountMicros || 0) / 10_000),
     spend_micros:         row.metrics?.costMicros || 0,

@@ -203,7 +203,11 @@ async function runPlatform(platformName, fetchFn, setBudgetFn, setStatusFn) {
       try {
         if (action.action_type === "increase_budget" || action.action_type === "decrease_budget") {
           const newBudget = action.proposed_value.new_daily_budget_cents;
-          apiResponse = await setBudgetFn(snapshot.external_campaign_id, newBudget);
+          // Google needs budget resource name, other platforms take campaign ID
+          const budgetTarget = platformName === "google"
+            ? (snapshot.budget_resource_name || snapshot.external_campaign_id)
+            : snapshot.external_campaign_id;
+          apiResponse = await setBudgetFn(budgetTarget, newBudget);
           log(`  [WRITE] Set ${platformName} budget for ${snapshot.external_campaign_id} to $${(newBudget / 100).toFixed(2)}`);
           // Update controls row
           await supabase.from("ad_campaign_controls")
