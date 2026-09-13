@@ -155,7 +155,6 @@ async function fetchCampaignPerformance(dateRange = "TODAY") {
       campaign.name,
       campaign.status,
       campaign.advertising_channel_type,
-      campaign.campaign_budget,
       campaign.start_date,
       campaign.end_date,
       campaign_budget.amount_micros,
