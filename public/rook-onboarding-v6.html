@@ -69,6 +69,12 @@
     .signup-box p{color:rgba(255,255,255,.7);font-size:13px;margin-bottom:14px;line-height:1.5}
     .signup-box .btn-signup{display:block;width:100%;padding:14px;background:linear-gradient(135deg,#1463ff,var(--teal));color:#fff;font:700 15px Inter,sans-serif;border:none;border-radius:99px;cursor:pointer;transition:opacity .15s}
     .signup-box .btn-signup:hover{opacity:.9}
+
+    /* ── Welcome offer block ── */
+    .offer-block{text-align:center;margin:6px 0 22px}
+    .offer-line{font-size:31px;font-weight:900;line-height:1.2;letter-spacing:-.01em}
+    .offer-sub{font-size:13px;color:var(--muted);font-weight:600;margin-top:10px}
+    @media (max-width:360px){ .offer-line{font-size:27px} }
   </style>
 </head>
 <!-- Google tag -->
@@ -124,6 +130,11 @@
     <div style="background:#EEF6FF;border:1px solid #BFDBFE;border-radius:10px;padding:12px 14px;margin-bottom:20px;display:flex;align-items:center;gap:8px">
       <span style="font-size:20px;flex-shrink:0">🎯</span>
       <span style="font-size:13px;color:#1D4ED8;font-weight:600;line-height:1.4">ROOK shows you which jobs you actually match — directly from employer career sites.</span>
+    </div>
+    <div class="offer-block">
+      <div class="offer-line" style="color:var(--blue)">Start free.</div>
+      <div class="offer-line" style="color:var(--navy)">Then less than $5 a week.</div>
+      <div class="offer-sub">3-day free trial · Billed monthly</div>
     </div>
     <button class="btn-primary" id="btnWelcomeStart">See my matches</button>
     <div class="trust">Answer 4 quick questions · See real matches · No email until you're ready</div>
