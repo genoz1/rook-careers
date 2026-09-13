@@ -152,10 +152,6 @@ async function fetchCampaignStats(campaignId, startDate, endDate) {
         data: {
           start_date: startDate,
           end_date: endDate,
-          granularity: "DAY",
-          breakdown: "CAMPAIGN",
-          campaign_ids: [campaignId],
-          fields: ["impressions", "clicks", "spend", "conversions"],
         },
       }),
       signal: controller.signal,

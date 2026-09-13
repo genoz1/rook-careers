@@ -98,7 +98,7 @@ async function googleAdsQuery(gaql) {
     });
     if (!res.ok) {
       const body = await res.text().catch(() => "");
-      throw new Error(`Google Ads query failed (${res.status}): ${body.slice(0, 300)}`);
+      throw new Error(`Google Ads query failed (${res.status}): ${body.slice(0, 1000)}`);
     }
     return await res.json();
   } finally {
