@@ -131,19 +131,45 @@ async function fetchCampaigns() {
 
 /**
  * Fetch campaign performance stats for a given date range.
- * v3: GET /ad_accounts/{ad_account_id}/campaigns/{campaign_id}/reports
+ * v3: POST /ad_accounts/{ad_account_id}/reports with JSON body
  */
 async function fetchCampaignStats(campaignId, startDate, endDate) {
   const creds = getCredentials();
+  const token = await getAccessToken();
+  const url = `${BASE_URL}/ad_accounts/${creds.accountId}/reports`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    const data = await redditGet(`/ad_accounts/${creds.accountId}/campaigns/${campaignId}/reports`, {
-      start_date: startDate,
-      end_date: endDate,
-      interval: "day",
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "User-Agent": "ROOK:AdManager:1.0 (by /u/rookcareers)",
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        data: {
+          start_date: startDate,
+          end_date: endDate,
+          granularity: "DAY",
+          breakdown: "CAMPAIGN",
+          campaign_ids: [campaignId],
+          fields: ["impressions", "clicks", "spend", "conversions"],
+        },
+      }),
+      signal: controller.signal,
     });
-    return sanitizeResponse(data);
-  } catch (_) {
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`Reddit reports POST failed (${res.status}): ${body.slice(0, 200)}`);
+    }
+    return sanitizeResponse(await res.json());
+  } catch (err) {
+    console.error(`Reddit stats error for ${campaignId}: ${err.message}`);
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -163,8 +189,11 @@ async function fetchCampaignPerformance() {
       stats = await fetchCampaignStats(c.id, today, today);
     } catch (_) {}
 
-    const statsData = stats?.data?.[0] || {};
-    const spendCents = statsData.spend ? Math.round(parseFloat(statsData.spend) * 100) : 0;
+    // v3 /reports response: { data: { rows: [...] } } or { data: [...] }
+    const rows = stats?.data?.rows || stats?.data || [];
+    const statsData = Array.isArray(rows) ? (rows[0] || {}) : {};
+    const spendRaw = statsData.spend ?? statsData.cost ?? 0;
+    const spendCents = spendRaw ? Math.round(parseFloat(spendRaw) * 100) : 0;
 
     return {
       platform: "reddit",
