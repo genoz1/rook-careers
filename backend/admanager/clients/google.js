@@ -1,23 +1,24 @@
 // ROOK Ad Manager — Google Ads API client
 //
-// Uses the Google Ads REST API (v17). Requires:
-//   GOOGLE_ADS_DEVELOPER_TOKEN
+// Uses the Google Ads REST API (v25). Requires:
 //   GOOGLE_ADS_CLIENT_ID
 //   GOOGLE_ADS_CLIENT_SECRET
 //   GOOGLE_ADS_REFRESH_TOKEN
-//   GOOGLE_ADS_CUSTOMER_ID   (10-digit, no dashes)
-//   GOOGLE_ADS_LOGIN_CUSTOMER_ID  (MCC account if applicable, else same as CUSTOMER_ID)
+//   GOOGLE_ADS_CUSTOMER_ID         (10-digit, no dashes)
+//
+// Optional:
+//   GOOGLE_ADS_LOGIN_CUSTOMER_ID   (MCC manager account ID — only set if
+//                                   access is through a manager account)
 //
 // Never logs secrets. All credential access goes through getCredentials().
 
-const GOOGLE_ADS_API_VERSION = "v17";
+const GOOGLE_ADS_API_VERSION = "v25";
 const BASE_URL = `https://googleads.googleapis.com/${GOOGLE_ADS_API_VERSION}`;
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const REQUEST_TIMEOUT_MS = 30_000;
 
 function getCredentials() {
   const required = [
-    "GOOGLE_ADS_DEVELOPER_TOKEN",
     "GOOGLE_ADS_CLIENT_ID",
     "GOOGLE_ADS_CLIENT_SECRET",
     "GOOGLE_ADS_REFRESH_TOKEN",
@@ -28,12 +29,14 @@ function getCredentials() {
     throw new Error(`Google Ads: missing env vars: ${missing.join(", ")}`);
   }
   return {
-    developerToken: process.env.GOOGLE_ADS_DEVELOPER_TOKEN,
-    clientId: process.env.GOOGLE_ADS_CLIENT_ID,
-    clientSecret: process.env.GOOGLE_ADS_CLIENT_SECRET,
-    refreshToken: process.env.GOOGLE_ADS_REFRESH_TOKEN,
-    customerId: process.env.GOOGLE_ADS_CUSTOMER_ID.replace(/-/g, ""),
-    loginCustomerId: (process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID || process.env.GOOGLE_ADS_CUSTOMER_ID).replace(/-/g, ""),
+    clientId:       process.env.GOOGLE_ADS_CLIENT_ID,
+    clientSecret:   process.env.GOOGLE_ADS_CLIENT_SECRET,
+    refreshToken:   process.env.GOOGLE_ADS_REFRESH_TOKEN,
+    customerId:     process.env.GOOGLE_ADS_CUSTOMER_ID.replace(/-/g, ""),
+    // loginCustomerId is optional — only present when using a manager account
+    loginCustomerId: process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID
+      ? process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID.replace(/-/g, "")
+      : null,
   };
 }
 
@@ -51,8 +54,8 @@ async function getAccessToken() {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
-        grant_type: "refresh_token",
-        client_id: creds.clientId,
+        grant_type:    "refresh_token",
+        client_id:     creds.clientId,
         client_secret: creds.clientSecret,
         refresh_token: creds.refreshToken,
       }),
@@ -68,6 +71,18 @@ async function getAccessToken() {
   }
 }
 
+function buildHeaders(token, creds) {
+  const headers = {
+    Authorization:  `Bearer ${token}`,
+    "Content-Type": "application/json",
+  };
+  // Only send login-customer-id when a manager account ID is configured
+  if (creds.loginCustomerId) {
+    headers["login-customer-id"] = creds.loginCustomerId;
+  }
+  return headers;
+}
+
 async function googleAdsQuery(gaql) {
   const creds = getCredentials();
   const token = await getAccessToken();
@@ -77,12 +92,7 @@ async function googleAdsQuery(gaql) {
   try {
     const res = await fetch(url, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "developer-token": creds.developerToken,
-        "login-customer-id": creds.loginCustomerId,
-        "Content-Type": "application/json",
-      },
+      headers: buildHeaders(token, creds),
       body: JSON.stringify({ query: gaql }),
       signal: controller.signal,
     });
@@ -96,7 +106,6 @@ async function googleAdsQuery(gaql) {
   }
 }
 
-// Mutate a resource (budget change, status change, etc.)
 async function googleAdsMutate(operations) {
   const creds = getCredentials();
   const token = await getAccessToken();
@@ -106,12 +115,7 @@ async function googleAdsMutate(operations) {
   try {
     const res = await fetch(url, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "developer-token": creds.developerToken,
-        "login-customer-id": creds.loginCustomerId,
-        "Content-Type": "application/json",
-      },
+      headers: buildHeaders(token, creds),
       body: JSON.stringify({ mutateOperations: operations }),
       signal: controller.signal,
     });
@@ -125,7 +129,6 @@ async function googleAdsMutate(operations) {
   }
 }
 
-// Strip any secrets from a response before storing/logging
 function sanitizeResponse(obj) {
   if (!obj || typeof obj !== "object") return obj;
   const REDACTED_KEYS = ["access_token", "refresh_token", "client_secret", "developer_token"];
@@ -143,8 +146,7 @@ function sanitizeResponse(obj) {
 }
 
 /**
- * Fetch campaign-level performance for today (and optionally yesterday).
- * Returns array of normalized campaign objects.
+ * Fetch campaign-level performance. GAQL fields verified against v25.
  */
 async function fetchCampaignPerformance(dateRange = "TODAY") {
   const gaql = `
@@ -163,9 +165,7 @@ async function fetchCampaignPerformance(dateRange = "TODAY") {
       metrics.clicks,
       metrics.conversions,
       metrics.all_conversions,
-      metrics.view_through_conversions,
-      campaign.url_expansion_opt_out,
-      campaign.payment_mode
+      metrics.view_through_conversions
     FROM campaign
     WHERE segments.date DURING ${dateRange}
       AND campaign.status != 'REMOVED'
@@ -178,20 +178,20 @@ async function fetchCampaignPerformance(dateRange = "TODAY") {
   return rows.map((row) => ({
     platform: "google",
     external_campaign_id: String(row.campaign?.id || ""),
-    campaign_name: row.campaign?.name || "",
-    status: row.campaign?.status || "",
-    effective_status: row.campaign?.status || "",
-    advertising_channel: row.campaign?.advertisingChannelType || "",
-    start_date: row.campaign?.startDate || null,
-    end_date: row.campaign?.endDate || null,
-    budget_micros: row.campaignBudget?.amountMicros || 0,
-    budget_cents: Math.round((row.campaignBudget?.amountMicros || 0) / 10_000),
-    spend_micros: row.metrics?.costMicros || 0,
-    spend_cents: Math.round((row.metrics?.costMicros || 0) / 10_000),
-    impressions: Number(row.metrics?.impressions || 0),
-    clicks: Number(row.metrics?.clicks || 0),
-    conversions: Number(row.metrics?.conversions || 0),
-    all_conversions: Number(row.metrics?.allConversions || 0),
+    campaign_name:        row.campaign?.name || "",
+    status:               row.campaign?.status || "",
+    effective_status:     row.campaign?.status || "",
+    advertising_channel:  row.campaign?.advertisingChannelType || "",
+    start_date:           row.campaign?.startDate || null,
+    end_date:             row.campaign?.endDate || null,
+    budget_micros:        row.campaignBudget?.amountMicros || 0,
+    budget_cents:         Math.round((row.campaignBudget?.amountMicros || 0) / 10_000),
+    spend_micros:         row.metrics?.costMicros || 0,
+    spend_cents:          Math.round((row.metrics?.costMicros || 0) / 10_000),
+    impressions:          Number(row.metrics?.impressions || 0),
+    clicks:               Number(row.metrics?.clicks || 0),
+    conversions:          Number(row.metrics?.conversions || 0),
+    all_conversions:      Number(row.metrics?.allConversions || 0),
     _raw: sanitizeResponse(row),
   }));
 }
@@ -223,8 +223,7 @@ async function fetchRejectedAds(campaignId) {
 }
 
 /**
- * Update campaign daily budget (in cents). Returns sanitized API response.
- * Caller is responsible for dry-run gating — this executes immediately.
+ * Update campaign daily budget (in cents).
  */
 async function setCampaignBudget(campaignBudgetResourceName, newBudgetCents) {
   const operations = [{
@@ -261,8 +260,9 @@ async function setCampaignStatus(campaignResourceName, newStatus) {
  */
 async function testConnection() {
   try {
-    await googleAdsQuery("SELECT customer.id FROM customer LIMIT 1");
-    return { ok: true };
+    const data = await googleAdsQuery("SELECT customer.id, customer.descriptive_name FROM customer LIMIT 1");
+    const customer = data.results?.[0]?.customer;
+    return { ok: true, customer_id: customer?.id, account_name: customer?.descriptiveName || "" };
   } catch (err) {
     return { ok: false, error: err.message };
   }
