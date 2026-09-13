@@ -187,14 +187,12 @@ async function fetchCampaignPerformance() {
       stats = await fetchCampaignStats(c.id, today, today);
     } catch (_) {}
 
-    // v3 /reports returns {data:[{date, IMPRESSIONS, CLICKS, SPEND}]}
-    const allRows = stats?.data || [];
-    const filtered = Array.isArray(allRows)
-      ? allRows.filter(r => !r.campaign_id || String(r.campaign_id) === String(c.id))
-      : [];
-    const statsData = filtered[0] || {};
-    const spendRaw = statsData.SPEND ?? statsData.spend ?? statsData.cost ?? 0;
-    const spendCents = spendRaw ? Math.round(parseFloat(spendRaw) * 100) : 0;
+    // v3 /reports response: {data: {metrics: [{date, impressions, clicks, spend}]}}
+    // spend is in micros (1,000,000 = $1.00)
+    const metrics = stats?.data?.metrics || [];
+    const statsData = metrics[0] || {};
+    const spendRaw = statsData.spend ?? 0;
+    const spendCents = spendRaw ? Math.round(spendRaw / 10_000) : 0;
 
     return {
       platform: "reddit",
@@ -205,12 +203,16 @@ async function fetchCampaignPerformance() {
       objective: c.objective || "",
       start_date: c.start_date || null,
       end_date: c.end_date || null,
-      daily_budget_cents: c.daily_budget_cents || null,
+      daily_budget_cents: c.daily_budget_cents
+        ? Math.round(c.daily_budget_cents / 100)   // Reddit budget already in microcents → cents
+        : c.goal_value
+        ? Math.round(c.goal_value / 10_000)         // goal_value in micros → cents
+        : null,
       total_budget_cents: c.total_budget_cents || null,
       spend_cents: spendCents,
-      impressions: Number(statsData.IMPRESSIONS ?? statsData.impressions ?? 0),
-      clicks:      Number(statsData.CLICKS      ?? statsData.clicks      ?? 0),
-      conversions: 0, // Reddit reports API does not expose conversions in basic fields
+      impressions: Number(statsData.impressions ?? 0),
+      clicks:      Number(statsData.clicks      ?? 0),
+      conversions: 0,
       _raw: sanitizeResponse(c),
     };
   }));
