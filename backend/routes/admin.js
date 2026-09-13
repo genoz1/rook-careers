@@ -181,6 +181,52 @@ router.get("/admin/employers", requireConfig, requireAuth, requireAdmin, async (
   res.json(data);
 });
 
+// GET /api/admin/admanager/dashboard?token=...
+// Returns live campaign data from all configured platforms for the dashboard.
+router.get("/admin/admanager/dashboard", async (req, res) => {
+  const expectedToken = process.env.AD_MANAGER_TEST_TOKEN;
+  if (!expectedToken || req.query.token !== expectedToken) {
+    return res.status(401).json({ error: "unauthorized" });
+  }
+  const enabled = (process.env.AD_ENABLED_PLATFORMS || "").split(",").map(p => p.trim()).filter(Boolean);
+  const mode = process.env.AD_MANAGER_MODE || "off";
+  const platforms = {};
+
+  const fetchPlatform = async (name, fetchFn) => {
+    try {
+      platforms[name] = { ok: true, campaigns: await fetchFn(), error: null };
+    } catch (err) {
+      platforms[name] = { ok: false, campaigns: [], error: err.message };
+    }
+  };
+
+  await Promise.all([
+    enabled.includes("meta") && process.env.META_ADS_ACCESS_TOKEN
+      ? fetchPlatform("meta", () => require("../admanager/clients/meta").fetchCampaignPerformance("today"))
+      : Promise.resolve(),
+    enabled.includes("google") && process.env.GOOGLE_ADS_CUSTOMER_ID
+      ? fetchPlatform("google", () => require("../admanager/clients/google").fetchCampaignPerformance())
+      : Promise.resolve(),
+    enabled.includes("reddit") && process.env.REDDIT_ADS_ACCOUNT_ID
+      ? fetchPlatform("reddit", () => require("../admanager/clients/reddit").fetchCampaignPerformance())
+      : Promise.resolve(),
+  ]);
+
+  // Also pull recent snapshots from DB
+  let snapshots = [];
+  try {
+    const { data } = await supabaseAdmin
+      .from("ad_performance_snapshots")
+      .select("*")
+      .gte("snapshot_date", new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10))
+      .order("snapshot_date", { ascending: false })
+      .limit(200);
+    snapshots = data || [];
+  } catch (_) {}
+
+  return res.json({ mode, enabled_platforms: enabled, platforms, snapshots, fetched_at: new Date().toISOString() });
+});
+
 module.exports = router;
 
 // ── Ad Manager connection test ────────────────────────────────────────────

@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ROOK — Ad Manager</title>
+<link rel="icon" href="assets/favicon.ico">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--navy:#062d55;--blue:#0877d1;--green:#1a7a50;--red:#c0392b;--yellow:#d97706;--muted:#587283;--line:#dbe8f0;--ink:#0d2035;--bg:#f4f9fd;--paper:#fff;--radius:14px}
+body{font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh}
+.topbar{background:var(--navy);padding:14px 28px;display:flex;align-items:center;justify-content:space-between}
+.brand{display:flex;align-items:center;gap:10px;color:#fff;font-size:17px;font-weight:900;letter-spacing:.08em}
+.rookmark{width:30px;height:30px;border-radius:9px;background:linear-gradient(145deg,#0c4a8a,var(--blue));color:#fff;display:grid;place-items:center;font-family:Georgia,serif;font-size:17px}
+.mode-badge{font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;letter-spacing:.05em}
+.mode-dry{background:rgba(255,193,7,.2);color:#ffc107}
+.mode-live{background:rgba(26,122,80,.2);color:#2ecc71}
+.mode-off{background:rgba(255,255,255,.1);color:#aaa}
+.shell{max-width:1100px;margin:0 auto;padding:24px 20px}
+.page-title{font-size:22px;font-weight:900;color:var(--navy);margin-bottom:4px}
+.page-sub{font-size:13px;color:var(--muted);margin-bottom:24px}
+.login-box{background:var(--paper);border:1.5px solid var(--line);border-radius:var(--radius);padding:32px;max-width:400px;margin:60px auto}
+.login-box h2{font-size:20px;font-weight:800;margin-bottom:16px;color:var(--navy)}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:5px}
+.field input{width:100%;padding:11px 13px;border:1.5px solid var(--line);border-radius:10px;font:inherit;font-size:14px;background:var(--bg);color:var(--ink);outline:none}
+.field input:focus{border-color:var(--blue)}
+.btn{display:block;width:100%;padding:12px;border:none;border-radius:10px;background:linear-gradient(110deg,var(--navy),var(--blue));color:#fff;font:inherit;font-size:14px;font-weight:700;cursor:pointer}
+.err{color:var(--red);font-size:13px;margin-top:8px;text-align:center}
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px}
+.stat-card{background:var(--paper);border:1.5px solid var(--line);border-radius:var(--radius);padding:18px}
+.stat-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:6px}
+.stat-value{font-size:28px;font-weight:900;color:var(--navy);line-height:1}
+.stat-sub{font-size:12px;color:var(--muted);margin-top:4px}
+.platform-section{margin-bottom:28px}
+.platform-header{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.platform-name{font-size:15px;font-weight:800;color:var(--navy)}
+.platform-icon{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-size:14px;font-weight:900;color:#fff;flex-shrink:0}
+.icon-meta{background:#1877f2}
+.icon-google{background:#ea4335}
+.icon-reddit{background:#ff4500}
+.conn-ok{font-size:12px;color:var(--green);font-weight:600}
+.conn-err{font-size:12px;color:var(--red);font-weight:600}
+.campaign-table{width:100%;border-collapse:collapse;background:var(--paper);border-radius:var(--radius);overflow:hidden;border:1.5px solid var(--line)}
+.campaign-table th{background:#f8fbfd;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:10px 14px;text-align:left;border-bottom:1.5px solid var(--line)}
+.campaign-table td{padding:12px 14px;font-size:13px;border-bottom:1px solid var(--line);vertical-align:middle}
+.campaign-table tr:last-child td{border-bottom:none}
+.campaign-table tr:hover td{background:#f8fbfd}
+.status-pill{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.04em}
+.status-active,.status-enabled{background:#eef7f1;color:#1a6b40}
+.status-paused{background:#fef3cd;color:#92600a}
+.status-removed,.status-archived{background:#fde8e8;color:var(--red)}
+.alert-row{background:var(--paper);border:1.5px solid var(--line);border-radius:var(--radius);padding:14px 16px;margin-bottom:8px;display:flex;align-items:flex-start;gap:12px}
+.alert-critical{border-left:4px solid var(--red)}
+.alert-warning{border-left:4px solid var(--yellow)}
+.alert-icon{font-size:16px;flex-shrink:0;margin-top:1px}
+.alert-body{flex:1}
+.alert-title{font-size:13px;font-weight:700;color:var(--ink);margin-bottom:2px}
+.alert-msg{font-size:12px;color:var(--muted)}
+.refresh-btn{font-size:12px;font-weight:600;color:var(--blue);background:none;border:none;cursor:pointer;padding:0}
+.refresh-btn:hover{text-decoration:underline}
+.fetched-at{font-size:12px;color:var(--muted);margin-left:auto}
+.section-header{display:flex;align-items:center;margin-bottom:12px;gap:12px}
+.section-title{font-size:15px;font-weight:800;color:var(--navy)}
+.empty{font-size:13px;color:var(--muted);padding:20px;text-align:center}
+.loading{text-align:center;padding:60px;color:var(--muted);font-size:14px}
+@media(max-width:700px){.stats-row{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand"><div class="rookmark">♜</div> ROOK · Ad Manager</div>
+  <span id="modeBadge" class="mode-badge mode-off">Loading…</span>
+</div>
+
+<div id="loginScreen" class="shell" style="display:none">
+  <div class="login-box">
+    <h2>Ad Manager Access</h2>
+    <div class="field">
+      <label>Access Token</label>
+      <input type="password" id="tokenInput" placeholder="Enter your AD_MANAGER_TEST_TOKEN" autocomplete="off">
+    </div>
+    <button class="btn" onclick="login()">Sign in</button>
+    <div class="err" id="loginErr"></div>
+  </div>
+</div>
+
+<div id="dashboard" class="shell" style="display:none">
+  <div style="display:flex;align-items:center;margin-bottom:4px">
+    <div class="page-title">Advertising Dashboard</div>
+    <span class="fetched-at" id="fetchedAt"></span>
+  </div>
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:24px">
+    <div class="page-sub" style="margin:0">Live campaign data across all platforms</div>
+    <button class="refresh-btn" onclick="loadData()">↻ Refresh</button>
+  </div>
+
+  <!-- Summary stats -->
+  <div class="stats-row">
+    <div class="stat-card"><div class="stat-label">Total Spend Today</div><div class="stat-value" id="totalSpend">—</div><div class="stat-sub">across all platforms</div></div>
+    <div class="stat-card"><div class="stat-label">Impressions</div><div class="stat-value" id="totalImpressions">—</div><div class="stat-sub">today</div></div>
+    <div class="stat-card"><div class="stat-label">Clicks</div><div class="stat-value" id="totalClicks">—</div><div class="stat-sub">today</div></div>
+    <div class="stat-card"><div class="stat-label">Active Campaigns</div><div class="stat-value" id="activeCampaigns">—</div><div class="stat-sub">across all platforms</div></div>
+  </div>
+
+  <!-- Alerts -->
+  <div id="alertsSection" style="display:none;margin-bottom:24px">
+    <div class="section-header"><div class="section-title">⚠️ Alerts</div></div>
+    <div id="alertsList"></div>
+  </div>
+
+  <!-- Platform sections -->
+  <div id="platformSections"></div>
+</div>
+
+<div id="loadingScreen" class="shell loading">Loading…</div>
+
+<script>
+const TOKEN_KEY = 'rook_admanager_token';
+let token = sessionStorage.getItem(TOKEN_KEY) || '';
+
+function login() {
+  token = document.getElementById('tokenInput').value.trim();
+  if (!token) return;
+  document.getElementById('loginErr').textContent = '';
+  loadData();
+}
+
+function fmt(cents) {
+  if (cents == null || cents === 0) return '$0.00';
+  return '$' + (cents / 100).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+function fmtNum(n) {
+  if (n == null) return '0';
+  return Number(n).toLocaleString('en-US');
+}
+function statusClass(s) {
+  const lower = (s||'').toLowerCase();
+  if (lower === 'active' || lower === 'enabled') return 'status-active';
+  if (lower === 'paused') return 'status-paused';
+  return 'status-removed';
+}
+function platformIcon(p) {
+  if (p === 'meta') return '<div class="platform-icon icon-meta">f</div>';
+  if (p === 'google') return '<div class="platform-icon icon-google">G</div>';
+  if (p === 'reddit') return '<div class="platform-icon icon-reddit">R</div>';
+  return '<div class="platform-icon" style="background:#888">?</div>';
+}
+
+function detectAlerts(platforms) {
+  const alerts = [];
+  for (const [pName, pData] of Object.entries(platforms||{})) {
+    if (!pData?.ok) { alerts.push({type:'critical',platform:pName,msg:'Platform fetch failed: '+(pData?.error||'unknown')}); continue; }
+    for (const c of (pData.campaigns||[])) {
+      const st = (c.status||c.effective_status||'').toLowerCase();
+      if (c.spend_cents === 0 && (st === 'active' || st === 'enabled')) {
+        alerts.push({type:'warning',platform:pName,name:c.campaign_name,msg:'$0 spend today — check budget and targeting'});
+      }
+      if (st === 'paused') {
+        alerts.push({type:'warning',platform:pName,name:c.campaign_name,msg:'Campaign is paused'});
+      }
+    }
+  }
+  return alerts;
+}
+
+async function loadData() {
+  if (!token) {
+    document.getElementById('loadingScreen').style.display = 'none';
+    document.getElementById('loginScreen').style.display = '';
+    document.getElementById('dashboard').style.display = 'none';
+    return;
+  }
+  document.getElementById('loadingScreen').style.display = '';
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'none';
+
+  try {
+    const res = await fetch('/api/admin/admanager/dashboard?token=' + encodeURIComponent(token));
+    if (res.status === 401) {
+      sessionStorage.removeItem(TOKEN_KEY);
+      token = '';
+      document.getElementById('loadingScreen').style.display = 'none';
+      document.getElementById('loginScreen').style.display = '';
+      document.getElementById('loginErr').textContent = 'Invalid token.';
+      return;
+    }
+    const data = await res.json();
+    sessionStorage.setItem(TOKEN_KEY, token);
+    renderDashboard(data);
+  } catch(err) {
+    document.getElementById('loadingScreen').textContent = 'Error loading data: ' + err.message;
+  }
+}
+
+function renderDashboard(data) {
+  // Mode badge
+  const badge = document.getElementById('modeBadge');
+  badge.textContent = (data.mode||'off').toUpperCase();
+  badge.className = 'mode-badge ' + (data.mode === 'live' ? 'mode-live' : data.mode === 'dry-run' ? 'mode-dry' : 'mode-off');
+
+  // Fetched at
+  document.getElementById('fetchedAt').textContent = 'Updated ' + new Date(data.fetched_at).toLocaleTimeString();
+
+  // Totals
+  let totalSpend = 0, totalImpressions = 0, totalClicks = 0, activeCampaigns = 0;
+  for (const pData of Object.values(data.platforms||{})) {
+    for (const c of (pData?.campaigns||[])) {
+      totalSpend += c.spend_cents || 0;
+      totalImpressions += c.impressions || 0;
+      totalClicks += c.clicks || 0;
+      const st = (c.status||'').toLowerCase();
+      if (st === 'active' || st === 'enabled') activeCampaigns++;
+    }
+  }
+  document.getElementById('totalSpend').textContent = fmt(totalSpend);
+  document.getElementById('totalImpressions').textContent = fmtNum(totalImpressions);
+  document.getElementById('totalClicks').textContent = fmtNum(totalClicks);
+  document.getElementById('activeCampaigns').textContent = activeCampaigns;
+
+  // Alerts
+  const alerts = detectAlerts(data.platforms);
+  const alertsList = document.getElementById('alertsList');
+  const alertsSection = document.getElementById('alertsSection');
+  if (alerts.length) {
+    alertsSection.style.display = '';
+    alertsList.innerHTML = alerts.map(a => `
+      <div class="alert-row alert-${a.type}">
+        <div class="alert-icon">${a.type === 'critical' ? '🔴' : '⚠️'}</div>
+        <div class="alert-body">
+          <div class="alert-title">${a.platform.toUpperCase()}${a.name ? ' · ' + a.name : ''}</div>
+          <div class="alert-msg">${a.msg}</div>
+        </div>
+      </div>`).join('');
+  } else {
+    alertsSection.style.display = 'none';
+  }
+
+  // Platform sections
+  const pSections = document.getElementById('platformSections');
+  pSections.innerHTML = '';
+  const platformOrder = ['meta','google','reddit'];
+  for (const pName of platformOrder) {
+    const pData = data.platforms?.[pName];
+    if (!pData) continue;
+    const campaigns = pData.campaigns || [];
+    const div = document.createElement('div');
+    div.className = 'platform-section';
+    div.innerHTML = `
+      <div class="platform-header">
+        ${platformIcon(pName)}
+        <div class="platform-name">${pName.charAt(0).toUpperCase()+pName.slice(1)} Ads</div>
+        ${pData.ok
+          ? `<span class="conn-ok">✓ Connected · ${campaigns.length} campaign${campaigns.length!==1?'s':''}</span>`
+          : `<span class="conn-err">✗ Error: ${pData.error||'unknown'}</span>`}
+      </div>
+      ${campaigns.length ? `
+      <table class="campaign-table">
+        <thead>
+          <tr>
+            <th>Campaign</th>
+            <th>Status</th>
+            <th>Spend Today</th>
+            <th>Impressions</th>
+            <th>Clicks</th>
+            <th>Conversions</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${campaigns.map(c => `
+          <tr>
+            <td style="font-weight:600;max-width:280px">${c.campaign_name||c.external_campaign_id}</td>
+            <td><span class="status-pill ${statusClass(c.status||c.effective_status)}">${(c.status||c.effective_status||'—').toUpperCase()}</span></td>
+            <td>${fmt(c.spend_cents)}</td>
+            <td>${fmtNum(c.impressions)}</td>
+            <td>${fmtNum(c.clicks)}</td>
+            <td>${fmtNum(c.conversions)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>` : `<div class="empty">No campaign data available</div>`}
+    `;
+    pSections.appendChild(div);
+  }
+
+  document.getElementById('loadingScreen').style.display = 'none';
+  document.getElementById('dashboard').style.display = '';
+}
+
+// Auto-refresh every 5 minutes
+setInterval(loadData, 5 * 60 * 1000);
+loadData();
+</script>
+</body>
+</html>
