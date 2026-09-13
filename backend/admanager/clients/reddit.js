@@ -1,15 +1,15 @@
 // ROOK Ad Manager — Reddit Ads API client
 //
-// Uses the Reddit Ads API v2. Requires:
+// Uses the Reddit Ads API v3. Requires:
 //   REDDIT_ADS_CLIENT_ID
 //   REDDIT_ADS_CLIENT_SECRET
 //   REDDIT_ADS_REFRESH_TOKEN   (from OAuth2 authorization_code flow)
-//   REDDIT_ADS_ACCOUNT_ID      (t2_XXXXX format or just the ID)
+//   REDDIT_ADS_ACCOUNT_ID      (a2_XXXXX format)
 //
-// Reddit Ads API docs: https://ads-api.reddit.com/docs/v2/
+// Reddit Ads API docs: https://ads-api.reddit.com/docs/v3/
 // Rate limit: 60 requests/minute per token.
 
-const BASE_URL = "https://ads-api.reddit.com/api/v2.0";
+const BASE_URL = "https://ads-api.reddit.com/api/v3";
 const TOKEN_URL = "https://www.reddit.com/api/v1/access_token";
 const REQUEST_TIMEOUT_MS = 30_000;
 
@@ -40,7 +40,7 @@ async function getAccessToken() {
       headers: {
         Authorization: `Basic ${auth}`,
         "Content-Type": "application/x-www-form-urlencoded",
-        "User-Agent": "ROOK-AdManager/1.0",
+        "User-Agent": "ROOK:AdManager:1.0 (by /u/rookcareers)",
       },
       body: new URLSearchParams({
         grant_type: "refresh_token",
@@ -79,7 +79,7 @@ async function redditGet(path, params = {}) {
     const res = await fetch(url, {
       headers: {
         Authorization: `Bearer ${token}`,
-        "User-Agent": "ROOK-AdManager/1.0",
+        "User-Agent": "ROOK:AdManager:1.0 (by /u/rookcareers)",
         Accept: "application/json",
       },
       signal: controller.signal,
@@ -103,7 +103,7 @@ async function redditPatch(path, body = {}) {
       method: "PATCH",
       headers: {
         Authorization: `Bearer ${token}`,
-        "User-Agent": "ROOK-AdManager/1.0",
+        "User-Agent": "ROOK:AdManager:1.0 (by /u/rookcareers)",
         "Content-Type": "application/json",
       },
       body: JSON.stringify(body),
@@ -121,23 +121,22 @@ async function redditPatch(path, body = {}) {
 
 /**
  * Fetch all campaigns for the account.
+ * v3: GET /ad_accounts/{ad_account_id}/campaigns
  */
 async function fetchCampaigns() {
   const creds = getCredentials();
-  const data = await redditGet(`/accounts/${creds.accountId}/campaigns`);
+  const data = await redditGet(`/ad_accounts/${creds.accountId}/campaigns`);
   return (data.data || []).map(sanitizeResponse);
 }
 
 /**
  * Fetch campaign performance stats for a given date range.
- * @param {string} campaignId
- * @param {string} startDate  YYYY-MM-DD
- * @param {string} endDate    YYYY-MM-DD
+ * v3: GET /ad_accounts/{ad_account_id}/campaigns/{campaign_id}/reports
  */
 async function fetchCampaignStats(campaignId, startDate, endDate) {
   const creds = getCredentials();
   try {
-    const data = await redditGet(`/accounts/${creds.accountId}/campaigns/${campaignId}/stats`, {
+    const data = await redditGet(`/ad_accounts/${creds.accountId}/campaigns/${campaignId}/reports`, {
       start_date: startDate,
       end_date: endDate,
       interval: "day",
@@ -155,7 +154,7 @@ async function fetchCampaignPerformance() {
   const creds = getCredentials();
   const today = new Date().toISOString().slice(0, 10);
 
-  const campaignsData = await redditGet(`/accounts/${creds.accountId}/campaigns`);
+  const campaignsData = await redditGet(`/ad_accounts/${creds.accountId}/campaigns`);
   const campaigns = campaignsData.data || [];
 
   const results = await Promise.all(campaigns.map(async (c) => {
@@ -176,7 +175,7 @@ async function fetchCampaignPerformance() {
       objective: c.objective || "",
       start_date: c.start_date || null,
       end_date: c.end_date || null,
-      daily_budget_cents: c.daily_budget_cents || (c.total_budget_cents ? null : null),
+      daily_budget_cents: c.daily_budget_cents || null,
       total_budget_cents: c.total_budget_cents || null,
       spend_cents: spendCents,
       impressions: Number(statsData.impressions || 0),
@@ -191,12 +190,12 @@ async function fetchCampaignPerformance() {
 
 /**
  * Update campaign daily budget.
- * Reddit API uses cents for budget values.
+ * v3: PATCH /ad_accounts/{ad_account_id}/campaigns/{campaign_id}
  */
 async function setCampaignBudget(campaignId, newDailyBudgetCents) {
   const creds = getCredentials();
   const result = await redditPatch(
-    `/accounts/${creds.accountId}/campaigns/${campaignId}`,
+    `/ad_accounts/${creds.accountId}/campaigns/${campaignId}`,
     { daily_budget_cents: newDailyBudgetCents }
   );
   return sanitizeResponse(result);
@@ -204,22 +203,27 @@ async function setCampaignBudget(campaignId, newDailyBudgetCents) {
 
 /**
  * Pause or activate a campaign.
+ * v3: PATCH /ad_accounts/{ad_account_id}/campaigns/{campaign_id}
  * @param {'PAUSED'|'ACTIVE'} newStatus
  */
 async function setCampaignStatus(campaignId, newStatus) {
   const creds = getCredentials();
   const result = await redditPatch(
-    `/accounts/${creds.accountId}/campaigns/${campaignId}`,
+    `/ad_accounts/${creds.accountId}/campaigns/${campaignId}`,
     { status: newStatus }
   );
   return sanitizeResponse(result);
 }
 
+/**
+ * Test connection.
+ * v3: GET /ad_accounts/{ad_account_id}
+ */
 async function testConnection() {
   try {
     const creds = getCredentials();
-    const data = await redditGet(`/accounts/${creds.accountId}`);
-    return { ok: true, account_name: data?.data?.name || creds.accountId };
+    const data = await redditGet(`/ad_accounts/${creds.accountId}`);
+    return { ok: true, account_name: data?.data?.name || data?.name || creds.accountId };
   } catch (err) {
     return { ok: false, error: err.message };
   }
