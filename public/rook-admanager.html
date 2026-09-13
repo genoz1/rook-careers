@@ -197,7 +197,7 @@ input:checked + .slider:before{transform:translateX(16px)}
       <strong style="color:var(--ink)">Scale up (+20%):</strong> When CPA &lt; $14 (70% of target) — campaign is profitable, give it more budget.<br>
       <strong style="color:var(--ink)">Scale down (−15%):</strong> When CTR &lt; 0.1% with 5,000+ impressions — creative fatigue, reduce waste.<br>
       <strong style="color:var(--ink)">Recommend pause:</strong> When CPA &gt; $60 (3× target) — spending too much per conversion, flag for review.<br>
-      <strong style="color:var(--ink)">Combined cap:</strong> No single campaign exceeds $25/day. Total across all platforms capped at $100/day.<br>
+      <strong style="color:var(--ink)">Combined cap:</strong> Total daily budget across all campaigns is $25/day. App can shift up to 20% ($5) between campaigns to follow performance. Hard ceiling is $30/day — never exceeded.<br>
       <strong style="color:var(--ink)">Minimum data:</strong> 20 clicks AND $5 spend required before any budget action fires.<br>
       <strong style="color:var(--ink)">Schedule:</strong> Runs daily at 8 AM ET via DigitalOcean scheduled job (not yet enabled — see below).
     </div>
@@ -490,8 +490,7 @@ function renderConfigFull(cfg) {
     ['AD_BUDGET_SCALE_DOWN_PCT', (cfg.budget_scale_down_pct*100).toFixed(0)+'%', 'How much to reduce budget when CTR is very low.'],
     ['AD_MIN_CLICKS', cfg.min_clicks_for_budget_decision, 'Minimum clicks required before any budget action fires.'],
     ['AD_MIN_SPEND_CENTS', fmtD(cfg.min_spend_cents_for_decision), 'Minimum spend required before any budget action fires.'],
-    ['AD_TOTAL_DAILY_BUDGET_CAP_CENTS', fmtD(cfg.total_daily_budget_cap_cents), 'Maximum combined daily budget across all platforms.'],
-    ['AD_COMBINED_DAILY_BUDGET_CENTS', '$25.00', 'Maximum daily budget for any single campaign.'],
+    ['AD_COMBINED_DAILY_BUDGET_CENTS', fmtD(cfg.total_daily_budget_cap_cents), 'Total daily budget across ALL campaigns combined ($25/day). App can shift up to 20% ($5) between campaigns. Hard ceiling is $30/day.'],
     ['AD_MANAGER_MODE', 'dry-run / write / off', 'Operating mode. Keep dry-run until ready to activate write mode.'],
   ];
   document.getElementById('configTable').innerHTML = vars.map(([k,v,d])=>`<tr><td><code style="font-size:11px;background:#f1f5f9;padding:2px 6px;border-radius:4px">${k}</code></td><td style="font-weight:600">${v}</td><td style="color:var(--muted)">${d}</td></tr>`).join('');
