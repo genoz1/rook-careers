@@ -485,7 +485,7 @@ function scoreJob(job, profile) {
     if (matchedIndustry) {
       reasons.push(`Matches your interest in ${matchedIndustry}`);
     } else {
-      prefScore -= 10;
+      prefScore -= 20;
       concerns.push("Industry may not match your stated preference");
     }
   }
