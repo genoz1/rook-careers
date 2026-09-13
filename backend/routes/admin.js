@@ -181,7 +181,130 @@ router.get("/admin/employers", requireConfig, requireAuth, requireAdmin, async (
   res.json(data);
 });
 
-// GET /api/admin/admanager/dashboard?token=...
+// POST /api/admin/admanager/import?token=...
+// Imports all live campaigns into ad_campaign_controls.
+// ON CONFLICT DO NOTHING — never overwrites existing rows.
+// Sets desired_state from actual platform status. approved_for_automation=false always.
+router.post("/admin/admanager/import", async (req, res) => {
+  const expectedToken = process.env.AD_MANAGER_TEST_TOKEN;
+  if (!expectedToken || req.query.token !== expectedToken) return res.status(401).json({ error: "unauthorized" });
+
+  const enabled = (process.env.AD_ENABLED_PLATFORMS || "").split(",").map(p => p.trim()).filter(Boolean);
+  const imported = [], skipped = [], errors = [];
+
+  const activeStatuses = ["active","enabled","ACTIVE","ENABLED"];
+
+  const importCampaigns = async (platformName, campaigns) => {
+    for (const c of campaigns) {
+      const desired = activeStatuses.includes(c.status || c.effective_status) ? "active" : "paused";
+      const row = {
+        platform: platformName,
+        external_campaign_id: String(c.external_campaign_id),
+        campaign_name: c.campaign_name || "",
+        desired_state: desired,
+        approved_for_automation: false,
+        destination_url: "https://rookcareers.com/rook-onboarding-v4.html",
+        min_daily_budget_cents: 500,
+        max_daily_budget_cents: 2500,
+        notes: `Auto-imported ${new Date().toISOString().slice(0,10)}. Budget: ${c.budget_cents ? "$"+(c.budget_cents/100).toFixed(2)+"/day" : "unknown"}`,
+      };
+      const { error } = await supabaseAdmin.from("ad_campaign_controls").insert(row);
+      if (error) {
+        if (error.code === "23505") skipped.push({ platform: platformName, id: c.external_campaign_id, name: c.campaign_name });
+        else errors.push({ platform: platformName, id: c.external_campaign_id, error: error.message });
+      } else {
+        imported.push({ platform: platformName, id: c.external_campaign_id, name: c.campaign_name, desired_state: desired });
+      }
+    }
+  };
+
+  try {
+    if (enabled.includes("meta") && process.env.META_ADS_ACCESS_TOKEN) {
+      const camps = await require("../admanager/clients/meta").fetchCampaignPerformance("today");
+      await importCampaigns("meta", camps);
+    }
+    if (enabled.includes("google") && process.env.GOOGLE_ADS_CUSTOMER_ID) {
+      const camps = await require("../admanager/clients/google").fetchCampaignPerformance();
+      await importCampaigns("google", camps);
+    }
+    if (enabled.includes("reddit") && process.env.REDDIT_ADS_ACCOUNT_ID) {
+      const camps = await require("../admanager/clients/reddit").fetchCampaignPerformance();
+      await importCampaigns("reddit", camps);
+    }
+  } catch(err) {
+    errors.push({ platform: "unknown", error: err.message });
+  }
+
+  return res.json({ imported, skipped, errors });
+});
+
+// GET /api/admin/admanager/controls?token=...
+router.get("/admin/admanager/controls", async (req, res) => {
+  const expectedToken = process.env.AD_MANAGER_TEST_TOKEN;
+  if (!expectedToken || req.query.token !== expectedToken) return res.status(401).json({ error: "unauthorized" });
+  const { data, error } = await supabaseAdmin.from("ad_campaign_controls").select("*").order("platform").order("campaign_name");
+  if (error) return res.status(500).json({ error: error.message });
+  return res.json({ controls: data || [] });
+});
+
+// PATCH /api/admin/admanager/controls/:id?token=...
+// Only allows safe fields — never enables write mode or changes platform credentials.
+router.patch("/admin/admanager/controls/:id", async (req, res) => {
+  const expectedToken = process.env.AD_MANAGER_TEST_TOKEN;
+  if (!expectedToken || req.query.token !== expectedToken) return res.status(401).json({ error: "unauthorized" });
+  const allowed = ["campaign_name","desired_state","approved_for_automation","min_daily_budget_cents","max_daily_budget_cents","destination_url","notes"];
+  const update = {};
+  for (const k of allowed) { if (req.body[k] !== undefined) update[k] = req.body[k]; }
+  update.updated_at = new Date().toISOString();
+  const { data, error } = await supabaseAdmin.from("ad_campaign_controls").update(update).eq("id", req.params.id).select().single();
+  if (error) return res.status(500).json({ error: error.message });
+  return res.json({ control: data });
+});
+
+// GET /api/admin/admanager/dryrun?token=...
+// Runs the full policy engine against today's live data and returns proposed actions.
+router.get("/admin/admanager/dryrun", async (req, res) => {
+  const expectedToken = process.env.AD_MANAGER_TEST_TOKEN;
+  if (!expectedToken || req.query.token !== expectedToken) return res.status(401).json({ error: "unauthorized" });
+
+  const policy = require("../admanager/policy");
+  const enabled = (process.env.AD_ENABLED_PLATFORMS || "").split(",").map(p => p.trim()).filter(Boolean);
+  const results = [];
+
+  const { data: controls } = await supabaseAdmin.from("ad_campaign_controls").select("*");
+  const controlMap = new Map((controls||[]).map(c => [`${c.platform}:${c.external_campaign_id}`, c]));
+
+  const evalPlatform = async (name, fetchFn) => {
+    try {
+      const campaigns = await fetchFn();
+      for (const c of campaigns) {
+        const ctrl = controlMap.get(`${name}:${c.external_campaign_id}`);
+        const alerts = policy.evaluateAlerts(c, ctrl || { desired_state: "active", destination_url: "https://rookcareers.com/rook-onboarding-v4.html" });
+        const actions = ctrl ? policy.evaluateBudgetPolicy(c, ctrl) : [{ action_type: "skip_no_controls", reason: "No controls row — import campaigns first" }];
+        results.push({ platform: name, campaign_id: c.external_campaign_id, campaign_name: c.campaign_name,
+          status: c.status, spend_cents: c.spend_cents, impressions: c.impressions, clicks: c.clicks,
+          conversions: c.conversions, budget_cents: c.budget_cents,
+          has_controls: !!ctrl, approved_for_automation: ctrl?.approved_for_automation || false,
+          alerts, actions });
+      }
+    } catch(err) {
+      results.push({ platform: name, error: err.message });
+    }
+  };
+
+  if (enabled.includes("meta") && process.env.META_ADS_ACCESS_TOKEN)
+    await evalPlatform("meta", () => require("../admanager/clients/meta").fetchCampaignPerformance("today"));
+  if (enabled.includes("google") && process.env.GOOGLE_ADS_CUSTOMER_ID)
+    await evalPlatform("google", () => require("../admanager/clients/google").fetchCampaignPerformance());
+  if (enabled.includes("reddit") && process.env.REDDIT_ADS_ACCOUNT_ID)
+    await evalPlatform("reddit", () => require("../admanager/clients/reddit").fetchCampaignPerformance());
+
+  const config = policy.CONFIG;
+  return res.json({ dry_run: true, mode: process.env.AD_MANAGER_MODE || "off", config, results, generated_at: new Date().toISOString() });
+});
+
+module.exports = router;
+
 // Returns live campaign data from all configured platforms for the dashboard.
 router.get("/admin/admanager/dashboard", async (req, res) => {
   const expectedToken = process.env.AD_MANAGER_TEST_TOKEN;

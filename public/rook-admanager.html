@@ -5,293 +5,574 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ROOK — Ad Manager</title>
 <link rel="icon" href="assets/favicon.ico">
-<link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-:root{--navy:#062d55;--blue:#0877d1;--green:#1a7a50;--red:#c0392b;--yellow:#d97706;--muted:#587283;--line:#dbe8f0;--ink:#0d2035;--bg:#f4f9fd;--paper:#fff;--radius:14px}
-body{font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh}
-.topbar{background:var(--navy);padding:14px 28px;display:flex;align-items:center;justify-content:space-between}
-.brand{display:flex;align-items:center;gap:10px;color:#fff;font-size:17px;font-weight:900;letter-spacing:.08em}
-.rookmark{width:30px;height:30px;border-radius:9px;background:linear-gradient(145deg,#0c4a8a,var(--blue));color:#fff;display:grid;place-items:center;font-family:Georgia,serif;font-size:17px}
-.mode-badge{font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;letter-spacing:.05em}
+:root{--navy:#062d55;--blue:#0877d1;--green:#1a7a50;--red:#c0392b;--yellow:#d97706;--muted:#587283;--line:#dbe8f0;--ink:#0d2035;--bg:#f4f9fd;--paper:#fff;--radius:12px}
+body{font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--ink);font-size:14px}
+.topbar{background:var(--navy);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+.brand{display:flex;align-items:center;gap:9px;color:#fff;font-size:15px;font-weight:900;letter-spacing:.08em}
+.rookmark{width:26px;height:26px;border-radius:7px;background:linear-gradient(145deg,#0c4a8a,var(--blue));color:#fff;display:grid;place-items:center;font-family:Georgia,serif;font-size:15px}
+.topnav{display:flex;gap:4px}
+.tab{padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;color:rgba(255,255,255,.6);background:none;border:none}
+.tab.active,.tab:hover{color:#fff;background:rgba(255,255,255,.12)}
+.mode-badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;letter-spacing:.05em}
 .mode-dry{background:rgba(255,193,7,.2);color:#ffc107}
-.mode-live{background:rgba(26,122,80,.2);color:#2ecc71}
+.mode-live{background:rgba(26,122,80,.25);color:#2ecc71}
 .mode-off{background:rgba(255,255,255,.1);color:#aaa}
-.shell{max-width:1100px;margin:0 auto;padding:24px 20px}
-.page-title{font-size:22px;font-weight:900;color:var(--navy);margin-bottom:4px}
-.page-sub{font-size:13px;color:var(--muted);margin-bottom:24px}
-.login-box{background:var(--paper);border:1.5px solid var(--line);border-radius:var(--radius);padding:32px;max-width:400px;margin:60px auto}
-.login-box h2{font-size:20px;font-weight:800;margin-bottom:16px;color:var(--navy)}
-.field{margin-bottom:14px}
-.field label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:5px}
-.field input{width:100%;padding:11px 13px;border:1.5px solid var(--line);border-radius:10px;font:inherit;font-size:14px;background:var(--bg);color:var(--ink);outline:none}
+.shell{max-width:1200px;margin:0 auto;padding:20px}
+.page{display:none}.page.active{display:block}
+
+/* login */
+.login-wrap{display:flex;justify-content:center;padding:80px 20px}
+.login-box{background:var(--paper);border:1.5px solid var(--line);border-radius:var(--radius);padding:32px;width:380px}
+.login-box h2{font-size:18px;font-weight:800;color:var(--navy);margin-bottom:18px}
+.field{margin-bottom:13px}
+.field label{display:block;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em}
+.field input{width:100%;padding:10px 12px;border:1.5px solid var(--line);border-radius:9px;font:inherit;font-size:14px;background:var(--bg);color:var(--ink);outline:none}
 .field input:focus{border-color:var(--blue)}
-.btn{display:block;width:100%;padding:12px;border:none;border-radius:10px;background:linear-gradient(110deg,var(--navy),var(--blue));color:#fff;font:inherit;font-size:14px;font-weight:700;cursor:pointer}
-.err{color:var(--red);font-size:13px;margin-top:8px;text-align:center}
-.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px}
-.stat-card{background:var(--paper);border:1.5px solid var(--line);border-radius:var(--radius);padding:18px}
-.stat-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:6px}
-.stat-value{font-size:28px;font-weight:900;color:var(--navy);line-height:1}
-.stat-sub{font-size:12px;color:var(--muted);margin-top:4px}
-.platform-section{margin-bottom:28px}
-.platform-header{display:flex;align-items:center;gap:10px;margin-bottom:12px}
-.platform-name{font-size:15px;font-weight:800;color:var(--navy)}
-.platform-icon{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-size:14px;font-weight:900;color:#fff;flex-shrink:0}
-.icon-meta{background:#1877f2}
-.icon-google{background:#ea4335}
-.icon-reddit{background:#ff4500}
-.conn-ok{font-size:12px;color:var(--green);font-weight:600}
-.conn-err{font-size:12px;color:var(--red);font-weight:600}
-.campaign-table{width:100%;border-collapse:collapse;background:var(--paper);border-radius:var(--radius);overflow:hidden;border:1.5px solid var(--line)}
-.campaign-table th{background:#f8fbfd;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:10px 14px;text-align:left;border-bottom:1.5px solid var(--line)}
-.campaign-table td{padding:12px 14px;font-size:13px;border-bottom:1px solid var(--line);vertical-align:middle}
-.campaign-table tr:last-child td{border-bottom:none}
-.campaign-table tr:hover td{background:#f8fbfd}
-.status-pill{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.04em}
-.status-active,.status-enabled{background:#eef7f1;color:#1a6b40}
-.status-paused{background:#fef3cd;color:#92600a}
-.status-removed,.status-archived{background:#fde8e8;color:var(--red)}
-.alert-row{background:var(--paper);border:1.5px solid var(--line);border-radius:var(--radius);padding:14px 16px;margin-bottom:8px;display:flex;align-items:flex-start;gap:12px}
-.alert-critical{border-left:4px solid var(--red)}
-.alert-warning{border-left:4px solid var(--yellow)}
-.alert-icon{font-size:16px;flex-shrink:0;margin-top:1px}
+.btn{padding:10px 18px;border:none;border-radius:9px;font:inherit;font-size:13px;font-weight:700;cursor:pointer}
+.btn-primary{background:linear-gradient(110deg,var(--navy),var(--blue));color:#fff}
+.btn-sm{font-size:12px;padding:5px 12px}
+.btn-ghost{background:var(--bg);color:var(--navy);border:1.5px solid var(--line)}
+.btn-danger{background:#fde8e8;color:var(--red);border:1.5px solid #f5c0c0}
+.btn-success{background:#eef7f1;color:var(--green);border:1.5px solid #b8dfc8}
+.err{color:var(--red);font-size:12px;margin-top:8px;text-align:center}
+
+/* stat cards */
+.stats-row{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px}
+.stat{background:var(--paper);border:1.5px solid var(--line);border-radius:var(--radius);padding:16px}
+.stat-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:5px}
+.stat-val{font-size:24px;font-weight:900;color:var(--navy);line-height:1}
+.stat-sub{font-size:11px;color:var(--muted);margin-top:3px}
+
+/* section */
+.section{background:var(--paper);border:1.5px solid var(--line);border-radius:var(--radius);margin-bottom:16px;overflow:hidden}
+.section-hd{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}
+.section-title{font-size:13px;font-weight:800;color:var(--navy)}
+.section-body{padding:16px}
+
+/* table */
+table{width:100%;border-collapse:collapse}
+th{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:8px 10px;text-align:left;border-bottom:1.5px solid var(--line);white-space:nowrap}
+td{padding:10px 10px;border-bottom:1px solid var(--line);vertical-align:middle;font-size:13px}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#f8fbfd}
+
+/* pills */
+.pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+.pill-active,.pill-enabled{background:#eef7f1;color:#1a6b40}
+.pill-paused{background:#fef3cd;color:#92600a}
+.pill-removed,.pill-archived{background:#fde8e8;color:var(--red)}
+.pill-dryrun{background:#e8f0fe;color:#1a56db}
+.pill-skip{background:#f5f5f5;color:#888}
+
+/* alerts */
+.alert-box{border-radius:10px;padding:11px 14px;margin-bottom:8px;display:flex;gap:10px;align-items:flex-start;border-left:4px solid}
+.alert-critical{background:#fde8e8;border-color:var(--red)}
+.alert-warning{background:#fef3cd;border-color:var(--yellow)}
+.alert-info{background:#e8f0fe;border-color:var(--blue)}
 .alert-body{flex:1}
-.alert-title{font-size:13px;font-weight:700;color:var(--ink);margin-bottom:2px}
+.alert-title{font-weight:700;font-size:12px;margin-bottom:2px}
 .alert-msg{font-size:12px;color:var(--muted)}
-.refresh-btn{font-size:12px;font-weight:600;color:var(--blue);background:none;border:none;cursor:pointer;padding:0}
+
+/* action rows */
+.action-row{border-radius:9px;padding:10px 13px;margin-bottom:7px;border:1.5px solid}
+.action-increase{background:#eef7f1;border-color:#b8dfc8}
+.action-decrease{background:#fef3cd;border-color:#f5d68a}
+.action-pause{background:#fde8e8;border-color:#f5c0c0}
+.action-skip{background:#f8fbfd;border-color:var(--line)}
+.action-noaction{background:#f8fbfd;border-color:var(--line)}
+
+/* config block */
+.config-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.config-item{background:#f8fbfd;border-radius:9px;padding:12px 14px}
+.config-key{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
+.config-val{font-size:16px;font-weight:800;color:var(--navy)}
+
+/* editable input in table */
+.inline-input{width:80px;padding:4px 7px;border:1.5px solid var(--line);border-radius:6px;font:inherit;font-size:12px;text-align:right}
+.inline-input:focus{border-color:var(--blue);outline:none}
+.toggle{position:relative;display:inline-block;width:36px;height:20px}
+.toggle input{opacity:0;width:0;height:0}
+.slider{position:absolute;inset:0;background:#dbe8f0;border-radius:20px;cursor:pointer;transition:.2s}
+.slider:before{content:"";position:absolute;height:14px;width:14px;left:3px;bottom:3px;background:white;border-radius:50%;transition:.2s}
+input:checked + .slider{background:var(--green)}
+input:checked + .slider:before{transform:translateX(16px)}
+
+.platform-icon{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:5px;font-size:11px;font-weight:900;color:#fff;margin-right:6px;vertical-align:middle}
+.pi-meta{background:#1877f2}.pi-google{background:#ea4335}.pi-reddit{background:#ff4500}
+
+.empty{color:var(--muted);text-align:center;padding:32px;font-size:13px}
+.loading{color:var(--muted);padding:20px;font-size:12px}
+.refresh-btn{font-size:11px;font-weight:600;color:var(--blue);background:none;border:none;cursor:pointer;padding:0}
 .refresh-btn:hover{text-decoration:underline}
-.fetched-at{font-size:12px;color:var(--muted);margin-left:auto}
-.section-header{display:flex;align-items:center;margin-bottom:12px;gap:12px}
-.section-title{font-size:15px;font-weight:800;color:var(--navy)}
-.empty{font-size:13px;color:var(--muted);padding:20px;text-align:center}
-.loading{text-align:center;padding:60px;color:var(--muted);font-size:14px}
-@media(max-width:700px){.stats-row{grid-template-columns:1fr 1fr}}
+.ts{font-size:11px;color:var(--muted)}
+.banner{border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:12px;font-weight:600;display:flex;align-items:center;gap:8px}
+.banner-info{background:#e8f0fe;color:#1a56db}
+.banner-warn{background:#fef3cd;color:#92600a}
+
+@media(max-width:800px){.stats-row{grid-template-columns:1fr 1fr}.config-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 
 <div class="topbar">
-  <div class="brand"><div class="rookmark">♜</div> ROOK · Ad Manager</div>
-  <span id="modeBadge" class="mode-badge mode-off">Loading…</span>
+  <div class="brand"><div class="rookmark">♜</div> ROOK Ad Manager</div>
+  <div class="topnav" id="topnav" style="display:none">
+    <button class="tab active" onclick="showPage('overview')">Overview</button>
+    <button class="tab" onclick="showPage('dryrun')">Dry Run</button>
+    <button class="tab" onclick="showPage('controls')">Campaign Controls</button>
+    <button class="tab" onclick="showPage('config')">Policy Config</button>
+  </div>
+  <span id="modeBadge" class="mode-badge mode-off">—</span>
 </div>
 
-<div id="loginScreen" class="shell" style="display:none">
+<!-- LOGIN -->
+<div id="loginWrap" class="login-wrap">
   <div class="login-box">
-    <h2>Ad Manager Access</h2>
-    <div class="field">
-      <label>Access Token</label>
-      <input type="password" id="tokenInput" placeholder="Enter your AD_MANAGER_TEST_TOKEN" autocomplete="off">
-    </div>
-    <button class="btn" onclick="login()">Sign in</button>
+    <h2>Ad Manager</h2>
+    <div class="field"><label>Access Token</label><input type="password" id="tokenInput" placeholder="AD_MANAGER_TEST_TOKEN" autocomplete="off" onkeydown="if(event.key==='Enter')login()"></div>
+    <button class="btn btn-primary" style="width:100%" onclick="login()">Sign in</button>
     <div class="err" id="loginErr"></div>
   </div>
 </div>
 
-<div id="dashboard" class="shell" style="display:none">
-  <div style="display:flex;align-items:center;margin-bottom:4px">
-    <div class="page-title">Advertising Dashboard</div>
-    <span class="fetched-at" id="fetchedAt"></span>
-  </div>
-  <div style="display:flex;align-items:center;gap:12px;margin-bottom:24px">
-    <div class="page-sub" style="margin:0">Live campaign data across all platforms</div>
-    <button class="refresh-btn" onclick="loadData()">↻ Refresh</button>
+<!-- MAIN -->
+<div id="main" style="display:none">
+<div class="shell">
+
+<!-- OVERVIEW -->
+<div id="page-overview" class="page active">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+    <div>
+      <div style="font-size:18px;font-weight:900;color:var(--navy)">Advertising Overview</div>
+      <div class="ts" id="overviewTs"></div>
+    </div>
+    <button class="refresh-btn" onclick="loadAll()">↻ Refresh</button>
   </div>
 
-  <!-- Summary stats -->
   <div class="stats-row">
-    <div class="stat-card"><div class="stat-label">Total Spend Today</div><div class="stat-value" id="totalSpend">—</div><div class="stat-sub">across all platforms</div></div>
-    <div class="stat-card"><div class="stat-label">Impressions</div><div class="stat-value" id="totalImpressions">—</div><div class="stat-sub">today</div></div>
-    <div class="stat-card"><div class="stat-label">Clicks</div><div class="stat-value" id="totalClicks">—</div><div class="stat-sub">today</div></div>
-    <div class="stat-card"><div class="stat-label">Active Campaigns</div><div class="stat-value" id="activeCampaigns">—</div><div class="stat-sub">across all platforms</div></div>
+    <div class="stat"><div class="stat-label">Spend Today</div><div class="stat-val" id="s-spend">—</div><div class="stat-sub">all platforms</div></div>
+    <div class="stat"><div class="stat-label">Impressions</div><div class="stat-val" id="s-imp">—</div><div class="stat-sub">today</div></div>
+    <div class="stat"><div class="stat-label">Clicks</div><div class="stat-val" id="s-clicks">—</div><div class="stat-sub">today</div></div>
+    <div class="stat"><div class="stat-label">Conversions</div><div class="stat-val" id="s-conv">—</div><div class="stat-sub">platform-reported</div></div>
+    <div class="stat"><div class="stat-label">Active Campaigns</div><div class="stat-val" id="s-active">—</div><div class="stat-sub">across platforms</div></div>
   </div>
 
-  <!-- Alerts -->
-  <div id="alertsSection" style="display:none;margin-bottom:24px">
-    <div class="section-header"><div class="section-title">⚠️ Alerts</div></div>
-    <div id="alertsList"></div>
-  </div>
+  <div id="alertsBanner"></div>
 
-  <!-- Platform sections -->
-  <div id="platformSections"></div>
+  <div class="section">
+    <div class="section-hd"><span class="section-title">Campaigns — Live Data</span></div>
+    <table>
+      <thead><tr><th>Platform</th><th>Campaign</th><th>Status</th><th>Spend</th><th>Impressions</th><th>Clicks</th><th>Conversions</th><th>CTR</th><th>CPA</th></tr></thead>
+      <tbody id="overviewTable"><tr><td colspan="9" class="loading">Loading…</td></tr></tbody>
+    </table>
+  </div>
 </div>
 
-<div id="loadingScreen" class="shell loading">Loading…</div>
+<!-- DRY RUN -->
+<div id="page-dryrun" class="page">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+    <div>
+      <div style="font-size:18px;font-weight:900;color:var(--navy)">Dry Run — Proposed Actions</div>
+      <div class="ts" id="dryrunTs"></div>
+    </div>
+    <button class="btn btn-ghost btn-sm" onclick="loadDryrun()">↻ Re-run</button>
+  </div>
+
+  <div class="banner banner-info">⚡ Execution is disabled. These are proposed actions only — nothing will change until you enable write mode and approve automation per campaign.</div>
+
+  <div class="section">
+    <div class="section-hd"><span class="section-title">Policy Engine Config</span></div>
+    <div class="section-body">
+      <div class="config-grid" id="configGrid"><div class="loading">Loading…</div></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-hd"><span class="section-title">Budget Flow — How Money Shifts</span></div>
+    <div class="section-body" style="font-size:13px;color:var(--muted);line-height:1.8">
+      <strong style="color:var(--ink)">Conversion metric:</strong> Platform-reported conversions (signups/onboarding starts attributed to each ad). CPA = spend ÷ conversions.<br>
+      <strong style="color:var(--ink)">Scale up (+20%):</strong> When CPA &lt; $14 (70% of target) — campaign is profitable, give it more budget.<br>
+      <strong style="color:var(--ink)">Scale down (−15%):</strong> When CTR &lt; 0.1% with 5,000+ impressions — creative fatigue, reduce waste.<br>
+      <strong style="color:var(--ink)">Recommend pause:</strong> When CPA &gt; $60 (3× target) — spending too much per conversion, flag for review.<br>
+      <strong style="color:var(--ink)">Combined cap:</strong> No single campaign exceeds $25/day. Total across all platforms capped at $100/day.<br>
+      <strong style="color:var(--ink)">Minimum data:</strong> 20 clicks AND $5 spend required before any budget action fires.<br>
+      <strong style="color:var(--ink)">Schedule:</strong> Runs daily at 8 AM ET via DigitalOcean scheduled job (not yet enabled — see below).
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-hd"><span class="section-title">Proposed Actions per Campaign</span></div>
+    <div class="section-body" id="dryrunResults"><div class="loading">Loading…</div></div>
+  </div>
+
+  <div class="section">
+    <div class="section-hd"><span class="section-title">Schedule — Not Yet Enabled</span></div>
+    <div class="section-body" style="font-size:13px;color:var(--muted);line-height:1.8">
+      To enable the daily budget optimizer, add a DigitalOcean App Platform job:<br><br>
+      <code style="background:#f1f5f9;padding:6px 10px;border-radius:6px;display:inline-block;font-size:12px">node backend/admanager/manager.js</code><br><br>
+      Schedule: <strong style="color:var(--ink)">Daily at 13:00 UTC (8 AM ET)</strong><br>
+      Mode: Keep <code>AD_MANAGER_MODE=dry-run</code> until you've verified a full cycle, then switch to <code>write</code>.<br>
+      Per-campaign automation requires <strong style="color:var(--ink)">approved_for_automation = true</strong> in the controls table — toggle this in Campaign Controls when ready.
+    </div>
+  </div>
+</div>
+
+<!-- CONTROLS -->
+<div id="page-controls" class="page">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+    <div>
+      <div style="font-size:18px;font-weight:900;color:var(--navy)">Campaign Controls</div>
+      <div class="ts">Budget limits and automation approval per campaign</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-ghost btn-sm" onclick="loadControls()">↻ Refresh</button>
+      <button class="btn btn-primary btn-sm" onclick="importCampaigns()">⬇ Import Live Campaigns</button>
+    </div>
+  </div>
+
+  <div class="banner banner-warn" id="importBanner" style="display:none"></div>
+
+  <div class="section">
+    <div class="section-hd">
+      <span class="section-title">Controls — Approval Required Per Campaign</span>
+      <span class="ts">Changes save immediately. Execution remains disabled.</span>
+    </div>
+    <div style="overflow-x:auto">
+    <table>
+      <thead><tr>
+        <th>Platform</th><th>Campaign</th><th>Live Status</th><th>Desired</th>
+        <th>Min Budget/day</th><th>Max Budget/day</th>
+        <th>Auto-Approved</th><th>Notes</th><th></th>
+      </tr></thead>
+      <tbody id="controlsTable"><tr><td colspan="9" class="loading">Loading…</td></tr></tbody>
+    </table>
+    </div>
+  </div>
+</div>
+
+<!-- CONFIG -->
+<div id="page-config" class="page">
+  <div style="font-size:18px;font-weight:900;color:var(--navy);margin-bottom:4px">Policy Configuration</div>
+  <div class="ts" style="margin-bottom:16px">Read from environment variables. Change in DigitalOcean App Platform → Settings → Environment Variables.</div>
+
+  <div class="section">
+    <div class="section-hd"><span class="section-title">Current Values</span></div>
+    <div class="section-body"><div class="config-grid" id="configGridFull"><div class="loading">Loading…</div></div></div>
+  </div>
+
+  <div class="section">
+    <div class="section-hd"><span class="section-title">Environment Variable Reference</span></div>
+    <div class="section-body">
+    <table>
+      <thead><tr><th>Variable</th><th>Current (approx)</th><th>Description</th></tr></thead>
+      <tbody id="configTable"><tr><td colspan="3" class="loading">Loading…</td></tr></tbody>
+    </table>
+    </div>
+  </div>
+</div>
+
+</div><!-- /shell -->
+</div><!-- /main -->
 
 <script>
-const TOKEN_KEY = 'rook_admanager_token';
+const TOKEN_KEY = 'rook_adm_tok';
 let token = sessionStorage.getItem(TOKEN_KEY) || '';
+let dashData = null, dryrunData = null, controlsData = null;
 
+// ── Auth ──────────────────────────────────────────────────────────────────
 function login() {
   token = document.getElementById('tokenInput').value.trim();
   if (!token) return;
-  document.getElementById('loginErr').textContent = '';
-  loadData();
+  sessionStorage.setItem(TOKEN_KEY, token);
+  init();
 }
 
-function fmt(cents) {
-  if (cents == null || cents === 0) return '$0.00';
-  return '$' + (cents / 100).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+async function init() {
+  if (!token) { showLogin(); return; }
+  document.getElementById('loginWrap').style.display = 'none';
+  document.getElementById('main').style.display = '';
+  document.getElementById('topnav').style.display = '';
+  await loadAll();
 }
-function fmtNum(n) {
-  if (n == null) return '0';
-  return Number(n).toLocaleString('en-US');
+
+function showLogin() {
+  document.getElementById('loginWrap').style.display = 'flex';
+  document.getElementById('main').style.display = 'none';
+  document.getElementById('topnav').style.display = 'none';
 }
-function statusClass(s) {
-  const lower = (s||'').toLowerCase();
-  if (lower === 'active' || lower === 'enabled') return 'status-active';
-  if (lower === 'paused') return 'status-paused';
-  return 'status-removed';
+
+// ── Navigation ────────────────────────────────────────────────────────────
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  event.target.classList.add('active');
+  if (name === 'dryrun' && !dryrunData) loadDryrun();
+  if (name === 'controls' && !controlsData) loadControls();
+  if (name === 'config' && dryrunData) renderConfig(dryrunData.config);
+}
+
+// ── API ───────────────────────────────────────────────────────────────────
+async function api(path) {
+  const r = await fetch('/api/admin/admanager/' + path + '?token=' + encodeURIComponent(token));
+  if (r.status === 401) { sessionStorage.removeItem(TOKEN_KEY); token=''; showLogin(); throw new Error('unauthorized'); }
+  return r.json();
+}
+async function apiPost(path, body) {
+  const r = await fetch('/api/admin/admanager/' + path + '?token=' + encodeURIComponent(token), { method:'POST', headers:{'Content-Type':'application/json'}, body: body ? JSON.stringify(body) : undefined });
+  if (r.status === 401) { sessionStorage.removeItem(TOKEN_KEY); token=''; showLogin(); throw new Error('unauthorized'); }
+  return r.json();
+}
+async function apiPatch(path, body) {
+  const r = await fetch('/api/admin/admanager/' + path + '?token=' + encodeURIComponent(token), { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  return r.json();
+}
+
+// ── Formatters ────────────────────────────────────────────────────────────
+const fmtD = c => c == null ? '—' : '$' + (c/100).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+const fmtN = n => n == null ? '—' : Number(n).toLocaleString('en-US');
+const ctr = (cl, im) => im > 0 ? ((cl/im)*100).toFixed(2)+'%' : '—';
+const cpa = (sp, cv) => cv > 0 ? fmtD(Math.round(sp/cv)) : '—';
+function pillFor(s) {
+  const l = (s||'').toLowerCase();
+  const cls = l === 'active' || l === 'enabled' ? 'pill-active' : l === 'paused' ? 'pill-paused' : 'pill-removed';
+  return `<span class="pill ${cls}">${s||'—'}</span>`;
 }
 function platformIcon(p) {
-  if (p === 'meta') return '<div class="platform-icon icon-meta">f</div>';
-  if (p === 'google') return '<div class="platform-icon icon-google">G</div>';
-  if (p === 'reddit') return '<div class="platform-icon icon-reddit">R</div>';
-  return '<div class="platform-icon" style="background:#888">?</div>';
+  const cls = p === 'meta' ? 'pi-meta' : p === 'google' ? 'pi-google' : 'pi-reddit';
+  const lbl = p === 'meta' ? 'f' : p === 'google' ? 'G' : 'R';
+  return `<span class="platform-icon ${cls}">${lbl}</span>`;
 }
 
-function detectAlerts(platforms) {
-  const alerts = [];
-  for (const [pName, pData] of Object.entries(platforms||{})) {
-    if (!pData?.ok) { alerts.push({type:'critical',platform:pName,msg:'Platform fetch failed: '+(pData?.error||'unknown')}); continue; }
-    for (const c of (pData.campaigns||[])) {
-      const st = (c.status||c.effective_status||'').toLowerCase();
-      if (c.spend_cents === 0 && (st === 'active' || st === 'enabled')) {
-        alerts.push({type:'warning',platform:pName,name:c.campaign_name,msg:'$0 spend today — check budget and targeting'});
-      }
-      if (st === 'paused') {
-        alerts.push({type:'warning',platform:pName,name:c.campaign_name,msg:'Campaign is paused'});
-      }
-    }
-  }
-  return alerts;
-}
-
-async function loadData() {
-  if (!token) {
-    document.getElementById('loadingScreen').style.display = 'none';
-    document.getElementById('loginScreen').style.display = '';
-    document.getElementById('dashboard').style.display = 'none';
-    return;
-  }
-  document.getElementById('loadingScreen').style.display = '';
-  document.getElementById('loginScreen').style.display = 'none';
-  document.getElementById('dashboard').style.display = 'none';
-
+// ── Load all ──────────────────────────────────────────────────────────────
+async function loadAll() {
   try {
-    const res = await fetch('/api/admin/admanager/dashboard?token=' + encodeURIComponent(token));
-    if (res.status === 401) {
-      sessionStorage.removeItem(TOKEN_KEY);
-      token = '';
-      document.getElementById('loadingScreen').style.display = 'none';
-      document.getElementById('loginScreen').style.display = '';
-      document.getElementById('loginErr').textContent = 'Invalid token.';
-      return;
-    }
-    const data = await res.json();
-    sessionStorage.setItem(TOKEN_KEY, token);
-    renderDashboard(data);
-  } catch(err) {
-    document.getElementById('loadingScreen').textContent = 'Error loading data: ' + err.message;
-  }
+    dashData = await api('dashboard');
+    renderOverview(dashData);
+    if (dryrunData) {} // don't auto-reload dryrun
+    if (controlsData) loadControls();
+  } catch(e) { if (e.message !== 'unauthorized') console.error(e); }
 }
 
-function renderDashboard(data) {
-  // Mode badge
+// ── Overview ──────────────────────────────────────────────────────────────
+function renderOverview(data) {
   const badge = document.getElementById('modeBadge');
   badge.textContent = (data.mode||'off').toUpperCase();
-  badge.className = 'mode-badge ' + (data.mode === 'live' ? 'mode-live' : data.mode === 'dry-run' ? 'mode-dry' : 'mode-off');
+  badge.className = 'mode-badge ' + (data.mode==='live'?'mode-live':data.mode==='dry-run'?'mode-dry':'mode-off');
+  document.getElementById('overviewTs').textContent = 'Updated ' + new Date(data.fetched_at).toLocaleTimeString();
 
-  // Fetched at
-  document.getElementById('fetchedAt').textContent = 'Updated ' + new Date(data.fetched_at).toLocaleTimeString();
-
-  // Totals
-  let totalSpend = 0, totalImpressions = 0, totalClicks = 0, activeCampaigns = 0;
-  for (const pData of Object.values(data.platforms||{})) {
-    for (const c of (pData?.campaigns||[])) {
-      totalSpend += c.spend_cents || 0;
-      totalImpressions += c.impressions || 0;
-      totalClicks += c.clicks || 0;
+  let spend=0, imp=0, clicks=0, conv=0, active=0;
+  const rows = [];
+  for (const [pName, pData] of Object.entries(data.platforms||{})) {
+    if (!pData?.ok) { rows.push(`<tr><td colspan="9" style="color:var(--red);padding:10px">${pName} error: ${pData?.error}</td></tr>`); continue; }
+    for (const c of (pData.campaigns||[])) {
+      spend += c.spend_cents||0; imp += c.impressions||0; clicks += c.clicks||0; conv += c.conversions||0;
       const st = (c.status||'').toLowerCase();
-      if (st === 'active' || st === 'enabled') activeCampaigns++;
+      if (st === 'active' || st === 'enabled') active++;
+      rows.push(`<tr>
+        <td>${platformIcon(pName)}${pName}</td>
+        <td style="max-width:240px;font-weight:600">${c.campaign_name||c.external_campaign_id}</td>
+        <td>${pillFor(c.status||c.effective_status)}</td>
+        <td>${fmtD(c.spend_cents)}</td>
+        <td>${fmtN(c.impressions)}</td>
+        <td>${fmtN(c.clicks)}</td>
+        <td>${fmtN(c.conversions)}</td>
+        <td>${ctr(c.clicks, c.impressions)}</td>
+        <td>${cpa(c.spend_cents, c.conversions)}</td>
+      </tr>`);
     }
   }
-  document.getElementById('totalSpend').textContent = fmt(totalSpend);
-  document.getElementById('totalImpressions').textContent = fmtNum(totalImpressions);
-  document.getElementById('totalClicks').textContent = fmtNum(totalClicks);
-  document.getElementById('activeCampaigns').textContent = activeCampaigns;
+  document.getElementById('s-spend').textContent = fmtD(spend);
+  document.getElementById('s-imp').textContent = fmtN(imp);
+  document.getElementById('s-clicks').textContent = fmtN(clicks);
+  document.getElementById('s-conv').textContent = fmtN(conv);
+  document.getElementById('s-active').textContent = active;
+  document.getElementById('overviewTable').innerHTML = rows.join('') || '<tr><td colspan="9" class="empty">No campaign data</td></tr>';
 
-  // Alerts
-  const alerts = detectAlerts(data.platforms);
-  const alertsList = document.getElementById('alertsList');
-  const alertsSection = document.getElementById('alertsSection');
+  // Alerts banner
+  const alerts = [];
+  for (const [pName, pData] of Object.entries(data.platforms||{})) {
+    for (const c of (pData?.campaigns||[])) {
+      const st = (c.status||'').toLowerCase();
+      if (c.spend_cents === 0 && (st==='active'||st==='enabled')) alerts.push({type:'warning',msg:`${pName.toUpperCase()} · ${c.campaign_name}: $0 spend today`});
+      if (st === 'paused') alerts.push({type:'warning',msg:`${pName.toUpperCase()} · ${c.campaign_name}: paused`});
+    }
+  }
+  const b = document.getElementById('alertsBanner');
   if (alerts.length) {
-    alertsSection.style.display = '';
-    alertsList.innerHTML = alerts.map(a => `
-      <div class="alert-row alert-${a.type}">
-        <div class="alert-icon">${a.type === 'critical' ? '🔴' : '⚠️'}</div>
-        <div class="alert-body">
-          <div class="alert-title">${a.platform.toUpperCase()}${a.name ? ' · ' + a.name : ''}</div>
-          <div class="alert-msg">${a.msg}</div>
-        </div>
-      </div>`).join('');
-  } else {
-    alertsSection.style.display = 'none';
-  }
-
-  // Platform sections
-  const pSections = document.getElementById('platformSections');
-  pSections.innerHTML = '';
-  const platformOrder = ['meta','google','reddit'];
-  for (const pName of platformOrder) {
-    const pData = data.platforms?.[pName];
-    if (!pData) continue;
-    const campaigns = pData.campaigns || [];
-    const div = document.createElement('div');
-    div.className = 'platform-section';
-    div.innerHTML = `
-      <div class="platform-header">
-        ${platformIcon(pName)}
-        <div class="platform-name">${pName.charAt(0).toUpperCase()+pName.slice(1)} Ads</div>
-        ${pData.ok
-          ? `<span class="conn-ok">✓ Connected · ${campaigns.length} campaign${campaigns.length!==1?'s':''}</span>`
-          : `<span class="conn-err">✗ Error: ${pData.error||'unknown'}</span>`}
-      </div>
-      ${campaigns.length ? `
-      <table class="campaign-table">
-        <thead>
-          <tr>
-            <th>Campaign</th>
-            <th>Status</th>
-            <th>Spend Today</th>
-            <th>Impressions</th>
-            <th>Clicks</th>
-            <th>Conversions</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${campaigns.map(c => `
-          <tr>
-            <td style="font-weight:600;max-width:280px">${c.campaign_name||c.external_campaign_id}</td>
-            <td><span class="status-pill ${statusClass(c.status||c.effective_status)}">${(c.status||c.effective_status||'—').toUpperCase()}</span></td>
-            <td>${fmt(c.spend_cents)}</td>
-            <td>${fmtNum(c.impressions)}</td>
-            <td>${fmtNum(c.clicks)}</td>
-            <td>${fmtNum(c.conversions)}</td>
-          </tr>`).join('')}
-        </tbody>
-      </table>` : `<div class="empty">No campaign data available</div>`}
-    `;
-    pSections.appendChild(div);
-  }
-
-  document.getElementById('loadingScreen').style.display = 'none';
-  document.getElementById('dashboard').style.display = '';
+    b.innerHTML = alerts.map(a=>`<div class="alert-box alert-${a.type}"><div class="alert-body"><div class="alert-msg">${a.type==='warning'?'⚠️':''} ${a.msg}</div></div></div>`).join('');
+  } else b.innerHTML = '';
 }
 
-// Auto-refresh every 5 minutes
-setInterval(loadData, 5 * 60 * 1000);
-loadData();
+// ── Dry Run ───────────────────────────────────────────────────────────────
+async function loadDryrun() {
+  document.getElementById('dryrunResults').innerHTML = '<div class="loading">Fetching live data and evaluating policy…</div>';
+  document.getElementById('configGrid').innerHTML = '<div class="loading">Loading…</div>';
+  try {
+    dryrunData = await api('dryrun');
+    document.getElementById('dryrunTs').textContent = 'Generated ' + new Date(dryrunData.generated_at).toLocaleTimeString();
+    renderDryrun(dryrunData);
+    renderConfig(dryrunData.config);
+    if (document.getElementById('configGridFull')) renderConfigFull(dryrunData.config);
+  } catch(e) { document.getElementById('dryrunResults').innerHTML = '<div class="empty">Error: ' + e.message + '</div>'; }
+}
+
+function actionClass(type) {
+  if (type==='increase_budget') return 'action-increase';
+  if (type==='decrease_budget') return 'action-decrease';
+  if (type==='recommend_pause') return 'action-pause';
+  if (type.startsWith('skip')||type==='no_action') return 'action-skip';
+  return 'action-noaction';
+}
+function actionPill(type) {
+  if (type==='increase_budget') return '<span class="pill pill-active">↑ Scale Up</span>';
+  if (type==='decrease_budget') return '<span class="pill pill-paused">↓ Scale Down</span>';
+  if (type==='recommend_pause') return '<span class="pill" style="background:#fde8e8;color:var(--red)">⏸ Pause</span>';
+  if (type==='no_action') return '<span class="pill pill-skip">✓ No Action</span>';
+  return '<span class="pill pill-skip">Skip</span>';
+}
+
+function renderDryrun(data) {
+  const el = document.getElementById('dryrunResults');
+  if (!data.results?.length) { el.innerHTML = '<div class="empty">No campaigns found. Import campaigns first in Campaign Controls.</div>'; return; }
+
+  let html = '';
+  for (const r of data.results) {
+    if (r.error) { html += `<div class="action-row action-skip"><strong>${r.platform}</strong>: ${r.error}</div>`; continue; }
+    html += `<div style="margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        ${platformIcon(r.platform)}
+        <strong>${r.campaign_name||r.campaign_id}</strong>
+        ${pillFor(r.status)}
+        ${r.has_controls ? '' : '<span class="pill pill-skip">No Controls Row</span>'}
+        ${r.approved_for_automation ? '<span class="pill pill-active">Auto-Approved</span>' : '<span class="pill pill-skip">Manual Only</span>'}
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px">
+        Spend: ${fmtD(r.spend_cents)} · Impressions: ${fmtN(r.impressions)} · Clicks: ${fmtN(r.clicks)} · Conversions: ${fmtN(r.conversions)} · CTR: ${ctr(r.clicks,r.impressions)} · CPA: ${cpa(r.spend_cents,r.conversions)}
+      </div>`;
+
+    if (r.alerts?.length) {
+      html += r.alerts.map(a=>`<div class="alert-box alert-${a.severity}" style="margin-bottom:6px"><div class="alert-body"><div class="alert-title">${a.alert_type}</div><div class="alert-msg">${a.message}</div></div></div>`).join('');
+    }
+    if (r.actions?.length) {
+      html += r.actions.map(a=>`<div class="action-row ${actionClass(a.action_type)}" style="margin-bottom:5px">
+        ${actionPill(a.action_type)} <span style="margin-left:8px;font-size:12px">${a.reason}</span>
+        ${a.proposed_value?.new_daily_budget_cents ? `<br><span style="font-size:11px;color:var(--muted)">Proposed: ${fmtD(a.proposed_value.previous_daily_budget_cents)} → ${fmtD(a.proposed_value.new_daily_budget_cents)} (${a.proposed_value.pct_change?.toFixed(1)}%)</span>` : ''}
+      </div>`).join('');
+    }
+    html += '</div><hr style="border:none;border-top:1px solid var(--line);margin-bottom:14px">';
+  }
+  el.innerHTML = html;
+}
+
+function renderConfig(cfg) {
+  if (!cfg) return;
+  document.getElementById('configGrid').innerHTML = `
+    <div class="config-item"><div class="config-key">CPA Target</div><div class="config-val">${fmtD(cfg.cpa_target_cents)}</div></div>
+    <div class="config-item"><div class="config-key">Pause if CPA ></div><div class="config-val">${fmtD(cfg.cpa_target_cents * cfg.cpa_pause_threshold)}</div></div>
+    <div class="config-item"><div class="config-key">Scale Up if CPA <</div><div class="config-val">${fmtD(cfg.cpa_target_cents * cfg.cpa_scale_threshold)}</div></div>
+    <div class="config-item"><div class="config-key">Combined Daily Cap</div><div class="config-val">${fmtD(cfg.total_daily_budget_cap_cents)}</div></div>
+    <div class="config-item"><div class="config-key">Budget Step Up</div><div class="config-val">+${(cfg.budget_scale_up_pct*100).toFixed(0)}%</div></div>
+    <div class="config-item"><div class="config-key">Budget Step Down</div><div class="config-val">−${(cfg.budget_scale_down_pct*100).toFixed(0)}%</div></div>`;
+}
+
+function renderConfigFull(cfg) {
+  if (!cfg) return;
+  renderConfig(cfg);
+  const vars = [
+    ['AD_CPA_TARGET_CENTS', fmtD(cfg.cpa_target_cents), 'Target cost per conversion. Below this × 0.7 = scale up. Above this × 3 = pause.'],
+    ['AD_CPA_PAUSE_THRESHOLD', cfg.cpa_pause_threshold + 'x', 'CPA multiplier at which campaign is flagged for pause review.'],
+    ['AD_CPA_SCALE_THRESHOLD', cfg.cpa_scale_threshold + 'x', 'CPA multiplier below which budget is increased.'],
+    ['AD_BUDGET_SCALE_UP_PCT', (cfg.budget_scale_up_pct*100).toFixed(0)+'%', 'How much to increase budget when performance is strong.'],
+    ['AD_BUDGET_SCALE_DOWN_PCT', (cfg.budget_scale_down_pct*100).toFixed(0)+'%', 'How much to reduce budget when CTR is very low.'],
+    ['AD_MIN_CLICKS', cfg.min_clicks_for_budget_decision, 'Minimum clicks required before any budget action fires.'],
+    ['AD_MIN_SPEND_CENTS', fmtD(cfg.min_spend_cents_for_decision), 'Minimum spend required before any budget action fires.'],
+    ['AD_TOTAL_DAILY_BUDGET_CAP_CENTS', fmtD(cfg.total_daily_budget_cap_cents), 'Maximum combined daily budget across all platforms.'],
+    ['AD_COMBINED_DAILY_BUDGET_CENTS', '$25.00', 'Maximum daily budget for any single campaign.'],
+    ['AD_MANAGER_MODE', 'dry-run / write / off', 'Operating mode. Keep dry-run until ready to activate write mode.'],
+  ];
+  document.getElementById('configTable').innerHTML = vars.map(([k,v,d])=>`<tr><td><code style="font-size:11px;background:#f1f5f9;padding:2px 6px;border-radius:4px">${k}</code></td><td style="font-weight:600">${v}</td><td style="color:var(--muted)">${d}</td></tr>`).join('');
+}
+
+// ── Controls ──────────────────────────────────────────────────────────────
+async function loadControls() {
+  document.getElementById('controlsTable').innerHTML = '<tr><td colspan="9" class="loading">Loading controls…</td></tr>';
+  try {
+    // Load controls + live status
+    const [ctrlRes, dashRes] = await Promise.all([api('controls'), dashData ? Promise.resolve(dashData) : api('dashboard')]);
+    if (!dashData) dashData = dashRes;
+    controlsData = ctrlRes.controls || [];
+
+    // Build live status map
+    const liveMap = {};
+    for (const [p, pd] of Object.entries(dashData?.platforms||{})) {
+      for (const c of (pd?.campaigns||[])) liveMap[p+':'+c.external_campaign_id] = c;
+    }
+
+    if (!controlsData.length) {
+      document.getElementById('controlsTable').innerHTML = '<tr><td colspan="9" class="empty">No controls rows. Click "Import Live Campaigns" to add your campaigns.</td></tr>';
+      return;
+    }
+
+    document.getElementById('controlsTable').innerHTML = controlsData.map(c => {
+      const live = liveMap[c.platform+':'+c.external_campaign_id];
+      const liveStatus = live?.status || live?.effective_status || '—';
+      return `<tr id="ctrl-${c.id}">
+        <td>${platformIcon(c.platform)}${c.platform}</td>
+        <td style="max-width:200px;font-weight:600;font-size:12px">${c.campaign_name}</td>
+        <td>${pillFor(liveStatus)}</td>
+        <td>
+          <select class="inline-input" style="width:90px" onchange="saveControl('${c.id}',{desired_state:this.value})">
+            <option value="active" ${c.desired_state==='active'?'selected':''}>Active</option>
+            <option value="paused" ${c.desired_state==='paused'?'selected':''}>Paused</option>
+            <option value="archived" ${c.desired_state==='archived'?'selected':''}>Archived</option>
+          </select>
+        </td>
+        <td>$<input class="inline-input" type="number" value="${(c.min_daily_budget_cents/100).toFixed(0)}" min="1" max="999" onblur="saveControl('${c.id}',{min_daily_budget_cents:Math.round(parseFloat(this.value)*100)})"></td>
+        <td>$<input class="inline-input" type="number" value="${(c.max_daily_budget_cents/100).toFixed(0)}" min="1" max="999" onblur="saveControl('${c.id}',{max_daily_budget_cents:Math.round(parseFloat(this.value)*100)})"></td>
+        <td style="text-align:center">
+          <label class="toggle"><input type="checkbox" ${c.approved_for_automation?'checked':''} onchange="saveControl('${c.id}',{approved_for_automation:this.checked})"><span class="slider"></span></label>
+        </td>
+        <td style="max-width:160px;font-size:11px;color:var(--muted)">${c.notes||'—'}</td>
+        <td><span class="ts">${c.last_action||''}</span></td>
+      </tr>`;
+    }).join('');
+  } catch(e) { document.getElementById('controlsTable').innerHTML = `<tr><td colspan="9" class="empty">Error: ${e.message}</td></tr>`; }
+}
+
+async function saveControl(id, updates) {
+  try {
+    await apiPatch('controls/' + id, updates);
+    // brief visual feedback
+    const row = document.getElementById('ctrl-'+id);
+    if (row) { row.style.background='#eef7f1'; setTimeout(()=>row.style.background='',600); }
+  } catch(e) { alert('Save failed: ' + e.message); }
+}
+
+async function importCampaigns() {
+  const banner = document.getElementById('importBanner');
+  banner.style.display = '';
+  banner.className = 'banner banner-info';
+  banner.textContent = 'Importing campaigns…';
+  try {
+    const r = await apiPost('import');
+    const msg = [];
+    if (r.imported?.length) msg.push(`✅ Imported: ${r.imported.map(x=>x.name||x.id).join(', ')}`);
+    if (r.skipped?.length) msg.push(`ℹ️ Already existed (not overwritten): ${r.skipped.map(x=>x.name||x.id).join(', ')}`);
+    if (r.errors?.length) msg.push(`❌ Errors: ${r.errors.map(x=>x.error).join(', ')}`);
+    banner.textContent = msg.join(' · ') || 'Done';
+    banner.className = 'banner ' + (r.errors?.length ? 'banner-warn' : 'banner-info');
+    await loadControls();
+    controlsData = null; // force reload
+  } catch(e) { banner.textContent = 'Import failed: ' + e.message; banner.className = 'banner banner-warn'; }
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────
+if (token) init(); else document.getElementById('loginWrap').style.display = 'flex';
+setInterval(()=>{ if(dashData && document.getElementById('page-overview').classList.contains('active')) loadAll(); }, 5*60*1000);
 </script>
 </body>
 </html>
