@@ -84,13 +84,14 @@ async function metaPost(path, body = {}) {
   }
 }
 
-const META_CAMPAIGN_FIELDS = [
-  "id", "name", "status", "effective_status",
-  "objective", "start_time", "stop_time",
-  "daily_budget", "lifetime_budget",
-  "budget_remaining",
-  "insights.fields(spend,impressions,clicks,actions,cost_per_action_type)",
-].join(",");
+function buildMetaCampaignFields(datePreset = "today") {
+  return [
+    "id", "name", "status", "effective_status",
+    "objective", "start_time", "stop_time",
+    "daily_budget", "lifetime_budget", "budget_remaining",
+    `insights.date_preset(${datePreset}).fields(spend,impressions,clicks,actions,cost_per_action_type)`,
+  ].join(",");
+}
 
 /**
  * Fetch all campaigns with today's performance.
@@ -98,8 +99,7 @@ const META_CAMPAIGN_FIELDS = [
 async function fetchCampaignPerformance(datePreset = "today") {
   const creds = getCredentials();
   const data = await metaGet(`/${creds.accountId}/campaigns`, {
-    fields: META_CAMPAIGN_FIELDS,
-    date_preset: datePreset,
+    fields: buildMetaCampaignFields(datePreset),
     limit: "200",
   });
 
