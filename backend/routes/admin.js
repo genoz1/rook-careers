@@ -204,8 +204,8 @@ router.post("/admin/admanager/import", async (req, res) => {
         desired_state: desired,
         approved_for_automation: false,
         destination_url: "https://rookcareers.com/rook-onboarding-v4.html",
-        min_daily_budget_cents: 500,
-        max_daily_budget_cents: 2500,
+        min_daily_budget_cents: 200,   // $2/day minimum per campaign
+        max_daily_budget_cents: 1500,  // $15/day max per campaign (well within $30 total)
         notes: `Auto-imported ${new Date().toISOString().slice(0,10)}. Budget: ${c.budget_cents ? "$"+(c.budget_cents/100).toFixed(2)+"/day" : "unknown"}`,
       };
       const { error } = await supabaseAdmin.from("ad_campaign_controls").insert(row);
