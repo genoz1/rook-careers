@@ -28,6 +28,18 @@
 
 const { hasUnambiguousForeignCountryEvidence, hasExplicitUsLanguageEvidence } = require("./locationTextRules");
 
+// Temporary data quarantine for three confirmed bad-location records
+// that cannot yet be rejected reliably from location text alone:
+// two Barcelona, Spain jobs previously resolved to Barcelona, NY, and
+// one Nashua, NH job with a known incorrect stored coordinate. Keep
+// this check ahead of all location evidence so re-ingestion cannot make
+// these records candidate-visible until their parsing is corrected.
+const TEMPORARILY_QUARANTINED_JOB_IDS = new Set([
+  "226f8b0f-6577-478c-9c50-e369e8cf18c6",
+  "93402f62-4c5d-456e-af08-c11132958f1b",
+  "9e4116c4-a3c8-448b-b733-d3468b92f9f9",
+]);
+
 // Complete, independent US state/DC/territory allowlist. Verified
 // directly (not assumed) against us-atlas's states-10m.json boundary
 // dataset during this project's backfill research: all 50 states, DC
@@ -106,6 +118,10 @@ function resolveUsStateCode(stateValue) {
  */
 function isUsEligibleJob(job) {
   if (!job) return false;
+
+  if (TEMPORARILY_QUARANTINED_JOB_IDS.has(String(job.id || ""))) {
+    return false;
+  }
 
   // Unambiguous foreign evidence is evaluated FIRST, before anything
   // else, and always wins — even over what looks like a valid US
