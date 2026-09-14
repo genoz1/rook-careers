@@ -22,6 +22,7 @@
 const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
 const { scoreJob, mentionsNonUsCountry, hasFullAccess, stateAbbrFromName } = require("../matching");
+const { scrubCompanyNameFromText, redactForNonSubscriber, redactForAnonymous } = require("../redaction");
 const { fetchActiveJobs } = require("../scoring/precompute");
 const { distanceMiles, geocodeZip } = require("../geocoding");
 const { sendEmail } = require("../email/resend");
@@ -137,112 +138,10 @@ function matchFromRow(row) {
 // now includes a trialing candidate as well as an actively paying one.
 // See that file's comment for the reasoning.
 
-// Escapes regex special characters in a company name before using it in
-// a pattern — company names can contain characters like "." or "+"
-// (e.g. "3M", "C.R. Bard") that would otherwise be interpreted as regex
-// syntax instead of literal text.
-function escapeRegex(str) {
-  return String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-// Replaces every occurrence of the employer's name in a block of text
-// with a neutral placeholder. Real bug this fixes: company_name was
-// being stripped from the job OBJECT for non-subscribers, but the raw
-// description_text almost always names the employer in its own opening
-// sentence ("Medtronic is a global leader in...") — completely
-// defeating the redaction, since the name was sitting in plain sight a
-// few lines below the "Employer hidden" badge. This catches the base
-// name regardless of legal-suffix variations ("Medtronic Inc.",
-// "Medtronic Corporation") since those still contain the base name as
-// a substring.
-// Common legal-entity suffixes that are never worth scrubbing on their
-// own — "Inc" or "LLC" alone doesn't identify who the employer is, and
-// treating them as significant words would create a lot of pointless
-// replacements throughout ordinary text.
-const COMPANY_SUFFIX_WORDS = new Set([
-  "inc", "inc.", "llc", "llc.", "corp", "corp.", "corporation", "co", "co.",
-  "company", "ltd", "ltd.", "limited", "group", "holdings", "the", "of",
-]);
-
-function scrubCompanyNameFromText(text, companyName) {
-  if (!text || !companyName) return text;
-  let result = text.replace(new RegExp(escapeRegex(companyName), "gi"), "this employer");
-
-  // Real gap this closes: matching only the exact full stored
-  // company_name misses the very common case where a job posting's own
-  // description text refers to the employer by a shorter form of its
-  // name than what's stored in the database — e.g. company_name is
-  // "Caris Life Sciences" but the posting's own text says "At Caris,
-  // we understand..." Reported directly: the listing page still showed
-  // "At Caris" in a preview even after the exact-match scrub was
-  // working correctly on the job detail page. Scrubbing each
-  // significant standalone word from the company name too (skipping
-  // short/common legal-suffix words) catches this without needing to
-  // guess every possible abbreviated form in advance.
-  //
-  // Reported directly, a second gap: a company known by a short
-  // all-caps acronym/brand (e.g. "MWI", for MWI Animal Health) leaked
-  // straight through in a job TITLE ("Regional Manager - MWI") even
-  // after this fix, because "MWI" is only 3 characters and the
-  // length-based filter below exists specifically to skip short,
-  // common, non-identifying words (like "of" or "co") — it wasn't
-  // meant to also exclude a genuinely identifying short acronym. An
-  // all-caps token is treated as identifying regardless of length,
-  // since ordinary English words this short are essentially never
-  // fully capitalized in normal text.
-  const words = companyName.split(/\s+/).filter((w) => {
-    const letters = w.replace(/[^a-zA-Z]/g, "");
-    if (COMPANY_SUFFIX_WORDS.has(w.toLowerCase())) return false;
-    if (letters.length > 3) return true;
-    return letters.length >= 2 && letters === letters.toUpperCase();
-  });
-  for (const word of words) {
-    result = result.replace(new RegExp(`\\b${escapeRegex(word)}\\b`, "gi"), "this employer");
-  }
-  return result;
-}
-
-function redactForNonSubscriber(job) {
-  const {
-    company_name, source_url, application_url,
-    recruiter_name, recruiter_email, recruiter_company, recruiter_contact_method, // same gate applies to recruiter postings
-    description_text, description_preview,
-    title_original, title_normalized,
-    ...rest
-  } = job;
-  const scrubbedFullText = scrubCompanyNameFromText(description_text, company_name);
-  return {
-    ...rest,
-    // Real gate bypass this closes: a job's TITLE can name the employer
-    // directly (e.g. "Regional Manager - MWI"), and neither this
-    // function nor its callers ever touched title_original/
-    // title_normalized before now — every other field was gated, but
-    // the title was shown completely unredacted to every non-subscribed
-    // and anonymous viewer regardless. Reported directly with a real
-    // example. Falls back to the original title only when scrubbing
-    // isn't possible (no company_name on file) rather than showing
-    // nothing.
-    title_original: scrubCompanyNameFromText(title_original, company_name) ?? title_original,
-    title_normalized: scrubCompanyNameFromText(title_normalized, company_name) ?? title_normalized,
-    description_text: scrubbedFullText,
-    description_preview: scrubCompanyNameFromText(description_preview, company_name) ?? (scrubbedFullText ? scrubbedFullText.slice(0, 300) : undefined),
-    subscription_required: true,
-  };
-}
-
-// Stricter than redactForNonSubscriber: an anonymous visitor has no
-// account at all, so on top of the usual company/apply-link redaction,
-// this also strips the match score, recommendation, categories,
-// reasons, and concerns entirely. Direct instruction: "mask the job
-// details so when the customer actually signs up its the same
-// format" — same card layout and same real scoreJob()-driven ranking
-// as a signed-in candidate would see, just with everything that would
-// reveal the fit or the employer removed rather than shown for free.
-function redactForAnonymous(job) {
-  const withCompanyRedacted = redactForNonSubscriber(job);
-  const { match, ...rest } = withCompanyRedacted;
-  return rest;
-}
+// Redaction logic (scrubCompanyNameFromText, redactForNonSubscriber,
+// redactForAnonymous) now lives in backend/redaction.js — extracted so
+// it's directly unit-testable without pulling in this file's heavier
+// dependencies (email, geocoding, scoring). Imported above.
 
 // PERFORMANCE (2026-09, investigated per direct audit finding —
 // dashboard matches stuck on "Loading" for 25+ seconds): scoreJob()
@@ -998,6 +897,18 @@ router.post("/jobs/:id/apply", requireConfig, requireAuth, loadCandidateId, asyn
       .eq("id", req.candidateId)
       .maybeSingle();
     console.log(`${tag} profile fetch done (found=${!!profile})`);
+
+    // Direct instruction: applying is a premium action, gated the same
+    // way viewing the employer/full description already is. This route
+    // had no such check before now — not a problem while every account
+    // necessarily had a subscription (card required at signup), but a
+    // real gap the moment a card-less free account can exist and reach
+    // this endpoint directly. Checked here, not just hidden in the UI,
+    // since the UI can be bypassed by calling the API directly.
+    if (!hasFullAccess(profile)) {
+      console.log(`${tag} blocked — candidate does not have full access`);
+      return res.status(403).json({ error: "Start your free trial to apply to jobs.", subscription_required: true });
+    }
 
     let resumeUrl = null;
     if (profile?.resume_file_path) {

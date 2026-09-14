@@ -1207,7 +1207,7 @@
       ? `<span style="color:#7C3AED; font-weight:600;">🔒 Subscribe to see who's hiring</span> — ${escapeHtml(job.location_raw || '')} ${comp ? '&nbsp;·&nbsp; ' + escapeHtml(comp) : ''}`
       : `${escapeHtml(job.company_name || (isRecruiterPosted ? 'Confidential search' : ''))} — ${escapeHtml(job.location_raw || '')} ${comp ? '&nbsp;·&nbsp; ' + escapeHtml(comp) : ''}`;
     const primaryActionBtn = job.subscription_required
-      ? `<a href="rook-pricing.html" class="btn btn-primary btn-sm">${escapeHtml(lockedJobCtaLabel)}</a>`
+      ? `<button type="button" class="btn btn-primary btn-sm" onclick="rookGoToCheckout('job_card')">${escapeHtml(lockedJobCtaLabel)}</button>`
       : isRecruiterPosted
         // Real bug this fixes: isRecruiterPosted was computed but never
         // actually used here, so a recruiter-posted job (which has no

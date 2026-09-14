@@ -85,6 +85,10 @@
   gtag('js', new Date());
   gtag('config', 'AW-18428232873');
   gtag('config', 'G-LDG2CL5Z8R');
+  // Fires once, on first load of the welcome screen — the true top of
+  // the funnel (account_created / dashboard_viewed / trial_activated
+  // are the later steps, tracked on their own pages). No PII in params.
+  gtag('event', 'onboarding_started', { event_category: 'onboarding', event_label: 'v6' });
 </script>
 <body>
 

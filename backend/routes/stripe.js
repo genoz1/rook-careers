@@ -46,6 +46,29 @@ function getTrialPeriodDays() {
   return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 0;
 }
 
+// Trial-abuse guard, factored out as its own pure function (same reason
+// buildCheckoutSessionParams and handleStripeWebhookEvent are factored
+// out below — so it's directly unit-testable without a real Express
+// request or a real Stripe/Supabase client). Used by BOTH checkout
+// entry points (create-checkout-session's hosted redirect flow, and
+// create-subscription-from-setup's embedded flow) so the rule can't
+// drift between them.
+//
+// Direct instruction: use the EXISTING trial-history field
+// (trial_started_at) rather than adding a new trial_used column — it's
+// already set exactly once, the first time a subscription ever reaches
+// 'trialing' (see schema.sql, and the set-once write in
+// handleStripeWebhookEvent above), and never cleared afterward
+// regardless of what happens to the subscription later. Its presence on
+// a profile row is already a complete, accurate answer to "has this
+// account ever had a trial" — a second field tracking the same fact
+// would just be a second source of truth to keep in sync with the
+// first, not a genuine improvement.
+function computeTrialDaysForCheckout(profile) {
+  const alreadyUsedTrial = Boolean(profile?.trial_started_at);
+  return alreadyUsedTrial ? 0 : getTrialPeriodDays();
+}
+
 function requireConfig(req, res, next) {
   if (!isConfigured || !stripe || !supabaseAnon || !supabaseAdmin) {
     return res.status(503).json({
@@ -148,7 +171,17 @@ function buildCheckoutSessionParams({ trialDays, utm, userEmail, userId, publicA
 // checkout.
 router.post("/stripe/create-checkout-session", requireConfig, requireAuth, async (req, res) => {
   try {
-    const trialDays = getTrialPeriodDays();
+    // Same trial-abuse guard as create-subscription-from-setup below —
+    // this is a second, separate entry point into checkout (Stripe-hosted
+    // redirect, used by rook-pricing.html) that reaches the same Stripe
+    // price, so it needs the same protection against granting a second
+    // free trial to an account that already had one.
+    const { data: profileForTrialCheck } = await supabaseAdmin
+      .from("candidate_profiles")
+      .select("trial_started_at")
+      .eq("user_id", req.user.id)
+      .maybeSingle();
+    const trialDays = computeTrialDaysForCheckout(profileForTrialCheck);
     const utm = pickUtmFields(req.body);
     const sessionParams = buildCheckoutSessionParams({
       trialDays,
@@ -283,25 +316,36 @@ router.post("/stripe/create-subscription-from-setup", requireConfig, requireAuth
     const { payment_method_id, customer_id } = req.body;
     if (!payment_method_id) return res.status(400).json({ error: "payment_method_id required" });
 
-    const trialDays = getTrialPeriodDays();
-
     // Use customer_id passed from the frontend (returned by create-setup-intent)
     // which avoids a second DB lookup that was silently failing when the
     // profile row didn't have stripe_customer_id populated yet.
-    let customerId = customer_id;
-    if (!customerId) {
-      // Fallback: look up from DB in case frontend didn't pass it
-      const { data: profile } = await supabaseAdmin
-        .from("candidate_profiles")
-        .select("stripe_customer_id")
-        .eq("user_id", req.user.id)
-        .maybeSingle();
-      customerId = profile?.stripe_customer_id;
-    }
+    // Single lookup, used for both the customerId fallback below AND the
+    // trial-abuse check right after — was previously a separate query
+    // only run when customer_id was missing from the request; now always
+    // run, since we need trial_started_at regardless of that.
+    const { data: profile } = await supabaseAdmin
+      .from("candidate_profiles")
+      .select("stripe_customer_id, trial_started_at")
+      .eq("user_id", req.user.id)
+      .maybeSingle();
+
+    let customerId = customer_id || profile?.stripe_customer_id;
 
     if (!customerId) {
       return res.status(400).json({ error: "No Stripe customer found. Please restart checkout." });
     }
+
+    // Trial-abuse guard: this account already started a trial once
+    // (trial_started_at is set once, on the very first trialing status,
+    // and never cleared — see schema.sql). Direct instruction: don't
+    // grant a second free trial to the same account just because their
+    // subscription later lapsed/was cancelled and they're re-entering
+    // checkout from the free dashboard. Everything else about checkout
+    // stays identical — same price, same product, same card flow — the
+    // subscription is just created without a trial period this time, so
+    // Stripe charges the card immediately instead of after 3 days.
+    const alreadyUsedTrial = Boolean(profile?.trial_started_at);
+    const trialDays = computeTrialDaysForCheckout(profile);
 
     // Attach payment method to customer and set as default
     await stripe.paymentMethods.attach(payment_method_id, {
@@ -324,16 +368,31 @@ router.post("/stripe/create-subscription-from-setup", requireConfig, requireAuth
 
     const subscription = await stripe.subscriptions.create(subParams);
 
-    // Update profile — use upsert so it works even if the row doesn't exist yet
+    // Update profile — use upsert so it works even if the row doesn't exist yet.
+    // Direct fix alongside the trial-abuse guard above: this used to
+    // hardcode subscription_status: "trialing" unconditionally, which was
+    // only ever true before because a trial was always granted at this
+    // point. Now that a repeat customer can go straight to "active" (no
+    // trial_period_days applied), that hardcoded write would have lied
+    // about their real status and — worse — stamped a fresh
+    // trial_started_at over the one already on file, defeating the guard
+    // it was meant to enforce. subscription.status is Stripe's own,
+    // authoritative answer; trial_started_at is only ever written here
+    // the first time (never for a repeat customer, never overwriting an
+    // existing value), matching the same "set once" rule the webhook
+    // already follows for this column.
+    const updatePayload = {
+      user_id: req.user.id,
+      stripe_customer_id: customerId,
+      subscription_status: subscription.status,
+      updated_at: new Date().toISOString(),
+    };
+    if (subscription.status === "trialing" && !alreadyUsedTrial) {
+      updatePayload.trial_started_at = new Date().toISOString();
+    }
     const { error: profileErr } = await supabaseAdmin
       .from("candidate_profiles")
-      .upsert({
-        user_id: req.user.id,
-        stripe_customer_id: customerId,
-        subscription_status: "trialing",
-        trial_started_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }, { onConflict: "user_id" });
+      .upsert(updatePayload, { onConflict: "user_id" });
 
     if (profileErr) {
       console.error("create-subscription-from-setup profile update failed:", profileErr.message);
@@ -817,6 +876,7 @@ module.exports = router;
 module.exports.handleStripeWebhookEvent = handleStripeWebhookEvent;
 module.exports.applyGuardedSubscriptionUpdate = applyGuardedSubscriptionUpdate;
 module.exports.getTrialPeriodDays = getTrialPeriodDays;
+module.exports.computeTrialDaysForCheckout = computeTrialDaysForCheckout;
 module.exports.buildCheckoutSessionParams = buildCheckoutSessionParams;
 module.exports.warnIfPortalCancellationModeIsWrong = warnIfPortalCancellationModeIsWrong;
 module.exports._resetPortalConfigCheckForTests = _resetPortalConfigCheckForTests;

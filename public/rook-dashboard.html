@@ -17,21 +17,19 @@
   // runtime that supports multiple config() calls for different
   // products (Ads conversion ID, GA4 measurement ID) side by side.
   gtag('config', 'G-LDG2CL5Z8R');
-  // Fire trial_started conversion if redirected from successful signup
-  (function() {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('trial') === 'started') {
-      gtag('event', 'conversion', {
-        send_to: 'AW-18428232873',
-        event_category: 'conversion',
-        event_label: 'trial_started_dashboard',
-        value: 0.0,
-        currency: 'USD'
-      });
-      // Clean URL without reloading
-      history.replaceState({}, '', window.location.pathname);
-    }
-  })();
+  // dashboard_viewed fires on every load — a general engagement event,
+  // distinct from the one-time conversion events below. No PII in params.
+  gtag('event', 'dashboard_viewed', { event_category: 'engagement' });
+  // trial_activated / the AW conversion used to fire right here, based
+  // on nothing but the ?trial=started URL param — before rook-auth.js,
+  // Supabase, or any authenticated fetch have even loaded at this point
+  // in <head>. That's a real "fires on a URL param, not a confirmed
+  // state" risk: a bookmarked/shared/replayed URL with that param, or
+  // any future code path that lands here with it set, would fire a
+  // conversion with zero server confirmation behind it. Moved to run
+  // inside the authenticated profile-fetch below instead, where a
+  // freshly-fetched profile.subscription_status is available to check
+  // against — see the "Trial-activation conversion" block further down.
 </script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -400,6 +398,18 @@
       <div class="stat-card"><div class="num" id="statApplications">—</div><div class="lbl">Applications In Progress</div></div>
     </div>
 
+    <!-- Primary unlock banner — shown only to candidates without full
+         access (see rookHasFullAccess() in rook-auth.js), hidden below
+         via inline display:none until the profile fetch below decides.
+         This is the "primary unlock CTA" the free-dashboard spec calls
+         for; the small per-job buttons further down are the secondary,
+         per-listing CTAs and route to the same place. -->
+    <div id="unlockBanner" style="display:none; background:linear-gradient(135deg,#062d55,#0877d1); border-radius:18px; padding:22px 24px; margin-bottom:18px; color:#fff;">
+      <div style="font-size:19px; font-weight:900; line-height:1.25; margin-bottom:8px;">Unlock all 5,500+ medical sales jobs</div>
+      <div style="font-size:13.5px; color:#dcedf8; line-height:1.55; margin-bottom:16px; max-width:520px;">Start your 3-day free trial to view employers, open complete job listings, apply, and activate personalized job alerts. Then $19.99/month. Cancel anytime.</div>
+      <button type="button" id="unlockBannerBtn" onclick="rookGoToCheckout('banner')" style="background:#fff; color:#062d55; border:0; border-radius:99px; padding:12px 22px; font:inherit; font-size:14px; font-weight:800; cursor:pointer;">Unlock all 5,500+ medical sales jobs</button>
+    </div>
+
     <div class="panel-head">
       <h2>Today's Matches</h2>
       <div class="filter-row" id="tierFilters">
@@ -610,6 +620,81 @@
           sessionEmail = session?.user?.email || '';
         } catch(_) {}
         rookApplySidebarProfile(profile, sessionEmail);
+        // Primary unlock banner: shown only when this candidate does not
+        // currently have full access. Purely a display decision — the
+        // banner being hidden/shown has no bearing on what data the
+        // job-listing endpoints actually return; that's enforced
+        // server-side regardless of whether this script runs at all.
+        const unlockBanner = document.getElementById('unlockBanner');
+        if (unlockBanner) unlockBanner.style.display = rookHasFullAccess(profile) ? 'none' : 'block';
+
+        // Trial-activation conversion — moved here (out of the early
+        // <head> script) specifically so it can check a freshly-fetched
+        // profile.subscription_status before firing, instead of trusting
+        // the ?trial=started URL param alone. That param only proves the
+        // browser was redirected here after rook-checkout.html's API
+        // call reported success; this profile fetch is the actual
+        // server-confirmed state (written either by that same API call
+        // or, if it's landed by now, the Stripe webhook — either way, a
+        // real database row, not a client-side claim).
+        //
+        // Checked against subscription_status === 'trialing' SPECIFICALLY
+        // — not rookHasFullAccess(), which also returns true for 'active'.
+        // Two real cases land on this exact same redirect with status
+        // 'active' instead of 'trialing': (1) a repeat customer who
+        // already used their one trial (see the trial-abuse guard in
+        // computeTrialDaysForCheckout — they're charged immediately, no
+        // trial_period_days applied), and (2) if TRIAL_PERIOD_DAYS were
+        // ever set to 0 account-wide. Neither of those candidates
+        // actually activated a trial, so an event literally named
+        // trial_activated must not fire for them — that would conflate
+        // "started paying immediately" with "started a free trial" and
+        // skew trial-specific ad-campaign CPA reporting. Direct
+        // instruction: active subscribers must not generate a
+        // trial-activation conversion.
+        //
+        // Caveat worth knowing: if TRIAL_PERIOD_DAYS is ever set to 0,
+        // NO conversion event fires here at all for a brand-new paying
+        // signup (case 2 above) — this check deliberately narrows to
+        // "trial genuinely activated," not "any new paid signup." That
+        // tradeoff wasn't asked to be solved here.
+        //
+        // Two separate guards against firing more than once:
+        //   1. sessionStorage flag — survives the URL param being
+        //      stripped, so even a bookmarked/shared/back-button-restored
+        //      URL with the param still intact can't refire it later in
+        //      the same browser session.
+        //   2. history.replaceState strips the param immediately after
+        //      the check, so a plain page refresh has nothing left to
+        //      trigger on even without the sessionStorage guard.
+        // Both together mean: fires at most once per real trial
+        // activation, per browser, full stop.
+        (function () {
+          const params = new URLSearchParams(window.location.search);
+          if (params.get('trial') !== 'started') return;
+          // Strip the param immediately regardless of outcome below —
+          // there's nothing left to act on after this check either way.
+          history.replaceState({}, '', window.location.pathname);
+          let alreadyFired = false;
+          try { alreadyFired = sessionStorage.getItem('rook_trial_activated_fired') === '1'; } catch (_) {}
+          if (alreadyFired) return;
+          if (profile?.subscription_status !== 'trialing') {
+            // Either not a real trial (active/repeat-customer/trial-
+            // disabled case above) or the write hasn't landed yet — 
+            // don't fire a trial-specific conversion for a state that
+            // isn't genuinely 'trialing'.
+            return;
+          }
+          gtag('event', 'conversion', {
+            send_to: 'AW-18428232873',
+            event_category: 'conversion',
+            event_label: 'trial_started_dashboard',
+            value: 0.0,
+            currency: 'USD'
+          });
+          gtag('event', 'trial_activated', { event_category: 'conversion' });
+          try { sessionStorage.setItem('rook_trial_activated_fired', '1'); } catch (_) {}
+        })();
         if (profile?.name) {
           // First name only — matches how the rest of the app addresses
           // the candidate (e.g. application emails), not a full-name
@@ -1267,7 +1352,7 @@
     // anything to click to apply."
     let primaryActionBtn;
     if (job.subscription_required) {
-      primaryActionBtn = `<a href="rook-pricing.html" class="btn btn-primary btn-sm">${escapeHtml(lockedJobCtaLabel)}</a>`;
+      primaryActionBtn = `<button type="button" class="btn btn-primary btn-sm" onclick="rookGoToCheckout('job_card')">${escapeHtml(lockedJobCtaLabel)}</button>`;
     } else if (isRecruiterPosted) {
       primaryActionBtn = `<a href="rook-apply.html?job=${escapeHtml(job.id)}" class="btn btn-primary btn-sm">Apply Now</a>`;
     } else {

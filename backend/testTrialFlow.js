@@ -15,8 +15,9 @@
 // bug in the real logic shows up here.
 
 const assert = require("assert");
-const { handleStripeWebhookEvent, buildCheckoutSessionParams, warnIfPortalCancellationModeIsWrong, _resetPortalConfigCheckForTests } = require("./routes/stripe");
+const { handleStripeWebhookEvent, buildCheckoutSessionParams, warnIfPortalCancellationModeIsWrong, _resetPortalConfigCheckForTests, computeTrialDaysForCheckout } = require("./routes/stripe");
 const { hasFullAccess, isPayingSubscriber } = require("./matching");
+const { redactForNonSubscriber, redactForAnonymous, scrubCompanyNameFromText } = require("./redaction");
 
 let passCount = 0;
 let failCount = 0;
@@ -824,6 +825,141 @@ async function run() {
     const result = await handleStripeWebhookEvent(event, { stripe: {}, supabaseAdmin: db });
     assert.strictEqual(result.applied, true);
     assert.strictEqual(db._table[0].subscription_cancel_at, null, "reactivation clears the cancellation regardless of the current_period_end field's shape");
+  });
+
+  console.log("\n=== Free-account flow: server-side redaction (backend/redaction.js) [free dashboard spec] ===");
+
+  const SAMPLE_JOB = {
+    id: "job_1",
+    title_original: "Territory Manager - Medtronic Cardiac",
+    title_normalized: "Territory Manager",
+    company_name: "Medtronic",
+    location_raw: "Dallas, TX",
+    date_posted: "2026-09-01",
+    source_url: "https://medtronic.com/careers/12345",
+    application_url: "https://medtronic.com/careers/12345/apply",
+    recruiter_name: "Jane Recruiter",
+    recruiter_email: "jane@agency.com",
+    recruiter_company: "Agency Co",
+    recruiter_contact_method: "Email jane@agency.com",
+    description_text: "Medtronic is a global leader in medical technology. At Medtronic, you will drive sales of our cardiac portfolio across your territory.",
+    description_preview: "Medtronic is a global leader in medical technology.",
+    match: { overall_score: 84, recommendation: "Strong Match", reasons: ["Territory experience"], concerns: [] },
+  };
+
+  test("redactForNonSubscriber strips employer identity and application fields entirely", () => {
+    const result = redactForNonSubscriber(SAMPLE_JOB);
+    assert.strictEqual(result.company_name, undefined, "company_name must be absent, not just blanked");
+    assert.strictEqual(result.source_url, undefined);
+    assert.strictEqual(result.application_url, undefined);
+    assert.strictEqual(result.recruiter_name, undefined);
+    assert.strictEqual(result.recruiter_email, undefined);
+    assert.strictEqual(result.recruiter_company, undefined);
+    assert.strictEqual(result.recruiter_contact_method, undefined);
+    assert.strictEqual(result.subscription_required, true, "frontend needs this flag to render the locked state");
+  });
+
+  test("redactForNonSubscriber keeps everything the free spec explicitly allows", () => {
+    const result = redactForNonSubscriber(SAMPLE_JOB);
+    assert.strictEqual(result.location_raw, "Dallas, TX");
+    assert.strictEqual(result.date_posted, "2026-09-01");
+    assert.deepStrictEqual(result.match, SAMPLE_JOB.match, "match score/recommendation must survive for a signed-in free candidate — only redactForAnonymous strips it");
+    assert.ok(result.id, "job id must survive — needed for save/dismiss/detail links");
+  });
+
+  test("redactForNonSubscriber scrubs the employer name out of the title, not just the company_name field", () => {
+    const result = redactForNonSubscriber(SAMPLE_JOB);
+    assert.ok(!/medtronic/i.test(result.title_original), `title must not leak the employer name: "${result.title_original}"`);
+    assert.ok(!/medtronic/i.test(result.title_normalized));
+  });
+
+  test("redactForNonSubscriber scrubs the employer name out of the full description AND the preview, including a shortened self-reference", () => {
+    const result = redactForNonSubscriber(SAMPLE_JOB);
+    assert.ok(!/medtronic/i.test(result.description_text), `full description must not leak the employer name: "${result.description_text}"`);
+    assert.ok(!/medtronic/i.test(result.description_preview));
+    // The description's own second sentence refers to the employer only
+    // as "Medtronic" again here, but this specifically exercises the
+    // shortened/informal self-reference gap the word-level scrub exists
+    // to close (see scrubCompanyNameFromText's own comments).
+    assert.ok(result.description_text.toLowerCase().includes("this employer"), "scrubbed text should read naturally with the neutral placeholder");
+  });
+
+  test("redactForAnonymous does everything redactForNonSubscriber does, PLUS strips the match score entirely", () => {
+    const result = redactForAnonymous(SAMPLE_JOB);
+    assert.strictEqual(result.company_name, undefined);
+    assert.strictEqual(result.match, undefined, "an anonymous visitor must not see match score/recommendation/reasons/concerns at all");
+  });
+
+  test("a job with no company_name on file is left otherwise intact by the scrub (no company name to leak in the first place)", () => {
+    const jobWithNoCompany = { ...SAMPLE_JOB, company_name: undefined };
+    const result = redactForNonSubscriber(jobWithNoCompany);
+    assert.strictEqual(result.title_original, SAMPLE_JOB.title_original, "falls back to the original title when there's no company name to scrub against");
+  });
+
+  test("scrubCompanyNameFromText catches a short ALL-CAPS acronym brand name even though it's under the length filter", () => {
+    const scrubbed = scrubCompanyNameFromText("Regional Manager - MWI Animal Health", "MWI Animal Health");
+    assert.ok(!/\bMWI\b/.test(scrubbed), `short all-caps acronym must still be scrubbed: "${scrubbed}"`);
+  });
+
+  test("scrubCompanyNameFromText does NOT over-scrub common legal-suffix words like 'Group' or 'Co' on their own", () => {
+    // Regression guard: the whole point of COMPANY_SUFFIX_WORDS is that
+    // ordinary text containing the word "Group" or "Co" elsewhere isn't
+    // turned into nonsense just because the employer's name happens to
+    // end in one of those words.
+    const scrubbed = scrubCompanyNameFromText("Join our sales group and grow your co-workers' skills.", "Acme Group");
+    assert.ok(scrubbed.includes("sales group"), "the common word 'group' elsewhere in ordinary text must survive untouched");
+  });
+
+  test("the actual production pattern (hasFullAccess ? job : redactForNonSubscriber(job)) fully hides employer identity for a brand-new free account", () => {
+    // This is the exact one-line pattern used throughout routes/jobs.js
+    // (GET /jobs, GET /jobs/:id, /saved-jobs, /recruiter-jobs) — a direct
+    // end-to-end check that a free signup (no subscription_status at
+    // all, straight out of the new card-less onboarding flow) actually
+    // gets the redacted shape, not the raw one.
+    const freshFreeProfile = { subscription_status: null, trial_started_at: null };
+    const shown = hasFullAccess(freshFreeProfile) ? SAMPLE_JOB : redactForNonSubscriber(SAMPLE_JOB);
+    assert.strictEqual(shown.company_name, undefined, "a brand-new free account must never receive the employer name");
+    assert.strictEqual(shown.source_url, undefined);
+    assert.strictEqual(shown.subscription_required, true);
+  });
+
+  console.log("\n=== Trial-abuse guard: computeTrialDaysForCheckout (used by both checkout entry points) ===");
+
+  test("a brand-new account (never trialed) gets the full configured trial length", () => {
+    const originalEnv = process.env.TRIAL_PERIOD_DAYS;
+    process.env.TRIAL_PERIOD_DAYS = "3";
+    try {
+      assert.strictEqual(computeTrialDaysForCheckout({ trial_started_at: null }), 3);
+      assert.strictEqual(computeTrialDaysForCheckout(null), 3, "no profile row at all is treated the same as never-trialed");
+      assert.strictEqual(computeTrialDaysForCheckout(undefined), 3);
+    } finally {
+      process.env.TRIAL_PERIOD_DAYS = originalEnv;
+    }
+  });
+
+  test("an account that already has trial_started_at set gets ZERO trial days, regardless of current subscription_status", () => {
+    // Direct instruction: don't grant a second free trial to the same
+    // account. This is exactly the free-dashboard scenario — a
+    // candidate trialed once, cancelled or lapsed back to no active
+    // subscription, and clicks "Unlock" again from the free dashboard.
+    const originalEnv = process.env.TRIAL_PERIOD_DAYS;
+    process.env.TRIAL_PERIOD_DAYS = "3";
+    try {
+      assert.strictEqual(computeTrialDaysForCheckout({ trial_started_at: isoPast(30 * DAY), subscription_status: "cancelled" }), 0);
+      assert.strictEqual(computeTrialDaysForCheckout({ trial_started_at: isoPast(30 * DAY), subscription_status: null }), 0, "still zero even if subscription_status was later cleared entirely");
+    } finally {
+      process.env.TRIAL_PERIOD_DAYS = originalEnv;
+    }
+  });
+
+  test("trials disabled account-wide (TRIAL_PERIOD_DAYS=0) still returns 0 for a never-trialed account — unrelated to the abuse guard", () => {
+    const originalEnv = process.env.TRIAL_PERIOD_DAYS;
+    process.env.TRIAL_PERIOD_DAYS = "0";
+    try {
+      assert.strictEqual(computeTrialDaysForCheckout({ trial_started_at: null }), 0);
+    } finally {
+      process.env.TRIAL_PERIOD_DAYS = originalEnv;
+    }
   });
 
   console.log(`\n${passCount} passed, ${failCount} failed\n`);

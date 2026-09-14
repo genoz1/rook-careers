@@ -70,6 +70,52 @@ async function rookLockedJobCtaLabel() {
   return `Start ${days}-Day Free Trial`;
 }
 
+// Client-side mirror of backend/matching.js's hasFullAccess(). This is
+// NOT a security boundary — the server (redactForNonSubscriber / the
+// jobs & application-package routes) is the only thing that actually
+// withholds data. This copy exists purely so pages can decide what to
+// SHOW (e.g. whether to render the "Unlock" banner) without an extra
+// round trip or guessing at the rule. Kept logically identical to the
+// backend version on purpose — same two timestamp checks, same two
+// statuses — so the two never quietly drift apart.
+function rookHasFullAccess(profile) {
+  if (!profile) return false;
+  const status = profile.subscription_status;
+  if (status !== "trialing" && status !== "active") return false;
+  const now = Date.now();
+  if (profile.subscription_cancel_at && new Date(profile.subscription_cancel_at).getTime() <= now) return false;
+  if (status === "trialing" && profile.trial_ends_at && new Date(profile.trial_ends_at).getTime() <= now) return false;
+  return true;
+}
+
+// Fires a GA4 event via the shared gtag() runtime already loaded on
+// every page (see product_information: one gtag.js instance, both the
+// Ads conversion ID and the GA4 measurement ID configured on it).
+// Direct instruction: never send email addresses, résumé contents, or
+// other PII as event params — callers must only pass non-identifying
+// context (counts, categories, source labels). No-ops safely if gtag
+// isn't loaded yet or a param is missing, so a tracking hiccup never
+// breaks the actual user-facing action it's attached to.
+function rookTrackEvent(name, params = {}) {
+  try {
+    if (typeof gtag === 'function') gtag('event', name, params);
+  } catch (_) {
+    // Analytics must never be able to break the page it's attached to.
+  }
+}
+
+// Shared "go unlock" action for every locked-job CTA, primary unlock
+// banner, gated Apply button, and gated Application Package link across
+// the app (dashboard, search, job analysis). Fires job_unlock_clicked
+// with a `source` label identifying which surface was clicked, then
+// sends the candidate to the existing rook-checkout.html flow — the
+// same authenticated Setup-Intent-based checkout used everywhere else,
+// never a separate/parallel payment path.
+function rookGoToCheckout(source) {
+  rookTrackEvent('job_unlock_clicked', { event_category: 'engagement', source: String(source || 'unknown') });
+  window.location.href = 'rook-checkout.html';
+}
+
 // Fills in the sidebar's name/avatar/plan card (the ".side-foot" block
 // present on every logged-in page) from a real candidate profile object.
 // This used to be literal hardcoded text ("Gene Zentko", "Professional

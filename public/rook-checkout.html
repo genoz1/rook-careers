@@ -289,6 +289,23 @@
     }
   </style>
 </head>
+<!-- Google tag — was missing from this page entirely before now, which
+     is why checkout_started had nowhere to fire from. Same shared
+     runtime/IDs as every other ROOK page (rook-dashboard.html,
+     rook-onboarding-v6*.html) — one gtag.js instance, both the Ads
+     conversion ID and the GA4 measurement ID configured on it. No
+     conversion events added here — trial_activated/the AW conversion
+     still only fire from rook-dashboard.html, after the webhook-backed
+     redirect, per direct instruction that free/checkout-start events
+     must never be confused with a confirmed paid-trial conversion. -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=AW-18428232873"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'AW-18428232873');
+  gtag('config', 'G-LDG2CL5Z8R');
+</script>
 <body>
 
 <nav>
@@ -419,6 +436,13 @@
   if (!session) {
     window.location.href = 'rook-login.html?return=' + encodeURIComponent(window.location.href);
     return;
+  }
+
+  // checkout_started — fires once, only for an already-authenticated
+  // candidate who actually reached this page (not on the login bounce
+  // above). No PII in params.
+  if (typeof gtag !== 'undefined') {
+    gtag('event', 'checkout_started', { event_category: 'conversion' });
   }
 
   // ── Init Stripe Elements ───────────────────────────────────────────────

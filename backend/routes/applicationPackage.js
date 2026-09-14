@@ -10,6 +10,7 @@
 const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
 const { generateApplicationPackage } = require("../ai/applicationPackage");
+const { hasFullAccess } = require("../matching");
 
 const router = express.Router();
 
@@ -42,9 +43,21 @@ async function requireAuth(req, res, next) {
 router.get("/application-package/:jobId", requireConfig, requireAuth, async (req, res) => {
   const { data: profile } = await supabaseAdmin
     .from("candidate_profiles")
-    .select("id, resume_text, name, email, phone")
+    .select("id, resume_text, name, email, phone, subscription_status, subscription_cancel_at, trial_ends_at")
     .eq("user_id", req.user.id)
     .maybeSingle();
+
+  // Direct instruction: a tailored application package is built from the
+  // employer's name and full, unredacted job description — exactly the
+  // two things a free candidate must never receive. This route had no
+  // subscription check at all before now (it only required a résumé on
+  // file), which was harmless while every account necessarily had a
+  // subscription, but became a real bypass of the redaction elsewhere in
+  // the app the moment a card-less free account exists. Checked here,
+  // server-side, not just left to the "createPackageLink" UI to hide.
+  if (!hasFullAccess(profile)) {
+    return res.status(403).json({ error: "Start your free trial to generate a tailored application package.", subscription_required: true });
+  }
 
   if (!profile || !profile.resume_text) {
     return res.status(400).json({ error: "Upload a résumé before generating an application package — see onboarding Step 1." });

@@ -4,11 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex">
-<title>ROOK — Start Your Free Trial</title>
+<title>ROOK — Create Your Free Account</title>
 <link rel="icon" href="assets/favicon.ico">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<script src="https://js.stripe.com/v3/"></script>
 <script src="rook-config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <style>
@@ -26,7 +25,6 @@ body{font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--ink
 .brand-name{font-size:19px;font-weight:900;letter-spacing:.08em;color:var(--navy)}
 .screen{padding-top:28px}
 
-/* trial box — exact v4 */
 .eyebrow{font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--blue);margin-bottom:10px}
 h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing:-.03em;color:var(--navy);margin-bottom:12px}
 .lead{font-size:15px;color:var(--muted);line-height:1.6;margin-bottom:4px}
@@ -38,7 +36,6 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
 .trial-feature{display:flex;align-items:flex-start;gap:10px;margin-top:10px;font-size:13px;color:var(--ink)}
 .trial-check{color:var(--green);font-weight:700;flex-shrink:0}
 
-/* form sections */
 .form-section{background:var(--paper);border:1.5px solid var(--line);border-radius:var(--radius);padding:20px;margin-top:10px}
 .form-section-label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px}
 .field-group{display:flex;flex-direction:column;gap:12px}
@@ -46,19 +43,14 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
 .field-label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:5px}
 .field-input{width:100%;padding:13px 14px;border:1.5px solid var(--line);border-radius:var(--input-radius);font:inherit;font-size:15px;color:var(--ink);background:var(--bg);outline:none;-webkit-appearance:none;transition:border-color .15s}
 .field-input:focus{border-color:var(--blue)}
-.stripe-element{background:var(--bg);border:1.5px solid var(--line);border-radius:var(--input-radius);padding:13px 14px;transition:border-color .15s}
-.stripe-element.StripeElement--focus{border-color:var(--blue)}
-.stripe-element.StripeElement--invalid{border-color:#e03131}
-.card-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 
-/* button */
 .btn-primary{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:15px;border:none;border-radius:12px;background:linear-gradient(110deg,var(--navy),var(--blue));color:#fff;font:inherit;font-size:15px;font-weight:700;cursor:pointer;margin-top:20px;transition:opacity .15s}
 .btn-primary:disabled{opacity:.55;cursor:not-allowed}
 .fine{font-size:11px;color:var(--muted);text-align:center;margin-top:12px;line-height:1.6}
 .err{font-size:13px;color:#c0392b;font-weight:500;text-align:center;min-height:18px;margin-top:10px}
 .spinner{width:18px;height:18px;border:2.5px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
 @keyframes spin{to{transform:rotate(360deg)}}
-@media(max-width:400px){.name-row,.card-row{grid-template-columns:1fr}}
+@media(max-width:400px){.name-row{grid-template-columns:1fr}}
 </style>
 </head>
 <!-- Google tag -->
@@ -80,18 +72,18 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
   </div>
 
   <div class="screen">
-    <div class="eyebrow">Full access for 3 days</div>
-    <h2>Make your next move.</h2>
-    <p class="lead">Unlock employer names and application links. Explore on your terms.</p>
+    <div class="eyebrow">Free account · No card required</div>
+    <h2>See your matches.</h2>
+    <p class="lead">Create your free account to see how many medical &amp; animal health sales roles match your background — no card, no commitment.</p>
 
     <div class="trial-box">
       <div class="trial-price">
-        <span>ROOK Membership</span>
-        <div><strong>$0</strong> <small>today</small></div>
+        <span>Free Account</span>
+        <div><strong>$0</strong> <small>always</small></div>
       </div>
-      <div class="trial-feature"><span class="trial-check">✓</span> Employer names and application links</div>
-      <div class="trial-feature"><span class="trial-check">✓</span> Save jobs and set up alerts</div>
-      <div class="trial-feature"><span class="trial-check">✓</span> Personalized scores after résumé analysis</div>
+      <div class="trial-feature"><span class="trial-check">✓</span> See your total match count and scores</div>
+      <div class="trial-feature"><span class="trial-check">✓</span> Titles, locations, and posting dates</div>
+      <div class="trial-feature"><span class="trial-check">✓</span> Unlock employers &amp; apply anytime with a 3-day free trial</div>
     </div>
 
     <div class="form-section">
@@ -118,39 +110,9 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
       </div>
     </div>
 
-    <div class="form-section">
-      <div class="form-section-label">Payment details</div>
-      <div class="field-group">
-        <div>
-          <label class="field-label">Card number</label>
-          <div id="cardNumber" class="stripe-element"></div>
-        </div>
-        <div class="card-row">
-          <div>
-            <label class="field-label">Expiry date</label>
-            <div id="cardExpiry" class="stripe-element"></div>
-          </div>
-          <div>
-            <label class="field-label">Security code</label>
-            <div id="cardCvc" class="stripe-element"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <div class="err" id="formErr"></div>
-    <button class="btn-primary" id="btnStartTrial">Start my free 3-day trial</button>
-    <p class="fine" id="fineText">Card required. 3 days free, then <strong>$19.99/month</strong>. Automatically renews until canceled. Cancel anytime in Settings before your trial ends to avoid being charged. <span id="firstChargeDate"></span></p>
-    <script>
-      // Show first charge date dynamically
-      (function() {
-        const d = new Date();
-        d.setDate(d.getDate() + 3);
-        const opts = { weekday: 'long', month: 'long', day: 'numeric' };
-        const el = document.getElementById('firstChargeDate');
-        if (el) el.textContent = 'First charge: ' + d.toLocaleDateString('en-US', opts) + '.';
-      })();
-    </script>
+    <button class="btn-primary" id="btnCreateAccount">See my matches</button>
+    <p class="fine">No card required. You can start a 3-day free trial any time from your dashboard to unlock employers, full listings, and applying.</p>
   </div>
 </div>
 
@@ -160,23 +122,10 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
     try { return JSON.parse(sessionStorage.getItem('rook_v6_state') || '{}'); } catch(_) { return {}; }
   }
   const errEl = document.getElementById('formErr');
-  const btn   = document.getElementById('btnStartTrial');
+  const btn   = document.getElementById('btnCreateAccount');
   function showErr(msg) { errEl.textContent = msg || ''; }
 
-  const publishableKey = window.ROOK_CONFIG?.STRIPE_PUBLISHABLE_KEY;
-  if (!publishableKey) { showErr('Payment system unavailable. Please try again later.'); btn.disabled = true; return; }
-
   const sb = window.supabase.createClient(window.ROOK_CONFIG.SUPABASE_URL, window.ROOK_CONFIG.SUPABASE_ANON_KEY);
-  const stripe = Stripe(publishableKey);
-  const elements = stripe.elements({ fonts:[{cssSrc:'https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap'}] });
-  const style = { base:{fontFamily:'Inter,system-ui,sans-serif',fontSize:'15px',color:'#0d2035',fontWeight:'500','::placeholder':{color:'#a0b4c4',fontWeight:'400'}},invalid:{color:'#c0392b'} };
-  const cardNumber = elements.create('cardNumber', {style, placeholder:'1234 5678 9012 3456'});
-  const cardExpiry = elements.create('cardExpiry', {style});
-  const cardCvc    = elements.create('cardCvc',    {style});
-  cardNumber.mount('#cardNumber');
-  cardExpiry.mount('#cardExpiry');
-  cardCvc.mount('#cardCvc');
-  [cardNumber, cardExpiry, cardCvc].forEach(el => el.on('change', e => { if (e.error) showErr(e.error.message); else showErr(''); }));
 
   btn.addEventListener('click', async () => {
     showErr('');
@@ -191,10 +140,6 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
 
     btn.disabled = true;
     btn.innerHTML = '<div class="spinner"></div> Creating your account…';
-    // Conversion: checkout started
-    if (typeof gtag !== 'undefined') {
-      gtag('event', 'begin_checkout', { event_category: 'conversion', event_label: 'trial_v6', value: 0 });
-    }
 
     try {
       const { data: signUpData, error: signUpErr } = await sb.auth.signUp({
@@ -220,6 +165,15 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
       }
       if (!accessToken) throw new Error('Could not start session. Please try again.');
 
+      // Conversion: free account created — a real signup, but a
+      // SECONDARY conversion. The primary Google Ads/Meta conversion
+      // (trial_activated) only fires later, from rook-checkout.html's
+      // webhook-confirmed success — never here. No PII in the params.
+      if (typeof gtag !== 'undefined') {
+        gtag('event', 'sign_up', { event_category: 'conversion', event_label: 'free_account_v6', value: 0 });
+        gtag('event', 'account_created', { event_category: 'conversion', method: 'email' });
+      }
+
       const v6 = getV6State();
       const prefillPayload = { user_id: userId, name: `${firstName} ${lastName}` };
       if (v6.industry) prefillPayload.desired_industries = [v6.industry];
@@ -237,51 +191,28 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
         prefillPayload.home_lng   = v6.location.lng   ?? null;
         prefillPayload.home_location_label = v6.location.label || null;
       }
-      fetch('/api/profile/prefill', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(prefillPayload)
-      }).catch(() => {});
-
-      btn.innerHTML = '<div class="spinner"></div> Setting up payment…';
-      const setupRes = await fetch('/api/stripe/create-setup-intent', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` }
-      });
-      const setupData = await setupRes.json();
-      if (!setupRes.ok || !setupData.client_secret) throw new Error(setupData.error || 'Could not initialize payment.');
-
-      btn.innerHTML = '<div class="spinner"></div> Verifying card…';
-      const { setupIntent, error: cardError } = await stripe.confirmCardSetup(setupData.client_secret, {
-        payment_method: { card: cardNumber }
-      });
-      if (cardError) throw new Error(cardError.message);
-
-      btn.innerHTML = '<div class="spinner"></div> Starting your trial…';
-      const subRes = await fetch('/api/stripe/create-subscription-from-setup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-        body: JSON.stringify({ payment_method_id: setupIntent.payment_method, customer_id: setupData.customer_id })
-      });
-      const subData = await subRes.json();
-      if (!subRes.ok) throw new Error(subData.error || 'Could not start trial.');
+      // Awaited (not fire-and-forget, unlike the old flow) — the free
+      // dashboard's whole point is to show real matches immediately, so
+      // onboarding answers need to actually be saved before we redirect,
+      // not racing the navigation.
+      try {
+        await fetch('/api/profile/prefill', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(prefillPayload)
+        });
+      } catch (_) {
+        // Best-effort — the dashboard will still load with whatever
+        // subset of the profile made it through; not worth blocking
+        // account creation over.
+      }
 
       try { sessionStorage.removeItem('rook_v6_state'); } catch(_) {}
-      // Conversion: trial started — fires from confirmed backend action, not button click
-      if (typeof gtag !== 'undefined') {
-        gtag('event', 'conversion', {
-          send_to: 'AW-18428232873',
-          event_category: 'conversion',
-          event_label: 'trial_started',
-          value: 0.0,
-          currency: 'USD'
-        });
-      }
-      window.location.href = 'rook-dashboard.html?trial=started';
+      window.location.href = 'rook-dashboard.html?welcome=1';
     } catch (err) {
       showErr(err.message);
       btn.disabled = false;
-      btn.innerHTML = 'Start my free 3-day trial';
+      btn.innerHTML = 'See my matches';
     }
   });
 })();

@@ -434,12 +434,27 @@ function renderJob(job) {
     : '<li style="color:#5B6B85;">No specific concerns flagged.</li>';
 
   const viewOriginal = document.getElementById('viewOriginalLink');
+  // Direct instruction: a locked (subscription_required) job must not
+  // let a free candidate reach an apply path at all — checked first,
+  // before the recruiter_posted branch below, since source_type isn't
+  // itself redacted for free candidates the way source_url/company_name
+  // are, and would otherwise fall through into a live "Apply Now" link
+  // for a recruiter-posted job. The actual submission is separately
+  // blocked server-side (POST /jobs/:id/apply's hasFullAccess check) —
+  // this is just making sure the UI never dangles a working-looking
+  // link in front of a free candidate in the first place.
+  //
   // Recruiter-posted jobs have no external source_url — the recruiter
-  // themselves is the application path, so this now routes to ROOK's
-  // own in-site Apply page (rook-apply.html) instead of a dead "#" link
-  // or a bare mailto handoff (reported: no way to apply to a
+  // themselves is the application path, so an unlocked one routes to
+  // ROOK's own in-site Apply page (rook-apply.html) instead of a dead
+  // "#" link or a bare mailto handoff (reported: no way to apply to a
   // recruiter-posted job anywhere in the product).
-  if (job.source_url) {
+  if (job.subscription_required) {
+    viewOriginal.removeAttribute('href');
+    viewOriginal.style.cursor = 'pointer';
+    viewOriginal.textContent = 'Unlock to Apply';
+    viewOriginal.onclick = (e) => { e.preventDefault(); rookGoToCheckout('job_analysis_apply'); return false; };
+  } else if (job.source_url) {
     viewOriginal.href = job.source_url;
     viewOriginal.textContent = 'Open Original Posting';
   } else if (job.source_type === 'recruiter_posted') {
@@ -468,7 +483,18 @@ function renderJob(job) {
     };
   }
 
-  document.getElementById('createPackageLink').href = `rook-application-package.html?job=${encodeURIComponent(job.id)}`;
+  // Application package (tailored résumé/cover letter) exposes the real
+  // employer name and full description — gated server-side already
+  // (backend/routes/applicationPackage.js), but the link itself
+  // shouldn't dangle in front of a free candidate either.
+  const createPackageLink = document.getElementById('createPackageLink');
+  if (job.subscription_required) {
+    createPackageLink.removeAttribute('href');
+    createPackageLink.style.cursor = 'pointer';
+    createPackageLink.onclick = (e) => { e.preventDefault(); rookGoToCheckout('job_analysis_package'); return false; };
+  } else {
+    createPackageLink.href = `rook-application-package.html?job=${encodeURIComponent(job.id)}`;
+  }
 
   document.getElementById('saveJobLink').onclick = async () => {
     const btn = document.getElementById('saveJobLink');
