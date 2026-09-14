@@ -277,6 +277,41 @@ async function run() {
     assert.strictEqual(isUsEligibleJob({ job_lat: null, job_lng: null, state: null, location_raw: "2 Locations" }), false);
   });
 
+  console.log("\n=== jobEligibility.js: temporary quarantine for confirmed bad-location records ===");
+
+  test("first Barcelona, Spain record remains excluded even with valid-looking New York coordinates/state", () => {
+    const job = {
+      id: "226f8b0f-6577-478c-9c50-e369e8cf18c6",
+      job_lat: 42.0740813,
+      job_lng: -79.4924188,
+      state: "New York",
+      location_raw: "Barcelona",
+    };
+    assert.strictEqual(isUsEligibleJob(job), false);
+  });
+
+  test("second Barcelona, Spain record remains excluded even with valid-looking New York coordinates/state", () => {
+    const job = {
+      id: "93402f62-4c5d-456e-af08-c11132958f1b",
+      job_lat: 42.0740813,
+      job_lng: -79.4924188,
+      state: "New York",
+      location_raw: "Barcelona",
+    };
+    assert.strictEqual(isUsEligibleJob(job), false);
+  });
+
+  test("Nashua record remains excluded even with valid-looking New Hampshire coordinates/state", () => {
+    const job = {
+      id: "9e4116c4-a3c8-448b-b733-d3468b92f9f9",
+      job_lat: 45.2838212,
+      job_lng: -71.1020442,
+      state: "New Hampshire",
+      location_raw: "Remote, NH | Nashua, New Hampshire",
+    };
+    assert.strictEqual(isUsEligibleJob(job), false);
+  });
+
   console.log("\n=== jobEligibility.js: unambiguous foreign evidence wins even with valid-looking US coordinates/state (ordering fix) ===");
 
   test("Tanzania with valid-looking DC coordinates AND a resolvable DC state is STILL excluded", () => {
