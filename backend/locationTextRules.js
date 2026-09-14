@@ -101,6 +101,31 @@ function hasUnambiguousForeignCountryEvidence(locationRaw) {
   return false;
 }
 
+// Direct instruction: the narrowest defensible fix here, not a general
+// world-cities database (no reliable, complete "all city names" dataset
+// exists the way i18n-iso-countries exists for countries, and building
+// one would be a much larger, different project than what was asked).
+// Confirmed by direct investigation, not inferred from a coordinate:
+// two real Sanofi postings use bare "Barcelona" — no state, country, or
+// any other qualifier at all — as their ENTIRE location_raw for jobs
+// actually based in Barcelona, SPAIN (one description explicitly states
+// "Location: Barcelona, Spain"; the other is written entirely in
+// Spanish describing Spanish healthcare regions). That bare string
+// coincidentally matches a real place, Barcelona, in Chautauqua County,
+// NY. A legitimate US posting for a small town essentially never omits
+// ALL state/country context the way this employer's board does for its
+// home-market (Spain) postings — kept as an explicit, minimal, named
+// list, scoped to exactly this confirmed case. Extend only when another
+// concrete case is investigated and confirmed the same way — never
+// preemptively, and never by broadening this into a general foreign-
+// city check.
+const KNOWN_AMBIGUOUS_BARE_CITY_NAMES = new Set(["barcelona"]);
+
+function isBareAmbiguousForeignCityName(locationRaw) {
+  const text = normalizeLocationText(locationRaw).toLowerCase();
+  return KNOWN_AMBIGUOUS_BARE_CITY_NAMES.has(text);
+}
+
 // Bare generic work-arrangement terms with no location content at all.
 // Proven necessary, not theoretical: a live Nominatim query for the
 // single word "Remote" returns a real match — an actual hamlet in Coos
@@ -136,5 +161,6 @@ module.exports = {
   normalizeLocationText,
   hasUnambiguousForeignCountryEvidence,
   isBareGenericRemoteTerm,
+  isBareAmbiguousForeignCityName,
   hasExplicitUsLanguageEvidence,
 };

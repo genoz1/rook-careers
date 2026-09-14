@@ -40,7 +40,7 @@
 // (a 5-digit US ZIP, not free text) with no equivalent foreign-country
 // or bare-generic-term risk, and is out of scope for this project.
 
-const { hasUnambiguousForeignCountryEvidence, isBareGenericRemoteTerm } = require("./locationTextRules");
+const { hasUnambiguousForeignCountryEvidence, isBareGenericRemoteTerm, isBareAmbiguousForeignCityName } = require("./locationTextRules");
 const { resolveUsStateCode } = require("./jobEligibility");
 
 const USER_AGENT = "ROOK-Careers/1.0 (rookcareers.com; job-matching platform)";
@@ -104,8 +104,8 @@ async function geocodeZip(zip) {
  * Geocode a free-text job location ("Tampa, FL", "Orlando, Florida") to
  * {lat, lng, state}, or null if not found, rejected, or on error.
  *
- * Two rejection paths run BEFORE any Nominatim call is made (no network
- * cost for either):
+ * Three rejection paths run BEFORE any Nominatim call is made (no
+ * network cost for any of them):
  *   - isBareGenericRemoteTerm: "Remote", "WFH", "Virtual", "Telecommute"
  *     alone. Confirmed necessary — a live query for the bare word
  *     "Remote" returns a real match (a hamlet in Coos County, Oregon),
@@ -116,6 +116,13 @@ async function geocodeZip(zip) {
  *     This always wins even when US-sounding text is also present
  *     elsewhere in the same string (e.g. "United States / Canada" is
  *     rejected, not accepted) — direct instruction.
+ *   - isBareAmbiguousForeignCityName: a small, explicit, named list of
+ *     bare foreign CITY names confirmed (not assumed) to coincide with
+ *     a real US place — currently just "Barcelona" (two real Sanofi
+ *     postings for Barcelona, Spain used bare "Barcelona" with zero
+ *     other location context, which matched Barcelona, NY). Deliberately
+ *     narrow — see locationTextRules.js for why this isn't a general
+ *     world-cities database.
  *
  * After a successful geocode, the result's `category` must be "place"
  * or "boundary" (see ACCEPTABLE_RESULT_CATEGORIES above), the returned
@@ -129,6 +136,7 @@ async function geocodeLocation(locationText) {
   if (!locationText || !locationText.trim()) return null;
   if (isBareGenericRemoteTerm(locationText)) return null;
   if (hasUnambiguousForeignCountryEvidence(locationText)) return null;
+  if (isBareAmbiguousForeignCityName(locationText)) return null;
 
   await throttle();
   try {

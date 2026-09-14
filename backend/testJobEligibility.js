@@ -13,9 +13,12 @@ const assert = require("assert");
 const {
   hasUnambiguousForeignCountryEvidence,
   isBareGenericRemoteTerm,
+  isBareAmbiguousForeignCityName,
   hasExplicitUsLanguageEvidence,
 } = require("./locationTextRules");
 const { isUsEligibleJob, resolveUsStateCode, US_ELIGIBLE_STATE_CODES } = require("./jobEligibility");
+const { extractGeocodableLocation } = require("./locationExtraction");
+const { validateDryRunReport } = require("./backfillReportValidation");
 
 let passCount = 0;
 let failCount = 0;
@@ -491,6 +494,119 @@ async function run() {
     const result = await geocodeLocation("some ambiguous input");
     restore();
     assert.strictEqual(result, null);
+  });
+
+  console.log("\n=== locationTextRules.js: isBareAmbiguousForeignCityName (durable Barcelona fix) ===");
+
+  test('"Barcelona" alone is flagged as an ambiguous bare foreign city name', () => {
+    assert.strictEqual(isBareAmbiguousForeignCityName("Barcelona"), true);
+  });
+  test('"barcelona" (lowercase) is still flagged, case-insensitively', () => {
+    assert.strictEqual(isBareAmbiguousForeignCityName("barcelona"), true);
+  });
+  test('"Barcelona, NY" is NOT flagged — a qualified string is not the confirmed bare-ambiguous shape', () => {
+    assert.strictEqual(isBareAmbiguousForeignCityName("Barcelona, NY"), false);
+  });
+  test('"Barcelona, Spain" is NOT flagged by this check specifically (it would be caught by the country-evidence check instead)', () => {
+    assert.strictEqual(isBareAmbiguousForeignCityName("Barcelona, Spain"), false);
+  });
+  test('"Boston" is NOT flagged (not on the narrow, confirmed list)', () => {
+    assert.strictEqual(isBareAmbiguousForeignCityName("Boston"), false);
+  });
+
+  await asyncTest("geocodeLocation NEVER calls fetch for bare \"Barcelona\" (durable fix — confirmed real record, prevents recreating the Barcelona/NY coordinate on future re-ingestion)", async () => {
+    const restore = installFetchStub();
+    delete require.cache[require.resolve("./geocoding")];
+    const { geocodeLocation } = require("./geocoding");
+    const result = await geocodeLocation("Barcelona");
+    const callCount = restore();
+    assert.strictEqual(callCount, 0, "fetch must not be called at all for the confirmed bare-ambiguous city name");
+    assert.strictEqual(result, null);
+  });
+
+  console.log("\n=== locationExtraction.js: extractGeocodableLocation (durable Nashua fix) ===");
+
+  test('"Remote, NH | Nashua, New Hampshire" (the real Nashua record) extracts the more specific second segment', () => {
+    assert.strictEqual(extractGeocodableLocation("Remote, NH | Nashua, New Hampshire"), "Nashua, New Hampshire");
+  });
+
+  test('a bare "Remote, TX" with NO second segment is left unchanged — the narrow fix only triggers with a more specific second segment present', () => {
+    assert.strictEqual(extractGeocodableLocation("Remote, TX"), "Remote, TX");
+  });
+
+  test('"Remote, NH | 2 Locations" (second segment not a real city+state shape) is left as the first segment, not force-substituted', () => {
+    assert.strictEqual(extractGeocodableLocation("Remote, NH | 2 Locations"), "Remote, NH");
+  });
+
+  test("the separate 172-record cluster shape (\"United States Remote Office | Texas, USA\") is NOT affected by this narrow fix — different first-segment shape entirely, explicitly out of scope", () => {
+    // "United States Remote Office" does not match the bare "Remote, XX"
+    // pattern this fix targets, so it falls through unchanged to the
+    // existing (unmodified) extraction logic — confirming this project
+    // did not broadly redesign all pipe-delimited records.
+    assert.strictEqual(extractGeocodableLocation("United States Remote Office | Texas, USA"), "United States Remote Office | Texas, USA".split("|")[0].trim());
+  });
+
+  test('"Remote - Georgia" (dash, not the "Remote, XX" comma+2-letter shape) is unaffected by this fix', () => {
+    assert.strictEqual(extractGeocodableLocation("Remote - Georgia"), "Georgia");
+  });
+
+  console.log("\n=== backfillReportValidation.js: validateDryRunReport (pure, no I/O) ===");
+
+  function makeValidReport(overrides = {}) {
+    return {
+      mode: "dry-run",
+      entries: [
+        { job_id: "11111111-1111-1111-1111-111111111111", proposed_state: "CA", matched_fips: "06", current_job_lat: "34.0", current_job_lng: "-118.0", current_state: null },
+        { job_id: "22222222-2222-2222-2222-222222222222", proposed_state: null, matched_fips: null, current_job_lat: null, current_job_lng: null, current_state: null },
+      ],
+      ...overrides,
+    };
+  }
+
+  test("a well-formed dry-run report validates OK", () => {
+    const result = validateDryRunReport(makeValidReport());
+    assert.strictEqual(result.valid, true);
+    assert.deepStrictEqual(result.errors, []);
+  });
+
+  test('a report with mode "write" (not "dry-run") is rejected', () => {
+    const result = validateDryRunReport(makeValidReport({ mode: "write" }));
+    assert.strictEqual(result.valid, false);
+    assert.ok(result.errors.some((e) => e.includes('mode')));
+  });
+
+  test("a report with a duplicate job_id is rejected", () => {
+    const report = makeValidReport();
+    report.entries.push({ ...report.entries[0] });
+    const result = validateDryRunReport(report);
+    assert.strictEqual(result.valid, false);
+    assert.ok(result.errors.some((e) => e.includes("duplicate")));
+  });
+
+  test("a report with an invalid proposed_state (not in the allowlist) is rejected", () => {
+    const report = makeValidReport();
+    report.entries[0].proposed_state = "ZZ";
+    const result = validateDryRunReport(report);
+    assert.strictEqual(result.valid, false);
+    assert.ok(result.errors.some((e) => e.includes("invalid proposed_state")));
+  });
+
+  test("a report where proposed_state and matched_fips disagree is rejected", () => {
+    const report = makeValidReport();
+    report.entries[0].matched_fips = "36"; // NY, not CA — inconsistent with proposed_state "CA"
+    const result = validateDryRunReport(report);
+    assert.strictEqual(result.valid, false);
+    assert.ok(result.errors.some((e) => e.includes("does not match FIPS")));
+  });
+
+  test("a report with entries that isn't an array is rejected", () => {
+    const result = validateDryRunReport({ mode: "dry-run", entries: "not-an-array" });
+    assert.strictEqual(result.valid, false);
+  });
+
+  test("a completely malformed input (null) is rejected without throwing", () => {
+    const result = validateDryRunReport(null);
+    assert.strictEqual(result.valid, false);
   });
 
   console.log(`\n${passCount} passed, ${failCount} failed\n`);

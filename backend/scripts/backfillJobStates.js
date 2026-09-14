@@ -6,39 +6,36 @@
 // state/DC/territory that coordinate falls inside, using a LOCAL,
 // OFFLINE point-in-polygon check against the U.S. Census Bureau's real
 // boundary data (us-atlas + topojson-client + @turf/boolean-point-in-
-// polygon) — not a new Nominatim call. Verified directly that this
-// dataset includes DC and all 5 US territories before this script was
-// written.
+// polygon) — not a new Nominatim call.
 //
-// THREE MODES, each requiring an increasing level of explicit intent:
+// THREE MODES:
 //
-//   1. DRY RUN (default — just `node backend/scripts/backfillJobStates.js`)
-//      Recomputes fresh from the live database. Zero writes. Produces a
-//      timestamped report file for review.
+//   1. DRY RUN (default) — recomputes fresh, zero writes, produces a
+//      timestamped report file.
 //
 //   2. WRITE (`--write --confirm --report=<path-to-a-dry-run-report>`)
-//      Does NOT recompute anything. Reads the EXACT reviewed dry-run
-//      report file you pass in and applies only what's already written
-//      in it. Before touching each row, re-fetches its CURRENT
-//      job_lat/job_lng/state from the database and compares them
-//      against the current_job_lat/current_job_lng/current_state values
-//      recorded in the report at dry-run time — if the row has changed
-//      since the report was generated (e.g. re-ingested in the
-//      meantime), that row is SKIPPED, not written, and recorded as
-//      skipped in the write-results report. Produces a write-results
-//      report (successful / skipped / failed IDs) — this is the file
-//      needed for a later rollback.
+//      Validates the report file first (see backfillReportValidation.js
+//      — must be mode "dry-run", well-formed, unique job IDs, valid
+//      state/FIPS pairs) and refuses to proceed if invalid. Does NOT
+//      recompute anything from the live database — applies only what's
+//      in the validated report. Each write is a SINGLE atomic
+//      conditional UPDATE (`WHERE id = ? AND job_lat = ? AND job_lng =
+//      ? AND state IS/= ?`), so the check-and-write is one database
+//      operation, not a separate read then a separate write with a race
+//      window in between. Whether the update actually matched a row is
+//      confirmed directly from Postgres's returned row count (via
+//      .select() after .update()) — zero rows back means the row had
+//      already changed since the dry run, and it's recorded as
+//      skipped, not silently treated as a no-op success.
 //
 //   3. ROLLBACK (`--rollback --confirm --report=<path-to-a-write-results-report>`)
-//      Reads a write-results report from mode 2. For each row that was
-//      successfully written, re-fetches its CURRENT state and
-//      coordinates and clears `state` back to NULL ONLY IF the current
-//      state still equals exactly what this backfill wrote AND the
-//      coordinates are unchanged from what was recorded at write time.
-//      Any row that fails that check is skipped, not forced.
+//      Same atomic-conditional-update approach: clears `state` back to
+//      NULL only via an UPDATE whose WHERE clause requires state AND
+//      coordinates to still equal exactly what mode 2 wrote — confirmed
+//      from the returned row, not a separate check.
 //
 // Every mode besides plain dry-run requires BOTH a mode flag (--write
-// or --rollback) AND --confirm — a single flag alone does nothing.
+// or --rollback) AND --confirm.
 
 require("dotenv").config();
 const fs = require("fs");
@@ -47,10 +44,10 @@ const { createClient } = require("@supabase/supabase-js");
 const topojson = require("topojson-client");
 const booleanPointInPolygon = require("@turf/boolean-point-in-polygon").default;
 const usAtlas = require("us-atlas/states-10m.json");
+const { validateDryRunReport, FIPS_TO_ABBR } = require("../backfillReportValidation");
 
 // Exact IDs confirmed and listed during this project's assessment —
-// must never receive a backfilled state under any mode. Kept as a
-// literal, reviewable list rather than a database flag.
+// must never receive a backfilled state under any mode.
 const KNOWN_BAD_RECORD_IDS = [
   "db7e9d00-c286-4c8e-8c67-f971fe250816", // Tanzania
   "baef5492-73a8-4237-9499-e7de74b5cdb2", // Kuwait
@@ -64,19 +61,8 @@ const KNOWN_BAD_RECORD_IDS = [
   "519cb3e1-1b7d-40dd-9a38-450ae5971980", // Panama, Panamá, Panama
   "226f8b0f-6577-478c-9c50-e369e8cf18c6", // Barcelona, Spain (Sanofi Sales Representative)
   "93402f62-4c5d-456e-af08-c11132958f1b", // Barcelona, Spain (Sanofi Project Manager Medical Communications)
-  "9e4116c4-a3c8-448b-b733-d3468b92f9f9", // "Remote, NH | Nashua, New Hampshire" — real NH job, wrong stored coordinate
+  "9e4116c4-a3c8-448b-b733-d3468b92f9f9", // "Remote, NH | Nashua, New Hampshire"
 ];
-
-const FIPS_TO_ABBR = {
-  "01": "AL", "02": "AK", "04": "AZ", "05": "AR", "06": "CA", "08": "CO", "09": "CT",
-  "10": "DE", "11": "DC", "12": "FL", "13": "GA", "15": "HI", "16": "ID", "17": "IL",
-  "18": "IN", "19": "IA", "20": "KS", "21": "KY", "22": "LA", "23": "ME", "24": "MD",
-  "25": "MA", "26": "MI", "27": "MN", "28": "MS", "29": "MO", "30": "MT", "31": "NE",
-  "32": "NV", "33": "NH", "34": "NJ", "35": "NM", "36": "NY", "37": "NC", "38": "ND",
-  "39": "OH", "40": "OK", "41": "OR", "42": "PA", "44": "RI", "45": "SC", "46": "SD",
-  "47": "TN", "48": "TX", "49": "UT", "50": "VT", "51": "VA", "53": "WA", "54": "WV",
-  "55": "WI", "56": "WY", "60": "AS", "66": "GU", "69": "MP", "72": "PR", "78": "VI",
-};
 
 function buildStatePolygons() {
   const geo = topojson.feature(usAtlas, usAtlas.objects.states);
@@ -84,14 +70,12 @@ function buildStatePolygons() {
 }
 
 function findStateForPoint(lat, lng, statePolygons) {
-  const point = { type: "Point", coordinates: [lng, lat] }; // GeoJSON order: [lng, lat]
+  const point = { type: "Point", coordinates: [lng, lat] };
   for (const state of statePolygons) {
     if (!state.abbr) continue;
     try {
       if (booleanPointInPolygon(point, state.geometry)) return state;
-    } catch (_) {
-      // A malformed geometry for one state must not abort the whole run.
-    }
+    } catch (_) {}
   }
   return null;
 }
@@ -105,6 +89,21 @@ function parseArgs() {
     confirmed: args.includes("--confirm"),
     reportPath: reportArg ? reportArg.slice("--report=".length) : null,
   };
+}
+
+// Builds a single, atomic, conditional UPDATE — the WHERE clause
+// itself encodes the "still matches what was reviewed" guard, so the
+// check and the write are one database round trip, not two. .select()
+// after .update() makes Postgres return the row(s) actually changed;
+// an empty result means the guard didn't match anything (the row had
+// already moved on), which the caller treats as "skipped", never as a
+// silent success.
+function guardedUpdate(supabase, { id, expectedLat, expectedLng, expectedState, newValues }) {
+  let query = supabase.from("jobs").update(newValues).eq("id", id);
+  query = (expectedLat === null || expectedLat === undefined) ? query.is("job_lat", null) : query.eq("job_lat", expectedLat);
+  query = (expectedLng === null || expectedLng === undefined) ? query.is("job_lng", null) : query.eq("job_lng", expectedLng);
+  query = (expectedState === null || expectedState === undefined) ? query.is("state", null) : query.eq("state", expectedState);
+  return query.select();
 }
 
 async function runDryRun(supabase) {
@@ -180,7 +179,7 @@ async function runDryRun(supabase) {
 
 async function runWrite(supabase, reportPath) {
   if (!reportPath) {
-    console.error("--write requires --report=<path-to-a-dry-run-report.json>. Refusing to guess which report to apply. No changes made.");
+    console.error("--write requires --report=<path-to-a-dry-run-report.json>. No changes made.");
     process.exit(1);
   }
   if (!fs.existsSync(reportPath)) {
@@ -188,9 +187,17 @@ async function runWrite(supabase, reportPath) {
     process.exit(1);
   }
 
-  console.log(`WRITE MODE — applying EXACTLY what's in ${reportPath}. Not recomputing anything.\n`);
   const sourceReport = JSON.parse(fs.readFileSync(reportPath, "utf8"));
-  const candidates = (sourceReport.entries || []).filter((e) => e.proposed_state && !KNOWN_BAD_RECORD_IDS.includes(e.job_id));
+  const validation = validateDryRunReport(sourceReport);
+  if (!validation.valid) {
+    console.error("Refusing to proceed: the report failed validation.");
+    console.error(JSON.stringify(validation.errors, null, 2));
+    process.exit(1);
+  }
+  console.log(`Report validated OK (mode="dry-run", ${sourceReport.entries.length} entries, no duplicate IDs, all proposed states valid and FIPS-consistent).\n`);
+
+  console.log(`WRITE MODE — applying EXACTLY what's in ${reportPath}. Not recomputing anything.\n`);
+  const candidates = sourceReport.entries.filter((e) => e.proposed_state && !KNOWN_BAD_RECORD_IDS.includes(e.job_id));
   console.log(`${candidates.length} row(s) in the report have a proposed_state and aren't a known-bad record.\n`);
 
   const successful = [];
@@ -199,39 +206,23 @@ async function runWrite(supabase, reportPath) {
 
   for (const entry of candidates) {
     try {
-      // Re-fetch the row's CURRENT state — never trust the report's
-      // snapshot as still being true. If anything about the row has
-      // changed since the dry run was generated, skip it rather than
-      // overwrite based on stale information.
-      const { data: current, error: fetchErr } = await supabase
-        .from("jobs")
-        .select("id, job_lat, job_lng, state")
-        .eq("id", entry.job_id)
-        .maybeSingle();
-      if (fetchErr) { failed.push({ job_id: entry.job_id, error: fetchErr.message }); continue; }
-      if (!current) { skipped.push({ job_id: entry.job_id, reason: "row no longer exists" }); continue; }
-
-      const coordsUnchanged =
-        String(current.job_lat) === String(entry.current_job_lat) &&
-        String(current.job_lng) === String(entry.current_job_lng);
-      const stateUnchanged = (current.state || null) === (entry.current_state || null);
-
-      if (!coordsUnchanged || !stateUnchanged) {
-        skipped.push({
-          job_id: entry.job_id,
-          reason: `row changed since the dry run — coords_unchanged=${coordsUnchanged}, state_unchanged=${stateUnchanged}`,
-        });
+      const { data, error } = await guardedUpdate(supabase, {
+        id: entry.job_id,
+        expectedLat: entry.current_job_lat,
+        expectedLng: entry.current_job_lng,
+        expectedState: entry.current_state,
+        newValues: { state: entry.proposed_state },
+      });
+      if (error) { failed.push({ job_id: entry.job_id, error: error.message }); continue; }
+      if (!data || data.length === 0) {
+        skipped.push({ job_id: entry.job_id, reason: "guarded update matched zero rows — row's current job_lat/job_lng/state no longer equal the reviewed dry-run values" });
         continue;
       }
-
-      const { error: updateErr } = await supabase.from("jobs").update({ state: entry.proposed_state }).eq("id", entry.job_id);
-      if (updateErr) { failed.push({ job_id: entry.job_id, error: updateErr.message }); continue; }
-
       successful.push({
         job_id: entry.job_id,
         written_state: entry.proposed_state,
-        job_lat_at_write_time: current.job_lat,
-        job_lng_at_write_time: current.job_lng,
+        original_job_lat: entry.current_job_lat,
+        original_job_lng: entry.current_job_lng,
       });
     } catch (err) {
       failed.push({ job_id: entry.job_id, error: err.message });
@@ -264,10 +255,13 @@ async function runRollback(supabase, reportPath) {
     process.exit(1);
   }
 
-  console.log(`ROLLBACK MODE — reverting exactly what ${reportPath} recorded as successful.\n`);
   const writeReport = JSON.parse(fs.readFileSync(reportPath, "utf8"));
+  if (writeReport.mode !== "write") {
+    console.error(`Refusing to proceed: expected a write-results report (mode "write"), got ${JSON.stringify(writeReport.mode)}.`);
+    process.exit(1);
+  }
   const toRollBack = writeReport.successful || [];
-  console.log(`${toRollBack.length} row(s) recorded as successfully written in this report.\n`);
+  console.log(`ROLLBACK MODE — reverting exactly the ${toRollBack.length} row(s) ${reportPath} recorded as successful.\n`);
 
   const rolledBack = [];
   const skipped = [];
@@ -275,34 +269,23 @@ async function runRollback(supabase, reportPath) {
 
   for (const entry of toRollBack) {
     try {
-      const { data: current, error: fetchErr } = await supabase
-        .from("jobs")
-        .select("id, job_lat, job_lng, state")
-        .eq("id", entry.job_id)
-        .maybeSingle();
-      if (fetchErr) { failed.push({ job_id: entry.job_id, error: fetchErr.message }); continue; }
-      if (!current) { skipped.push({ job_id: entry.job_id, reason: "row no longer exists" }); continue; }
-
-      // Only clear state if it STILL equals exactly what this backfill
-      // wrote, AND the coordinates are unchanged from write time — if
-      // either has moved on (e.g. a fresh re-ingestion legitimately set
-      // a new state since), rolling back would destroy newer, correct
-      // data. Skip rather than force in that case.
-      const stateStillMatches = current.state === entry.written_state;
-      const coordsStillMatch =
-        String(current.job_lat) === String(entry.job_lat_at_write_time) &&
-        String(current.job_lng) === String(entry.job_lng_at_write_time);
-
-      if (!stateStillMatches || !coordsStillMatch) {
-        skipped.push({
-          job_id: entry.job_id,
-          reason: `row no longer matches what was written — state_still_matches=${stateStillMatches}, coords_still_match=${coordsStillMatch}`,
-        });
+      // Atomic conditional update: only clears state if it STILL equals
+      // exactly what this backfill wrote, at the ORIGINAL coordinates
+      // recorded at write time — never based merely on the row
+      // currently containing nulls (a freshly re-ingested row could be
+      // null/null/null for a completely unrelated reason).
+      const { data, error } = await guardedUpdate(supabase, {
+        id: entry.job_id,
+        expectedLat: entry.original_job_lat,
+        expectedLng: entry.original_job_lng,
+        expectedState: entry.written_state,
+        newValues: { state: null },
+      });
+      if (error) { failed.push({ job_id: entry.job_id, error: error.message }); continue; }
+      if (!data || data.length === 0) {
+        skipped.push({ job_id: entry.job_id, reason: "guarded update matched zero rows — row no longer matches what this backfill wrote" });
         continue;
       }
-
-      const { error: updateErr } = await supabase.from("jobs").update({ state: null }).eq("id", entry.job_id);
-      if (updateErr) { failed.push({ job_id: entry.job_id, error: updateErr.message }); continue; }
       rolledBack.push(entry.job_id);
     } catch (err) {
       failed.push({ job_id: entry.job_id, error: err.message });
