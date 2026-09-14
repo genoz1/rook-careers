@@ -277,7 +277,25 @@ async function run() {
     assert.strictEqual(isUsEligibleJob({ job_lat: null, job_lng: null, state: null, location_raw: "2 Locations" }), false);
   });
 
+  console.log("\n=== jobEligibility.js: unambiguous foreign evidence wins even with valid-looking US coordinates/state (ordering fix) ===");
+
+  test("Tanzania with valid-looking DC coordinates AND a resolvable DC state is STILL excluded", () => {
+    // This is exactly the shape the 10 known-bad records originally
+    // had: real, plausible coordinates and a real, resolvable US state
+    // name, sitting alongside a job whose own location text plainly
+    // names a foreign country. Foreign evidence must win regardless.
+    const job = { job_lat: 38.9061022, job_lng: -77.0491254, state: "District of Columbia", location_raw: "Tanzania" };
+    assert.strictEqual(isUsEligibleJob(job), false);
+  });
+
+  test('"United States / Canada" with valid-looking US coordinates AND a resolvable state is STILL excluded', () => {
+    const job = { job_lat: 44.5, job_lng: -89.5, state: "Wisconsin", location_raw: "United States / Canada" };
+    assert.strictEqual(isUsEligibleJob(job), false);
+  });
+
   console.log("\n=== geocoding.js: pre-checks and category validation (mocked fetch — no real network calls) ===");
+
+
 
   // These tests mock global.fetch to (a) prove the two pre-checks
   // short-circuit BEFORE any network call is made at all, and (b) prove
@@ -384,6 +402,54 @@ async function run() {
     const restore = installFetchStub(true, [{
       lat: "38.2467233", lon: "-122.7860267", category: "water", type: "lake",
       address: { state: "California" },
+    }]);
+    delete require.cache[require.resolve("./geocoding")];
+    const { geocodeLocation } = require("./geocoding");
+    const result = await geocodeLocation("some ambiguous input");
+    restore();
+    assert.strictEqual(result, null);
+  });
+
+  await asyncTest("geocodeLocation REJECTS a place/boundary-category result with NO state in the address at all (missing state)", async () => {
+    const restore = installFetchStub(true, [{
+      lat: "40.0", lon: "-100.0", category: "boundary", type: "administrative",
+      address: {}, // no state field at all
+    }]);
+    delete require.cache[require.resolve("./geocoding")];
+    const { geocodeLocation } = require("./geocoding");
+    const result = await geocodeLocation("some ambiguous input");
+    restore();
+    assert.strictEqual(result, null, "a result with no state at all must be rejected, even if category is acceptable");
+  });
+
+  await asyncTest("geocodeLocation REJECTS a place/boundary-category result whose state does NOT resolve through the allowlist (invalid state)", async () => {
+    const restore = installFetchStub(true, [{
+      lat: "43.6532", lon: "-79.3832", category: "boundary", type: "administrative",
+      address: { state: "Ontario" }, // a real place, but not a US state/DC/territory
+    }]);
+    delete require.cache[require.resolve("./geocoding")];
+    const { geocodeLocation } = require("./geocoding");
+    const result = await geocodeLocation("some ambiguous input");
+    restore();
+    assert.strictEqual(result, null, "a category-acceptable result with a non-US state value must still be rejected");
+  });
+
+  await asyncTest("geocodeLocation REJECTS non-finite coordinates even with an otherwise-acceptable category and state", async () => {
+    const restore = installFetchStub(true, [{
+      lat: "not-a-number", lon: "-77.0", category: "place", type: "city",
+      address: { state: "Virginia" },
+    }]);
+    delete require.cache[require.resolve("./geocoding")];
+    const { geocodeLocation } = require("./geocoding");
+    const result = await geocodeLocation("some ambiguous input");
+    restore();
+    assert.strictEqual(result, null, "a non-finite latitude must be rejected regardless of category/state");
+  });
+
+  await asyncTest("geocodeLocation REJECTS a missing longitude field entirely", async () => {
+    const restore = installFetchStub(true, [{
+      lat: "38.9", category: "place", type: "city", // lon field entirely absent
+      address: { state: "Virginia" },
     }]);
     delete require.cache[require.resolve("./geocoding")];
     const { geocodeLocation } = require("./geocoding");

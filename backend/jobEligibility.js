@@ -92,36 +92,41 @@ function resolveUsStateCode(stateValue) {
  * calls. Implements the decision order established across this
  * project's assessment:
  *
- *   1. Real coordinates + a state/DC/territory that resolves through
- *      the explicit allowlist above -> ELIGIBLE.
- *   2. Otherwise, if the job's own location text unambiguously names a
- *      foreign country, EXCLUDED — this check always wins, even when
- *      explicit-US-sounding text is ALSO present in the same string
- *      (e.g. "United States / Canada" is excluded, not accepted).
+ *   1. If the job's own location text unambiguously names a foreign
+ *      country, EXCLUDED — checked FIRST, unconditionally, and always
+ *      wins even over what looks like a valid US coordinate/state pair
+ *      already on the row (see the comment inside isUsEligibleJob for
+ *      why this ordering matters — it's not just defensive theorizing).
+ *   2. Otherwise, real coordinates + a state/DC/territory that resolves
+ *      through the explicit allowlist above -> ELIGIBLE.
  *   3. Otherwise, if the location text carries explicit US-language
  *      evidence ("United States", "USA", "US Territory", etc.),
- *      ELIGIBLE via the fallback — used only when steps 1-2 didn't
- *      already resolve it (i.e. geocoding produced nothing usable and
- *      there's no conflicting foreign evidence).
+ *      ELIGIBLE via the fallback.
  *   4. Otherwise, EXCLUDED as unresolved.
- *
- * A job with a resolvable state is decided by step 1 alone — the
- * foreign-country and fallback checks (steps 2-3) are secondary checks
- * for jobs that have no resolvable state, not an override of a
- * genuinely-resolved US location.
  */
 function isUsEligibleJob(job) {
   if (!job) return false;
+
+  // Unambiguous foreign evidence is evaluated FIRST, before anything
+  // else, and always wins — even over what looks like a valid US
+  // coordinate/state pair. Direct instruction, and not merely
+  // theoretical: this project's own 10 known-bad records originally
+  // had exactly this shape — real, plausible-looking coordinates and a
+  // real US state name (District of Columbia, Georgia, New York)
+  // sitting alongside a job whose actual location text plainly named a
+  // foreign country. A job's own location text is the most direct
+  // signal of where it really is; it must never be overridden by a
+  // coordinate/state pair, since that pair is exactly the kind of data
+  // this whole project found could be wrong.
+  if (hasUnambiguousForeignCountryEvidence(job.location_raw)) {
+    return false;
+  }
 
   const hasCoordinates = job.job_lat != null && job.job_lng != null;
   const resolvedState = resolveUsStateCode(job.state);
 
   if (hasCoordinates && resolvedState) {
     return true;
-  }
-
-  if (hasUnambiguousForeignCountryEvidence(job.location_raw)) {
-    return false;
   }
 
   if (hasExplicitUsLanguageEvidence(job.location_raw)) {

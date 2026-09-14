@@ -13,6 +13,7 @@
     "archive-old-jobs": "node backend/archiveOldJobs.js",
     "test-trial-flow": "node backend/testTrialFlow.js",
     "test-job-eligibility": "node backend/testJobEligibility.js",
+    "test-all": "npm run test-job-eligibility && npm run test-trial-flow && npm run test-ui-copy",
     "test-resume-achievements": "node backend/testResumeAchievements.js",
     "test-social-automation": "node backend/testSocialAutomation.js",
     "social:discover-channels": "node backend/socialPublishWorker.js discover",

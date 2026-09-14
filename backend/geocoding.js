@@ -41,6 +41,7 @@
 // or bare-generic-term risk, and is out of scope for this project.
 
 const { hasUnambiguousForeignCountryEvidence, isBareGenericRemoteTerm } = require("./locationTextRules");
+const { resolveUsStateCode } = require("./jobEligibility");
 
 const USER_AGENT = "ROOK-Careers/1.0 (rookcareers.com; job-matching platform)";
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -117,8 +118,12 @@ async function geocodeZip(zip) {
  *     rejected, not accepted) — direct instruction.
  *
  * After a successful geocode, the result's `category` must be "place"
- * or "boundary" (see ACCEPTABLE_RESULT_CATEGORIES above) or the result
- * is discarded entirely, same as a zero-result response.
+ * or "boundary" (see ACCEPTABLE_RESULT_CATEGORIES above), the returned
+ * lat/lng must both be finite numbers, and the result's address.state
+ * must resolve through jobEligibility.js's explicit US state/DC/
+ * territory allowlist — any one of these failing discards the result
+ * entirely, same as a zero-result response. A "place"/"boundary"
+ * category alone is necessary but not sufficient; direct instruction.
  */
 async function geocodeLocation(locationText) {
   if (!locationText || !locationText.trim()) return null;
@@ -134,7 +139,24 @@ async function geocodeLocation(locationText) {
     const first = results?.[0];
     if (!first) return null;
     if (!ACCEPTABLE_RESULT_CATEGORIES.has(first.category)) return null;
-    return { lat: parseFloat(first.lat), lng: parseFloat(first.lon), state: first.address?.state || null };
+
+    const lat = parseFloat(first.lat);
+    const lng = parseFloat(first.lon);
+    // Reject non-finite coordinates outright — a malformed or missing
+    // lat/lon in Nominatim's response must never be silently accepted
+    // as if it were a real point.
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
+    // A "place"/"boundary"-category result is necessary but not
+    // sufficient — it must ALSO carry a state/DC/territory that
+    // resolves through jobEligibility.js's explicit allowlist. Without
+    // this, an accepted result with no state at all (or a foreign
+    // state-equivalent Nominatim happened to return) would still
+    // produce unusable or wrong data. Direct instruction.
+    const stateName = first.address?.state;
+    if (!resolveUsStateCode(stateName)) return null;
+
+    return { lat, lng, state: stateName };
   } catch {
     return null;
   }
