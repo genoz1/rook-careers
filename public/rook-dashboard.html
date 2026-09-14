@@ -280,6 +280,13 @@
   .rlw-item{padding:10px 14px;cursor:pointer;font-size:14px;color:#062d55;border-bottom:1px solid #eaf1f6;list-style:none;}
   .rlw-item:last-child{border-bottom:none;}
   .rlw-item.rlw-active,.rlw-item:hover{background:#f0f7ff;color:#0877d1;}
+  /* Résumé-upload "still working" indicator — a plain static button/line
+     used to look frozen during the real, sometimes 20-40+ second backend
+     work (text extraction, AI analysis, embeddings). This spinner plus
+     the cycling status messages in JS below both exist purely to show
+     visible progress the whole time, not to speed anything up. */
+  .btn-spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:rookspin .7s linear infinite;vertical-align:-2px;margin-right:7px;}
+  @keyframes rookspin{to{transform:rotate(360deg)}}
 
 </style>
 <link rel="stylesheet" href="rook-mobile.css">
@@ -742,18 +749,56 @@
             fileInput.onchange = async () => {
               const file = fileInput.files[0];
               if (!file) return;
-              if (link) { link.textContent = 'Uploading…'; link.style.opacity = '0.6'; link.onclick = null; }
+              if (link) {
+                link.innerHTML = '<span class="btn-spinner"></span>Uploading…';
+                link.style.opacity = '0.85';
+                link.style.pointerEvents = 'none';
+                link.onclick = null;
+              }
               if (statusEl) { statusEl.style.display = 'block'; statusEl.textContent = '📤 Uploading your résumé…'; }
+
+              // Cycling reassurance messages — /api/resume does real,
+              // sequential work server-side (text extraction, AI résumé
+              // analysis, embedding generation, then a rescore), which
+              // genuinely can take 20-40+ seconds for a longer résumé.
+              // Direct instruction: show that it's still working rather
+              // than leaving one static line up the whole time, which
+              // reads as stuck even when it isn't. Purely cosmetic —
+              // doesn't change how long the upload actually takes.
+              const progressMessages = [
+                { at: 0,  text: '📤 Uploading your résumé…' },
+                { at: 4,  text: '📄 Reading your résumé…' },
+                { at: 10, text: '🧠 Analyzing your experience…' },
+                { at: 20, text: '🔍 Matching you to open roles…' },
+                { at: 35, text: '⏳ Still working — longer résumés can take up to a minute…' },
+              ];
+              const uploadStartedAt = Date.now();
+              const progressInterval = setInterval(() => {
+                if (!statusEl) return;
+                const elapsedSeconds = (Date.now() - uploadStartedAt) / 1000;
+                let current = progressMessages[0];
+                for (const m of progressMessages) { if (elapsedSeconds >= m.at) current = m; }
+                statusEl.textContent = current.text;
+              }, 1000);
+
               try {
                 const token = await rookGetAccessToken();
                 const fd = new FormData();
                 fd.append('resume', file);
                 const r = await fetch('/api/resume', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd });
+                clearInterval(progressInterval);
                 if (!r.ok) throw new Error('Upload failed');
+                if (link) link.innerHTML = 'Uploading…';
                 if (statusEl) statusEl.textContent = '✅ Résumé uploaded! Reloading your matches…';
                 setTimeout(() => window.location.reload(), 1200);
               } catch (err) {
-                if (link) { link.textContent = 'Try again'; link.style.opacity = '1'; link.onclick = (e) => { e.preventDefault(); fileInput.click(); }; }
+                clearInterval(progressInterval);
+                if (link) {
+                  link.innerHTML = 'Try again';
+                  link.style.opacity = '1';
+                  link.style.pointerEvents = '';
+                  link.onclick = (e) => { e.preventDefault(); fileInput.click(); };
+                }
                 if (statusEl) statusEl.textContent = '❌ Upload failed — please try again.';
               }
             };
