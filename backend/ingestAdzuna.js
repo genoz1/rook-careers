@@ -243,7 +243,10 @@ async function run() {
         try {
           const coords = await geocodeLocation(upsertedRow.location_raw);
           if (coords) {
-            await supabase.from("jobs").update({ job_lat: coords.lat, job_lng: coords.lng }).eq("id", upsertedRow.id);
+            // Same fix as backend/ingest.js — coords.state was previously
+            // dropped here too, an identical instance of the same defect
+            // in this separate (Adzuna) ingestion pathway.
+            await supabase.from("jobs").update({ job_lat: coords.lat, job_lng: coords.lng, state: coords.state }).eq("id", upsertedRow.id);
           }
         } catch (err) {
           console.error(`  Geocoding failed for "${job.location_raw}": ${err.message}`);

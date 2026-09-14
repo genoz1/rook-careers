@@ -102,7 +102,10 @@ async function run() {
     try {
       const coords = await geocodeLocation(geoLoc);
       if (coords) {
-        await supabase.from("jobs").update({ job_lat: coords.lat, job_lng: coords.lng }).eq("id", job.id);
+        // Same fix as backend/ingest.js — coords.state was previously
+        // dropped here too, an identical instance of the same defect in
+        // this standalone one-time bulk-regeocoding script.
+        await supabase.from("jobs").update({ job_lat: coords.lat, job_lng: coords.lng, state: coords.state }).eq("id", job.id);
         updated++;
       } else {
         skipped++;

@@ -1,7 +1,7 @@
 {
   "name": "rook-careers",
   "version": "0.2.0",
-  "description": "ROOK Careers \u2014 UI prototype plus Phase 1 backend scaffold (Supabase, Stripe, ATS ingestion adapters).",
+  "description": "ROOK Careers — UI prototype plus Phase 1 backend scaffold (Supabase, Stripe, ATS ingestion adapters).",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -12,6 +12,7 @@
     "precompute-scores": "node backend/precomputeScores.js",
     "archive-old-jobs": "node backend/archiveOldJobs.js",
     "test-trial-flow": "node backend/testTrialFlow.js",
+    "test-job-eligibility": "node backend/testJobEligibility.js",
     "test-resume-achievements": "node backend/testResumeAchievements.js",
     "test-social-automation": "node backend/testSocialAutomation.js",
     "social:discover-channels": "node backend/socialPublishWorker.js discover",
@@ -32,11 +33,17 @@
     "@supabase/supabase-js": "^2.45.0",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "i18n-iso-countries": "^7.14.0",
     "mammoth": "^1.8.0",
     "multer": "^1.4.5-lts.1",
     "pdf-parse": "^1.1.1",
     "sharp": "^0.35.4",
     "stripe": "^16.8.0",
     "zipcodes": "^8.0.0"
+  },
+  "devDependencies": {
+    "@turf/boolean-point-in-polygon": "^7.4.0",
+    "topojson-client": "^3.1.0",
+    "us-atlas": "^3.0.1"
   }
 }

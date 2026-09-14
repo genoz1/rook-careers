@@ -318,13 +318,21 @@ async function ingestEmployer(employer) {
     // location, incorrect geocoding, etc.) which causes jobs to appear in the wrong
     // city for candidates. We extract a clean, geocodable location string from
     // location_raw and use that as the source of truth.
+    //
+    // Fixed: previously only job_lat/job_lng were written here — coords.state
+    // (now returned by geocodeLocation(), see backend/geocoding.js) was silently
+    // dropped, which was the entire reason the `state` column was null for every
+    // job in the database regardless of whether geocoding succeeded. That was a
+    // separate, compounding defect from the foreign-country/bad-result-type issue
+    // fixed in geocoding.js itself — this ingestion code simply never asked for
+    // or saved the field, even when a geocode succeeded correctly.
     if (upsertedRow.location_raw) {
       try {
         const geoLoc = extractGeocodableLocation(upsertedRow.location_raw);
         if (geoLoc) {
           const coords = await geocodeLocation(geoLoc);
           if (coords) {
-            await supabase.from("jobs").update({ job_lat: coords.lat, job_lng: coords.lng }).eq("id", upsertedRow.id);
+            await supabase.from("jobs").update({ job_lat: coords.lat, job_lng: coords.lng, state: coords.state }).eq("id", upsertedRow.id);
           }
         }
       } catch (err) {
