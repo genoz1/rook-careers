@@ -842,7 +842,7 @@ router.get("/new-matches-today-count", requireConfig, requireAuth, loadCandidate
   // shouldn't be counted as one of their matches either.
   const { data: todaysJobs, error } = await supabaseAdmin
     .from("jobs")
-    .select("location_raw, job_lng, title_original")
+    .select("id, job_lat, job_lng, state, location_raw")
     .eq("status", "active")
     .eq("moderation_status", "approved")
     .gte("date_posted", todayStart.toISOString());

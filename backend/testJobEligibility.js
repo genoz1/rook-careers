@@ -625,7 +625,7 @@ async function run() {
 
   test("the /sitemap.xml route filters jobs through isUsEligibleJob before listing them (real incident: this exact route is how Google discovered the Wuhan posting)", () => {
     const src = fs.readFileSync(path.join(__dirname, "routes", "publicPages.js"), "utf8");
-    assert.ok(/\(jobs \|\| \[\]\)\.filter\(isUsEligibleJob\)/.test(src), "sitemap job URLs must be filtered through isUsEligibleJob");
+    assert.ok(/allJobs\.filter\(isUsEligibleJob\)/.test(src), "sitemap job URLs must be filtered through isUsEligibleJob");
   });
 
   test("the /jobs/:id route's 'similar jobs' internal links are also filtered through isUsEligibleJob", () => {
@@ -656,6 +656,23 @@ async function run() {
     // count, /saved-jobs, and one more list-building spot. A regression
     // that drops any of these should fail this count, not silently pass.
     assert.ok(matches.length >= 10, `expected at least 10 isUsEligibleJob filter call sites in jobs.js, found ${matches.length}`);
+  });
+
+  test("GET /new-matches-today-count selects every field isUsEligibleJob needs (id, job_lat, job_lng, state, location_raw) — real bug this guards: job_lat/state were missing, so hasCoordinates was always false regardless of real data", () => {
+    const src = fs.readFileSync(path.join(__dirname, "routes", "jobs.js"), "utf8");
+    const routeMatch = src.match(/router\.get\("\/new-matches-today-count"[\s\S]*?\.select\("([^"]+)"\)/);
+    assert.ok(routeMatch, "could not find the /new-matches-today-count route's select() call");
+    const selected = routeMatch[1].split(",").map((s) => s.trim());
+    for (const field of ["id", "job_lat", "job_lng", "state", "location_raw"]) {
+      assert.ok(selected.includes(field), `/new-matches-today-count must select "${field}" for isUsEligibleJob to work correctly`);
+    }
+  });
+
+  test("GET /sitemap.xml paginates through all active jobs rather than capping at a single page before eligibility filtering", () => {
+    const src = fs.readFileSync(path.join(__dirname, "routes", "publicPages.js"), "utf8");
+    const sitemapSection = src.slice(src.indexOf('router.get("/sitemap.xml"'));
+    assert.ok(/\.range\(from, from \+ PAGE_SIZE - 1\)/.test(sitemapSection), "the sitemap route must paginate via .range() rather than a single .limit() call");
+    assert.ok(!/\.limit\(5000\)/.test(sitemapSection), "the old hard .limit(5000) cap (applied before eligibility filtering) must be gone");
   });
 
   console.log(`\n${passCount} passed, ${failCount} failed\n`);

@@ -526,17 +526,32 @@ router.get("/sitemap.xml", async (req, res) => {
 
   let jobUrls = [];
   if (isConfigured) {
-    const { data: jobs } = await supabaseAnon
-      .from("jobs")
-      .select("id, last_seen_at, job_lat, job_lng, state, location_raw")
-      .eq("status", "active")
-      .limit(5000);
+    // Paginate through every active job rather than capping at a single
+    // page — a hard .limit() applied before eligibility filtering would
+    // silently under-report the sitemap once the active-job count grows
+    // past that cap, and specifically would never even consider some
+    // eligible jobs for inclusion at all, not just miscount them.
+    const allJobs = [];
+    const PAGE_SIZE = 1000;
+    let from = 0;
+    while (true) {
+      const { data: page, error: pageError } = await supabaseAnon
+        .from("jobs")
+        .select("id, last_seen_at, job_lat, job_lng, state, location_raw")
+        .eq("status", "active")
+        .order("id")
+        .range(from, from + PAGE_SIZE - 1);
+      if (pageError || !page || page.length === 0) break;
+      allJobs.push(...page);
+      if (page.length < PAGE_SIZE) break;
+      from += PAGE_SIZE;
+    }
     // Direct instruction, prompted by a real incident: this sitemap is
     // literally how Google discovers pages to crawl — it was handing
     // Google a full list of every active job's URL regardless of
     // country, which is how a Wuhan, China posting ended up indexed.
     // Same isUsEligibleJob() gate as the job-detail route above.
-    jobUrls = (jobs || []).filter(isUsEligibleJob).map((j) => ({ url: `${APP_BASE_URL}/jobs/${j.id}`, lastmod: j.last_seen_at }));
+    jobUrls = allJobs.filter(isUsEligibleJob).map((j) => ({ url: `${APP_BASE_URL}/jobs/${j.id}`, lastmod: j.last_seen_at }));
   }
 
   const urlEntries = [
