@@ -168,7 +168,10 @@ router.post("/recruiter-postings", requireConfig, requireAuth, loadRecruiterId, 
   if (location_raw) {
     try {
       const coords = await geocodeLocation(location_raw);
-      if (coords) await supabaseAdmin.from("jobs").update({ job_lat: coords.lat, job_lng: coords.lng }).eq("id", inserted.id);
+      // Same fix as backend/ingest.js — coords.state was previously
+      // dropped here too, an identical instance of the same defect
+      // in the recruiter-posting creation path.
+      if (coords) await supabaseAdmin.from("jobs").update({ job_lat: coords.lat, job_lng: coords.lng, state: coords.state }).eq("id", inserted.id);
     } catch (err) {
       console.error(`Recruiter posting geocoding failed: ${err.message}`);
     }
@@ -245,7 +248,10 @@ router.put("/recruiter-postings/:id", requireConfig, requireAuth, loadRecruiterI
   if (location_raw) {
     try {
       const coords = await geocodeLocation(location_raw);
-      if (coords) await supabaseAdmin.from("jobs").update({ job_lat: coords.lat, job_lng: coords.lng }).eq("id", req.params.id);
+      // Same fix as backend/ingest.js — coords.state was previously
+      // dropped here too, an identical instance of the same defect
+      // in the recruiter-posting edit path.
+      if (coords) await supabaseAdmin.from("jobs").update({ job_lat: coords.lat, job_lng: coords.lng, state: coords.state }).eq("id", req.params.id);
     } catch (err) {
       console.error(`Recruiter posting edit geocoding failed: ${err.message}`);
     }

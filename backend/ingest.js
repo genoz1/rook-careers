@@ -36,31 +36,7 @@ const { fetchSuccessFactorsJobs, normalizeSuccessFactorsJob } = require("./adapt
 const { analyzeJob } = require("./ai/jobAnalysis");
 const { generateEmbedding } = require("./ai/embeddings");
 const { geocodeLocation } = require("./geocoding");
-
-// Extract a clean, geocodable location string from a job's location_raw.
-// Job boards use many formats: "USA - Florida - Orlando", "Remote - Georgia",
-// "Melbourne, FL, us", pipe-delimited multi-city lists, etc.
-// Returns the best single location string, or null if not geocodable.
-function extractGeocodableLocation(locationRaw) {
-  if (!locationRaw || !locationRaw.trim()) return null;
-  let loc = locationRaw.split("|")[0].trim();
-  // Skip useless placeholders
-  if (/^(\d+\s+Locations?|Field\s+(Sales|Worker)\s*\()/i.test(loc)) return null;
-  // Strip "Remote - " prefix → "Remote - Georgia" becomes "Georgia"
-  loc = loc.replace(/^Remote\s*[-–]\s*/i, "").trim();
-  // "USA - State - City" or "United States - State - City" → "City, State"
-  const usaDash = loc.match(/^(?:USA?|United States?)\s*[-–]\s*([A-Za-z ]+?)\s*[-–]\s*([A-Za-z][A-Za-z0-9 .]+)/i);
-  if (usaDash) {
-    const state = usaDash[1].trim();
-    const city = usaDash[2].replace(/[-–].*$/, "").trim();
-    return city.length > 1 ? `${city}, ${state}` : state;
-  }
-  // Remove trailing ", us" / ", United States" country suffixes
-  loc = loc.replace(/,\s*(us|usa|united states?)$/i, "").trim();
-  // Skip if ends in a non-US 2-letter country code (e.g. ", no", ", de", ", cn")
-  if (/,\s*[a-z]{2}$/i.test(loc) && !/,\s*(fl|ga|tx|ny|ca|oh|il|pa|nc|va|wa|ma|co|az|mi|tn|or|nj|md|mn|sc|al|la|wi|mo|ct|ok|ar|ia|ms|ks|ne|nv|id|mt|nd|sd|wv|wy|vt|nh|me|de|ri|ak|hi)$/i.test(loc)) return null;
-  return loc.length > 2 ? loc : null;
-}
+const { extractGeocodableLocation } = require("./locationExtraction");
 
 // Use the SERVICE ROLE key here, never the anon key — ingestion writes
 // to the jobs table and must bypass row-level security intentionally.
@@ -318,13 +294,21 @@ async function ingestEmployer(employer) {
     // location, incorrect geocoding, etc.) which causes jobs to appear in the wrong
     // city for candidates. We extract a clean, geocodable location string from
     // location_raw and use that as the source of truth.
+    //
+    // Fixed: previously only job_lat/job_lng were written here — coords.state
+    // (now returned by geocodeLocation(), see backend/geocoding.js) was silently
+    // dropped, which was the entire reason the `state` column was null for every
+    // job in the database regardless of whether geocoding succeeded. That was a
+    // separate, compounding defect from the foreign-country/bad-result-type issue
+    // fixed in geocoding.js itself — this ingestion code simply never asked for
+    // or saved the field, even when a geocode succeeded correctly.
     if (upsertedRow.location_raw) {
       try {
         const geoLoc = extractGeocodableLocation(upsertedRow.location_raw);
         if (geoLoc) {
           const coords = await geocodeLocation(geoLoc);
           if (coords) {
-            await supabase.from("jobs").update({ job_lat: coords.lat, job_lng: coords.lng }).eq("id", upsertedRow.id);
+            await supabase.from("jobs").update({ job_lat: coords.lat, job_lng: coords.lng, state: coords.state }).eq("id", upsertedRow.id);
           }
         }
       } catch (err) {
