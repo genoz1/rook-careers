@@ -13,6 +13,7 @@
 const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
 const { getTrialPeriodDays } = require("../routes/stripe");
+const { isUsEligibleJob } = require("../jobEligibility");
 
 const router = express.Router();
 
@@ -132,12 +133,21 @@ router.get("/jobs/:id", async (req, res, next) => {
 
   const { data: job, error } = await supabaseAnon
     .from("jobs")
-    .select("id, title_original, title_normalized, location_raw, compensation_text, salary_min, salary_max, description_text, date_posted, status, company_name, ai_analysis, remote_status, travel_percentage")
+    .select("id, title_original, title_normalized, location_raw, compensation_text, salary_min, salary_max, description_text, date_posted, status, company_name, ai_analysis, remote_status, travel_percentage, job_lat, job_lng, state")
     .eq("id", req.params.id)
     .eq("status", "active")
     .maybeSingle();
 
-  if (error || !job) {
+  // Direct instruction, prompted by a real incident: a Wuhan, China
+  // posting was indexed by Google via this exact page. This route had
+  // no eligibility check at all — any active job, regardless of
+  // country, got a full public page. Treated identically to "not
+  // found" rather than a distinct error: this never reveals to a
+  // visitor or a crawler that ROOK has non-US postings internally, and
+  // it means a job that later gets corrected (e.g. once re-ingested
+  // cleanly) becomes visible again automatically, with no special
+  // handling needed.
+  if (error || !job || !isUsEligibleJob(job)) {
     // Reported via audit: a nonexistent/expired job ID silently showed
     // the plain homepage with no indication anything was wrong - the
     // comment this replaces described falling through to "a normal
@@ -209,15 +219,18 @@ router.get("/jobs/:id", async (req, res, next) => {
       || (job.location_raw || "").split(",")[1]?.trim() || null;
     const similarQuery = supabaseAnon
       .from("jobs")
-      .select("id, title_original, location_raw, company_name")
+      .select("id, title_original, location_raw, company_name, job_lat, job_lng, state")
       .eq("status", "active")
       .eq("moderation_status", "approved")
       .neq("id", job.id)
-      .limit(4);
-    const { data: similar } = stateGuess
+      .limit(16); // fetch extra — some will be filtered out by isUsEligibleJob below
+    const { data: similarRaw } = stateGuess
       ? await similarQuery.ilike("location_raw", `%${stateGuess}%`)
       : await similarQuery;
-    if (similar && similar.length > 0) {
+    // Same eligibility gate as the primary job above — a foreign
+    // posting must never appear as a "similar role" link either.
+    const similar = (similarRaw || []).filter(isUsEligibleJob).slice(0, 4);
+    if (similar.length > 0) {
       similarJobsHtml = `
       <div style="margin-top:32px;">
         <div style="font-size:12.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:12px;">Similar Roles</div>
@@ -504,18 +517,19 @@ router.get("/jobs", async (req, res) => {
   if (!Number.isSafeInteger(page * pageSize)) return res.status(404).send("Page not found.");
   try {
     const { data, error } = await supabaseAnon.from("jobs")
-      .select("id, title_original, title_normalized, location_raw")
+      .select("id, title_original, title_normalized, location_raw, job_lat, job_lng, state")
       .eq("status", "active").eq("moderation_status", "approved")
       .order("id", { ascending: true })
       .range((page - 1) * pageSize, page * pageSize);
     if (error || !Array.isArray(data)) throw new Error("Directory query failed");
     if (!data.length && page > 1) return res.status(404).send("Page not found.");
+    const eligibleData = data.filter(isUsEligibleJob);
     const pageUrl = (number) => number === 1 ? "/jobs" : `/jobs?page=${number}`;
     const bodyHtml = `
       <h1 style="font-size:28px;margin-bottom:16px;">Medical sales job previews${page > 1 ? ` — page ${page}` : ""}</h1>
       <p style="line-height:1.7;margin-bottom:24px;">Browse titles and locations of current opportunities. ROOK membership unlocks employer names, full job details, application links, and personalized matching.</p>
       <p style="margin-bottom:24px;"><a href="/rook-browse.html" style="color:var(--royal);">Find roles near your ZIP code</a></p>
-      ${data.slice(0, pageSize).map(job => `<a href="/jobs/${escapeHtml(job.id)}" style="display:block;background:#fff;border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:12px;"><h2 style="font-size:17px;margin-bottom:6px;">${escapeHtml(job.title_original || job.title_normalized || "Open role")}</h2><p style="color:var(--muted);">${escapeHtml(job.location_raw || "Location not specified")}</p></a>`).join("") || "<p>No open roles right now. Please check back soon.</p>"}
+      ${eligibleData.slice(0, pageSize).map(job => `<a href="/jobs/${escapeHtml(job.id)}" style="display:block;background:#fff;border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:12px;"><h2 style="font-size:17px;margin-bottom:6px;">${escapeHtml(job.title_original || job.title_normalized || "Open role")}</h2><p style="color:var(--muted);">${escapeHtml(job.location_raw || "Location not specified")}</p></a>`).join("") || "<p>No open roles right now. Please check back soon.</p>"}
       <nav aria-label="Job directory pages" style="display:flex;justify-content:space-between;gap:16px;margin-top:24px;">
         ${page > 1 ? `<a href="${pageUrl(page - 1)}" class="btn btn-outline">Previous page</a>` : ""}
         ${data.length > pageSize ? `<a href="${pageUrl(page + 1)}" class="btn btn-outline">Next page</a>` : ""}
@@ -549,11 +563,11 @@ router.get("/sitemap.xml", async (req, res) => {
     let offset = 0;
     while (true) {
       const { data: jobs, error } = await supabaseAnon.from("jobs")
-        .select("id").eq("status", "active").eq("moderation_status", "approved")
+        .select("id, job_lat, job_lng, state, location_raw").eq("status", "active").eq("moderation_status", "approved")
         .order("id", { ascending: true }).range(offset, offset + 499);
       if (error || !Array.isArray(jobs)) throw new Error("Sitemap query failed");
       if (!jobs.length) break;
-      jobUrls.push(...jobs.map(j => `${APP_BASE_URL}/jobs/${j.id}`));
+      jobUrls.push(...jobs.filter(isUsEligibleJob).map(j => `${APP_BASE_URL}/jobs/${j.id}`));
       if (jobUrls.length + staticUrls.length > 50000) throw new Error("Sitemap requires splitting");
       offset += jobs.length;
     }
