@@ -605,6 +605,22 @@ async function run() {
     );
   });
 
+  test("confirmed Massachusetts misspelling from the live dry run is normalized", () => {
+    assert.strictEqual(
+      parseExplicitState("United States Remote Office | Massachusettes, USA"),
+      "Massachusetts"
+    );
+  });
+
+  test("confirmed Louisiana misspellings from the live dry run are normalized", () => {
+    for (const misspelling of ["Louisana", "Louvisana"]) {
+      assert.strictEqual(
+        parseExplicitState(`United States Remote Office | ${misspelling}, USA`),
+        "Louisiana"
+      );
+    }
+  });
+
   console.log("\n=== backfillReportValidation.js: validateDryRunReport (pure, no I/O) ===");
 
   function makeValidReport(overrides = {}) {
