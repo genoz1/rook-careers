@@ -230,20 +230,16 @@ router.get("/jobs/:id", async (req, res, next) => {
     }
   } catch (_) {}
 
-  // JSON-LD JobPosting with complete fields for Google Jobs
+  // This is a public preview of a paid service, not a Google Jobs listing.
+  // JobPosting requires full public details and a way to apply without payment.
+  // Describe the actual preview page without exposing members-only fields or
+  // inventing missing employer posting dates to satisfy rich-result validation.
   const jsonLd = {
     "@context": "https://schema.org/",
-    "@type": "JobPosting",
-    title: titleWithLoc,
+    "@type": "WebPage",
+    name: titleWithLoc,
     description: preview,
-    datePosted: job.date_posted || undefined,
-    validThrough: job.expires_at || undefined,
-    hiringOrganization: { "@type": "Organization", name: "See employer on ROOK", sameAs: APP_BASE_URL },
-    jobLocation: locShort ? { "@type": "Place", address: { "@type": "PostalAddress", addressLocality: locShort.split(",")[0]?.trim(), addressRegion: locShort.split(",")[1]?.trim(), addressCountry: "US" } } : undefined,
-    employmentType: job.employment_type === "Contract" ? "CONTRACTOR" : "FULL_TIME",
-    ...(job.salary_min ? { baseSalary: { "@type": "MonetaryAmount", currency: "USD", value: { "@type": "QuantitativeValue", minValue: job.salary_min, maxValue: job.salary_max || undefined, unitText: "YEAR" } } } : {}),
-    directApply: false,
-    url: `${APP_BASE_URL}/jobs/${job.id}`,
+    url: canonicalUrl,
   };
 
   const trialDays = getTrialPeriodDays();
@@ -270,7 +266,7 @@ router.get("/jobs/:id", async (req, res, next) => {
       ${ctaBlock}
     </div>
     ${similarJobsHtml}
-    <div style="text-align:center;margin-top:24px;"><a href="/rook-browse.html" style="color:var(--royal);font-size:13px;font-weight:600;">← Browse all open roles</a></div>
+    <div style="text-align:center;margin-top:24px;"><a href="/jobs" style="color:var(--royal);font-size:13px;font-weight:600;">← Browse all open roles</a></div>
   `;
 
   res.send(pageShell({ title: `${titleWithLoc} — ROOK`, description: metaDescription, canonicalUrl, bodyHtml, jsonLd, jobId: req.params.id }));
@@ -497,6 +493,39 @@ router.get("/jobs/category/:slug", async (req, res, next) => {
   res.send(pageShell({ title: `${category.label} — ROOK`, description: metaDescription, canonicalUrl, bodyHtml }));
 });
 
+// A crawlable directory with ordinary links and pagination in the first HTML
+// response. Select only fields already visible in anonymous job previews.
+router.get("/jobs", async (req, res) => {
+  if (!isConfigured) return res.status(503).set("Retry-After", "300").send("Job directory temporarily unavailable.");
+  const pageValue = req.query.page === undefined ? "1" : req.query.page;
+  if (typeof pageValue !== "string" || !/^[1-9]\d*$/.test(pageValue)) return res.status(404).send("Page not found.");
+  const page = Number(pageValue);
+  const pageSize = 100;
+  if (!Number.isSafeInteger(page * pageSize)) return res.status(404).send("Page not found.");
+  try {
+    const { data, error } = await supabaseAnon.from("jobs")
+      .select("id, title_original, title_normalized, location_raw")
+      .eq("status", "active").eq("moderation_status", "approved")
+      .order("id", { ascending: true })
+      .range((page - 1) * pageSize, page * pageSize);
+    if (error || !Array.isArray(data)) throw new Error("Directory query failed");
+    if (!data.length && page > 1) return res.status(404).send("Page not found.");
+    const pageUrl = (number) => number === 1 ? "/jobs" : `/jobs?page=${number}`;
+    const bodyHtml = `
+      <h1 style="font-size:28px;margin-bottom:16px;">Medical sales job previews${page > 1 ? ` — page ${page}` : ""}</h1>
+      <p style="line-height:1.7;margin-bottom:24px;">Browse titles and locations of current opportunities. ROOK membership unlocks employer names, full job details, application links, and personalized matching.</p>
+      <p style="margin-bottom:24px;"><a href="/rook-browse.html" style="color:var(--royal);">Find roles near your ZIP code</a></p>
+      ${data.slice(0, pageSize).map(job => `<a href="/jobs/${escapeHtml(job.id)}" style="display:block;background:#fff;border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:12px;"><h2 style="font-size:17px;margin-bottom:6px;">${escapeHtml(job.title_original || job.title_normalized || "Open role")}</h2><p style="color:var(--muted);">${escapeHtml(job.location_raw || "Location not specified")}</p></a>`).join("") || "<p>No open roles right now. Please check back soon.</p>"}
+      <nav aria-label="Job directory pages" style="display:flex;justify-content:space-between;gap:16px;margin-top:24px;">
+        ${page > 1 ? `<a href="${pageUrl(page - 1)}" class="btn btn-outline">Previous page</a>` : ""}
+        ${data.length > pageSize ? `<a href="${pageUrl(page + 1)}" class="btn btn-outline">Next page</a>` : ""}
+      </nav>`;
+    return res.send(pageShell({ title: `Medical Sales Job Previews${page > 1 ? ` — Page ${page}` : ""} — ROOK`, description: "Browse current medical sales job titles and locations. Unlock employer details and personalized matching with ROOK membership.", canonicalUrl: `${APP_BASE_URL}${pageUrl(page)}`, bodyHtml }));
+  } catch (_) {
+    return res.status(503).set("Retry-After", "300").send("Job directory temporarily unavailable.");
+  }
+});
+
 // GET /sitemap.xml — lists the homepage, the public browse page, and
 // every currently-active job's real crawlable URL. Regenerated on every
 // request rather than cached as a static file, since the job list
@@ -504,6 +533,7 @@ router.get("/jobs/category/:slug", async (req, res, next) => {
 router.get("/sitemap.xml", async (req, res) => {
   const staticUrls = [
     `${APP_BASE_URL}/`,
+    `${APP_BASE_URL}/jobs`,
     `${APP_BASE_URL}/rook-browse.html`,
     `${APP_BASE_URL}/rook-about.html`,
     `${APP_BASE_URL}/rook-pricing.html`,
@@ -511,25 +541,32 @@ router.get("/sitemap.xml", async (req, res) => {
     ...Object.keys(CATEGORIES).map((slug) => `${APP_BASE_URL}/jobs/category/${slug}`),
   ];
 
-  let jobUrls = [];
-  if (isConfigured) {
-    const { data: jobs } = await supabaseAnon
-      .from("jobs")
-      .select("id, last_seen_at")
-      .eq("status", "active")
-      .limit(5000);
-    jobUrls = (jobs || []).map((j) => ({ url: `${APP_BASE_URL}/jobs/${j.id}`, lastmod: j.last_seen_at }));
+  if (!isConfigured) return res.status(503).set("Retry-After", "300").send("Sitemap temporarily unavailable.");
+  const jobUrls = [];
+  try {
+    // PostgREST can cap a single response even when limit(5000) is requested.
+    // Use small, ordered pages and advance by the number actually returned.
+    let offset = 0;
+    while (true) {
+      const { data: jobs, error } = await supabaseAnon.from("jobs")
+        .select("id").eq("status", "active").eq("moderation_status", "approved")
+        .order("id", { ascending: true }).range(offset, offset + 499);
+      if (error || !Array.isArray(jobs)) throw new Error("Sitemap query failed");
+      if (!jobs.length) break;
+      jobUrls.push(...jobs.map(j => `${APP_BASE_URL}/jobs/${j.id}`));
+      if (jobUrls.length + staticUrls.length > 50000) throw new Error("Sitemap requires splitting");
+      offset += jobs.length;
+    }
+  } catch (_) {
+    // Never publish a successful but empty/partial sitemap during an outage.
+    return res.status(503).set("Retry-After", "300").send("Sitemap temporarily unavailable.");
   }
 
+  // last_seen_at records ingestion checks, not significant page changes.
+  // Omit lastmod until a reliable content-modification timestamp is available.
   const urlEntries = [
-    ...staticUrls.map((url, i) => {
-      const priority = i === 0 ? "1.0" : url.includes("/jobs/category/") ? "0.8" : "0.6";
-      return `<url><loc>${escapeHtml(url)}</loc><priority>${priority}</priority></url>`;
-    }),
-    ...jobUrls.map(
-      (j) => `<url><loc>${escapeHtml(j.url)}</loc><priority>0.6</priority>${j.lastmod ? `<lastmod>${new Date(j.lastmod).toISOString().slice(0, 10)}</lastmod>` : ""}<changefreq>weekly</changefreq></url>`
-    ),
-  ].join("\n");
+    ...staticUrls, ...jobUrls,
+  ].map(url => `<url><loc>${escapeHtml(url)}</loc></url>`).join("\n");
 
   res.set("Content-Type", "application/xml");
   res.send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urlEntries}\n</urlset>`);
