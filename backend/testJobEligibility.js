@@ -680,16 +680,23 @@ async function run() {
     assert.strictEqual(result.valid, false);
   });
 
-  console.log("\n=== Stage 1 boundary: customer-facing eligibility gates remain inactive ===");
+  console.log("\n=== Stage 2: customer-facing eligibility gates are active everywhere ===");
 
-  test("Stage 1 does not import isUsEligibleJob into candidate-facing jobs.js", () => {
+  test("candidate-facing jobs.js imports and applies isUsEligibleJob", () => {
     const src = fs.readFileSync(path.join(__dirname, "routes", "jobs.js"), "utf8");
-    assert.ok(!/require\(["']\.\.\/jobEligibility["']\)/.test(src));
+    assert.ok(/require\(["']\.\.\/jobEligibility["']\)/.test(src));
+    assert.ok(/if \(!isUsEligibleJob\(data\)\)/.test(src), "single-job API must reject ineligible jobs");
+    const filters = src.match(/\.filter\(isUsEligibleJob\)|\.filter\(\(job\) => isUsEligibleJob|\.filter\(\(row\) => isUsEligibleJob/g) || [];
+    assert.ok(filters.length >= 10, `expected at least 10 eligibility-filter call sites, found ${filters.length}`);
   });
 
-  test("Stage 1 does not import isUsEligibleJob into publicPages.js or alter sitemap visibility", () => {
+  test("public job pages, directory, similar jobs, and sitemap apply isUsEligibleJob", () => {
     const src = fs.readFileSync(path.join(__dirname, "routes", "publicPages.js"), "utf8");
-    assert.ok(!/require\(["']\.\.\/jobEligibility["']\)/.test(src));
+    assert.ok(/require\(["']\.\.\/jobEligibility["']\)/.test(src));
+    assert.ok(/error \|\| !job \|\| !isUsEligibleJob\(job\)/.test(src), "public job detail must reject ineligible jobs");
+    assert.ok(/eligibleData = data\.filter\(isUsEligibleJob\)/.test(src), "public job directory must filter ineligible jobs");
+    assert.ok(/similarRaw \|\| \[\]\)\.filter\(isUsEligibleJob\)/.test(src), "similar jobs must be filtered");
+    assert.ok(/jobs\.filter\(isUsEligibleJob\)\.map/.test(src), "sitemap must filter every fetched page");
   });
 
   console.log(`\n${passCount} passed, ${failCount} failed\n`);
