@@ -61,8 +61,8 @@ function normalizeRegionToken(value) {
   return String(value || "")
     .trim()
     .toLowerCase()
-    .replace(/\\./g, "")
-    .replace(/\\s+/g, " ");
+    .replace(/\./g, "")
+    .replace(/\s+/g, " ");
 }
 
 const US_REGION_BY_TOKEN = new Map(
