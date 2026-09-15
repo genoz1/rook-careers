@@ -65,9 +65,22 @@ function normalizeRegionToken(value) {
     .replace(/\s+/g, " ");
 }
 
+
 const US_REGION_BY_TOKEN = new Map(
   US_REGION_NAMES.map((name) => [normalizeRegionToken(name), name])
 );
+
+// Confirmed spellings present in the live Remote Office cluster. Keep
+// this list narrow: each alias was observed in the dry-run report and
+// maps only to its unambiguous canonical state name.
+const CONFIRMED_REGION_ALIASES = {
+  massachusettes: "Massachusetts",
+  louisana: "Louisiana",
+  louvisana: "Louisiana",
+};
+for (const [alias, canonicalName] of Object.entries(CONFIRMED_REGION_ALIASES)) {
+  US_REGION_BY_TOKEN.set(normalizeRegionToken(alias), canonicalName);
+}
 
 // Parses a region only from an exact comma-delimited token in the
 // pipe-delimited location text. Exact matching prevents collisions such
