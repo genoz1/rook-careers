@@ -45,15 +45,40 @@ const fs = require("fs");
 const path = require("path");
 const { createClient } = require("@supabase/supabase-js");
 
-const STATE_NAMES = ["Alabama","Alaska","Arizona","Arkansas","California","Colorado","Connecticut","Delaware","Florida","Georgia","Hawaii","Idaho","Illinois","Indiana","Iowa","Kansas","Kentucky","Louisiana","Maine","Maryland","Massachusetts","Michigan","Minnesota","Mississippi","Missouri","Montana","Nebraska","Nevada","New Hampshire","New Jersey","New Mexico","New York","North Carolina","North Dakota","Ohio","Oklahoma","Oregon","Pennsylvania","Rhode Island","South Carolina","South Dakota","Tennessee","Texas","Utah","Vermont","Virginia","Washington","West Virginia","Wisconsin","Wyoming"];
+const US_REGION_NAMES = [
+  "Alabama","Alaska","Arizona","Arkansas","California","Colorado","Connecticut","Delaware",
+  "Florida","Georgia","Hawaii","Idaho","Illinois","Indiana","Iowa","Kansas","Kentucky",
+  "Louisiana","Maine","Maryland","Massachusetts","Michigan","Minnesota","Mississippi",
+  "Missouri","Montana","Nebraska","Nevada","New Hampshire","New Jersey","New Mexico",
+  "New York","North Carolina","North Dakota","Ohio","Oklahoma","Oregon","Pennsylvania",
+  "Rhode Island","South Carolina","South Dakota","Tennessee","Texas","Utah","Vermont",
+  "Virginia","Washington","West Virginia","Wisconsin","Wyoming",
+  "District of Columbia","Puerto Rico","Guam","U.S. Virgin Islands",
+  "American Samoa","Northern Mariana Islands",
+];
 
-// Parses the explicit state name from the record's own text — pure
-// string matching, no geocoding, no network call.
+function normalizeRegionToken(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\\./g, "")
+    .replace(/\\s+/g, " ");
+}
+
+const US_REGION_BY_TOKEN = new Map(
+  US_REGION_NAMES.map((name) => [normalizeRegionToken(name), name])
+);
+
+// Parses a region only from an exact comma-delimited token in the
+// pipe-delimited location text. Exact matching prevents collisions such
+// as "Virginia" inside "West Virginia" and avoids guessing from prose.
 function parseExplicitState(locationRaw) {
-  const segments = (locationRaw || "").split("|").map((s) => s.trim());
+  const segments = String(locationRaw || "").split("|").map((s) => s.trim());
   for (const segment of segments) {
-    for (const stateName of STATE_NAMES) {
-      if (segment.toLowerCase().includes(stateName.toLowerCase())) return stateName;
+    const tokens = segment.split(",").map(normalizeRegionToken).filter(Boolean);
+    for (const token of tokens) {
+      const regionName = US_REGION_BY_TOKEN.get(token);
+      if (regionName) return regionName;
     }
   }
   return null;
@@ -237,7 +262,11 @@ async function run() {
   return runDryRun(supabase);
 }
 
-run().catch((err) => {
-  console.error("Repair script crashed:", err);
-  process.exit(1);
-});
+if (require.main === module) {
+  run().catch((err) => {
+    console.error("Repair script crashed:", err);
+    process.exit(1);
+  });
+}
+
+module.exports = { parseExplicitState };
