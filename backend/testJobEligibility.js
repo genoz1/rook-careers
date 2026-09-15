@@ -21,6 +21,7 @@ const {
 const { isUsEligibleJob, resolveUsStateCode, US_ELIGIBLE_STATE_CODES } = require("./jobEligibility");
 const { extractGeocodableLocation } = require("./locationExtraction");
 const { validateDryRunReport } = require("./backfillReportValidation");
+const { parseExplicitState } = require("./scripts/repairRemoteOfficeCluster");
 
 let passCount = 0;
 let failCount = 0;
@@ -550,6 +551,58 @@ async function run() {
 
   test('"Remote - Georgia" (dash, not the "Remote, XX" comma+2-letter shape) is unaffected by this fix', () => {
     assert.strictEqual(extractGeocodableLocation("Remote - Georgia"), "Georgia");
+  });
+
+  console.log("\n=== repairRemoteOfficeCluster.js: exact US region parsing ===");
+
+  test('"West Virginia" is not misclassified as Virginia', () => {
+    assert.strictEqual(
+      parseExplicitState("United States Remote Office | West Virginia, USA"),
+      "West Virginia"
+    );
+  });
+
+  test('"Virginia" still parses correctly', () => {
+    assert.strictEqual(
+      parseExplicitState("United States Remote Office | Virginia, USA"),
+      "Virginia"
+    );
+  });
+
+  test('"District of Columbia" is supported', () => {
+    assert.strictEqual(
+      parseExplicitState("United States Remote Office | District of Columbia, USA"),
+      "District of Columbia"
+    );
+  });
+
+  test('"Puerto Rico" is supported', () => {
+    assert.strictEqual(
+      parseExplicitState("United States Remote Office | Puerto Rico, USA"),
+      "Puerto Rico"
+    );
+  });
+
+  test("all five US territories are supported by exact name", () => {
+    for (const territory of [
+      "Puerto Rico",
+      "Guam",
+      "U.S. Virgin Islands",
+      "American Samoa",
+      "Northern Mariana Islands",
+    ]) {
+      assert.strictEqual(
+        parseExplicitState(`United States Remote Office | ${territory}, USA`),
+        territory
+      );
+    }
+  });
+
+  test("region-like words embedded in prose are not guessed", () => {
+    assert.strictEqual(
+      parseExplicitState("United States Remote Office | West Virginia University, USA"),
+      null
+    );
   });
 
   console.log("\n=== backfillReportValidation.js: validateDryRunReport (pure, no I/O) ===");
