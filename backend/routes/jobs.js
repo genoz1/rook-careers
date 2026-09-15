@@ -21,8 +21,9 @@
 
 const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
-const { scoreJob, mentionsNonUsCountry, hasFullAccess, stateAbbrFromName } = require("../matching");
+const { scoreJob, hasFullAccess, stateAbbrFromName } = require("../matching");
 const { scrubCompanyNameFromText, redactForNonSubscriber, redactForAnonymous } = require("../redaction");
+const { isUsEligibleJob } = require("../jobEligibility");
 const { fetchActiveJobs } = require("../scoring/precompute");
 const { distanceMiles, geocodeZip } = require("../geocoding");
 const { sendEmail } = require("../email/resend");
@@ -308,7 +309,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
       if (state) fallbackQuery = fallbackQuery.eq("state", state);
       const { data: fallbackJobs, error: fallbackError } = await fallbackQuery;
       if (fallbackError) return res.status(500).json({ error: fallbackError.message });
-      const usOnly = (fallbackJobs || []).filter((job) => !mentionsNonUsCountry(job.location_raw, job.job_lng, job.title_original));
+      const usOnly = (fallbackJobs || []).filter(isUsEligibleJob);
       return res.json({ jobs: usOnly.map(redactForAnonymous).map(stripUnusedDescriptionFields), total_count: totalCount || 0, explored_location: false });
     }
 
@@ -354,7 +355,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     // scoreJob already handles safely everywhere it's read.
     const anonymousProfile = { home_lat: nearLat, home_lng: nearLng, home_state: nearStateName };
     let scored = [...nearby, ...(noCoordsJobs || [])]
-      .filter((job) => !mentionsNonUsCountry(job.location_raw, job.job_lng, job.title_original))
+      .filter(isUsEligibleJob)
       .map((job) => ({ ...job, match: scoreJob(job, anonymousProfile) }))
       .filter((job) => industry ? job.industry === industry : true)
       .filter((job) => state ? job.state === state : true)
@@ -489,7 +490,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     // entire point of "what if I lived here instead."
     const exploredProfile = { ...profile, home_lat: nearLat, home_lng: nearLng };
     let scored = [...nearby, ...(noCoordsJobs || [])]
-      .filter((job) => !mentionsNonUsCountry(job.location_raw, job.job_lng, job.title_original))
+      .filter(isUsEligibleJob)
       .map((job) => ({ ...job, match: scoreJob(job, exploredProfile) }))
       .filter((job) => industry ? job.industry === industry : true)
       .filter((job) => state ? job.state === state : true)
@@ -514,7 +515,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
       saved: savedJobIds.has(job.id),
       application_status: appStatusByJob.get(job.id) || null,
       employer_note: noteFor(job),
-    }));
+    })).filter(isUsEligibleJob); // real incident: a Wuhan, China posting was shown here before this gate existed
 
     return res.json({
       jobs: (hasFullAccess(profile) ? results : results.map(redactForNonSubscriber)).map(stripUnusedDescriptionFields),
@@ -633,7 +634,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
 
   let rows = (allMatchingJobs || [])
     .filter((job) => !dismissedJobIds.has(job.id))
-    .filter((job) => !mentionsNonUsCountry(job.location_raw, job.job_lng, job.title_original))
+    .filter(isUsEligibleJob)
     .filter((job) => titleLocSanityPass(job))
     .map((job) => ({ jobs: job, job_id: job.id, overall_score: null, saved: savedJobIds.has(job.id), _liveMatch: scoreJob(job, profile) }))
     .sort((a, b) => {
@@ -655,7 +656,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     saved: Boolean(row.saved),
     application_status: appStatusByJob.get(row.job_id) || null,
     employer_note: noteFor(row.jobs),
-  }));
+  })).filter(isUsEligibleJob);
 
   return res.json({
     jobs: (hasFullAccess(profile) ? results : results.map(redactForNonSubscriber)).map(stripUnusedDescriptionFields),
@@ -740,7 +741,7 @@ router.get("/recruiter-jobs", requireConfig, optionalAuth, async (req, res) => {
   }
 
   const results = jobsData
-    .filter((job) => !mentionsNonUsCountry(job.location_raw, job.job_lng, job.title_original))
+    .filter(isUsEligibleJob) // replaces the older, less complete mentionsNonUsCountry-based filter for consistency with every other route
     .map((job) => {
       const match = profile ? scoreJob(job, profile) : null;
       return {
@@ -841,13 +842,13 @@ router.get("/new-matches-today-count", requireConfig, requireAuth, loadCandidate
   // shouldn't be counted as one of their matches either.
   const { data: todaysJobs, error } = await supabaseAdmin
     .from("jobs")
-    .select("location_raw, job_lng, title_original")
+    .select("id, job_lat, job_lng, state, location_raw")
     .eq("status", "active")
     .eq("moderation_status", "approved")
     .gte("date_posted", todayStart.toISOString());
 
   if (error) return res.status(500).json({ error: error.message });
-  const count = (todaysJobs || []).filter((job) => !mentionsNonUsCountry(job.location_raw, job.job_lng, job.title_original)).length;
+  const count = (todaysJobs || []).filter(isUsEligibleJob).length;
   res.json({ new_today: count });
 });
 
@@ -1035,6 +1036,14 @@ router.get("/jobs/:id", requireConfig, optionalAuth, async (req, res) => {
     // recruiter-submitted rows.
     return res.status(404).json({ error: "Job not found" });
   }
+  if (!isUsEligibleJob(data)) {
+    // Same treatment as publicPages.js's job-detail route: a real
+    // incident (a Wuhan, China posting reachable via this exact API)
+    // showed this needed to be identical everywhere, not just on the
+    // SEO-facing page. Returns 404, not a distinct error, so nothing
+    // reveals to a caller that ROOK has non-US postings internally.
+    return res.status(404).json({ error: "Job not found" });
+  }
 
   if (!req.user) {
     return res.json({
@@ -1163,7 +1172,7 @@ router.get("/saved-jobs", requireConfig, requireAuth, loadCandidateId, async (re
 
   const jobs = (rows || [])
     .filter((row) => row.jobs) // guards against a job having been removed since it was saved
-    .filter((row) => !mentionsNonUsCountry(row.jobs.location_raw, row.jobs.job_lng, row.jobs.title_original))
+    .filter((row) => isUsEligibleJob(row.jobs))
     .map((row) => ({
       ...attachDistance(row.jobs, profile),
       match: row.overall_score != null ? matchFromRow(row) : null,
@@ -1471,7 +1480,7 @@ router.post("/onboarding/anonymous-preview", requireConfig, async (req, res) => 
     }
 
     const scored = (jobs || [])
-      .filter(j => !mentionsNonUsCountry(j.location_raw, j.job_lng, j.title_original))
+      .filter(isUsEligibleJob)
       .filter(j => titleLocSanityPass(j))
       .map(j => {
         const distMi = j.job_lat != null
@@ -1664,7 +1673,7 @@ router.get("/onboarding/match-preview", requireConfig, requireAuth, async (req, 
       `fetch_ms=${tFetch - t0}`);
 
     const scored = activeJobs
-      .filter((job) => !mentionsNonUsCountry(job.location_raw, job.job_lng, job.title_original))
+      .filter(isUsEligibleJob)
       .map((job) => ({ score: scoreJob(job, profile), jobId: job.id, job }))
       .filter((r) => r.score.overall_score != null && r.score.overall_score > 0)
       .sort((a, b) => b.score.overall_score - a.score.overall_score);
