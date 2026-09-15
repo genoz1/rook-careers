@@ -13,6 +13,7 @@
 const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
 const { getTrialPeriodDays } = require("../routes/stripe");
+const { isUsEligibleJob } = require("../jobEligibility");
 
 const router = express.Router();
 
@@ -132,12 +133,21 @@ router.get("/jobs/:id", async (req, res, next) => {
 
   const { data: job, error } = await supabaseAnon
     .from("jobs")
-    .select("id, title_original, title_normalized, location_raw, compensation_text, salary_min, salary_max, description_text, date_posted, status, company_name, ai_analysis, remote_status, travel_percentage")
+    .select("id, title_original, title_normalized, location_raw, compensation_text, salary_min, salary_max, description_text, date_posted, status, company_name, ai_analysis, remote_status, travel_percentage, job_lat, job_lng, state")
     .eq("id", req.params.id)
     .eq("status", "active")
     .maybeSingle();
 
-  if (error || !job) {
+  // Direct instruction, prompted by a real incident: a Wuhan, China
+  // posting was indexed by Google via this exact page. This route had
+  // no eligibility check at all — any active job, regardless of
+  // country, got a full public page. Treated identically to "not
+  // found" rather than a distinct error: this never reveals to a
+  // visitor or a crawler that ROOK has non-US postings internally, and
+  // it means a job that later gets corrected (e.g. once re-ingested
+  // cleanly) becomes visible again automatically, with no special
+  // handling needed.
+  if (error || !job || !isUsEligibleJob(job)) {
     // Reported via audit: a nonexistent/expired job ID silently showed
     // the plain homepage with no indication anything was wrong - the
     // comment this replaces described falling through to "a normal
@@ -209,15 +219,18 @@ router.get("/jobs/:id", async (req, res, next) => {
       || (job.location_raw || "").split(",")[1]?.trim() || null;
     const similarQuery = supabaseAnon
       .from("jobs")
-      .select("id, title_original, location_raw, company_name")
+      .select("id, title_original, location_raw, company_name, job_lat, job_lng, state")
       .eq("status", "active")
       .eq("moderation_status", "approved")
       .neq("id", job.id)
-      .limit(4);
-    const { data: similar } = stateGuess
+      .limit(16); // fetch extra — some will be filtered out by isUsEligibleJob below
+    const { data: similarRaw } = stateGuess
       ? await similarQuery.ilike("location_raw", `%${stateGuess}%`)
       : await similarQuery;
-    if (similar && similar.length > 0) {
+    // Same eligibility gate as the primary job above — a foreign
+    // posting must never appear as a "similar role" link either.
+    const similar = (similarRaw || []).filter(isUsEligibleJob).slice(0, 4);
+    if (similar.length > 0) {
       similarJobsHtml = `
       <div style="margin-top:32px;">
         <div style="font-size:12.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:12px;">Similar Roles</div>
@@ -515,10 +528,15 @@ router.get("/sitemap.xml", async (req, res) => {
   if (isConfigured) {
     const { data: jobs } = await supabaseAnon
       .from("jobs")
-      .select("id, last_seen_at")
+      .select("id, last_seen_at, job_lat, job_lng, state, location_raw")
       .eq("status", "active")
       .limit(5000);
-    jobUrls = (jobs || []).map((j) => ({ url: `${APP_BASE_URL}/jobs/${j.id}`, lastmod: j.last_seen_at }));
+    // Direct instruction, prompted by a real incident: this sitemap is
+    // literally how Google discovers pages to crawl — it was handing
+    // Google a full list of every active job's URL regardless of
+    // country, which is how a Wuhan, China posting ended up indexed.
+    // Same isUsEligibleJob() gate as the job-detail route above.
+    jobUrls = (jobs || []).filter(isUsEligibleJob).map((j) => ({ url: `${APP_BASE_URL}/jobs/${j.id}`, lastmod: j.last_seen_at }));
   }
 
   const urlEntries = [

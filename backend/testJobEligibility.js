@@ -10,6 +10,8 @@
 // already been validated against real, live diagnostic output earlier).
 
 const assert = require("assert");
+const fs = require("fs");
+const path = require("path");
 const {
   hasUnambiguousForeignCountryEvidence,
   isBareGenericRemoteTerm,
@@ -607,6 +609,53 @@ async function run() {
   test("a completely malformed input (null) is rejected without throwing", () => {
     const result = validateDryRunReport(null);
     assert.strictEqual(result.valid, false);
+  });
+
+  console.log("\n=== REGRESSION: publicPages.js wires isUsEligibleJob into every route that could expose a job to Google/visitors ===");
+
+  test("publicPages.js imports isUsEligibleJob", () => {
+    const src = fs.readFileSync(path.join(__dirname, "routes", "publicPages.js"), "utf8");
+    assert.ok(/require\(["']\.\.\/jobEligibility["']\)/.test(src), "publicPages.js must import isUsEligibleJob from jobEligibility.js");
+  });
+
+  test("the /jobs/:id public job-detail route rejects an ineligible job (real incident: a Wuhan, China posting was previously served here unfiltered)", () => {
+    const src = fs.readFileSync(path.join(__dirname, "routes", "publicPages.js"), "utf8");
+    assert.ok(/error \|\| !job \|\| !isUsEligibleJob\(job\)/.test(src), "the job-detail route must reject when isUsEligibleJob(job) is false, not just on a missing/errored row");
+  });
+
+  test("the /sitemap.xml route filters jobs through isUsEligibleJob before listing them (real incident: this exact route is how Google discovered the Wuhan posting)", () => {
+    const src = fs.readFileSync(path.join(__dirname, "routes", "publicPages.js"), "utf8");
+    assert.ok(/\(jobs \|\| \[\]\)\.filter\(isUsEligibleJob\)/.test(src), "sitemap job URLs must be filtered through isUsEligibleJob");
+  });
+
+  test("the /jobs/:id route's 'similar jobs' internal links are also filtered through isUsEligibleJob", () => {
+    const src = fs.readFileSync(path.join(__dirname, "routes", "publicPages.js"), "utf8");
+    assert.ok(/\(similarRaw \|\| \[\]\)\.filter\(isUsEligibleJob\)/.test(src), "similar-job internal links must not surface an ineligible job either");
+  });
+
+  console.log("\n=== REGRESSION: jobs.js wires isUsEligibleJob into every candidate-facing response path ===");
+
+  test("jobs.js imports isUsEligibleJob and no longer imports or calls the older mentionsNonUsCountry", () => {
+    const src = fs.readFileSync(path.join(__dirname, "routes", "jobs.js"), "utf8");
+    assert.ok(/require\(["']\.\.\/jobEligibility["']\)/.test(src), "jobs.js must import isUsEligibleJob from jobEligibility.js");
+    assert.ok(!/mentionsNonUsCountry\(/.test(src), "the older, less complete mentionsNonUsCountry check should no longer be CALLED anywhere (a comment referencing the old name for context is fine)");
+    assert.ok(!/\{[^}]*mentionsNonUsCountry[^}]*\}\s*=\s*require/.test(src), "mentionsNonUsCountry should no longer be imported at all");
+  });
+
+  test("GET /jobs/:id returns 404 for an ineligible job (real incident: reachable here before this gate existed)", () => {
+    const src = fs.readFileSync(path.join(__dirname, "routes", "jobs.js"), "utf8");
+    assert.ok(/if \(!isUsEligibleJob\(data\)\)/.test(src), "the single-job route must check isUsEligibleJob(data) and reject before returning any job fields");
+  });
+
+  test("every job-list response path in jobs.js filters through isUsEligibleJob", () => {
+    const src = fs.readFileSync(path.join(__dirname, "routes", "jobs.js"), "utf8");
+    const matches = src.match(/\.filter\(isUsEligibleJob\)|\.filter\(\(job\) => isUsEligibleJob|\.filter\(\(row\) => isUsEligibleJob/g) || [];
+    // Ten known call sites as of this change: the anonymous fallback,
+    // the anonymous explore path, the authenticated explore path, both
+    // GET /jobs response branches, /recruiter-jobs, /new-matches-today-
+    // count, /saved-jobs, and one more list-building spot. A regression
+    // that drops any of these should fail this count, not silently pass.
+    assert.ok(matches.length >= 10, `expected at least 10 isUsEligibleJob filter call sites in jobs.js, found ${matches.length}`);
   });
 
   console.log(`\n${passCount} passed, ${failCount} failed\n`);
