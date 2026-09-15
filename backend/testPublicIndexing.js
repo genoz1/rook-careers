@@ -39,6 +39,7 @@ function setup(rows, { cap = 1000, failAt = Infinity, configured = true } = {}) 
       if (name === "express") return { Router: () => router };
       if (name === "@supabase/supabase-js") return { createClient: () => client };
       if (name === "../routes/stripe") return { getTrialPeriodDays: () => 3 };
+      if (name === "../jobEligibility") return { isUsEligibleJob: (job) => job.location_raw !== "Kuwait" };
       throw new Error(`Unexpected dependency: ${name}`);
     },
     process: { env: configured ? { SUPABASE_URL: "https://example.test", SUPABASE_ANON_KEY: "test", PUBLIC_APP_URL: "https://rookcareers.com" } : {} },
@@ -82,6 +83,20 @@ test("sitemap failures return retryable errors rather than partial successful XM
     assert.equal(res.headers["Retry-After"], "300");
     assert.ok(!res.body.includes("<urlset"));
   }
+});
+
+test("public directory, sitemap, and direct job pages hide ineligible jobs", async () => {
+  const rows = jobs(3);
+  rows[1].location_raw = "Kuwait";
+  const invoke = setup(rows);
+  const directory = await invoke("/jobs");
+  const sitemap = await invoke("/sitemap.xml");
+  const hiddenDetail = await invoke("/jobs/:id", { params: { id: rows[1].id } });
+  assert.ok(directory.body.includes(rows[0].id) && directory.body.includes(rows[2].id));
+  assert.ok(!directory.body.includes(rows[1].id));
+  assert.ok(sitemap.body.includes(rows[0].id) && sitemap.body.includes(rows[2].id));
+  assert.ok(!sitemap.body.includes(rows[1].id));
+  assert.equal(hiddenDetail.statusCode, 404);
 });
 
 test("directory renders complete paginated links without disclosing paid fields", async () => {
