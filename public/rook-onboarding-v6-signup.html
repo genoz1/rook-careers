@@ -6,6 +6,7 @@
 <meta name="robots" content="noindex">
 <title>ROOK — Create Your Free Account</title>
 <link rel="icon" href="assets/favicon.ico">
+<script src="rook-attribution.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <script src="rook-config.js"></script>
@@ -46,6 +47,10 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
 
 .btn-primary{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:15px;border:none;border-radius:12px;background:linear-gradient(110deg,var(--navy),var(--blue));color:#fff;font:inherit;font-size:15px;font-weight:700;cursor:pointer;margin-top:20px;transition:opacity .15s}
 .btn-primary:disabled{opacity:.55;cursor:not-allowed}
+.verify-actions{display:flex;justify-content:space-between;gap:12px;margin-top:14px}
+.verify-actions button{border:0;background:none;color:var(--blue);font:inherit;font-size:13px;font-weight:700;cursor:pointer;padding:5px 0}
+.verify-actions button:disabled{color:var(--muted);cursor:not-allowed}
+.verify-email{font-weight:700;overflow-wrap:anywhere}
 .fine{font-size:11px;color:var(--muted);text-align:center;margin-top:12px;line-height:1.6}
 .err{font-size:13px;color:#c0392b;font-weight:500;text-align:center;min-height:18px;margin-top:10px}
 .spinner{width:18px;height:18px;border:2.5px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
@@ -86,7 +91,7 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
       <div class="trial-feature"><span class="trial-check">✓</span> Unlock employers &amp; apply anytime with a 3-day free trial</div>
     </div>
 
-    <div class="form-section">
+    <div class="form-section" id="createSection">
       <div class="form-section-label">Create your account</div>
       <div class="field-group">
         <div class="name-row">
@@ -110,9 +115,25 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
       </div>
     </div>
 
-    <div class="err" id="formErr"></div>
-    <button class="btn-primary" id="btnCreateAccount">See my matches</button>
-    <p class="fine">No card required. You can start a 3-day free trial any time from your dashboard to unlock employers, full listings, and applying.</p>
+    <div id="createActions">
+      <div class="err" id="formErr" role="alert"></div>
+      <button class="btn-primary" id="btnCreateAccount">Email my verification code</button>
+      <p class="fine">No card required. You can start a 3-day free trial any time from your dashboard to unlock employers, full listings, and applying.</p>
+    </div>
+    <div id="verifySection" style="display:none">
+      <div class="form-section">
+        <div class="form-section-label">Verify your email</div>
+        <p class="lead">Enter the 6-digit code sent to <span class="verify-email" id="verifyEmail"></span>. You can stay on this page.</p>
+        <label class="field-label" for="codeInput" style="margin-top:18px">Verification code</label>
+        <input class="field-input" id="codeInput" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="6-digit code">
+        <div class="err" id="codeErr" role="alert"></div>
+        <button class="btn-primary" id="btnVerifyCode">See my matches</button>
+        <div class="verify-actions">
+          <button type="button" id="btnResendCode" disabled>Resend code (60s)</button>
+          <button type="button" id="btnChangeEmail">Change email</button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -124,8 +145,40 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
   const errEl = document.getElementById('formErr');
   const btn   = document.getElementById('btnCreateAccount');
   function showErr(msg) { errEl.textContent = msg || ''; }
+  const codeErr = document.getElementById('codeErr');
+  const verifyBtn = document.getElementById('btnVerifyCode');
+  const resendBtn = document.getElementById('btnResendCode');
+  let pending = null;
+  let resendAvailableAt = 0;
+  let resendTimer;
 
   const sb = window.supabase.createClient(window.ROOK_CONFIG.SUPABASE_URL, window.ROOK_CONFIG.SUPABASE_ANON_KEY);
+
+  function updateResend() {
+    const remaining = Math.ceil((resendAvailableAt - Date.now()) / 1000);
+    resendBtn.disabled = remaining > 0;
+    resendBtn.textContent = remaining > 0 ? `Resend code (${remaining}s)` : 'Resend code';
+    if (remaining <= 0) clearInterval(resendTimer);
+  }
+  function showCodeStep(details) {
+    pending = details;
+    try { sessionStorage.setItem('rook_v6_pending_email', JSON.stringify(details)); } catch (_) {}
+    document.getElementById('createSection').style.display = 'none';
+    document.getElementById('createActions').style.display = 'none';
+    document.getElementById('verifySection').style.display = 'block';
+    document.getElementById('verifyEmail').textContent = details.email;
+    document.querySelector('.screen h2').textContent = 'Check your email.';
+    document.getElementById('codeInput').focus();
+    if (!resendAvailableAt) {
+      resendAvailableAt = Date.now() + 60_000;
+      resendTimer = setInterval(updateResend, 1000);
+      updateResend();
+    }
+  }
+  try {
+    const saved = JSON.parse(sessionStorage.getItem('rook_v6_pending_email') || 'null');
+    if (saved?.email && saved?.firstName && saved?.lastName) showCodeStep(saved);
+  } catch (_) {}
 
   btn.addEventListener('click', async () => {
     showErr('');
@@ -147,23 +200,70 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
         options: { data: { first_name: firstName, last_name: lastName } }
       });
       if (signUpErr) throw new Error(signUpErr.message);
-      const userId = signUpData.user?.id;
-      if (!userId) throw new Error('Account creation failed. Please try again.');
-
-      let accessToken = signUpData.session?.access_token;
-      if (!accessToken) {
-        btn.innerHTML = '<div class="spinner"></div> Confirming account…';
-        await fetch('/api/auth/confirm-email', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ user_id: userId })
-        });
-        btn.innerHTML = '<div class="spinner"></div> Signing in…';
-        const { data: signInData, error: signInErr } = await sb.auth.signInWithPassword({ email, password });
-        if (signInErr) throw new Error(signInErr.message);
-        accessToken = signInData.session?.access_token;
+      if (signUpData.session) {
+        await sb.auth.signOut();
+        throw new Error('Email verification is temporarily unavailable. Please try again later.');
       }
-      if (!accessToken) throw new Error('Could not start session. Please try again.');
+      if (!signUpData.user?.id) throw new Error('Could not send a code. Please try again.');
+      showCodeStep({ email, firstName, lastName });
+    } catch (err) {
+      showErr(err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Email my verification code';
+    }
+  });
+
+  document.getElementById('btnChangeEmail').addEventListener('click', () => {
+    pending = null;
+    resendAvailableAt = 0;
+    clearInterval(resendTimer);
+    sessionStorage.removeItem('rook_v6_pending_email');
+    codeErr.textContent = '';
+    document.getElementById('verifySection').style.display = 'none';
+    document.getElementById('createSection').style.display = 'block';
+    document.getElementById('createActions').style.display = 'block';
+    document.querySelector('.screen h2').textContent = 'See your matches.';
+  });
+
+  resendBtn.addEventListener('click', async () => {
+    if (!pending || Date.now() < resendAvailableAt) return;
+    resendBtn.disabled = true;
+    codeErr.textContent = '';
+    try {
+      const { error } = await sb.auth.resend({ type: 'signup', email: pending.email });
+      if (error) throw error;
+      resendAvailableAt = Date.now() + 60_000;
+      resendTimer = setInterval(updateResend, 1000);
+      updateResend();
+      codeErr.textContent = 'A new code is on its way.';
+    } catch (err) {
+      codeErr.textContent = err.message || 'Could not resend the code. Please try again.';
+      resendBtn.disabled = false;
+    }
+  });
+
+  document.getElementById('codeInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') verifyBtn.click();
+  });
+  verifyBtn.addEventListener('click', async () => {
+    if (!pending) return;
+    codeErr.textContent = '';
+    const token = document.getElementById('codeInput').value.trim();
+    if (!/^[0-9]{6}$/.test(token)) {
+      codeErr.textContent = 'Enter the 6-digit code from your email.';
+      return;
+    }
+    verifyBtn.disabled = true;
+    verifyBtn.innerHTML = '<div class="spinner"></div> Verifying…';
+    try {
+      const { data, error } = await sb.auth.verifyOtp({ email: pending.email, token, type: 'email' });
+      if (error) throw new Error(error.message);
+      if (!data?.session?.access_token || !data.user?.id || !data.user.email_confirmed_at) {
+        throw new Error('Could not verify your email. Please try again.');
+      }
+      const userId = data.user.id;
+      const { firstName, lastName } = pending;
 
       // Conversion: free account created — a real signup, but a
       // SECONDARY conversion. The primary Google Ads/Meta conversion
@@ -207,12 +307,15 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
         // account creation over.
       }
 
-      try { sessionStorage.removeItem('rook_v6_state'); } catch(_) {}
+      try {
+        sessionStorage.removeItem('rook_v6_state');
+        sessionStorage.removeItem('rook_v6_pending_email');
+      } catch(_) {}
       window.location.href = 'rook-dashboard.html?welcome=1';
     } catch (err) {
-      showErr(err.message);
-      btn.disabled = false;
-      btn.innerHTML = 'See my matches';
+      codeErr.textContent = err.message;
+      verifyBtn.disabled = false;
+      verifyBtn.textContent = 'See my matches';
     }
   });
 })();

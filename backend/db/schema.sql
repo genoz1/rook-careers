@@ -467,8 +467,8 @@ alter table jobs add column if not exists expires_at timestamptz;
 
 create table if not exists social_post_history (
   id uuid primary key default gen_random_uuid(),
-  run_key text not null,                 -- 'YYYY-MM-DD-AM' / 'YYYY-MM-DD-PM' — idempotency key for an entire run
-  slot text not null check (slot in ('am', 'pm')),
+  run_key text not null,                 -- 'YYYY-MM-DD-AM' / 'YYYY-MM-DD-MID' / 'YYYY-MM-DD-PM'
+  slot text not null check (slot in ('am', 'mid', 'pm')),
   job_id uuid references jobs(id) on delete set null,
   -- job_id ALONE is not sufficient for permanent duplicate prevention:
   -- backend/archiveOldJobs.js permanently DELETES jobs 90+ days after

@@ -1,4 +1,4 @@
-// Pure, timezone-aware scheduling logic for the twice-daily social
+// Pure, timezone-aware scheduling logic for the three daily social
 // automation runs. Deliberately timezone-name-based (via Intl's
 // America/New_York, the same mechanism nyWallClockToUtc in
 // socialAutomation.js already relies on) rather than any fixed UTC
@@ -11,7 +11,7 @@
 // own trigger already fires close to the right wall-clock moment.
 // This module is the second, independent layer of correctness: given
 // "now," it decides for itself (without trusting the trigger's exact
-// timing) whether the current moment falls within the AM or PM
+// timing) whether the current moment falls within a posting
 // window, so a slightly early/late/duplicate/retried invocation is
 // harmless — it either matches a window or it doesn't, and idempotency
 // (handled separately, in socialPublishWorker.js, via social_post_
@@ -19,6 +19,7 @@
 
 const TIMEZONE = "America/New_York";
 const AM_TARGET = { hour: 8, minute: 30 };
+const MID_TARGET = { hour: 12, minute: 30 };
 const PM_TARGET = { hour: 16, minute: 30 };
 const WINDOW_MINUTES = 15; // matches DO Scheduled Jobs' own minimum interval — one poll per window in the normal case
 
@@ -48,20 +49,21 @@ function isWithinWindow(nowParts, target, windowMinutes = WINDOW_MINUTES) {
 }
 
 /**
- * Given the current moment, returns which slot ('am' | 'pm') is
- * currently due, or null if neither window is active right now. Never
- * returns both — the AM and PM windows (8:15-8:45, 16:15-16:45) don't
+ * Given the current moment, returns which slot ('am' | 'mid' | 'pm') is
+ * currently due, or null if no window is active right now. The three
+ * windows (8:15-8:45, 12:15-12:45, 16:15-16:45) don't
  * overlap.
  */
 function determineActiveSlot(now = new Date()) {
   const nowParts = getEasternParts(now);
   if (isWithinWindow(nowParts, AM_TARGET)) return { slot: "am", dateStr: nowParts.dateStr };
+  if (isWithinWindow(nowParts, MID_TARGET)) return { slot: "mid", dateStr: nowParts.dateStr };
   if (isWithinWindow(nowParts, PM_TARGET)) return { slot: "pm", dateStr: nowParts.dateStr };
   return null;
 }
 
 /**
- * Computes the next upcoming AM and PM run times from "now," in both
+ * Computes the next upcoming AM, midday, and PM run times from "now," in both
  * Eastern wall-clock and UTC — for the scheduler-status command. Pure
  * date arithmetic in the target timezone; does not depend on any
  * particular current offset, so it's correct across a DST boundary
@@ -88,6 +90,7 @@ function computeNextRunTimes(now = new Date()) {
 
   return {
     nextAm: nextOccurrence(AM_TARGET),
+    nextMid: nextOccurrence(MID_TARGET),
     nextPm: nextOccurrence(PM_TARGET),
   };
 }
@@ -95,6 +98,7 @@ function computeNextRunTimes(now = new Date()) {
 module.exports = {
   TIMEZONE,
   AM_TARGET,
+  MID_TARGET,
   PM_TARGET,
   WINDOW_MINUTES,
   getEasternParts,
