@@ -1,0 +1,1542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="rook-attribution.js"></script>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=AW-18428232873"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'AW-18428232873');
+
+  // Direct instruction: integrate with the existing gtag.js runtime
+  // already loaded above for Google Ads, rather than loading a second,
+  // duplicate copy of gtag.js just for GA4 — gtag.js is a single shared
+  // runtime that supports multiple config() calls for different
+  // products (Ads conversion ID, GA4 measurement ID) side by side.
+  gtag('config', 'G-LDG2CL5Z8R');
+  // dashboard_viewed fires on every load — a general engagement event,
+  // distinct from the one-time conversion events below. No PII in params.
+  gtag('event', 'dashboard_viewed', { event_category: 'engagement' });
+  // trial_activated / the AW conversion used to fire right here, based
+  // on nothing but the ?trial=started URL param — before rook-auth.js,
+  // Supabase, or any authenticated fetch have even loaded at this point
+  // in <head>. That's a real "fires on a URL param, not a confirmed
+  // state" risk: a bookmarked/shared/replayed URL with that param, or
+  // any future code path that lands here with it set, would fire a
+  // conversion with zero server confirmation behind it. Moved to run
+  // inside the authenticated profile-fetch below instead, where a
+  // freshly-fetched profile.subscription_status is available to check
+  // against — see the "Trial-activation conversion" block further down.
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="assets/favicon.ico" sizes="any">
+<link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="icon" href="assets/favicon-16.png" type="image/png" sizes="16x16">
+<link rel="apple-touch-icon" href="assets/rook-icon-180.png">
+<link rel="icon" href="assets/rook-icon-192.png" type="image/png" sizes="192x192">
+<meta name="theme-color" content="#071E41">
+<title>Dashboard — ROOK</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#071E41; --royal:#1463FF; --teal:#12B8A6; --gray:#F5F7FA; --white:#FFFFFF;
+    --muted:#5B6B85; --border:#E3E8F0; --radius:14px;
+    --excellent:#00806E; --excellent-bg:rgba(0,194,168,0.12);
+    --strong:#1463FF; --strong-bg:rgba(20,99,255,0.1);
+    --possible:#B98900; --possible-bg:rgba(185,137,0,0.1);
+    --font-display:'Space Grotesk', sans-serif; --font-body:'Inter', sans-serif;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{font-family:var(--font-body); color:var(--navy); background:var(--gray); -webkit-font-smoothing:antialiased; overflow-x:hidden;}
+  h1,h2,h3{font-family:var(--font-display); letter-spacing:-0.01em;}
+  a{color:inherit; text-decoration:none;}
+  .btn{display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:10px 18px; border-radius:999px; font-size:13.5px; font-weight:600; cursor:pointer; border:none;}
+  .btn-primary{background:var(--royal); color:#fff;}
+  .btn-outline{background:#fff; color:var(--navy); border:1px solid var(--border);}
+  .btn-outline:hover{border-color:var(--royal); color:var(--royal);}
+  .btn-sm{padding:8px 14px; font-size:12.5px;}
+
+  /* shell layout */
+  .shell{display:grid; grid-template-columns:236px minmax(0,1fr); min-height:100vh;}
+  .sidebar{background:var(--navy); color:#fff; padding:26px 20px; display:flex; flex-direction:column;}
+  .logo{display:flex; align-items:center; gap:12px; font-family:var(--font-display); font-weight:700; font-size:19px; margin-bottom:36px; padding:0 6px;}
+  .logo svg{width:24px; height:24px;}
+  .side-nav{display:flex; flex-direction:column; gap:2px; flex:1;}
+  .side-nav a{display:flex; align-items:center; gap:12px; padding:11px 12px; border-radius:9px; font-size:14px; font-weight:500; color:#AEB9CF;}
+  .side-nav a svg{width:17px; height:17px;}
+  .side-nav a.active{background:rgba(255,255,255,0.08); color:#fff;}
+  .side-nav a:hover{color:#fff;}
+  .side-nav .count{margin-left:auto; background:var(--teal); color:#03261F; font-size:11px; font-weight:700; padding:2px 7px; border-radius:99px;}
+  .side-foot{border-top:1px solid rgba(255,255,255,0.1); padding-top:16px; display:flex; align-items:center; gap:10px;}
+  .avatar{width:34px; height:34px; border-radius:50%; background:linear-gradient(135deg,var(--royal),var(--teal)); display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700;}
+  .side-foot .n{font-size:13.5px; font-weight:600;}
+  .side-foot .r{font-size:11.5px; color:#8B96AB;}
+
+  /* Mobile app topbar + slide-down nav. Real bug this fixes: at
+     max-width:900px the entire .sidebar (every nav link — Dashboard,
+     Job Search, Recruiter Jobs, Applications, Saved Jobs, Career
+     Intelligence, My Résumés, Settings, Log Out) was simply hidden with
+     zero replacement, leaving a paying customer with no way to
+     navigate the app at all on a phone except manually editing the
+     URL. This reuses the existing sidebar's own markup and styling as
+     a full-width slide-down panel instead of duplicating every nav
+     link in a second place. */
+  .mobile-app-bar{display:none;}
+  .mobile-close-btn{display:none;}
+  @media(max-width:900px){
+    .mobile-app-bar{
+      display:flex; align-items:center; justify-content:space-between;
+      background:var(--navy); padding:14px 18px; position:sticky; top:0; z-index:150;
+    }
+    .mobile-app-bar .logo{margin-bottom:0;}
+    .mobile-app-bar .logo img{height:30px;}
+    .mobile-app-bar .logo span{font-size:22px !important;}
+    .mobile-menu-btn{background:none; border:none; width:32px; height:32px; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0;}
+    .mobile-menu-btn svg{width:22px; height:22px; color:#fff;}
+    .sidebar{display:none;}
+    .shell{grid-template-columns:1fr;}
+    .sidebar.mobile-open{
+      display:flex; position:fixed; inset:0; z-index:200; width:100%;
+      overflow-y:auto; padding-top:20px;
+    }
+    .mobile-close-btn{display:none;}
+    .sidebar.mobile-open .mobile-close-btn{
+      display:block; position:absolute; top:18px; right:18px;
+      background:none; border:none; color:#fff; cursor:pointer;
+    }
+  }
+
+  .main{padding:36px 44px 80px; min-width:0;}
+  .topline{display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:28px; flex-wrap:wrap; gap:16px;}
+  .greeting h1{font-size:26px; font-weight:700;}
+  .greeting p{font-size:14.5px; color:var(--muted); margin-top:4px;}
+  .top-actions{display:flex; gap:10px;}
+
+  .stat-grid{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:18px; margin-bottom:36px;}
+  .stat-card{background:#fff; border:1px solid var(--border); border-radius:var(--radius); padding:20px 22px;}
+  .stat-card .num{font-family:var(--font-display); font-size:28px; font-weight:700;}
+  .stat-card .lbl{font-size:13px; color:var(--muted); margin-top:4px;}
+  .stat-card.accent .num{color:var(--teal);}
+
+  .panel-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:12px;}
+  .panel-head h2{font-size:18px; font-weight:700;}
+  .filter-row{display:flex; gap:8px; flex-wrap:wrap;}
+  .chip{font-size:12.5px; font-weight:600; padding:7px 13px; border-radius:99px; border:1px solid var(--border); background:#fff; color:var(--muted); cursor:pointer;}
+  .chip.active{background:var(--navy); color:#fff; border-color:var(--navy);}
+
+  .job-list{display:flex; flex-direction:column; gap:14px; margin-bottom:40px;}
+  .job-row{
+    background:#fff; border:1px solid var(--border); border-radius:var(--radius); padding:22px 24px;
+    display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:22px; align-items:center;
+  }
+  .score-ring{
+    width:58px; height:58px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-family:var(--font-display); font-weight:700; font-size:15px; flex-shrink:0;
+    background:conic-gradient(var(--teal) calc(var(--pct) * 1%), #EDF1F7 0);
+    position:relative;
+  }
+  .score-ring::before{content:""; position:absolute; inset:5px; background:#fff; border-radius:50%;}
+  .score-ring span{position:relative; z-index:1; color:var(--navy);}
+  .job-info h4{font-size:16px; font-weight:700; margin-bottom:3px;}
+  .job-info .company{font-size:13.5px; color:var(--muted); margin-bottom:10px;}
+  .why-row{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px;}
+  .why-tag{font-size:11.5px; font-weight:600; padding:4px 9px; border-radius:6px; background:var(--excellent-bg); color:var(--excellent); display:flex; align-items:center; gap:4px;}
+  .why-tag svg{width:10px; height:10px;}
+  .concern-tag{font-size:11.5px; font-weight:600; padding:4px 9px; border-radius:6px; background:var(--possible-bg); color:var(--possible);}
+  .job-meta-line{font-size:12.5px; color:#8B96AB;}
+  .job-actions{display:flex; flex-direction:column; gap:8px; align-items:flex-end;}
+  .match-level{font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.03em; padding:3px 9px; border-radius:99px;}
+  .ml-excellent{background:var(--excellent-bg); color:var(--excellent);}
+  .ml-strong{background:var(--strong-bg); color:var(--strong);}
+  .ml-possible{background:var(--possible-bg); color:var(--possible);}
+
+  .category-grid{display:grid; grid-template-columns:1fr 1fr; gap:4px 16px; margin-top:8px;}
+  .rec-badge{font-size:11px; padding:3px 9px;}
+
+  @media(max-width:900px){
+    .shell{grid-template-columns:minmax(0,1fr);}
+    .main{padding:24px 16px 60px; min-width:0; overflow:hidden; width:100%;}
+    .stat-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr);}
+    .job-row{grid-template-columns:auto minmax(0,1fr); text-align:left; padding:16px 18px; row-gap:12px;}
+    .score-ring{width:46px; height:46px; font-size:13px;}
+    .job-actions{grid-column:1 / -1; align-items:flex-start; flex-direction:row; flex-wrap:wrap;}
+    .job-info{min-width:0; overflow-wrap:break-word; word-break:break-word;}
+    .job-info h4{overflow-wrap:break-word; word-break:break-word;}
+    .job-info .company{overflow-wrap:break-word; word-break:break-word;}
+    .job-meta-line{overflow-wrap:break-word; word-break:break-word; white-space:normal;}
+    .panel-head{flex-wrap:wrap; gap:8px;}
+    .filter-row{flex-wrap:wrap;}
+    .topline{flex-wrap:wrap;}
+    .top-actions{flex-wrap:wrap;}
+    /* Real bug this fixes: the category breakdown (Experience,
+       Industry & Product, Customer & Specialty, Location &
+       Preferences, Requirements) forced a 2-column grid at every
+       width, which meant long labels like "Industry & Product" and
+       "Location & Preferences" had to wrap inside an already-cramped
+       half-width column on a phone, making cards look messy and
+       taller than necessary. Single column here gives every row the
+       full card width, so nothing wraps mid-label. */
+    .category-grid{grid-template-columns:1fr;}
+    .rec-badge{font-size:9.5px; padding:2px 7px;}
+    /* Confirmed direction: full category breakdown moves to View
+       Analysis only on mobile — a compact list card's job is helping
+       someone decide which jobs are worth a closer look; the
+       category-by-category detail is genuinely detail-page content,
+       not scanning-list content. The score, title, badge, and
+       Qualifications/Preferences summary line already carry the
+       job here. */
+    .category-grid-wrap{display:none;}
+    /* Real bug this fixes: .overflow-menu is position:absolute with
+       right:0, meaning it expands LEFTWARD from wherever the "⋯"
+       trigger sits — correct on desktop, where job-actions right-aligns
+       that button near the right edge of the row. But the mobile
+       job-actions fix wraps buttons onto their own full-width row,
+       often leaving the "⋯" near the LEFT side of a narrow screen, so a
+       150px-wide menu expanding further left ran straight off the
+       visible viewport. Expanding rightward instead on mobile keeps it
+       on-screen regardless of where the button lands. */
+    .overflow-menu{left:0; right:auto;}
+  }
+.job-actions-overflow { position:relative; display:inline-block; }
+.btn-icon { border:1px solid #E2E7F0; background:#fff; border-radius:8px; width:32px; height:32px; font-size:16px; color:#5B6B85; cursor:pointer; line-height:1; }
+.btn-icon:hover { background:#F5F7FA; }
+.overflow-menu { display:none; position:absolute; right:0; top:38px; background:#fff; border:1px solid #E2E7F0; border-radius:10px; box-shadow:0 8px 24px rgba(20,30,50,0.12); z-index:20; min-width:150px; overflow:hidden; }
+.overflow-menu.open { display:block; }
+.overflow-menu button { display:block; width:100%; text-align:left; padding:9px 14px; background:none; border:none; font-size:12.5px; color:#3D4A63; cursor:pointer; }
+.overflow-menu button:hover { background:#F5F7FA; }
+.overflow-menu button:disabled { color:#B7C0D1; cursor:default; }
+  .linkedin-btn{border-color:var(--border);}
+  .linkedin-btn:hover{border-color:#0A66C2; color:#0A66C2;}
+  .linkedin-btn svg{flex-shrink:0;}
+  .linkedin-popover-overlay{
+    display:none; position:fixed; inset:0; background:rgba(7,30,65,0.45);
+    z-index:600; align-items:center; justify-content:center; padding:20px;
+  }
+  .linkedin-popover-overlay.active{display:flex;}
+  .linkedin-popover-card{
+    background:#fff; border-radius:var(--radius); max-width:440px; width:100%;
+    box-shadow:0 20px 60px rgba(7,30,65,0.3); overflow:hidden;
+  }
+  .linkedin-popover-head{padding:20px 22px 16px; border-bottom:1px solid var(--border); display:flex; gap:14px; align-items:flex-start;}
+  .linkedin-popover-head .icon{width:38px; height:38px; border-radius:10px; background:#0A66C218; color:#0A66C2; display:flex; align-items:center; justify-content:center; flex-shrink:0;}
+  .linkedin-popover-head h3{font-size:16px; margin:0 0 4px;}
+  .linkedin-popover-head p{font-size:13px; color:var(--muted); margin:0; line-height:1.4;}
+  .linkedin-popover-close{margin-left:auto; background:none; border:none; cursor:pointer; color:var(--muted); font-size:18px; line-height:1; padding:2px;}
+  .linkedin-popover-list{padding:8px;}
+  .linkedin-popover-item{display:flex; align-items:center; gap:14px; padding:12px 14px; border-radius:10px; text-decoration:none; color:inherit;}
+  .linkedin-popover-item:hover{background:#F5F7FA;}
+  .linkedin-popover-item .label{font-size:13.5px; font-weight:600; color:var(--navy); margin-bottom:2px;}
+  .linkedin-popover-item .desc{font-size:12px; color:var(--muted);}
+  .linkedin-popover-item .go{margin-left:auto; font-size:12px; font-weight:600; color:#0A66C2; white-space:nowrap;}
+  .linkedin-popover-foot{padding:12px 22px 18px; font-size:11.5px; color:var(--muted); text-align:center;}
+  .profile-gate-overlay{
+    display:none; position:fixed; inset:0; background:rgba(7,30,65,0.55);
+    z-index:500; align-items:center; justify-content:center; padding:20px;
+  }
+  .profile-gate-overlay.active{display:flex;}
+  .profile-gate-card{
+    background:#fff; border-radius:var(--radius); padding:32px; max-width:420px; width:100%;
+    box-shadow:0 20px 60px rgba(7,30,65,0.3); text-align:center;
+  }
+  .profile-gate-card h2{font-size:21px; margin-bottom:10px;}
+  .profile-gate-card p{font-size:14.5px; color:var(--muted); line-height:1.5; margin-bottom:22px;}
+  .profile-gate-card .btn-primary{display:inline-block; padding:12px 24px; border-radius:99px; font-weight:600; font-size:14.5px; text-decoration:none;}
+  .profile-gate-card .dismiss{display:block; margin-top:14px; font-size:13px; color:var(--muted); text-decoration:underline; cursor:pointer; background:none; border:none;}
+
+  /* ══ MEMBER MOBILE (max-width:880px) ════════════════════════ */
+  @media(max-width:880px){
+    /* Score hero */
+    .scorehero[id="mobileScoreboard"]{display:none}
+    @media(max-width:880px){.scorehero[id="mobileScoreboard"]{display:block}}
+    .scorehero{border-radius:22px; background:linear-gradient(135deg,#062d55,#075991); color:#fff; padding:20px; position:relative; overflow:hidden; margin-bottom:11px;}
+    .scorehero:after{content:""; position:absolute; width:130px; height:130px; border-radius:50%; background:rgba(83,200,120,.17); right:-38px; top:-43px;}
+    .big,.scorehero-count{font-size:48px !important; font-weight:900; line-height:1; letter-spacing:-.05em; position:relative; z-index:1;}
+    .scorehero h2,.scorehero-label{font-size:19px !important; margin:7px 0 4px; position:relative; z-index:1; color:#fff;}
+    .scorehero p,.scorehero-sub{font-size:12px; line-height:1.4; color:#dcedf8; margin:0; position:relative; z-index:1;}
+    /* Mini stats */
+    .mini-stats,.stat-buckets{display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin:11px 0 22px;}
+    .mini-stat,.stat-bucket{border:1px solid #dce7f0; border-radius:14px; background:#fff; padding:11px 8px; text-align:center;}
+    .mini-stat b,.stat-bucket-count{display:block; font-size:20px; color:#062d55; font-weight:900;}
+    .mini-stat span,.stat-bucket-label{display:block; font-size:9px; color:#637589; margin-top:2px;}
+    /* List head */
+    .listhead,.section-head-row{display:flex; align-items:end; justify-content:space-between; gap:10px; margin:20px 0 10px;}
+    .listhead h2{font-size:21px; color:#062d55; margin:0;}
+    .listhead a,.see-all{font-size:11px; color:#0877d1; font-weight:850;}
+    /* Job cards */
+    .job-row{border:1px solid #dce7f0; border-radius:18px; background:#fff; padding:15px; margin-bottom:10px; display:block !important;}
+    .job-row .score-ring{width:46px;height:46px;font-size:12px;float:right;margin:0 0 8px 10px;flex-shrink:0;}
+    .job-row .score-ring span{font-size:11px;font-weight:800;}
+    .job-row .job-info h4{font-size:16px; color:#062d55; margin:0 0 4px; line-height:1.2;}
+    .job-row .company,.job-row .job-info .company{font-size:12px; color:#47637c; font-weight:750;}
+    .job-actions{display:flex; flex-wrap:wrap; gap:6px; margin-top:10px;}
+    .job-actions .reason-tag{background:#f3f8fc; border-radius:9px; padding:6px 8px; font-size:10px; color:#47637c;}
+  }
+  /* Location widget suggestion list — shared styles used by rook-location-widget.js */
+  .rlw-item{padding:10px 14px;cursor:pointer;font-size:14px;color:#062d55;border-bottom:1px solid #eaf1f6;list-style:none;}
+  .rlw-item:last-child{border-bottom:none;}
+  .rlw-item.rlw-active,.rlw-item:hover{background:#f0f7ff;color:#0877d1;}
+  /* Résumé-upload "still working" indicator — a plain static button/line
+     used to look frozen during the real, sometimes 20-40+ second backend
+     work (text extraction, AI analysis, embeddings). This spinner plus
+     the cycling status messages in JS below both exist purely to show
+     visible progress the whole time, not to speed anything up. */
+  .btn-spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:rookspin .7s linear infinite;vertical-align:-2px;margin-right:7px;}
+  @keyframes rookspin{to{transform:rotate(360deg)}}
+
+</style>
+<link rel="stylesheet" href="rook-mobile.css">
+</head>
+<body>
+<div class="profile-gate-overlay" id="profileGateOverlay">
+  <div class="profile-gate-card">
+    <h2 id="profileGateTitle">Finish setting up your profile</h2>
+    <p id="profileGateBody">We can't score jobs against your background yet — a couple of things are still missing.</p>
+    <!-- Inline resume upload — no navigation to another page -->
+    <input type="file" id="profileGateResumeInput" accept=".pdf,.doc,.docx" style="display:none">
+    <a class="btn-primary" href="rook-settings.html" id="profileGateLink" style="background:var(--royal); color:#fff;">Complete My Profile →</a>
+    <div id="profileGateUploadStatus" style="display:none;font-size:13px;color:var(--royal);font-weight:600;margin-top:8px;text-align:center;"></div>
+    <button type="button" class="dismiss" id="profileGateDismiss">Skip</button>
+  </div>
+</div>
+<div class="linkedin-popover-overlay" id="linkedinPopoverOverlay" onclick="if(event.target === this) this.classList.remove('active')">
+  <div class="linkedin-popover-card">
+    <div class="linkedin-popover-head">
+      <div class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.446-2.136 2.94v5.666H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 11.001-4.124 2.062 2.062 0 010 4.124zM7.114 20.452H3.559V9h3.555v11.452z"/></svg></div>
+      <div>
+        <h3 id="linkedinPopoverTitle">Find contacts</h3>
+        <p>Opens LinkedIn's own search, using your account — ROOK doesn't store or show any contact data itself.</p>
+      </div>
+      <button type="button" class="linkedin-popover-close" onclick="document.getElementById('linkedinPopoverOverlay').classList.remove('active')" aria-label="Close">✕</button>
+    </div>
+    <div class="linkedin-popover-list" id="linkedinPopoverList"></div>
+    <div class="linkedin-popover-foot">Tip: LinkedIn's search can include people who left a company years ago. Once results load, use LinkedIn's own <strong>"Current company"</strong> filter (under "All filters") to see only people who work there now.</div>
+  </div>
+</div>
+<div class="mobile-app-bar">
+  <div class="logo" style="gap:8px;">
+    <img src="assets/rook-logo.png" alt="ROOK" style="height:35px;width:35px;border-radius:10px;object-fit:cover;"><span style="font-family:var(--font-display); font-weight:700; letter-spacing:-0.02em; color:#EDF3FF; line-height:1;">ROOK</span>
+  </div>
+  <a href="rook-mobile-menu.html" class="mobile-menu-btn" aria-label="Menu" style="display:grid;place-items:center;width:38px;height:38px;border-radius:13px;background:linear-gradient(145deg,#062d55,#0877d1);color:#fff;font-size:18px;font-weight:900;text-decoration:none;">☰</a>
+</div>
+
+<div class="shell">
+  <aside class="sidebar">
+    <button type="button" onclick="document.querySelector('.sidebar').classList.remove('mobile-open')" aria-label="Close menu" class="mobile-close-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+    <div class="logo" style="gap:8px;">
+      <img src="assets/rook-icon-192.png" alt="ROOK" style="height:43px; width:auto; display:block;"><span style="font-family:var(--font-display); font-weight:700; font-size:36px; letter-spacing:-0.02em; color:#EDF3FF; line-height:1;">ROOK</span>
+    </div>
+    <nav class="side-nav">
+      <a href="rook-dashboard.html" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l9-9 9 9M5 10v10h14V10"/></svg>Dashboard<span class="count">17</span></a>
+      <a href="rook-search.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>Job Search</a>
+      <a href="rook-recruiter-jobs.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>Recruiter Jobs</a>
+      <a href="rook-tracker.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>Applications</a>
+      <a href="rook-saved.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-4-7 4V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>Saved Jobs</a>
+      <a href="rook-intelligence.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>Career Intelligence</a>
+      <a href="rook-onboarding-v2.html?ob=resume_upload"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>My Résumés</a>
+      <a href="rook-settings.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09A1.65 1.65 0 0015 4.6a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>Settings</a>
+    </nav>
+    <div class="side-foot">
+      <div class="avatar" id="sideAvatar"></div>
+      <div><div class="n" id="sideName">—</div><div class="r" id="sideStatus">—</div></div>
+    </div>
+    <a href="#" onclick="document.getElementById('logoutLink').textContent='Signing out…'; rookSupabase.auth.signOut().then(()=>window.location.href='rook-login.html').catch(()=>window.location.href='rook-login.html'); return false;" id="logoutLink" style="display:block; text-align:center; font-size:12.5px; font-weight:600; color:#8B96AB; padding:12px 0 4px;">Log Out</a>
+  </aside>
+
+  <main class="main">
+    <div class="topline">
+      <div class="greeting">
+        <h1 id="greetingName">Good day</h1>
+        <p id="greetingSubtitle">Finding opportunities matching your career profile...</p>
+      </div>
+      <div class="top-actions">
+        <a href="rook-onboarding-v2.html?edit=preferences" class="btn btn-outline">Edit Preferences</a>
+        <a href="rook-search.html" class="btn btn-primary">+ New Search</a>
+      </div>
+    </div>
+
+    <!-- Primary Job-Search Location row — shows the saved work location and
+         lets the candidate change it inline. Changing it saves to the profile,
+         rescores, and reloads the job list. Does NOT affect the Find Jobs page
+         (temporary location searches there are independent). -->
+    <div id="locationRow" style="display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:16px; padding:10px 14px; background:#f3f8fc; border:1px solid #dce7f0; border-radius:13px;">
+      <span style="font-size:13px; font-weight:700; color:#47637c; white-space:nowrap; flex-shrink:0;">📍 Primary Job-Search Location:</span>
+      <span id="locationLabel" style="font-size:13px; font-weight:700; color:#062d55; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">—</span>
+      <button id="btnChangeLocation" style="font-size:12px; font-weight:700; color:#0877d1; background:none; border:1.5px solid #c4ddf5; border-radius:8px; padding:5px 11px; cursor:pointer; flex-shrink:0;">Change</button>
+    </div>
+    <!-- Inline location editor — hidden until "Change" is clicked -->
+    <div id="locationEditor" style="display:none; margin-bottom:16px; padding:14px; background:#fff; border:1.5px solid #0877d1; border-radius:13px; position:relative;">
+      <div style="font-size:12px; font-weight:700; color:#47637c; margin-bottom:8px; text-transform:uppercase; letter-spacing:.06em;">Change Primary Job-Search Location</div>
+      <div style="font-size:12px; color:#637589; margin-bottom:10px;">This updates your dashboard ranking and saves to your profile.</div>
+      <div style="position:relative;">
+        <input id="dashLocInput" type="text" placeholder="City, state or ZIP code"
+          style="width:100%;box-sizing:border-box;border:1.5px solid #dce7f0;border-radius:10px;padding:12px 14px;font-size:14px;outline:none;font-family:inherit;">
+        <ul id="dashLocList" hidden style="
+          position:absolute; top:100%; left:0; right:0; z-index:200;
+          background:#fff; border:1.5px solid #0877d1; border-top:none;
+          border-radius:0 0 10px 10px; margin:0; padding:4px 0; list-style:none;
+          max-height:200px; overflow-y:auto; box-shadow:0 8px 20px rgba(7,44,80,.12);
+        "></ul>
+      </div>
+      <div id="dashLocStatus" style="font-size:12px; color:#637589; min-height:16px; margin:6px 0 10px;"></div>
+      <div style="display:flex; gap:8px; justify-content:flex-end;">
+        <button id="btnCancelLocation" style="font-size:13px; font-weight:600; color:#637589; background:none; border:1.5px solid #dce7f0; border-radius:8px; padding:8px 14px; cursor:pointer;">Cancel</button>
+        <button id="btnSaveLocation" disabled style="font-size:13px; font-weight:700; color:#fff; background:linear-gradient(105deg,#062d55,#0877d1); border:0; border-radius:8px; padding:8px 16px; cursor:pointer; opacity:.5;">Save &amp; Refresh</button>
+      </div>
+    </div>
+
+
+    <!-- Mobile scorehero — shown only at max-width:880px via rook-mobile.css -->
+    <div class="scorehero" id="mobileScoreboard">
+      <div class="big" id="mobileJobCount">—</div>
+      <h2>opportunities ranked for you</h2>
+      <p id="mobileJobSub">Loading your matches…</p>
+    </div>
+    <div class="stat-grid">
+      <div class="stat-card"><div class="num" id="statNewMatches">—</div><div class="lbl">New Matches Today</div></div>
+      <div class="stat-card accent"><div class="num" id="statExcellent">—</div><div class="lbl">Excellent Matches (85%+)</div></div>
+      <div class="stat-card"><div class="num" id="statStrong">—</div><div class="lbl">Strong Matches (75–84%)</div></div>
+      <div class="stat-card"><div class="num" id="statApplications">—</div><div class="lbl">Applications In Progress</div></div>
+    </div>
+
+    <!-- Primary unlock banner — shown only to candidates without full
+         access (see rookHasFullAccess() in rook-auth.js), hidden below
+         via inline display:none until the profile fetch below decides.
+         This is the "primary unlock CTA" the free-dashboard spec calls
+         for; the small per-job buttons further down are the secondary,
+         per-listing CTAs and route to the same place. -->
+    <div id="unlockBanner" style="display:none; background:linear-gradient(135deg,#062d55,#0877d1); border-radius:18px; padding:22px 24px; margin-bottom:18px; color:#fff;">
+      <div style="font-size:19px; font-weight:900; line-height:1.25; margin-bottom:8px;">Unlock My Matches</div>
+      <div style="font-size:13.5px; color:#dcedf8; line-height:1.55; margin-bottom:16px; max-width:520px;">Start your 3-day free trial to view employers, open complete job listings, apply, and activate personalized job alerts. Then $19.99/month. Cancel anytime.</div>
+      <button type="button" id="unlockBannerBtn" onclick="rookGoToCheckout('banner')" style="background:#fff; color:#062d55; border:0; border-radius:99px; padding:12px 22px; font:inherit; font-size:14px; font-weight:800; cursor:pointer;">Unlock My Matches</button>
+    </div>
+
+    <div class="panel-head">
+      <h2>Today's Matches</h2>
+      <div class="filter-row" id="tierFilters">
+        <span class="chip active" onclick="setTierFilter('all', this)">All</span>
+        <span class="chip" onclick="setTierFilter('new', this)">New</span>
+        <span class="chip" onclick="setTierFilter('excellent', this)">Excellent</span>
+        <span class="chip" onclick="setTierFilter('strong', this)">Strong</span>
+        <span class="chip" onclick="setTierFilter('saved', this)">Saved</span>
+      </div>
+    </div>
+    <div style="font-size:12.5px; color:#8B96AB; margin:-10px 0 16px;">Showing jobs within 300 miles of home, plus remote/territory roles with no single fixed location. Looking farther out, or considering a different city? Try <a href="rook-search.html" style="color:var(--royal, #1463FF); font-weight:600;">Job Search</a>.</div>
+
+    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:14px;">
+      <label style="display:flex; align-items:center; gap:7px; font-size:12.5px; color:#5B6B85; font-weight:600; cursor:pointer; margin:0;">
+        <input type="checkbox" id="showRecruiterToggle" checked onchange="applyRecruiterToggle()">
+        Show recruiter-posted jobs
+      </label>
+      <label style="display:flex; align-items:center; gap:7px; font-size:12.5px; color:#5B6B85; font-weight:600; margin:0;">
+        Sort by
+        <select id="sortSelect" onchange="applyRecruiterToggle()" style="border:1px solid #E2E7F0; border-radius:8px; padding:5px 9px; font-size:12.5px; color:#3D4A63; font-weight:600; background:#fff;">
+          <option value="best_match">Best Match</option>
+          <option value="closest">Closest to You</option>
+          <option value="newest">Newest</option>
+        </select>
+      </label>
+    </div>
+
+    <div id="jobListLoading" aria-live="polite">
+      <div class="skeleton-row" style="display:flex; gap:16px; align-items:center; padding:18px; border:1px solid #E4E9F2; border-radius:12px; margin-bottom:12px;">
+        <div class="skel-shimmer" style="width:56px; height:56px; border-radius:50%; flex-shrink:0;"></div>
+        <div style="flex:1; min-width:0;">
+          <div class="skel-shimmer" style="height:16px; width:55%; border-radius:4px; margin-bottom:10px;"></div>
+          <div class="skel-shimmer" style="height:12px; width:75%; border-radius:4px; margin-bottom:10px;"></div>
+          <div class="skel-shimmer" style="height:11px; width:40%; border-radius:4px;"></div>
+        </div>
+      </div>
+      <div class="skeleton-row" style="display:flex; gap:16px; align-items:center; padding:18px; border:1px solid #E4E9F2; border-radius:12px; margin-bottom:12px;">
+        <div class="skel-shimmer" style="width:56px; height:56px; border-radius:50%; flex-shrink:0;"></div>
+        <div style="flex:1; min-width:0;">
+          <div class="skel-shimmer" style="height:16px; width:48%; border-radius:4px; margin-bottom:10px;"></div>
+          <div class="skel-shimmer" style="height:12px; width:65%; border-radius:4px; margin-bottom:10px;"></div>
+          <div class="skel-shimmer" style="height:11px; width:35%; border-radius:4px;"></div>
+        </div>
+      </div>
+      <div class="skeleton-row" style="display:flex; gap:16px; align-items:center; padding:18px; border:1px solid #E4E9F2; border-radius:12px; margin-bottom:12px;">
+        <div class="skel-shimmer" style="width:56px; height:56px; border-radius:50%; flex-shrink:0;"></div>
+        <div style="flex:1; min-width:0;">
+          <div class="skel-shimmer" style="height:16px; width:60%; border-radius:4px; margin-bottom:10px;"></div>
+          <div class="skel-shimmer" style="height:12px; width:70%; border-radius:4px; margin-bottom:10px;"></div>
+          <div class="skel-shimmer" style="height:11px; width:38%; border-radius:4px;"></div>
+        </div>
+      </div>
+      <div style="text-align:center; padding:8px 20px 4px; color:#5B6B85; font-size:13px;">Finding your best matches…</div>
+      <style>
+        .skel-shimmer{background:linear-gradient(90deg,#EAEEF5 25%,#F4F6FA 37%,#EAEEF5 63%); background-size:400% 100%; animation:skelShimmer 1.4s ease infinite;}
+        @keyframes skelShimmer{0%{background-position:100% 50%;}100%{background-position:0 50%;}}
+      </style>
+    </div>
+
+    <div class="job-list" id="jobList" data-demo="true" style="display:none;">
+
+
+    </div>
+    <div id="dashboardPagination" style="display:flex; justify-content:center; gap:8px; margin-top:24px;"></div>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="rook-config.js"></script>
+<script src="rook-auth.js"></script>
+<script src="rook-v7.js"></script>
+<script src="rook-location-widget.js"></script>
+<script>
+  // Every job row currently in the HTML is sample/demo data — clearly
+  // marked as such per the "no fake functionality" principle in the
+  // architecture spec. This script tries to replace it with real jobs
+  // from the backend; if that fails (no auth, no data yet, backend not
+  // running), the demo rows stay, with a banner explaining why.
+  //
+  // The demo rows are hidden by default (see the #jobListLoading div
+  // above) rather than shown immediately — they used to render right
+  // away in the raw HTML and only get swapped out once the fetch
+  // finished, which meant real users briefly saw old sample data flash
+  // on screen every time the dashboard loaded. Now nothing but a
+  // loading message shows until we actually know whether real data
+  // exists; the demo rows only ever appear as a genuine fallback, not
+  // as a default first frame.
+  let currentJobs = [];
+  // Safe default (matches the original, pre-trial wording) until
+  // loadJobs()'s prefetch resolves — see rookLockedJobCtaLabel() in
+  // rook-auth.js.
+  let lockedJobCtaLabel = 'Subscribe to Unlock';
+
+  (async () => {
+    const token = await rookV7Init();
+    if (!token) return; // rookRequireAuth already redirected to login
+
+    // Checks whether this candidate's profile actually has a résumé and a
+    // ZIP on file — both required by onboarding going forward, but an
+    // account created before that gate existed (or edited afterward) can
+    // still be missing one or both. Without this, someone lands on a
+    // dashboard where every job is stuck at a low or "not enough info"
+    // score with no clear explanation why, and no obvious next step.
+    // Doesn't block the rest of the page — jobs still load underneath —
+    // it's just a clear nudge back to the exact place to fix it.
+    function rookApplySidebarProfile(profile, sessionEmail) {
+      const avatarEl = document.getElementById('sideAvatar');
+      const nameEl   = document.getElementById('sideName');
+      const statusEl = document.getElementById('sideStatus');
+      if (!avatarEl) return;
+      const name  = profile?.name || '';
+      // Email comes from the auth session — not stored in candidate_profiles
+      const email = sessionEmail || profile?.email || '';
+      const initials = name
+        ? name.trim().split(/\s+/).map(w => w[0]).join('').toUpperCase().slice(0, 2)
+        : (email ? email[0].toUpperCase() : '?');
+      avatarEl.textContent = initials;
+      if (nameEl) nameEl.textContent = name || email || 'My Account';
+      if (statusEl) {
+        const s = profile?.subscription_status;
+        statusEl.textContent = s === 'active' ? 'Active member'
+          : s === 'trialing' ? 'Free trial'
+          : s === 'cancelled' ? 'Cancelled'
+          : 'No active plan';
+      }
+    }
+
+    (async () => {
+      try {
+        const res = await rookV7Fetch('/profile');
+        if (!res.ok) return;
+        const profile = await res.json();
+        // Get email from session since candidate_profiles doesn't store it
+        let sessionEmail = '';
+        try {
+          const { data: { session } } = await rookSupabase.auth.getSession();
+          sessionEmail = session?.user?.email || '';
+        } catch(_) {}
+        rookApplySidebarProfile(profile, sessionEmail);
+        // Primary unlock banner: shown only when this candidate does not
+        // currently have full access. Purely a display decision — the
+        // banner being hidden/shown has no bearing on what data the
+        // job-listing endpoints actually return; that's enforced
+        // server-side regardless of whether this script runs at all.
+        const unlockBanner = document.getElementById('unlockBanner');
+        if (unlockBanner) unlockBanner.style.display = rookHasFullAccess(profile) ? 'none' : 'block';
+
+        // Trial-activation conversion — moved here (out of the early
+        // <head> script) specifically so it can check a freshly-fetched
+        // profile.subscription_status before firing, instead of trusting
+        // the ?trial=started URL param alone. That param only proves the
+        // browser was redirected here after rook-checkout.html's API
+        // call reported success; this profile fetch is the actual
+        // server-confirmed state (written either by that same API call
+        // or, if it's landed by now, the Stripe webhook — either way, a
+        // real database row, not a client-side claim).
+        //
+        // Checked against subscription_status === 'trialing' SPECIFICALLY
+        // — not rookHasFullAccess(), which also returns true for 'active'.
+        // Two real cases land on this exact same redirect with status
+        // 'active' instead of 'trialing': (1) a repeat customer who
+        // already used their one trial (see the trial-abuse guard in
+        // computeTrialDaysForCheckout — they're charged immediately, no
+        // trial_period_days applied), and (2) if TRIAL_PERIOD_DAYS were
+        // ever set to 0 account-wide. Neither of those candidates
+        // actually activated a trial, so an event literally named
+        // trial_activated must not fire for them — that would conflate
+        // "started paying immediately" with "started a free trial" and
+        // skew trial-specific ad-campaign CPA reporting. Direct
+        // instruction: active subscribers must not generate a
+        // trial-activation conversion.
+        //
+        // Caveat worth knowing: if TRIAL_PERIOD_DAYS is ever set to 0,
+        // NO conversion event fires here at all for a brand-new paying
+        // signup (case 2 above) — this check deliberately narrows to
+        // "trial genuinely activated," not "any new paid signup." That
+        // tradeoff wasn't asked to be solved here.
+        //
+        // Two separate guards against firing more than once:
+        //   1. sessionStorage flag — survives the URL param being
+        //      stripped, so even a bookmarked/shared/back-button-restored
+        //      URL with the param still intact can't refire it later in
+        //      the same browser session.
+        //   2. history.replaceState strips the param immediately after
+        //      the check, so a plain page refresh has nothing left to
+        //      trigger on even without the sessionStorage guard.
+        // Both together mean: fires at most once per real trial
+        // activation, per browser, full stop.
+        (function () {
+          const params = new URLSearchParams(window.location.search);
+          if (params.get('trial') !== 'started') return;
+          // Strip the param immediately regardless of outcome below —
+          // there's nothing left to act on after this check either way.
+          history.replaceState({}, '', window.location.pathname);
+          let alreadyFired = false;
+          try { alreadyFired = sessionStorage.getItem('rook_trial_activated_fired') === '1'; } catch (_) {}
+          if (alreadyFired) return;
+          if (profile?.subscription_status !== 'trialing') {
+            // Either not a real trial (active/repeat-customer/trial-
+            // disabled case above) or the write hasn't landed yet —
+            // don't fire a trial-specific conversion for a state that
+            // isn't genuinely 'trialing'.
+            return;
+          }
+          gtag('event', 'conversion', {
+            send_to: 'AW-18428232873',
+            event_category: 'conversion',
+            event_label: 'trial_started_dashboard',
+            value: 0.0,
+            currency: 'USD'
+          });
+          gtag('event', 'trial_activated', { event_category: 'conversion' });
+          try { sessionStorage.setItem('rook_trial_activated_fired', '1'); } catch (_) {}
+        })();
+        if (profile?.name) {
+          // First name only — matches how the rest of the app addresses
+          // the candidate (e.g. application emails), not a full-name
+          // greeting that reads more formal than intended.
+          const firstName = profile.name.trim().split(/\s+/)[0];
+          document.getElementById('greetingName').textContent = `${greetingWord()}, ${firstName}`;
+        }
+        if (!profile) return; // no profile row at all — rookRequireAuth's routing already sends these candidates to onboarding, not here
+        const missingResume = !profile.resume_file_path;
+        const missingLocation = !profile.home_lat && !profile.home_zip;
+
+        // Dismiss button with sessionStorage — shows again on next visit if résumé still missing
+        const dismissBtn = document.getElementById('profileGateDismiss');
+        if (dismissBtn) {
+          dismissBtn.addEventListener('click', () => {
+            sessionStorage.setItem('rook_v7_resume_prompt_dismissed', rookV7Unlocked ? 'unmasked' : 'masked');
+            rookTrackEvent('v7_resume_skipped');
+            document.getElementById('profileGateOverlay').classList.remove('active');
+          });
+        }
+
+        // Don't show if dismissed this session (but show again next visit)
+        if (missingResume && sessionStorage.getItem('rook_v7_resume_prompt_dismissed') === (rookV7Unlocked ? 'unmasked' : 'masked')) {
+          // Still show the persistent reminder button below if résumé is missing
+          const reminder = document.getElementById('resumeReminder');
+          if (reminder) reminder.style.display = 'block';
+          return;
+        }
+
+        if (!missingResume && !missingLocation) return;
+        const title = document.getElementById('profileGateTitle');
+        const body  = document.getElementById('profileGateBody');
+        const link  = document.querySelector('#profileGateOverlay .btn-primary');
+        if (missingResume && !missingLocation) {
+          title.textContent = 'Make your matches more personal';
+          body.textContent = 'Right now your opportunities are based on your location and preferences. Upload your résumé for personalized match scores.';
+          const fileInput = document.getElementById('profileGateResumeInput');
+          const statusEl = document.getElementById('profileGateUploadStatus');
+          if (link) {
+            link.textContent = 'Upload résumé';
+            link.removeAttribute('href');
+            link.style.cursor = 'pointer';
+            link.onclick = (e) => { e.preventDefault(); fileInput && fileInput.click(); };
+          }
+          if (fileInput) {
+            fileInput.onchange = async () => {
+              const file = fileInput.files[0];
+              if (!file) return;
+              if (link) {
+                link.innerHTML = '<span class="btn-spinner"></span>Uploading…';
+                link.style.opacity = '0.85';
+                link.style.pointerEvents = 'none';
+                link.onclick = null;
+              }
+              if (statusEl) { statusEl.style.display = 'block'; statusEl.textContent = '📤 Uploading your résumé…'; }
+
+              // Cycling reassurance messages — /api/resume does real,
+              // sequential work server-side (text extraction, AI résumé
+              // analysis, embedding generation, then a rescore), which
+              // genuinely can take 20-40+ seconds for a longer résumé.
+              // Direct instruction: show that it's still working rather
+              // than leaving one static line up the whole time, which
+              // reads as stuck even when it isn't. Purely cosmetic —
+              // doesn't change how long the upload actually takes.
+              const progressMessages = [
+                { at: 0,  text: '📤 Uploading your résumé…' },
+                { at: 4,  text: '📄 Reading your résumé…' },
+                { at: 10, text: '🧠 Analyzing your experience…' },
+                { at: 20, text: '🔍 Matching you to open roles…' },
+                { at: 35, text: '⏳ Still working — longer résumés can take up to a minute…' },
+              ];
+              const uploadStartedAt = Date.now();
+              const progressInterval = setInterval(() => {
+                if (!statusEl) return;
+                const elapsedSeconds = (Date.now() - uploadStartedAt) / 1000;
+                let current = progressMessages[0];
+                for (const m of progressMessages) { if (elapsedSeconds >= m.at) current = m; }
+                statusEl.textContent = current.text;
+              }, 1000);
+
+              try {
+                const token = await rookGetAccessToken();
+                const fd = new FormData();
+                fd.append('resume', file);
+                const r = await rookV7Upload(fd);
+                clearInterval(progressInterval);
+                if (!r.ok) throw new Error('Upload failed');
+                rookTrackEvent('v7_resume_uploaded');
+                if (link) link.innerHTML = 'Uploading…';
+                if (statusEl) statusEl.textContent = '✅ Résumé uploaded! Reloading your matches…';
+                setTimeout(() => window.location.reload(), 1200);
+              } catch (err) {
+                clearInterval(progressInterval);
+                if (link) {
+                  link.innerHTML = 'Try again';
+                  link.style.opacity = '1';
+                  link.style.pointerEvents = '';
+                  link.onclick = (e) => { e.preventDefault(); fileInput.click(); };
+                }
+                if (statusEl) statusEl.textContent = '❌ Upload failed — please try again.';
+              }
+            };
+          }
+        } else if (missingResume && missingLocation) {
+          title.textContent = "You're missing a résumé and a primary location";
+          body.textContent = "Without these, we can't score jobs against your background or rank them by real distance.";
+          if (link) { link.textContent = 'Complete my profile'; link.href = 'rook-settings.html'; }
+        } else {
+          title.textContent = "You're missing a primary job-search location";
+          body.textContent = "Without it, we can't rank jobs by real distance from you — just which state they're in.";
+          if (link) { link.textContent = 'Add location'; link.href = 'rook-settings.html'; }
+        }
+        document.getElementById('profileGateOverlay').classList.add('active');
+        rookTrackEvent('v7_resume_prompt_shown', {stage:rookV7Unlocked ? 'unmasked' : 'masked'});
+      } catch {
+        // Best-effort — if this check itself fails, the dashboard should
+        // still work normally rather than get stuck on a silent gate.
+      }
+    })();
+
+    const jobList = document.getElementById('jobList');
+    const loading = document.getElementById('jobListLoading');
+
+    // ── Primary Job-Search Location display and change widget ─────────────────
+    // updateLocationLabel: reads the profile and updates the location row text.
+    // Called by loadJobs after fetching the profile.
+    function updateLocationLabel(profile) {
+      const labelEl = document.getElementById('locationLabel');
+      if (!labelEl) return;
+      let label = null;
+      if (profile?.home_location_label) {
+        label = profile.home_location_label;
+      } else if (profile?.home_city && profile?.home_state) {
+        // Derive from city + state abbreviation (fallback for older profiles)
+        const abbr = (profile.home_state.trim().length === 2)
+          ? profile.home_state.trim().toUpperCase()
+          : null; // stateAbbrFromName is backend-only; just show city, ST if 2-char
+        label = abbr ? `${profile.home_city}, ${abbr}` : `${profile.home_city}, ${profile.home_state}`;
+      } else if (profile?.home_zip) {
+        label = profile.home_zip;
+      }
+      labelEl.textContent = label || 'Not set — add in Settings';
+    }
+
+    // Wire the "Change" / "Cancel" buttons for the inline location editor
+    (function wireLocationEditor() {
+      const row     = document.getElementById('locationRow');
+      const editor  = document.getElementById('locationEditor');
+      const btnOpen = document.getElementById('btnChangeLocation');
+      const btnCancel = document.getElementById('btnCancelLocation');
+      const btnSave   = document.getElementById('btnSaveLocation');
+      if (!editor || !btnOpen) return;
+
+      let pendingLocation = null;
+
+      const dashWidget = RookLocationWidget.init({
+        inputEl:  document.getElementById('dashLocInput'),
+        listEl:   document.getElementById('dashLocList'),
+        statusEl: document.getElementById('dashLocStatus'),
+        onSelect: (s) => {
+          pendingLocation = s;
+          if (btnSave) { btnSave.disabled = false; btnSave.style.opacity = '1'; }
+        },
+        onClear: () => {
+          pendingLocation = null;
+          if (btnSave) { btnSave.disabled = true; btnSave.style.opacity = '.5'; }
+        },
+      });
+
+      btnOpen.addEventListener('click', () => {
+        editor.style.display = 'block';
+        row.style.display = 'none';
+        pendingLocation = null;
+        if (dashWidget) dashWidget.reset();
+        if (btnSave) { btnSave.disabled = true; btnSave.style.opacity = '.5'; }
+        document.getElementById('dashLocInput')?.focus();
+      });
+
+      btnCancel.addEventListener('click', () => {
+        editor.style.display = 'none';
+        row.style.display = 'flex';
+        if (dashWidget) dashWidget.reset();
+      });
+
+      btnSave.addEventListener('click', async () => {
+        if (!pendingLocation) return;
+        btnSave.disabled = true;
+        btnSave.textContent = 'Saving…';
+        try {
+          const payload = {
+            home_city:  pendingLocation.city  || null,
+            home_state: pendingLocation.state || null,
+            home_zip:   pendingLocation.zip   || null,
+            home_lat:   pendingLocation.lat   != null ? pendingLocation.lat : null,
+            home_lng:   pendingLocation.lng   != null ? pendingLocation.lng : null,
+            home_location_label: pendingLocation.label || null,
+          };
+          const saveRes = await rookV7Fetch('/profile', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          if (!saveRes.ok) throw new Error('Save failed');
+          // Update the label in the row before closing
+          document.getElementById('locationLabel').textContent = pendingLocation.label || pendingLocation.zip || '—';
+          editor.style.display = 'none';
+          row.style.display = 'flex';
+          // Reload jobs with new location
+          loadJobs();
+        } catch (err) {
+          document.getElementById('dashLocStatus').textContent = 'Could not save. Try again.';
+          btnSave.disabled = false;
+          btnSave.textContent = 'Save & Refresh';
+        }
+      });
+    })();
+
+    function revealDemo() {
+      loading.style.display = 'none';
+      jobList.style.display = '';
+    }
+
+    // Polls GET /scoring-status every few seconds until a brand-new
+    // candidate's first-ever scoring pass finishes in the background,
+    // then reloads the real job list. Replaces what used to be a
+    // synchronous scoring call the page just sat blocked on — a new
+    // candidate's very first dashboard load was waiting on the exact
+    // same full ~2,500-job scoring pass that was timing out even in a
+    // 30-minute background script with no time pressure. A live page
+    // load has nowhere near that tolerance.
+    async function pollScoringStatus() {
+      showBanner('Building your matches — this runs once for a brand-new profile and usually takes under a minute.', 'info');
+      jobList.innerHTML = '<div style="text-align:center; padding:60px 20px; color:#5B6B85; font-size:14px;">Building your matches…</div>';
+      revealDemo();
+      const poll = async () => {
+        try {
+          const res = await rookV7Fetch('/scoring-status');
+          const data = await res.json();
+          if (data.ready) {
+            loadJobs();
+          } else {
+            setTimeout(poll, 4000);
+          }
+        } catch {
+          setTimeout(poll, 4000);
+        }
+      };
+      setTimeout(poll, 4000);
+    }
+
+    async function loadJobs() {
+    try {
+      // Kicked off in parallel here, awaited just before rendering
+      // below — overlaps with the rest of this function's own fetches
+      // instead of adding to them sequentially.
+      const ctaLabelPromise = Promise.resolve('Unlock Job');
+      const profileRes = await rookV7Fetch('/profile');
+      const profileForLocation = profileRes.ok ? await profileRes.json() : null;
+
+      // Update the Primary Job-Search Location label in the UI
+      updateLocationLabel(profileForLocation);
+
+      // Build the jobs URL.
+      // Prefer stored home_lat/home_lng (populated for all new users and
+      // for existing users whose profile was re-saved after the migration).
+      // Fall back to geocoding from home_zip for existing users who have a
+      // saved ZIP but home_lat/home_lng haven't been populated yet.
+      let jobsUrl = '/jobs?limit=300';
+      const hasStoredCoords = profileForLocation?.home_lat != null && profileForLocation?.home_lng != null;
+      if (hasStoredCoords) {
+        jobsUrl = `/jobs?limit=300&near_lat=${profileForLocation.home_lat}&near_lng=${profileForLocation.home_lng}`;
+      } else if (profileForLocation?.home_zip) {
+        // Legacy fallback: geocode the saved ZIP
+        const geoRes = await rookV7Fetch('/geocode?q=' + encodeURIComponent(profileForLocation.home_zip));
+        if (geoRes.ok) {
+          const geo = await geoRes.json();
+          jobsUrl = `/jobs?limit=300&near_lat=${geo.lat}&near_lng=${geo.lng}`;
+        }
+      }
+      const res = await rookV7Fetch(jobsUrl);
+      if (!res.ok) throw new Error('API returned ' + res.status);
+      const data = await res.json();
+      const jobs = Array.isArray(data) ? data : (data.jobs || []); // Array.isArray fallback covers any cached/older response shape
+
+      if (Array.isArray(data) === false && data.scoring_in_progress) {
+        pollScoringStatus();
+        return;
+      }
+
+      if (!Array.isArray(jobs) || jobs.length === 0) {
+        const _mc0 = document.getElementById('mobileJobCount');
+        const _ms0 = document.getElementById('mobileJobSub');
+        if (_mc0) _mc0.textContent = '0';
+        if (_ms0) _ms0.textContent = 'No ranked opportunities yet.';
+        showBanner('No matches found for these preferences. You can return to the questions and try another location.');
+        revealDemo();
+        return;
+      }
+
+      // Real jobs exist — replace the demo rows and update the stat
+      // cards / greeting to reflect real counts instead of the original
+      // hardcoded mockup numbers.
+      currentJobs = jobs;
+
+      // The "Show recruiter-posted jobs" toggle implies recruiter jobs
+      // belong on this main list, not just the separate Recruiter Jobs
+      // page — but /jobs only returns jobs that already have a
+      // precomputed score row, so a just-approved recruiter posting can
+      // sit invisible here until the next scheduled scoring run. Merge
+      // in any recruiter-posted jobs from /recruiter-jobs (which reads
+      // straight from the jobs table, no scoring dependency) that
+      // aren't already present, so the toggle actually has something to
+      // show/hide the moment a job is approved, not hours later.
+
+      jobList.dataset.demo = 'false';
+      lockedJobCtaLabel = 'Unlock Job';
+      applyRecruiterToggle();
+      updateStats(jobs);
+      rookTrackEvent(rookV7Unlocked ? 'v7_unmasked_dashboard_viewed' : 'v7_masked_dashboard_viewed');
+      revealDemo();
+    } catch (err) {
+      const _mce = document.getElementById('mobileJobCount');
+      const _mse = document.getElementById('mobileJobSub');
+      if (_mce) _mce.textContent = '—';
+      if (_mse) _mse.textContent = 'Unable to load opportunities.';
+      showBanner('Unable to load your matches. Please reload to try again.');
+      revealDemo();
+    }
+    }
+
+    await loadJobs();
+  })();
+
+  async function updateStats(jobs) {
+    const excellent = jobs.filter((j) => (j.match?.overall_score ?? -1) >= 85).length;
+    const strong = jobs.filter((j) => (j.match?.overall_score ?? -1) >= 75 && j.match.overall_score < 85).length;
+
+    document.getElementById('statExcellent').textContent = excellent;
+    document.getElementById('statStrong').textContent = strong;
+
+    // Real bug this fixes: "New Matches Today" was set to jobs.length —
+    // the total count of jobs the dashboard's main list happened to
+    // fetch, which is capped at a small limit for display purposes.
+    // With thousands of active jobs on the platform, that limit was
+    // essentially always hit regardless of what was actually posted
+    // today, so this always read the same number — reported directly
+    // as "it always says 20." Uses a dedicated backend count instead,
+    // covering every active match for this candidate, not just the
+    // capped subset shown on screen.
+    try {
+      const newTodayRes = await rookV7Fetch('/new-matches-today-count');
+      if (newTodayRes.ok) {
+        const { new_today } = await newTodayRes.json();
+        document.getElementById('statNewMatches').textContent = new_today;
+      } else {
+        document.getElementById('statNewMatches').textContent = '—';
+      }
+    } catch {
+      document.getElementById('statNewMatches').textContent = '—';
+    }
+
+    // Applications In Progress — now backed by the real applications
+    // table (backend/routes/applications.js). "In progress" here means
+    // any status short of a terminal one (offer/rejected/withdrawn).
+    try {
+      const appsRes = await rookV7Fetch('/applications');
+      if (appsRes.ok) {
+        const apps = await appsRes.json();
+        const terminal = ['offer', 'rejected', 'withdrawn'];
+        const inProgress = apps.filter((a) => !terminal.includes(a.status)).length;
+        document.getElementById('statApplications').textContent = inProgress;
+      } else {
+        document.getElementById('statApplications').textContent = '—';
+      }
+    } catch {
+      document.getElementById('statApplications').textContent = '—';
+    }
+
+    document.getElementById('greetingSubtitle').textContent =
+      `We found ${jobs.length} opportunit${jobs.length === 1 ? 'y' : 'ies'} matching your career profile.`;
+
+    // Mobile scorehero — populated here with the real count from /api/jobs.
+    // The endpoint applies limit=300, so jobs.length <= 300. If the response
+    // is exactly 300 the pool may be larger; display "300+" to avoid
+    // presenting a capped page size as a precise total. Under the cap the
+    // count is the actual scored pool for this candidate.
+    // Subtitle: "Your ranked opportunities." — no claim about newness or
+    // score distribution; those are shown correctly in the stat cards above.
+    const mobileCount = document.getElementById('mobileJobCount');
+    const mobileSub   = document.getElementById('mobileJobSub');
+    // Count: exact when under the 300-row API cap; show 300 (not 300+)
+    // at the cap so we report the returned count without implying a known total.
+    // Label shifts to "Opportunities loaded" at the cap to signal the number
+    // is what was retrieved, not a guaranteed pool size.
+    if (mobileCount) mobileCount.textContent = jobs.length >= 300 ? '300' : String(jobs.length);
+    if (mobileSub)   mobileSub.textContent   = jobs.length >= 300
+      ? 'Opportunities loaded'
+      : 'Your ranked opportunities.';
+  }
+
+  // Shared by applyRecruiterToggle's sort and renderRealJobRow's card
+  // display — one definition of "remote" used everywhere distance
+  // logic touches a job.
+  function isRemoteJob(j) {
+    return j.remote_status === 'remote' || /remote/i.test(j.location_raw || '');
+  }
+
+  // Shared by both the "New" badge on each card and the "New" filter tab
+  // below, so they always agree on what counts as new rather than two
+  // separately-maintained definitions drifting apart over time.
+  function isNewJob(job) {
+    const postedDate = new Date(job.date_posted || job.first_seen_at || 0);
+    const daysSincePosted = (Date.now() - postedDate.getTime()) / (1000 * 60 * 60 * 24);
+    return daysSincePosted >= 0 && daysSincePosted <= 5;
+  }
+
+  // Reported directly: the All/Excellent/Strong/Saved/New chips above the
+  // job list had zero click handlers at all - clicking any of them never
+  // did anything, ever. Mirrors the score bands already used for the
+  // dashboard stat cards (Excellent 90%+, Strong 75-89%).
+  let currentTierFilter = 'all';
+  function setTierFilter(tier, el) {
+    currentTierFilter = tier;
+    document.querySelectorAll('#tierFilters .chip').forEach((c) => c.classList.remove('active'));
+    el.classList.add('active');
+    applyRecruiterToggle();
+  }
+
+  function applyRecruiterToggle() {
+    const showRecruiters = true; // Keep the frozen V7 result set before and after activation.
+    const sortBy = document.getElementById('sortSelect').value;
+    let visible = showRecruiters ? currentJobs : currentJobs.filter((j) => j.source_type !== 'recruiter_posted' && j.source_type !== 'agency_aggregated');
+
+    // Direct instruction: the Dashboard should only ever show jobs
+    // within a real commuting/territory distance of home, not the
+    // full nationwide pool sorted by score - that broader "what's out
+    // there anywhere" browsing is what Job Search is for (see the
+    // earlier location-search work), while the Dashboard is meant to
+    // be the tight, personalized daily view. Remote jobs are exempt,
+    // matching the existing isRemoteJob distance-exemption used
+    // elsewhere on this page. A job with no confirmed distance (never
+    // geocoded) is excluded rather than assumed to qualify, since
+    // "150 miles or closer" is a real claim this view is making, not
+    // just a display convenience.
+    // Direct instruction: a hard cutoff was hiding jobs with no
+    // computed distance at all (never geocoded - common for vague
+    // "Territory/Field based" postings with no single named city),
+    // even when a real match against a nearby territory clearly
+    // existed. Reported directly: "I know there are more than 7 jobs
+    // within the 150 mile radius." A job with unknown distance now
+    // shows rather than being hidden - only a job CONFIRMED far away
+    // (a real computed distance over the cap) gets excluded here.
+    // Radius also widened to 300 per direct instruction.
+    const DASHBOARD_MAX_MILES = 300;
+    visible = visible.filter((j) => isRemoteJob(j) || j.distance_miles == null || j.distance_miles <= DASHBOARD_MAX_MILES);
+
+    if (currentTierFilter === 'excellent') {
+      visible = visible.filter((j) => j.match?.excellent_match);
+    } else if (currentTierFilter === 'strong') {
+      visible = visible.filter((j) => !j.match?.excellent_match && (j.match?.overall_score ?? -1) >= 75 && (j.match?.overall_score ?? -1) < 85);
+    } else if (currentTierFilter === 'saved') {
+      visible = visible.filter((j) => j.saved);
+    } else if (currentTierFilter === 'new') {
+      visible = visible.filter(isNewJob);
+    }
+
+    // "Best Match" is the default order the API already returns (sorted
+    // by overall_score). "Closest to You" and "Newest" are pulled out
+    // as independent sorts rather than folded into the score itself —
+    // see conversation: distance shouldn't distort fit, it should be a
+    // separate way to look at the same list.
+    //
+    // Remote jobs are excluded from distance entirely, both here and in
+    // the card display below (see isRemoteJob, defined once at module
+    // scope so both this sort and renderRealJobRow's card rendering use
+    // the same definition). Reported bug: several unrelated remote
+    // listings (different companies, different states) all showed the
+    // exact same "2503 mi away" — a dead giveaway that geocoding a
+    // free-text "Remote" location resolves to some arbitrary fixed
+    // point, not a real distance. Rather than trying to make that
+    // number trustworthy, a remote job's distance is being treated as
+    // inapplicable, same as a job with no coordinates at all.
+    visible = [...visible];
+    if (sortBy === 'closest') {
+      visible.sort((a, b) => {
+        const aDist = isRemoteJob(a) ? null : a.distance_miles;
+        const bDist = isRemoteJob(b) ? null : b.distance_miles;
+        if (aDist == null && bDist == null) return 0;
+        if (aDist == null) return 1;
+        if (bDist == null) return -1;
+        return aDist - bDist;
+      });
+    } else if (sortBy === 'newest') {
+      visible.sort((a, b) => new Date(b.date_posted || b.first_seen_at || 0) - new Date(a.date_posted || a.first_seen_at || 0));
+    } else {
+      // Sort strictly by score — highest first, nothing else.
+      // Distance has its own dedicated sort option.
+      visible.sort((a, b) => (b.match?.overall_score ?? -1) - (a.match?.overall_score ?? -1));
+    }
+
+    // Direct instruction: the Dashboard only ever fetched (and showed)
+    // the top 20 jobs with no pagination at all, so anything past
+    // #20 was completely unreachable regardless of score - "I should
+    // be able to see all the results going all the way down to the
+    // lowest score." Real pagination now, same pattern as Job Search.
+    dashboardPage = 1;
+    renderDashboardPage(visible);
+  }
+
+  let dashboardPage = 1;
+  let lastVisibleJobs = [];
+  const DASHBOARD_PAGE_SIZE = 20;
+
+  function renderDashboardPage(visible) {
+    if (visible) lastVisibleJobs = visible;
+    const totalPages = Math.max(1, Math.ceil(lastVisibleJobs.length / DASHBOARD_PAGE_SIZE));
+    dashboardPage = Math.min(dashboardPage, totalPages);
+    const pageItems = lastVisibleJobs.slice((dashboardPage - 1) * DASHBOARD_PAGE_SIZE, dashboardPage * DASHBOARD_PAGE_SIZE);
+
+    document.getElementById('jobList').innerHTML = pageItems.length > 0
+      ? pageItems.map(renderRealJobRow).join('')
+      : '<div style="text-align:center; padding:40px 20px; color:#5B6B85; font-size:14px;">No jobs match with this filter.</div>';
+
+    const pagEl = document.getElementById('dashboardPagination');
+    if (totalPages <= 1) {
+      pagEl.innerHTML = '';
+    } else {
+      let html = '';
+      for (let p = 1; p <= totalPages; p++) {
+        html += `<a href="#" onclick="goToDashboardPage(${p}); return false;" style="width:34px; height:34px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:600; background:${p === dashboardPage ? 'var(--navy)' : '#fff'}; color:${p === dashboardPage ? '#fff' : 'var(--navy)'}; border:1px solid var(--border); box-shadow:0 2px 8px -4px rgba(11,29,58,0.1);">${p}</a>`;
+      }
+      pagEl.innerHTML = html;
+    }
+  }
+
+  function goToDashboardPage(p) {
+    dashboardPage = p;
+    renderDashboardPage();
+    document.getElementById('jobList').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  // Five fixed categories, always shown in this order, same set on every
+  // card — the whole point is a candidate can scan 20 cards in seconds
+  // because the layout never changes shape from job to job. Ratings come
+  // straight from backend/matching.js's scoreJob() (see `categories` on
+  // the match object); this function only renders them, it doesn't
+  // compute anything.
+  const CATEGORY_ORDER = ['experience', 'industry_product', 'customer_specialty', 'location_prefs', 'requirements'];
+  const RATING_STYLE = {
+    Strong:  { icon: '✓', color: '#00806E' },
+    Good:    { icon: '✓', color: '#1463FF' },
+    Partial: { icon: '△', color: '#B98900' },
+    Gap:     { icon: '✕', color: '#C0392B' },
+  };
+  function renderCategoryRows(categories) {
+    if (!categories) {
+      return `<div style="font-size:11.5px; color:#8B96AB; margin-top:6px;">Not enough information yet to break this down — upload a résumé for full category scoring.</div>`;
+    }
+    return `<div class="category-grid">
+      ${CATEGORY_ORDER.map((key) => {
+        const c = categories[key];
+        if (!c) return '';
+        const style = c.rating ? RATING_STYLE[c.rating] : { icon: '—', color: '#8B96AB' };
+        const ratingText = c.rating || 'Not enough info';
+        return `<div style="display:flex; align-items:center; gap:6px; font-size:12px;">
+          <span style="color:${style.color}; font-weight:700;">${style.icon}</span>
+          <span style="color:#3D4A63;">${escapeHtml(c.label)}</span>
+          <span style="color:${style.color}; font-weight:600; margin-left:auto;">${escapeHtml(ratingText)}</span>
+        </div>`;
+      }).join('')}
+    </div>`;
+  }
+
+  function renderRealJobRow(job) {
+    const comp = job.compensation_text || (job.salary_min ? `$${job.salary_min}${job.salary_max ? '–$' + job.salary_max : '+'}` : '');
+    const match = job.match;
+    // When no résumé is uploaded, overall_score is null but preference_fit
+    // is a real score (location + industry + years + territory).
+    // Also handle match being null entirely (no precomputed score, no live score).
+    const displayScore = match?.overall_score ?? match?.preference_fit ?? null;
+    const scoreDisplay = displayScore != null ? `${Math.round(displayScore)}%` : '—';
+    const scorePct     = displayScore != null ? Math.round(displayScore) : 0;
+
+    // One short AI-generated line, not the full reasons/concerns list —
+    // the most important reason to apply if the score is strong, or the
+    // most significant gap if it's not. Detailed evidence (all reasons,
+    // all concerns, résumé-vs-job breakdowns) moved to View Analysis.
+    // If the top reason is a stale distance (precomputed score stored with
+    // old coordinates), replace it with the actual live distance so the
+    // two distance numbers on the card never contradict each other.
+    let topLine = (match?.concerns?.length && (match?.overall_score ?? 100) < 90)
+      ? match.concerns[0]
+      : (match?.reasons?.[0] || '');
+    if (topLine && /miles? from you/i.test(topLine) && job.distance_miles != null) {
+      const actualMiles = Math.round(job.distance_miles);
+      topLine = actualMiles <= 60
+        ? `About ${actualMiles} miles from you`
+        : actualMiles <= 150
+          ? `About ${actualMiles} miles from you — within typical territory range`
+          : `About ${actualMiles} miles away — would likely require overnight travel`;
+    }
+    const summarySentence = topLine
+      ? `<div style="font-size:12.5px; color:#5B6B85; margin-top:8px; line-height:1.4;">${escapeHtml(topLine)}</div>`
+      : '';
+
+    const isApplied = job.application_status && job.application_status !== 'interested';
+    const savedLabel = job.saved ? 'Saved ✓' : 'Save';
+
+    // EXCELLENT MATCH is a distinct tier above the normal recommendation
+    // ladder — see backend/matching.js's excellent_match determination
+    // (stricter than overall_score >= 85 alone; it also requires every
+    // category to clear its bar).
+    const REC_COLORS = { 'Strong Match': '#00806E', 'Apply': '#1463FF', 'Stretch Apply': '#B98900', 'Skip': '#8B96AB' };
+    const recColor = match?.excellent_match ? '#7C3AED' : (REC_COLORS[match?.recommendation] || '#8B96AB');
+    const recLabel = match?.excellent_match ? 'Excellent Match' : match?.recommendation;
+    const recBadge = recLabel
+      ? `<span class="rec-badge" style="font-weight:700; border-radius:99px; background:${recColor}18; color:${recColor}; text-transform:uppercase; letter-spacing:0.02em;">${escapeHtml(recLabel)}</span>`
+      : '';
+    // "NEW" badge — shown regardless of sort order or which tab is active,
+    // so a genuinely new job doesn't quietly get buried under
+    // higher-scored older postings with nothing marking it as unseen.
+    // Reported directly: two Abbott roles posted yesterday and 4 days ago
+    // never stood out on the default Best Match view even though scoring
+    // was working correctly (84% - Strong, not Excellent) - nothing told
+    // the candidate they were new. Same date fallback already used for
+    // the "Newest" sort option, so "new" here means the same thing it
+    // means there.
+    const newBadge = isNewJob(job)
+      ? `<span class="rec-badge" style="font-weight:700; border-radius:99px; background:#E8F0FE; color:#1463FF; text-transform:uppercase; letter-spacing:0.02em;">New</span>`
+      : '';
+    const subScores = (match?.candidate_fit != null || match?.preference_fit != null)
+      ? `<div style="font-size:11px; color:#8B96AB; margin-top:2px;">
+          Qualifications ${match.candidate_fit ?? '—'}% · Preferences ${match.preference_fit ?? '—'}%
+        </div>`
+      : '';
+    const employerNote = job.employer_note
+      ? `<div style="font-size:11.5px; color:#1463FF; font-weight:600; margin-top:4px;">ⓘ ${escapeHtml(job.employer_note)}</div>`
+      : '';
+
+    // Recruiter-posted jobs get a visibly distinct treatment — a purple
+    // accent border and a clear badge — rather than blending in with
+    // employer-verified, ATS-pulled listings. The distinction matters:
+    // recruiter postings are reviewed before going live, but they're
+    // not independently verifiable against a real employer system the
+    // way every other job on ROOK is.
+    const isRecruiterPosted = job.source_type === 'recruiter_posted';
+    const isAgencySourced = job.source_type === 'agency_aggregated';
+
+    // 🔥 Just Posted badge — shown for 72 hours after first_seen_at
+    const firstSeen = job.first_seen_at ? new Date(job.first_seen_at) : null;
+    const hoursOld = firstSeen ? (Date.now() - firstSeen.getTime()) / (1000 * 60 * 60) : 999;
+    const justPostedBadge = hoursOld <= 72
+      ? `<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;background:#FFF3E0;color:#E65100;border:1px solid #FFB74D;margin-bottom:6px;">🔥 Just Posted</span>`
+      : '';
+
+    const rowStyle = (isRecruiterPosted || isAgencySourced)
+      ? 'border-left:4px solid #7C3AED; background:#FAF8FF;'
+      : hoursOld <= 72
+        ? 'border-left:4px solid #FB8C00; background:#FFFBF5;'
+        : '';
+
+    const recruiterBadge = isRecruiterPosted
+      ? `<span style="font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:99px; background:#7C3AED18; color:#7C3AED; text-transform:uppercase; letter-spacing:0.02em;">Posted by Recruiter</span>`
+      : isAgencySourced
+        // Deliberately different wording from "Posted by Recruiter" — this
+        // job wasn't submitted through ROOK by a recruiter, it's a real,
+        // live listing pulled from a staffing agency's own posting
+        // elsewhere. Calling it a native recruiter posting would overstate
+        // ROOK's relationship to it, which runs against the "don't
+        // fabricate" standard the whole recruiter-jobs section is held to.
+        ? `<span style="font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:99px; background:#7C3AED18; color:#7C3AED; text-transform:uppercase; letter-spacing:0.02em;">Agency Listing</span>`
+        : '';
+
+    // Non-subscribed candidates get this shape from the API (see
+    // redactForNonSubscriber in backend/routes/jobs.js) — company_name,
+    // source_url, and any recruiter contact fields are simply absent.
+    // Real match score and reasons stay fully visible; only the "who"
+    // and "how to apply" are gated, same principle as MedReps.
+    const companyLine = job.subscription_required
+      ? `<span style="color:#7C3AED; font-weight:600;">🔒 Subscribe to see who's hiring</span> — ${escapeHtml(job.location_raw || '')} ${comp ? '&nbsp;·&nbsp; ' + escapeHtml(comp) : ''}`
+      : `${escapeHtml(job.company_name || (isRecruiterPosted ? 'Confidential search' : ''))} — ${escapeHtml(job.location_raw || '')} ${comp ? '&nbsp;·&nbsp; ' + escapeHtml(comp) : ''}`;
+
+    // Recruiter-posted jobs have no source_url to link to at all — there's
+    // no external posting, the recruiter IS the application path. This
+    // used to fall through to `href="${job.source_url || '#'}"`, a dead
+    // link with nothing to click. Real bug: reported as "I can't find
+    // anything to click to apply."
+    let primaryActionBtn;
+    if (job.subscription_required) {
+      primaryActionBtn = `<button type="button" class="btn btn-primary btn-sm" onclick="rookGoToCheckout('job_card')">${escapeHtml(lockedJobCtaLabel)}</button>`;
+    } else if (isRecruiterPosted) {
+      primaryActionBtn = `<a href="rook-apply.html?job=${escapeHtml(job.id)}" class="btn btn-primary btn-sm">Apply Now</a>`;
+    } else {
+      primaryActionBtn = `<a href="${job.source_url || '#'}" target="_blank" class="btn btn-outline btn-sm">View Original</a>`;
+    }
+
+    // LinkedIn "find contacts" link — a constructed people-search URL,
+    // not a data lookup. No contact data is fetched, stored, or shown by
+    // ROOK itself; this just opens LinkedIn's own search results (using
+    // the candidate's own LinkedIn login) filtered to this company, the
+    // same as if they'd typed it into LinkedIn's search bar themselves.
+    // Only rendered when a real company name is actually known — absent
+    // for subscription-gated jobs and confidential recruiter searches,
+    // where there's nothing real to search for.
+    const companyForLinkedIn = (!job.subscription_required && job.company_name) ? job.company_name : null;
+    const linkedinBtn = companyForLinkedIn
+      ? `<button type="button" class="btn btn-outline btn-sm linkedin-btn" data-company="${escapeHtml(companyForLinkedIn)}" data-title="${escapeHtml(job.title_original || job.title_normalized || '')}" onclick="showLinkedInPopover(this)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.446-2.136 2.94v5.666H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 11.001-4.124 2.062 2.062 0 010 4.124zM7.114 20.452H3.559V9h3.555v11.452z"/></svg>
+          Find Contacts
+        </button>`
+      : '';
+
+    return `
+      <div class="job-row" data-job-id="${escapeHtml(job.id)}" style="${rowStyle}">
+        <div class="score-ring" style="--pct:${scorePct};"><span>${scoreDisplay}</span></div>
+        <div class="job-info">
+          ${justPostedBadge}
+          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+            <h4 style="margin:0;">${escapeHtml(job.title_original || job.title_normalized || 'Untitled role')}</h4>
+            ${newBadge}
+            ${recBadge}
+            ${recruiterBadge}
+          </div>
+          <div class="company">${companyLine}</div>
+          ${subScores}
+          <div class="category-grid-wrap">${renderCategoryRows(match?.categories)}</div>
+          ${summarySentence}
+          ${employerNote}
+          ${isApplied ? `<div style="font-size:11.5px; color:#00806E; font-weight:600; margin-top:4px;">✓ Application status: ${escapeHtml(job.application_status)}</div>` : ''}
+          <div class="job-meta-line">${job.date_posted ? 'Posted ' + escapeHtml(job.date_posted) : ''}${(!isRemoteJob(job) && job.distance_miles != null) ? ' · ' + job.distance_miles + ' mi away' : ''}</div>
+        </div>
+        <div class="job-actions">
+          <a href="${job.subscription_required ? 'rook-onboarding-v7-signup.html' : 'rook-job-analysis.html?job=' + escapeHtml(job.id)}" class="btn btn-outline btn-sm">View Analysis</a>
+          ${primaryActionBtn}
+          ${linkedinBtn}
+          <button type="button" class="btn btn-outline btn-sm" onclick="toggleSave('${escapeHtml(job.id)}', this)">${savedLabel}</button>
+          <div class="job-actions-overflow">
+            <button type="button" class="btn-icon" onclick="this.nextElementSibling.classList.toggle('open')" aria-label="More actions">⋯</button>
+            <div class="overflow-menu">
+              <button type="button" onclick="markApplied('${escapeHtml(job.id)}', this)" ${isApplied ? 'disabled' : ''}>${isApplied ? 'Applied ✓' : 'Mark Applied'}</button>
+              <button type="button" onclick="dismissJob('${escapeHtml(job.id)}', this)">Not interested</button>
+            </div>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  async function toggleSave(jobId, btn) {
+    const nowSaved = btn.textContent.trim() !== 'Saved ✓';
+    btn.disabled = true;
+    try {
+      const res = await rookV7Fetch(`/jobs/${jobId}/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ saved: nowSaved }),
+      });
+      if (res.ok) btn.textContent = nowSaved ? 'Saved ✓' : 'Save';
+    } catch (err) {
+      console.error('Save failed:', err);
+    }
+    btn.disabled = false;
+  }
+
+  async function markApplied(jobId, btn) {
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+    try {
+      const res = await rookV7Fetch('/applications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ job_id: jobId, status: 'applied' }),
+      });
+      if (res.ok) {
+        btn.textContent = 'Applied ✓';
+      } else {
+        btn.textContent = 'Mark Applied';
+        btn.disabled = false;
+      }
+    } catch (err) {
+      console.error('Mark applied failed:', err);
+      btn.textContent = 'Mark Applied';
+      btn.disabled = false;
+    }
+  }
+
+  async function dismissJob(jobId, btn) {
+    const row = btn.closest('.job-row');
+    btn.disabled = true;
+    try {
+      const res = await rookV7Fetch(`/jobs/${jobId}/dismiss`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dismissed: true }),
+      });
+      if (res.ok && row) {
+        row.style.opacity = '0.4';
+        row.style.pointerEvents = 'none';
+      }
+    } catch (err) {
+      console.error('Dismiss failed:', err);
+      btn.disabled = false;
+    }
+  }
+
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  // Real time-of-day, not a hardcoded "afternoon" that was wrong
+  // whenever anyone loaded the dashboard outside that window.
+  function greetingWord() {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 18) return 'Good afternoon';
+    return 'Good evening';
+  }
+  // Set immediately, synchronously — don't wait on the profile fetch
+  // just to get the time-of-day right. The name is filled in separately
+  // below once the profile actually loads.
+  document.getElementById('greetingName').textContent = greetingWord();
+
+  // Builds a small set of pre-filtered LinkedIn people-search links for a
+  // company — no contact data provider, no cost, no data staleness or
+  // licensing question. ROOK never fetches, stores, or shows a single
+  // name or title itself; every link just opens LinkedIn's own live
+  // search results (using the candidate's own LinkedIn login), the same
+  // as typing those same keywords into LinkedIn's search bar directly.
+  function showLinkedInPopover(btn) {
+    const company = btn.dataset.company;
+    const title = btn.dataset.title;
+    const searchUrl = (keywords) => `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(keywords)}`;
+    // LinkedIn's Boolean search gives OR the LOWEST precedence, with
+    // unquoted words joined by an implicit AND. Without parentheses,
+    // `${company} recruiter OR "talent acquisition"` actually parses as
+    // (company AND recruiter) OR "talent acquisition" — the second half
+    // of that OR drops the company filter entirely, matching anyone on
+    // LinkedIn with "talent acquisition" in their profile, worldwide.
+    // Every query below wraps the company in quotes and AND, with the
+    // OR terms grouped in their own parentheses, so the company always
+    // applies on both sides.
+    const companyPhrase = `"${company}"`;
+
+    const items = [
+      {
+        label: 'Sales Leadership',
+        desc: `Managers and directors at ${company}`,
+        url: searchUrl(`${companyPhrase} AND ("sales manager" OR "sales director")`),
+      },
+    ];
+    if (title) {
+      items.push({
+        label: 'People in a Similar Role',
+        desc: `Others currently in "${title}" at ${company}`,
+        url: searchUrl(`${companyPhrase} AND "${title}"`),
+      });
+    }
+    items.push({
+      label: 'Everyone at This Company',
+      desc: `Full LinkedIn results for ${company}`,
+      url: searchUrl(companyPhrase),
+    });
+
+    document.getElementById('linkedinPopoverTitle').textContent = `Find contacts at ${company}`;
+    document.getElementById('linkedinPopoverList').innerHTML = items.map((item) => `
+      <a class="linkedin-popover-item" href="${item.url}" target="_blank" rel="noopener">
+        <div>
+          <div class="label">${escapeHtml(item.label)}</div>
+          <div class="desc">${escapeHtml(item.desc)}</div>
+        </div>
+        <span class="go">Search →</span>
+      </a>
+    `).join('');
+    document.getElementById('linkedinPopoverOverlay').classList.add('active');
+  }
+
+  function showBanner(html, level) {
+    // Same fix as rook-search.html: reuse one stable element instead of
+    // creating a new one every call, which left old banners stacked up
+    // on the page forever.
+    let banner = document.getElementById('statusBanner');
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'statusBanner';
+      document.querySelector('.panel-head').insertAdjacentElement('afterend', banner);
+    }
+    banner.style.cssText = `background:${level === 'info' ? '#EAF7F4' : '#FFF7E6'}; border-left:3px solid ${level === 'info' ? '#00806E' : '#B98900'}; border-radius:8px; padding:12px 16px; margin-bottom:20px; font-size:13px; color:#3D4A63; line-height:1.5;`;
+    banner.innerHTML = html;
+  }
+</script>
+
+<script type="text/javascript">
+_linkedin_partner_id = "9629410";
+window._linkedin_data_partner_ids = window._linkedin_data_partner_ids || [];
+window._linkedin_data_partner_ids.push(_linkedin_partner_id);
+</script><script type="text/javascript">
+(function(l) {
+if (!l){window.lintrk = function(a,b){window.lintrk.q.push([a,b])};
+window.lintrk.q=[]}
+var s = document.getElementsByTagName("script")[0];
+var b = document.createElement("script");
+b.type = "text/javascript";b.async = true;
+b.src = "https://snap.licdn.com/li.lms-analytics/insight.min.js";
+s.parentNode.insertBefore(b, s);})(window.lintrk);
+</script>
+<noscript>
+<img height="1" width="1" style="display:none;" alt="" src="https://px.ads.linkedin.com/collect/?pid=9629410&fmt=gif" />
+</noscript>
+</body>
+</html>
