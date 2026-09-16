@@ -64,6 +64,11 @@ async function rookV7Fetch(path,options={}) {
   const data=rookV7Snapshot || await rookV7Read();
   const reply=value=>Promise.resolve(new Response(JSON.stringify(value),{headers:{'Content-Type':'application/json'}}));
   if(path === '/profile' && !options.method) return reply(data.profile);
+  if(path === '/profile' && options.method === 'PUT') {
+    const res=await rookV7Request('/location',options);
+    if(res.ok) await rookV7Read();
+    return res;
+  }
   if(path.startsWith('/jobs?')) return reply({jobs:data.jobs});
   if(path === '/new-matches-today-count') return reply({new_today:data.jobs.filter(j=>(j.date_posted || '').slice(0,10)===new Date().toISOString().slice(0,10)).length});
   if(!rookV7Unlocked) {
