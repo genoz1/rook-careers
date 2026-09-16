@@ -1,13 +1,13 @@
-// V7 snapshot ranking uses the current V6 anonymous scoring path unchanged,
-// with the dashboard's 300-row display limit instead of a three-card teaser.
-const {scoreJob, mentionsNonUsCountry} = require('./matching');
+// V7 uses the shared V6 scorer, with a V7-only location validity boundary
+// before ranking and the dashboard's 300-row display limit.
+const {scoreJob} = require('./matching');
+const {prepareJob} = require('./v7Location');
 const {distanceMiles} = require('./geocoding');
-const {isUsEligibleJob} = require('./jobEligibility');
 const JOB_LIST_COLUMNS = "id, source_job_id, employer_id, source_type, source_url, application_url, title_original, title_normalized, company_name, description_html, description_text, ai_analysis, location_raw, job_lat, job_lng, city, state, region, territory, remote_status, employment_type, category, subcategory, industry, product_type, sales_type, experience_min_years, experience_max_years, salary_min, salary_max, compensation_text, travel_percentage, overnight_travel, required_skills, preferred_skills, required_experience, preferred_experience, degree_required, certifications, date_posted, first_seen_at, last_seen_at, status, source_verified, moderation_status, recruiter_name, recruiter_email, recruiter_company, recruiter_contact_method, recruiter_id, created_at, updated_at";
 const JOB_LIST_COLUMNS_NO_DESCRIPTION = JOB_LIST_COLUMNS.split(", ").filter((c) => c !== "description_html" && c !== "description_text").join(", ");
 
 async function rank(db, profile) {
-    // ── Exact same SQL + scoring as dashboard live path ──────────────────
+    // Same geographic query shape and 1,000-row pool as the dashboard.
     const latDelta = 300 / 69;
     const lngDelta = 300 / (69 * Math.max(0.1, Math.cos((profile.home_lat * Math.PI) / 180)));
 
@@ -17,7 +17,7 @@ async function rank(db, profile) {
       .eq("status", "active")
       .eq("moderation_status", "approved")
       .or(`job_lat.is.null,remote_status.eq.remote,and(job_lat.gte.${profile.home_lat - latDelta},job_lat.lte.${profile.home_lat + latDelta},job_lng.gte.${profile.home_lng - lngDelta},job_lng.lte.${profile.home_lng + lngDelta})`)
-      .limit(400);
+      .limit(1000);
 
     if (error) throw new Error(error.message);
 
@@ -94,7 +94,8 @@ async function rank(db, profile) {
     }
 
     const scored = (jobs || [])
-      .filter(isUsEligibleJob)
+      .map(j => prepareJob(j,profile))
+      .filter(Boolean)
       .filter(j => titleLocSanityPass(j))
       .map(j => {
         const distMi = j.job_lat != null
