@@ -794,6 +794,39 @@ async function run() {
     assert.notStrictEqual(pmResult.jobId, amJobId, "the PM job must be different from the AM job");
   });
 
+  await asyncTest("three daily runs select distinct jobs and queue each only once", async () => {
+    const config = loadConfig({
+      SOCIAL_AUTOMATION_ENABLED: "true", SUPABASE_URL: "x", SUPABASE_SERVICE_ROLE_KEY: "x", SUPABASE_ANON_KEY: "x", SOCIAL_SPACING_HMAC_SECRET: SECRET,
+      BUFFER_ACCESS_TOKEN: "x", BUFFER_ROOK_LINKEDIN_CHANNEL_ID: "li-page-1", BUFFER_ROOK_FACEBOOK_CHANNEL_ID: "fb-page-1",
+    });
+    const jobs = ["A", "B", "C"].map(letter => baseJob({
+      id: `job-${letter}`, employer_id: `employer-${letter}`, source_job_id: `src-${letter}`,
+      title_original: `Territory Sales Manager ${letter}`,
+    }));
+    const history = [];
+    const supabaseAdmin = makeMockSupabase({ jobs, employers: [{ company_name: "Acme Diagnostics" }], history });
+    const supabaseAnon = makeMockSupabase({ jobs });
+    let calls = 0;
+    const deps = {
+      supabaseAdmin, supabaseAnon, listAllChannels: async () => [LINKEDIN_PAGE, FACEBOOK_PAGE],
+      createPost: async () => ({ id: `update-${++calls}`, status: "scheduled" }),
+      preflightCheckMedia: async () => ({ ok: true }),
+      uploadGraphicToStorage: async () => ({ publicUrl: "https://x/fake.jpg" }),
+    };
+    const results = [];
+    for (const slot of ["am", "mid", "pm"]) {
+      results.push(await runScheduledSlot(slot, "2026-09-05", config, deps));
+    }
+    assert.ok(results.every(result => result.ok));
+    assert.strictEqual(new Set(results.map(result => result.jobId)).size, 3);
+    assert.strictEqual(history.length, 3);
+    assert.deepStrictEqual(history.map(row => row.slot), ["am", "mid", "pm"]);
+    assert.strictEqual(calls, 6, "one Facebook and one LinkedIn post per slot");
+    const repeat = await runScheduledSlot("mid", "2026-09-05", config, deps);
+    assert.strictEqual(repeat.stage, "already_completed");
+    assert.strictEqual(calls, 6);
+  });
+
   console.log("\n=== Recurring automation: candidate fallback on final-validation failure ===");
   await asyncTest("if the top-ranked candidate fails final validation, the next eligible candidate is used automatically", async () => {
     const config = loadConfig({

@@ -377,7 +377,7 @@ async function runControlledLiveTest(config, { confirmLive } = {}, deps = {}) {
 }
 
 // =================================================================
-// Recurring twice-daily automation — the actual scheduled entry
+// Recurring three-times-daily automation — the actual scheduled entry
 // point. Everything it relies on (candidate selection, final
 // validation, media preflight, channel identification, Buffer
 // posting, history recording) is the exact same, already-tested
@@ -392,7 +392,7 @@ async function runControlledLiveTest(config, { confirmLive } = {}, deps = {}) {
 // =================================================================
 
 /**
- * @param {"am"|"pm"} slot
+ * @param {"am"|"mid"|"pm"} slot
  * @param {string} dateStr - the America/New_York calendar date (YYYY-MM-DD)
  *   this run is for, as determined by the caller via
  *   socialScheduler.determineActiveSlot — never derived from a raw
@@ -455,16 +455,13 @@ async function runScheduledSlot(slot, dateStr, config, deps = {}) {
     return { ok: false, stage: "channel_identification", slot, dateStr, runKey, errors: channels.errors };
   }
 
-  // Direct instruction: the PM job must differ from that morning's
-  // job. Looks up what (if anything) today's AM run actually selected
-  // and excludes it from the candidate pool entirely, rather than
-  // just hoping ranking alone avoids a repeat.
+  // Each later slot must differ from jobs already selected today.
   let excludedJobIds = new Set();
-  if (slot === "pm") {
-    const amRunKey = computeRunKey(dateStr, "am");
-    const { data: amRows } = await supabaseAdmin.from("social_post_history").select("job_id").eq("run_key", amRunKey);
-    const amJobId = (amRows || [])[0]?.job_id;
-    if (amJobId) excludedJobIds = new Set([amJobId]);
+  for (const earlier of slot === "mid" ? ["am"] : slot === "pm" ? ["am", "mid"] : []) {
+    const { data: rows } = await supabaseAdmin.from("social_post_history")
+      .select("job_id").eq("run_key", computeRunKey(dateStr, earlier));
+    const jobId = (rows || [])[0]?.job_id;
+    if (jobId) excludedJobIds.add(jobId);
   }
 
   const { rankedJobs } = await selectTopCandidate(supabaseAdmin, config, { excludedJobIds });
@@ -607,13 +604,13 @@ async function runScheduledSlot(slot, dateStr, config, deps = {}) {
 
 /**
  * Status snapshot for operator visibility — direct instruction:
- * enabled/disabled state, timezone, next AM/PM run times, and
+ * enabled/disabled state, timezone, next run times, and
  * last-run results, without ever displaying a secret.
  */
 async function getSchedulerStatus(config, deps = {}) {
   const supabaseAdmin = deps.supabaseAdmin || createClient(config.supabaseUrl, config.supabaseServiceRoleKey);
   const enabled = String(config.automationEnabled).toLowerCase() === "true";
-  const { nextAm, nextPm } = computeNextRunTimes(new Date());
+  const { nextAm, nextMid, nextPm } = computeNextRunTimes(new Date());
 
   const { data: recentRuns } = await supabaseAdmin
     .from("social_post_history")
@@ -622,6 +619,7 @@ async function getSchedulerStatus(config, deps = {}) {
     .limit(20);
 
   const lastAmRun = (recentRuns || []).find((r) => r.slot === "am") || null;
+  const lastMidRun = (recentRuns || []).find((r) => r.slot === "mid") || null;
   const lastPmRun = (recentRuns || []).find((r) => r.slot === "pm") || null;
 
   function summarize(run) {
@@ -638,8 +636,10 @@ async function getSchedulerStatus(config, deps = {}) {
     enabled,
     timezone: TIMEZONE,
     nextAmRun: nextAm,
+    nextMidRun: nextMid,
     nextPmRun: nextPm,
     lastAmRun: summarize(lastAmRun),
+    lastMidRun: summarize(lastMidRun),
     lastPmRun: summarize(lastPmRun),
   };
 }
@@ -678,13 +678,13 @@ if (require.main === module) {
       } else if (command === "scheduled-dispatch") {
         // The actual DigitalOcean Scheduled Job entry point — invoked
         // frequently (every 15 minutes, DO's minimum interval); it
-        // decides for itself whether "now" is within the AM or PM
+        // decides for itself whether "now" is within a posting
         // window, so a slightly early/late/duplicate invocation is
         // harmless. No-op (exit 0) outside both windows, which is the
         // normal outcome for the vast majority of invocations.
         const active = determineActiveSlot(new Date());
         if (!active) {
-          console.log(`Not within the AM or PM window at ${new Date().toISOString()} — no-op.`);
+          console.log(`Not within a posting window at ${new Date().toISOString()} — no-op.`);
         } else {
           const result = await runScheduledSlot(active.slot, active.dateStr, config);
           console.log(JSON.stringify(result, null, 2));
@@ -701,8 +701,8 @@ if (require.main === module) {
         //   node backend/socialPublishWorker.js dry-run-dispatch --slot am
         //   node backend/socialPublishWorker.js dry-run-dispatch --slot pm
         const slotArg = rest.find((_, i) => rest[i - 1] === "--slot") || rest[rest.indexOf("--slot") + 1];
-        if (!["am", "pm"].includes(slotArg)) {
-          console.error("Usage: dry-run-dispatch --slot am|pm");
+        if (!["am", "mid", "pm"].includes(slotArg)) {
+          console.error("Usage: dry-run-dispatch --slot am|mid|pm");
           process.exit(1);
         }
         // requireConfigKeys validates all env vars before touching anything
@@ -743,7 +743,7 @@ if (require.main === module) {
         const status = await getSchedulerStatus(config);
         console.log(JSON.stringify(status, null, 2));
       } else {
-        console.log("Usage: node backend/socialPublishWorker.js <discover|validate|live-test|dry-run-dispatch|scheduled-dispatch|scheduler-status> [--confirm-live] [--slot am|pm]");
+        console.log("Usage: node backend/socialPublishWorker.js <discover|validate|live-test|dry-run-dispatch|scheduled-dispatch|scheduler-status> [--confirm-live] [--slot am|mid|pm]");
         process.exit(1);
       }
     } catch (err) {

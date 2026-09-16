@@ -22,6 +22,10 @@ test("8:30 AM EDT (summer, UTC-4) is correctly detected as the AM window — sam
   const result = determineActiveSlot(new Date("2026-07-15T12:30:00Z"));
   assert.deepStrictEqual(result, { slot: "am", dateStr: "2026-07-15" });
 });
+test("12:30 PM EDT is the midday slot", () => {
+  assert.deepStrictEqual(determineActiveSlot(new Date("2026-07-15T16:30:00Z")),
+    { slot: "mid", dateStr: "2026-07-15" });
+});
 test("4:30 PM EST (winter) is correctly detected as the PM window", () => {
   const result = determineActiveSlot(new Date("2026-01-15T21:30:00Z"));
   assert.deepStrictEqual(result, { slot: "pm", dateStr: "2026-01-15" });
@@ -48,16 +52,17 @@ test("just inside the AM window boundary (15 minutes early) still matches", () =
 test("just outside the AM window boundary (16 minutes early) does not match", () => {
   assert.ok(!isWithinWindow({ hour: 8, minute: 14 }, { hour: 8, minute: 30 }, WINDOW_MINUTES));
 });
-test("a time far from both windows (e.g. noon) matches neither", () => {
+test("a time between windows matches none", () => {
   assert.strictEqual(determineActiveSlot(new Date("2026-01-15T17:00:00Z")), null);
 });
-test("the AM and PM windows never overlap — a single moment is never both", () => {
+test("the three posting windows never overlap", () => {
   for (let hour = 0; hour < 24; hour++) {
     for (const minute of [0, 15, 30, 45]) {
       const nowParts = { hour, minute };
       const am = isWithinWindow(nowParts, { hour: 8, minute: 30 });
+      const mid = isWithinWindow(nowParts, { hour: 12, minute: 30 });
       const pm = isWithinWindow(nowParts, { hour: 16, minute: 30 });
-      assert.ok(!(am && pm), `hour=${hour} minute=${minute} matched both windows`);
+      assert.ok(Number(am) + Number(mid) + Number(pm) <= 1, `hour=${hour} minute=${minute} matched multiple windows`);
     }
   }
 });
@@ -82,6 +87,10 @@ test("before 8:30am ET, the next AM run is today", () => {
 test("after 8:30am ET but before 4:30pm ET, the next AM run is tomorrow", () => {
   const { nextAm } = computeNextRunTimes(new Date("2026-01-15T15:00:00Z"));
   assert.strictEqual(nextAm.dateStr, "2026-01-16");
+});
+test("before 12:30pm ET, the next midday run is today", () => {
+  const { nextMid } = computeNextRunTimes(new Date("2026-01-15T16:00:00Z"));
+  assert.strictEqual(nextMid.dateStr, "2026-01-15");
 });
 test("after 4:30pm ET, the next PM run is tomorrow", () => {
   const { nextPm } = computeNextRunTimes(new Date("2026-01-15T23:00:00Z"));

@@ -686,7 +686,9 @@ function computeRunKey(dateStr, slot) {
 }
 
 function computeScheduledForUtc(dateStr, slot) {
-  return slot === "pm" ? nyWallClockToUtc(dateStr, 17, 0) : nyWallClockToUtc(dateStr, 9, 0);
+  if (slot === "pm") return nyWallClockToUtc(dateStr, 17, 0);
+  if (slot === "mid") return nyWallClockToUtc(dateStr, 13, 0);
+  return nyWallClockToUtc(dateStr, 9, 0);
 }
 
 function buildHistoryRow({ runKey, slot, jobId, jobFingerprint, contentVersion, employerSpacingKey, category, scheduledFor, facebook, linkedin, creativeUrl, captionVersion, selectedAt, validatedAt, failureReason }) {
