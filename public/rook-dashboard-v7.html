@@ -839,10 +839,12 @@
           editor.style.display = 'none';
           row.style.display = 'flex';
           // Reload jobs with new location
-          loadJobs();
+          await loadJobs();
         } catch (err) {
           document.getElementById('dashLocStatus').textContent = 'Could not save. Try again.';
           btnSave.disabled = false;
+          btnSave.textContent = 'Save & Refresh';
+        } finally {
           btnSave.textContent = 'Save & Refresh';
         }
       });

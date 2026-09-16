@@ -63,16 +63,27 @@ function queryDb(rows) {const q={from(){return q;},select(){return q;},eq(){retu
   // Exercise actual GET /session handler in memory: old snapshots repaired
   // BEFORE serialization on either side of the unchanged entitlement gate.
   const s = {profile,jobs:snapshot,user_id:'owner'};
-  let paid = false;
-  const db = {auth:{getUser:async token=>({data:{user:{id:token,email_confirmed_at:'yes'}}})},from(name){const q={select(){return q;},eq(){return q;},gt(){return q;},maybeSingle:async()=>({data:name==='onboarding_v7_sessions'?s:{subscription_status:paid?'active':'inactive'}})};return q;}};
+  let paid = false; let rankedLocation; let accountLocation={};
+  const db = {auth:{getUser:async token=>({data:{user:{id:token,email_confirmed_at:'yes'}}})},from(name){let payload;const q={select(){return q;},eq(){return q;},is(){return q;},gt(){return q;},update(v){payload=v;return q;},maybeSingle:async()=>{if(payload)Object.assign(s,payload);return {data:name==='onboarding_v7_sessions'?s:{...accountLocation,subscription_status:paid?'active':'inactive'}};},then(resolve){if(payload)Object.assign(accountLocation,payload);return Promise.resolve({error:null}).then(resolve);}};return q;}};
   const routeModule={exports:{}};
   const routeRequire=createRequire(require.resolve('./routes/onboardingV7'));
-  vm.runInNewContext(fs.readFileSync(require.resolve('./routes/onboardingV7'),'utf8'),{module:routeModule,require:n=>n==='@supabase/supabase-js'?{createClient:()=>db}:routeRequire(n),process:{env:{SUPABASE_URL:'https://test.invalid',SUPABASE_SERVICE_ROLE_KEY:'fake'}},setInterval:()=>({unref(){}}),Buffer});
+  vm.runInNewContext(fs.readFileSync(require.resolve('./routes/onboardingV7'),'utf8'),{module:routeModule,require:n=>n==='@supabase/supabase-js'?{createClient:()=>db}:n==='../v7Matching'?{rank:async(db,p)=>{rankedLocation=p;return [{...control,id:'new-location-job'}];}}:routeRequire(n),process:{env:{SUPABASE_URL:'https://test.invalid',SUPABASE_SERVICE_ROLE_KEY:'fake'}},setInterval:()=>({unref(){}}),Buffer});
   const handler=routeModule.exports.stack.find(l=>l.route?.path==='/session'&&l.route.methods.get).route.stack[0].handle;
   async function get(who) {let code=200,body;const res={status(n){code=n;return res;},json(v){body=v;return res;}};await handler({get:n=>n==='X-ROOK-V7'?'a'.repeat(64):`Bearer ${who}`},res);return {code,body};}
   let result=await get('owner');assert.equal(result.code,200);assert.equal(result.body.unlocked,false);assert.equal(result.body.jobs.length,1);assert(!JSON.stringify(result.body.jobs).includes('hidden.example'));
   paid=true;result=await get('owner');assert.equal(result.body.unlocked,true);assert.deepEqual(Array.from(result.body.jobs,j=>j.id),[control.id]);
   assert.equal((await get('other-account')).code,403);
+  const change=routeModule.exports.stack.find(l=>l.route?.path==='/location').route.stack[0].handle;
+  async function move(who,body){let code=200;const res={status(n){code=n;return res;},json(){return res;}};await change({body,get:n=>n==='X-ROOK-V7'?'a'.repeat(64):`Bearer ${who}`},res);return code;}
+  const newLocation={home_lat:42.36,home_lng:-71.06,home_city:'Boston',home_state:'MA',home_location_label:'Boston, MA',subscription_status:'active',desired_industries:['forged']};
+  assert.equal(await move('other-account',newLocation),403);
+  assert.equal(await move('owner',{...newLocation,home_lat:'invalid'}),400);
+  assert.equal(await move('owner',newLocation),200);
+  assert.equal(s.profile.home_city,'Boston');assert.equal(s.jobs[0].id,'new-location-job');
+  assert.equal(rankedLocation.desired_industries[0],'Diagnostics');assert.equal(accountLocation.home_city,'Boston');
+  assert.equal(accountLocation.subscription_status,undefined);
+  s.user_id=null;assert.equal(await move('anonymous',{...newLocation,home_city:'Reno',home_lat:39.5268,home_lng:-119.8113}),200);
+
   for(const file of ['backend/matching.js','backend/geocoding.js','backend/jobEligibility.js','backend/routes/jobs.js','public/rook-onboarding-v6.html','public/rook-dashboard.html','public/rook-checkout.html']) assert.equal(fs.readFileSync(file,'utf8'),execFileSync('git',['show',`${baseline}:${file}`],{encoding:'utf8'}),`${file} changed`);
   console.log('PASS: live Reno V6/V7 scores reproduce at 85/75/80; bad locations excluded; valid scores preserved; old snapshots repaired before masked/unmasked responses; cross-account access denied; V6 and shared scorer unchanged.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

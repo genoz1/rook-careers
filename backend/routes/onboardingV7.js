@@ -54,6 +54,30 @@ router.post('/session', wrap(async (req,res) => {
   if (error) throw error;
   res.json({token});
 }));
+router.put('/location', wrap(async (req,res) => {
+  const s = await session(req);
+  if (!s) return res.status(410).json({error:'Your saved matches expired. Please start again.'});
+  const u = await user(req);
+  if (s.user_id && s.user_id !== u?.id) return res.status(403).json({error:'Sign in to your account to continue.'});
+  let validated;
+  const b=req.body || {};
+  try {
+    validated=answersToProfile({location:{lat:b.home_lat,lng:b.home_lng,city:b.home_city,state:b.home_state,zip:b.home_zip,label:b.home_location_label},industry:s.profile.desired_industries[0],years:s.profile.total_sales_years,territories:s.profile.territory_size_preferences});
+  } catch(e) {return res.status(400).json({error:e.message});}
+  const location=Object.fromEntries(Object.entries(validated).filter(([k])=>k.startsWith('home_')));
+  const profile={...s.profile,...location};
+  const jobs=await rank(db,profile);
+  let update=db.from(table).update({profile,jobs}).eq('token_hash',s.token_hash);
+  update=s.user_id ? update.eq('user_id',s.user_id) : update.is('user_id',null);
+  const saved=await update.select('token_hash').maybeSingle();
+  if(saved.error) throw saved.error;
+  if(!saved.data) return res.status(409).json({error:'Your account changed during the search. Please retry.'});
+  if(s.user_id) {
+    const result=await db.from('candidate_profiles').update(location).eq('user_id',s.user_id);
+    if(result.error) throw result.error;
+  }
+  res.json({ok:true});
+}));
 router.get('/session', wrap(async (req,res) => {
   const s = await session(req);
   if (!s) return res.status(410).json({error:'Your saved matches expired. Please start again.'});
@@ -63,7 +87,7 @@ router.get('/session', wrap(async (req,res) => {
   if (u && s.user_id === u.id) {
     const {data,error} = await db.from('candidate_profiles').select('*').eq('user_id',u.id).maybeSingle();
     if (error) throw error;
-    profile = {...profile,...data};
+    profile = {...profile,...data,...s.profile};
   }
   if (s.resume_path && !profile.resume_file_path) profile.resume_file_path = 'pending';
   const unlocked = !!(s.user_id && u?.id === s.user_id && hasFullAccess(profile));
