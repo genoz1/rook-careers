@@ -5,11 +5,38 @@
 // displayed. Subject line adapts to reflect new vs recent.
 
 const { sendEmail } = require("./resend");
-const { mentionsNonUsCountry, hasFullAccess } = require("../matching");
+const { hasFullAccess } = require("../matching");
+const { distanceMiles } = require("../geocoding");
+const { isUsEligibleJob, resolveUsStateCode } = require("../jobEligibility");
 const { scrubCompanyNameFromText, redactForNonSubscriber } = require("../routes/jobs");
 
 const MIN_SCORE_TO_INCLUDE = 60;
 const MAX_JOBS_PER_EMAIL = 5;
+const MAX_DISTANCE_MILES = 300; // Same geographic radius as the authenticated job explorer.
+const MATCH_CANDIDATES_TO_FETCH = 200;
+
+// These strings describe an unrestricted US location, unlike "US PR Remote"
+// or "Remote - California". Field sales postings routinely say "remote"
+// while still requiring a specific territory, so that word alone is not proof.
+function isUnrestrictedUsLocation(location) {
+  return /^(?:(?:remote|virtual)\s*[,/_-]\s*)?(?:united states|usa|u\.s\.a\.)(?:\s*[-,/]?\s*(?:remote|nationwide|field based))?$/i.test(String(location || "").trim());
+}
+
+function isDigestLocationMatch(job, profile) {
+  if (!isUsEligibleJob(job)) return false;
+
+  // If a job names a place, that place wins over a generic "remote" tag.
+  // This catches CA/NC/PR territory jobs even when the ad calls them remote.
+  if (job.job_lat != null && job.job_lng != null) {
+    if (profile.home_lat == null || profile.home_lng == null) return false;
+    return distanceMiles(profile.home_lat, profile.home_lng, job.job_lat, job.job_lng) <= MAX_DISTANCE_MILES;
+  }
+
+  const jobState = resolveUsStateCode(job.state);
+  if (jobState) return jobState === resolveUsStateCode(profile.home_state);
+
+  return isUnrestrictedUsLocation(job.location_raw);
+}
 
 function escapeHtml(str) {
   return String(str).replace(/[&<>'"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -50,7 +77,7 @@ function renderDigestHtml({ name, jobs, appBaseUrl, subscribed, hasNewJobs }) {
 
   const introLine = subscribed
     ? hasNewJobs
-      ? `<p style="margin:0; font-size:14px; color:#5B6B85;">New roles posted in your area — matched to your background:</p>`
+      ? `<p style="margin:0; font-size:14px; color:#5B6B85;">New roles matching your location and background:</p>`
       : `<p style="margin:0; font-size:14px; color:#5B6B85;">Your top matches, updated daily:</p>`
     : `<p style="margin:0; font-size:14px; color:#5B6B85;">${jobs.length === 1 ? "This role is" : `These ${jobs.length} roles are`} waiting for you — subscribe to see who's hiring and apply directly:</p>`;
 
@@ -105,14 +132,12 @@ async function sendDigestForCandidate(supabase, profile, appBaseUrl) {
     .eq("jobs.moderation_status", "approved")
     .gte("jobs.first_seen_at", cutoff24h)
     .order("overall_score", { ascending: false })
-    .limit(MAX_JOBS_PER_EMAIL * 4);
+    .limit(MATCH_CANDIDATES_TO_FETCH);
 
   if (newErr) throw new Error(`Could not load new matches: ${newErr.message}`);
 
-  const freshDomestic = (newMatchRows || []).filter(
-    (r) => !mentionsNonUsCountry(r.jobs?.location_raw, r.jobs?.job_lng, r.jobs?.title_original)
-  );
-  const freshScored = freshDomestic
+  const freshLocal = (newMatchRows || []).filter((r) => isDigestLocationMatch(r.jobs, profile));
+  const freshScored = freshLocal
     .filter((r) => (r.overall_score ?? -1) >= MIN_SCORE_TO_INCLUDE)
     .slice(0, MAX_JOBS_PER_EMAIL);
 
@@ -129,18 +154,18 @@ async function sendDigestForCandidate(supabase, profile, appBaseUrl) {
       .eq("jobs.status", "active")
       .eq("jobs.moderation_status", "approved")
       .order("jobs.first_seen_at", { ascending: false })
-      .limit(MAX_JOBS_PER_EMAIL * 4);
+      .limit(MATCH_CANDIDATES_TO_FETCH);
 
     if (recentErr) throw new Error(`Could not load recent matches: ${recentErr.message}`);
 
     const existingIds = new Set(matchRows.map((r) => r.jobs?.id));
-    const recentDomestic = (recentRows || []).filter(
+    const recentLocal = (recentRows || []).filter(
       (r) =>
         !existingIds.has(r.jobs?.id) &&
-        !mentionsNonUsCountry(r.jobs?.location_raw, r.jobs?.job_lng, r.jobs?.title_original) &&
+        isDigestLocationMatch(r.jobs, profile) &&
         (r.overall_score ?? -1) >= MIN_SCORE_TO_INCLUDE
     );
-    matchRows = [...matchRows, ...recentDomestic].slice(0, MAX_JOBS_PER_EMAIL);
+    matchRows = [...matchRows, ...recentLocal].slice(0, MAX_JOBS_PER_EMAIL);
   }
 
   if (matchRows.length === 0) return { sent: false, reason: "no_qualifying_matches" };
@@ -159,7 +184,7 @@ async function sendDigestForCandidate(supabase, profile, appBaseUrl) {
 
   const html = renderDigestHtml({ name: profile.name, jobs: emailJobs, appBaseUrl, subscribed: hasAccess, hasNewJobs });
 
-  const subjectNew = `🔥 ${freshScored.length} new medical sales job${freshScored.length === 1 ? "" : "s"} posted near you`;
+  const subjectNew = `🔥 ${freshScored.length} new medical sales job${freshScored.length === 1 ? "" : "s"} matching your location`;
   const subjectFallback = `Your top ${scored.length} medical sales match${scored.length === 1 ? "" : "es"} on ROOK`;
   const subjectNonSub = `${scored.length} job${scored.length === 1 ? "" : "s"} waiting for you on ROOK — see who's hiring`;
 
@@ -172,4 +197,4 @@ async function sendDigestForCandidate(supabase, profile, appBaseUrl) {
   return { sent: true, jobCount: scored.length };
 }
 
-module.exports = { sendDigestForCandidate, renderDigestHtml };
+module.exports = { sendDigestForCandidate, renderDigestHtml, isDigestLocationMatch };
