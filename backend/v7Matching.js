@@ -7,7 +7,7 @@ const JOB_LIST_COLUMNS = "id, source_job_id, employer_id, source_type, source_ur
 const JOB_LIST_COLUMNS_NO_DESCRIPTION = JOB_LIST_COLUMNS.split(", ").filter((c) => c !== "description_html" && c !== "description_text").join(", ");
 
 async function rank(db, profile) {
-    // Same geographic query shape and 1,000-row pool as the dashboard.
+    // Preserve the existing 400-row cap for fast anonymous matching.
     const latDelta = 300 / 69;
     const lngDelta = 300 / (69 * Math.max(0.1, Math.cos((profile.home_lat * Math.PI) / 180)));
 
@@ -16,8 +16,11 @@ async function rank(db, profile) {
       .select(JOB_LIST_COLUMNS_NO_DESCRIPTION)
       .eq("status", "active")
       .eq("moderation_status", "approved")
-      .or(`job_lat.is.null,remote_status.eq.remote,and(job_lat.gte.${profile.home_lat - latDelta},job_lat.lte.${profile.home_lat + latDelta},job_lng.gte.${profile.home_lng - lngDelta},job_lng.lte.${profile.home_lng + lngDelta})`)
-      .limit(1000);
+      .gte("job_lat", profile.home_lat - latDelta)
+      .lte("job_lat", profile.home_lat + latDelta)
+      .gte("job_lng", profile.home_lng - lngDelta)
+      .lte("job_lng", profile.home_lng + lngDelta)
+      .limit(400);
 
     if (error) throw new Error(error.message);
 
