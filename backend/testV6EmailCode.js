@@ -73,6 +73,7 @@ async function run() {
   assert(entry.includes("window.location.search"));
   assert(!profile.includes('router.post("/auth/confirm-email"'));
   assert(!signup.includes("/api/auth/confirm-email"));
+  assert.match(signup, /id="codeInput"[^>]*maxlength="10"/);
 
   const h = makeHarness({ data: { user: { id: "pending-id" }, session: null }, error: null });
   await h.element("btnCreateAccount").click();
@@ -91,6 +92,16 @@ async function run() {
   assert.equal(h.calls.prefill.length, 1);
   assert.equal(h.location.href, "rook-dashboard.html?welcome=1");
   assert.equal(h.stored.has("rook_v6_pending_email"), false);
+
+  for (const token of ["12345678", "123456789"]) {
+    const variableLength = makeHarness({ data: { user: { id: "pending-id" }, session: null }, error: null });
+    await variableLength.element("btnCreateAccount").click();
+    variableLength.element("codeInput").value = token;
+    await variableLength.element("btnVerifyCode").click();
+    assert.equal(variableLength.calls.verify.length, 1, `complete ${token.length}-digit code must be submitted`);
+    assert.equal(variableLength.calls.verify[0].token, token, "submit the full code without truncation");
+    assert.equal(variableLength.location.href, "rook-dashboard.html?welcome=1");
+  }
 
   const immediate = makeHarness({
     data: { user: { id: "auto-confirmed" }, session: { access_token: "unverified" } }, error: null
