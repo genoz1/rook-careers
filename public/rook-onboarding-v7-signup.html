@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex">
-<title>ROOK — Create Your Free Account</title>
+<title>ROOK — Unlock Your Matches</title>
 <link rel="icon" href="assets/favicon.ico">
 <script src="rook-attribution.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -77,18 +77,18 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
   </div>
 
   <div class="screen">
-    <div class="eyebrow">Free account · No card required</div>
-    <h2>See your matches.</h2>
-    <p class="lead">Create your free account to see how many medical &amp; animal health sales roles match your background — no card, no commitment.</p>
+    <div class="eyebrow">3-day free trial · Card required</div>
+    <h2>Unlock your matches.</h2>
+    <p class="lead">Create your account, then enter your card on the next screen to start your 3-day free trial and unlock your matches.</p>
 
     <div class="trial-box">
       <div class="trial-price">
-        <span>Free Account</span>
-        <div><strong>$0</strong> <small>always</small></div>
+        <span>3-Day Free Trial</span>
+        <div><strong>$0</strong> <small>for 3 days</small></div>
       </div>
-      <div class="trial-feature"><span class="trial-check">✓</span> See your total match count and scores</div>
-      <div class="trial-feature"><span class="trial-check">✓</span> Titles, locations, and posting dates</div>
-      <div class="trial-feature"><span class="trial-check">✓</span> Unlock employers &amp; apply anytime with a 3-day free trial</div>
+      <div class="trial-feature"><span class="trial-check">✓</span> Unlock employer names and full job listings</div>
+      <div class="trial-feature"><span class="trial-check">✓</span> Get direct application links for your matches</div>
+      <div class="trial-feature"><span class="trial-check">✓</span> Then $19.99/month. Cancel before your trial ends to avoid being charged.</div>
     </div>
 
     <div class="form-section" id="createSection">
@@ -118,7 +118,7 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
     <div id="createActions">
       <div class="err" id="formErr" role="alert"></div>
       <button class="btn-primary" id="btnCreateAccount">Email my verification code</button>
-      <p class="fine">No card required. You can start a 3-day free trial any time from your dashboard to unlock employers, full listings, and applying.</p>
+      <p class="fine">Card required on the next screen to activate your trial. $0 for 3 days, then $19.99/month unless canceled. Cancel anytime.</p>
     </div>
     <div id="verifySection" style="display:none">
       <div class="form-section">
@@ -226,7 +226,7 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
     document.getElementById('verifySection').style.display = 'none';
     document.getElementById('createSection').style.display = 'block';
     document.getElementById('createActions').style.display = 'block';
-    document.querySelector('.screen h2').textContent = 'See your matches.';
+    document.querySelector('.screen h2').textContent = 'Unlock your matches.';
   });
 
   resendBtn.addEventListener('click', async () => {
