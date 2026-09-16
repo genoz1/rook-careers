@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>ROOK — Create Your Free Account</title>
+<link rel="icon" href="assets/favicon.ico">
+<script src="rook-attribution.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="rook-config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --navy:#062d55;--blue:#0877d1;--green:#1a7a50;--muted:#587283;
+  --line:#dbe8f0;--ink:#0d2035;--bg:#f4f9fd;--paper:#fff;
+  --radius:16px;--input-radius:11px;
+}
+body{font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:0 0 60px}
+.shell{width:100%;max-width:480px;padding:0 20px}
+.bar{display:flex;align-items:center;gap:10px;padding:22px 0 0}
+.brand{display:flex;align-items:center;gap:10px;text-decoration:none}
+.rookmark{width:34px;height:34px;border-radius:10px;background:linear-gradient(145deg,var(--navy),var(--blue));color:#fff;display:grid;place-items:center;font-family:Georgia,serif;font-size:21px}
+.brand-name{font-size:19px;font-weight:900;letter-spacing:.08em;color:var(--navy)}
+.screen{padding-top:28px}
+
+.eyebrow{font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--blue);margin-bottom:10px}
+h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing:-.03em;color:var(--navy);margin-bottom:12px}
+.lead{font-size:15px;color:var(--muted);line-height:1.6;margin-bottom:4px}
+.trial-box{background:#f4f9fd;border:1.5px solid var(--line);border-radius:var(--radius);padding:18px;margin:18px 0 8px}
+.trial-price{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px}
+.trial-price span{font-size:15px;font-weight:700;color:var(--navy)}
+.trial-price strong{font-size:32px;font-weight:900;color:var(--navy)}
+.trial-price small{font-size:13px;color:var(--muted);font-weight:500}
+.trial-feature{display:flex;align-items:flex-start;gap:10px;margin-top:10px;font-size:13px;color:var(--ink)}
+.trial-check{color:var(--green);font-weight:700;flex-shrink:0}
+
+.form-section{background:var(--paper);border:1.5px solid var(--line);border-radius:var(--radius);padding:20px;margin-top:10px}
+.form-section-label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px}
+.field-group{display:flex;flex-direction:column;gap:12px}
+.name-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.field-label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:5px}
+.field-input{width:100%;padding:13px 14px;border:1.5px solid var(--line);border-radius:var(--input-radius);font:inherit;font-size:15px;color:var(--ink);background:var(--bg);outline:none;-webkit-appearance:none;transition:border-color .15s}
+.field-input:focus{border-color:var(--blue)}
+
+.btn-primary{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:15px;border:none;border-radius:12px;background:linear-gradient(110deg,var(--navy),var(--blue));color:#fff;font:inherit;font-size:15px;font-weight:700;cursor:pointer;margin-top:20px;transition:opacity .15s}
+.btn-primary:disabled{opacity:.55;cursor:not-allowed}
+.verify-actions{display:flex;justify-content:space-between;gap:12px;margin-top:14px}
+.verify-actions button{border:0;background:none;color:var(--blue);font:inherit;font-size:13px;font-weight:700;cursor:pointer;padding:5px 0}
+.verify-actions button:disabled{color:var(--muted);cursor:not-allowed}
+.verify-email{font-weight:700;overflow-wrap:anywhere}
+.fine{font-size:11px;color:var(--muted);text-align:center;margin-top:12px;line-height:1.6}
+.err{font-size:13px;color:#c0392b;font-weight:500;text-align:center;min-height:18px;margin-top:10px}
+.spinner{width:18px;height:18px;border:2.5px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media(max-width:400px){.name-row{grid-template-columns:1fr}}
+</style>
+</head>
+<!-- Google tag -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=AW-18428232873"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'AW-18428232873');
+  gtag('config', 'G-LDG2CL5Z8R');
+</script>
+<body>
+<div class="shell">
+  <div class="bar">
+    <a class="brand" href="/">
+      <div class="rookmark">♜</div>
+      <span class="brand-name">ROOK</span>
+    </a>
+  </div>
+
+  <div class="screen">
+    <div class="eyebrow">Free account · No card required</div>
+    <h2>See your matches.</h2>
+    <p class="lead">Create your free account to see how many medical &amp; animal health sales roles match your background — no card, no commitment.</p>
+
+    <div class="trial-box">
+      <div class="trial-price">
+        <span>Free Account</span>
+        <div><strong>$0</strong> <small>always</small></div>
+      </div>
+      <div class="trial-feature"><span class="trial-check">✓</span> See your total match count and scores</div>
+      <div class="trial-feature"><span class="trial-check">✓</span> Titles, locations, and posting dates</div>
+      <div class="trial-feature"><span class="trial-check">✓</span> Unlock employers &amp; apply anytime with a 3-day free trial</div>
+    </div>
+
+    <div class="form-section" id="createSection">
+      <div class="form-section-label">Create your account</div>
+      <div class="field-group">
+        <div class="name-row">
+          <div>
+            <label class="field-label" for="firstName">First name</label>
+            <input class="field-input" id="firstName" type="text" placeholder="First" autocomplete="given-name">
+          </div>
+          <div>
+            <label class="field-label" for="lastName">Last name</label>
+            <input class="field-input" id="lastName" type="text" placeholder="Last" autocomplete="family-name">
+          </div>
+        </div>
+        <div>
+          <label class="field-label" for="emailInput">Email address</label>
+          <input class="field-input" id="emailInput" type="email" placeholder="you@example.com" autocomplete="email" spellcheck="false">
+        </div>
+        <div>
+          <label class="field-label" for="passwordInput">Password</label>
+          <input class="field-input" id="passwordInput" type="password" placeholder="8 or more characters" autocomplete="new-password" minlength="8">
+        </div>
+      </div>
+    </div>
+
+    <div id="createActions">
+      <div class="err" id="formErr" role="alert"></div>
+      <button class="btn-primary" id="btnCreateAccount">Email my verification code</button>
+      <p class="fine">No card required. You can start a 3-day free trial any time from your dashboard to unlock employers, full listings, and applying.</p>
+    </div>
+    <div id="verifySection" style="display:none">
+      <div class="form-section">
+        <div class="form-section-label">Verify your email</div>
+        <p class="lead">Enter the code sent to <span class="verify-email" id="verifyEmail"></span>. You can stay on this page.</p>
+        <label class="field-label" for="codeInput" style="margin-top:18px">Verification code</label>
+        <input class="field-input" id="codeInput" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="10" pattern="[0-9]{6,10}" placeholder="Code from email">
+        <div class="err" id="codeErr" role="alert"></div>
+        <button class="btn-primary" id="btnVerifyCode">See my matches</button>
+        <div class="verify-actions">
+          <button type="button" id="btnResendCode" disabled>Resend code (60s)</button>
+          <button type="button" id="btnChangeEmail">Change email</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(async () => {
+  const errEl = document.getElementById('formErr');
+  const btn   = document.getElementById('btnCreateAccount');
+  function showErr(msg) { errEl.textContent = msg || ''; }
+  const codeErr = document.getElementById('codeErr');
+  const verifyBtn = document.getElementById('btnVerifyCode');
+  const resendBtn = document.getElementById('btnResendCode');
+  let pending = null;
+  let resendAvailableAt = 0;
+  let resendTimer;
+
+  const sb = window.supabase.createClient(window.ROOK_CONFIG.SUPABASE_URL, window.ROOK_CONFIG.SUPABASE_ANON_KEY);
+
+  const existingSession = await sb.auth.getSession();
+  if (existingSession.data?.session && sessionStorage.getItem('rook_v7_token')) {
+    window.location.href = 'rook-checkout-v7.html';
+    return;
+  }
+
+  function updateResend() {
+    const remaining = Math.ceil((resendAvailableAt - Date.now()) / 1000);
+    resendBtn.disabled = remaining > 0;
+    resendBtn.textContent = remaining > 0 ? `Resend code (${remaining}s)` : 'Resend code';
+    if (remaining <= 0) clearInterval(resendTimer);
+  }
+  function showCodeStep(details) {
+    pending = details;
+    try { sessionStorage.setItem('rook_v7_pending_email', JSON.stringify(details)); } catch (_) {}
+    document.getElementById('createSection').style.display = 'none';
+    document.getElementById('createActions').style.display = 'none';
+    document.getElementById('verifySection').style.display = 'block';
+    document.getElementById('verifyEmail').textContent = details.email;
+    document.querySelector('.screen h2').textContent = 'Check your email.';
+    document.getElementById('codeInput').focus();
+    if (!resendAvailableAt) {
+      resendAvailableAt = Date.now() + 60_000;
+      resendTimer = setInterval(updateResend, 1000);
+      updateResend();
+    }
+  }
+  try {
+    const saved = JSON.parse(sessionStorage.getItem('rook_v7_pending_email') || 'null');
+    if (saved?.email && saved?.firstName && saved?.lastName) showCodeStep(saved);
+  } catch (_) {}
+
+  btn.addEventListener('click', async () => {
+    showErr('');
+    const firstName = document.getElementById('firstName').value.trim();
+    const lastName  = document.getElementById('lastName').value.trim();
+    const email     = document.getElementById('emailInput').value.trim();
+    const password  = document.getElementById('passwordInput').value;
+    if (!firstName) return showErr('Please enter your first name.');
+    if (!lastName)  return showErr('Please enter your last name.');
+    if (!email || !/\S+@\S+\.\S+/.test(email)) return showErr('Please enter a valid email address.');
+    if (!password || password.length < 8) return showErr('Password must be at least 8 characters.');
+
+    btn.disabled = true;
+    btn.innerHTML = '<div class="spinner"></div> Creating your account…';
+
+    try {
+      const { data: signUpData, error: signUpErr } = await sb.auth.signUp({
+        email, password,
+        options: { data: { first_name: firstName, last_name: lastName } }
+      });
+      if (signUpErr) throw new Error(signUpErr.message);
+      if (signUpData.session) {
+        await sb.auth.signOut();
+        throw new Error('Email verification is temporarily unavailable. Please try again later.');
+      }
+      if (!signUpData.user?.id) throw new Error('Could not send a code. Please try again.');
+      showCodeStep({ email, firstName, lastName });
+    } catch (err) {
+      showErr(err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Email my verification code';
+    }
+  });
+
+  document.getElementById('btnChangeEmail').addEventListener('click', () => {
+    pending = null;
+    resendAvailableAt = 0;
+    clearInterval(resendTimer);
+    sessionStorage.removeItem('rook_v7_pending_email');
+    codeErr.textContent = '';
+    document.getElementById('verifySection').style.display = 'none';
+    document.getElementById('createSection').style.display = 'block';
+    document.getElementById('createActions').style.display = 'block';
+    document.querySelector('.screen h2').textContent = 'See your matches.';
+  });
+
+  resendBtn.addEventListener('click', async () => {
+    if (!pending || Date.now() < resendAvailableAt) return;
+    resendBtn.disabled = true;
+    codeErr.textContent = '';
+    try {
+      const { error } = await sb.auth.resend({ type: 'signup', email: pending.email });
+      if (error) throw error;
+      resendAvailableAt = Date.now() + 60_000;
+      resendTimer = setInterval(updateResend, 1000);
+      updateResend();
+      codeErr.textContent = 'A new code is on its way.';
+    } catch (err) {
+      codeErr.textContent = err.message || 'Could not resend the code. Please try again.';
+      resendBtn.disabled = false;
+    }
+  });
+
+  document.getElementById('codeInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') verifyBtn.click();
+  });
+  verifyBtn.addEventListener('click', async () => {
+    if (!pending) return;
+    codeErr.textContent = '';
+    const token = document.getElementById('codeInput').value.trim();
+    if (!/^[0-9]{6,10}$/.test(token)) {
+      codeErr.textContent = 'Enter the full code from your email.';
+      return;
+    }
+    verifyBtn.disabled = true;
+    verifyBtn.innerHTML = '<div class="spinner"></div> Verifying…';
+    try {
+      const { data, error } = await sb.auth.verifyOtp({ email: pending.email, token, type: 'email' });
+      if (error) throw new Error(error.message);
+      if (!data?.session?.access_token || !data.user?.id || !data.user.email_confirmed_at) {
+        throw new Error('Could not verify your email. Please try again.');
+      }
+      const userId = data.user.id;
+      const { firstName, lastName } = pending;
+
+      // Conversion: free account created — a real signup, but a
+      // SECONDARY conversion. The primary Google Ads/Meta conversion
+      // (trial_activated) only fires later, from rook-checkout.html's
+      // webhook-confirmed success — never here. No PII in the params.
+      if (typeof gtag !== 'undefined') {
+        gtag('event', 'sign_up', { event_category: 'conversion', event_label: 'free_account_v7', value: 0 });
+        gtag('event', 'account_created', { event_category: 'conversion', method: 'email' });
+      }
+
+      const claim = await fetch('/api/v7/claim', {
+        method:'POST', headers:{Authorization:`Bearer ${data.session.access_token}`, 'X-ROOK-V7':sessionStorage.getItem('rook_v7_token') || ''}
+      });
+      if (!claim.ok) throw new Error('Your email is verified. Return to your V7 dashboard to retry transferring your matches.');
+      sessionStorage.removeItem('rook_v7_pending_email');
+      if (typeof gtag === 'function') gtag('event','v7_account_created');
+      window.location.href = 'rook-checkout-v7.html';
+    } catch (err) {
+      codeErr.textContent = err.message;
+      verifyBtn.disabled = false;
+      verifyBtn.textContent = 'See my matches';
+    }
+  });
+})();
+</script>
+</body>
+</html>
