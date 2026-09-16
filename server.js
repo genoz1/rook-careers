@@ -39,6 +39,24 @@ app.use("/api", require("./backend/routes/recruiterPostings"));
 app.use("/api", require("./backend/routes/automation"));
 app.use("/api", require("./backend/admanager/conversions"));
 
+// Keep legacy ad URLs and links opened under /medical-sales/ on real pages.
+// Preserve the original query string verbatim for Google Ads attribution.
+app.get("/medical-sales/free-trial", (req, res) => {
+  const queryStart = req.originalUrl.indexOf("?");
+  const query = queryStart === -1 ? "" : req.originalUrl.slice(queryStart);
+  res.set("Cache-Control", "no-store");
+  return res.redirect(302, "/rook-onboarding-v4.html" + query);
+});
+app.get("/medical-sales/:page", (req, res, next) => {
+  const page = req.params.page;
+  if (!/^rook-[a-z0-9-]+\.html$/.test(page) ||
+      !require("fs").existsSync(path.join(__dirname, "public", page))) return next();
+  const queryStart = req.originalUrl.indexOf("?");
+  const query = queryStart === -1 ? "" : req.originalUrl.slice(queryStart);
+  res.set("Cache-Control", "no-store");
+  return res.redirect(302, "/" + page + query);
+});
+
 // Server-rendered public pages (real per-job SEO meta tags + sitemap) —
 // registered before the static file server and the SPA catch-all below,
 // since /jobs/:id and /sitemap.xml aren't real files in /public.
