@@ -15,7 +15,7 @@ const records = [
  {id:'acede788-9577-42ed-af39-95475a89f761',title_original:'Sales Development Representative',location_raw:'Leiden',city:null,state:'NV',job_lat:39.6503817,job_lng:-119.87382,remote_status:null,employment_type:'FullTime',ai_analysis:{product_categories:['Healthcare SaaS','EHR/EPD software']},expected:80}
 ];
 const control = {...records[0],id:'nearby-control',title_original:'Account Executive',company_name:'Hidden Employer',source_url:'https://hidden.example/job',location_raw:'Reno, NV',city:'Reno',state:'NV',job_lat:39.54,job_lng:-119.82};
-function queryDb(rows) {const q={from(){return q;},select(){return q;},eq(){return q;},or(){return q;},limit(){return Promise.resolve({data:rows,error:null});}};return q;}
+function queryDb(rows) {const q={from(){return q;},select(){return q;},eq(){return q;},or(){return q;},gte(){return q;},lte(){return q;},limit(){return Promise.resolve({data:rows,error:null});}};return q;}
 (async () => {
   // GitHub baseline; this workspace's original local commit has the same tree.
   let baseline='b4c6f86fe141698f26931f02dc685b6acc144f29';
@@ -37,11 +37,10 @@ function queryDb(rows) {const q={from(){return q;},select(){return q;},eq(){retu
   const broad = {...profile,territory_size_preferences:['national']};
   const usRemote = {...records[1],location_raw:'Remote, US'};
   assert.equal(prepareJob(usRemote,profile),null);
-  assert.equal(prepareJob(usRemote,broad).job_lat,null);
-  assert.equal(prepareJob(usRemote,broad).state,null);
+  assert.equal(prepareJob(usRemote,broad),null);
+  assert.equal(prepareJob({...control,job_lat:40.71,job_lng:-74,remote_status:'remote'},broad),null);
   const stateWide = {...records[0],location_raw:'Remote - Nevada',state:'Nevada'};
-  assert.equal(prepareJob(stateWide,profile).job_lat,null);
-  assert.equal(prepareJob(stateWide,profile).state,'NV');
+  assert.equal(prepareJob(stateWide,profile),null);
   for(const location_raw of ['US CA Home Office','CA, United States','Remote - CA','California','United States Remote Office | California, USA']) assert.equal(prepareJob({...records[0],location_raw},profile),null);
   assert.equal(prepareJob({...control,job_lng:null},profile),null);
   const snapshot = [...records,control].map(j=>({...j,match:scoreJob(j,profile),distance_miles:123}));
@@ -52,7 +51,12 @@ function queryDb(rows) {const q={from(){return q;},select(){return q;},eq(){retu
   assert.deepEqual(snapshot,untouched);
   assert.deepEqual(repairSnapshot(repaired,profile),repaired);
   assert(!/Hidden Employer|hidden\.example|nearby-control/.test(JSON.stringify(repaired.map(preview))));
-  const ranked = await require('./v7Matching').rank(queryDb([...records,control]),profile);
+  const pool=queryDb([...records,control]); let cap;pool.limit=n=>{cap=n;return Promise.resolve({data:[...records,control],error:null});};
+  const ranked = await require('./v7Matching').rank(pool,profile);
+  assert.equal(cap,400);
+  const matchingSource=fs.readFileSync(require.resolve('./v7Matching'),'utf8');
+  assert(!matchingSource.includes('job_lat.is.null'));
+  assert(!matchingSource.includes('remote_status.eq.remote'));
   assert.deepEqual(ranked.map(j=>j.id),[control.id]);
   assert.deepEqual(ranked[0].match,scoreJob(control,profile));
 

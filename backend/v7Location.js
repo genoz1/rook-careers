@@ -4,7 +4,6 @@ const {resolveUsStateCode, isUsEligibleJob} = require('./jobEligibility');
 const {hasUnambiguousForeignCountryEvidence} = require('./locationTextRules');
 const {extractGeocodableLocation} = require('./locationExtraction');
 const {distanceMiles} = require('./geocoding');
-const {scoreJob} = require('./matching');
 
 function locationScope(job) {
   const raw = String(job.location_raw || '').trim();
@@ -24,32 +23,17 @@ function prepareJob(job, profile) {
   // Dutch role, despite legacy Nevada coordinates. Explicit US qualifiers
   // remain distinct; do not build a guessed world-city blacklist.
   if (/^(leiden|barcelona)$/i.test(String(job.location_raw || '').trim())) return null;
-  const scope = locationScope(job);
-  const clean = scope.imprecise ? {...job, job_lat:null, job_lng:null, city:null,
-    state:scope.stateOnly || null, distance_miles:null} : job;
-  const eligible = scope.stateOnly || isUsEligibleJob(clean);
-  if (!eligible) return null;
-  const choices = profile.territory_size_preferences || [profile.territory_size_preference];
-  const nearbyOnly = choices.some(c => c === 'local' || c === 'regional') && !choices.some(c => c === 'national' || c === 'remote');
-  if (nearbyOnly) {
-    if (scope.stateOnly) {
-      if (scope.stateOnly !== resolveUsStateCode(profile.home_state)) return null;
-    } else {
-      if (![clean.job_lat,clean.job_lng,profile.home_lat,profile.home_lng].every(v => typeof v === 'number' && Number.isFinite(v))) return null;
-      if (distanceMiles(profile.home_lat,profile.home_lng,clean.job_lat,clean.job_lng) > 300) return null;
-    }
-  }
-  return clean;
+  if (locationScope(job).imprecise || !isUsEligibleJob(job)) return null;
+  if (![job.job_lat,job.job_lng,profile.home_lat,profile.home_lng].every(v => typeof v === 'number' && Number.isFinite(v))) return null;
+  // Bounding-box corners can exceed the radius. Reject before scoreJob;
+  // no work-style or territory preference can bypass the 300-mile boundary.
+  if (distanceMiles(profile.home_lat,profile.home_lng,job.job_lat,job.job_lng) > 300) return null;
+  return job;
 }
 
 function repairSnapshot(jobs, profile) {
-  return (jobs || []).flatMap(job => {
-    const clean = prepareJob(job,profile);
-    if (!clean) return [];
-    // Preserve every unaffected score and result identity. Only a rejected
-    // coordinate changes the scorer's input, using the original four answers.
-    return [clean === job ? job : {...clean,match:scoreJob(clean,profile)}];
-  }).sort((a,b) => (b.match?.overall_score || 0) - (a.match?.overall_score || 0));
+  // Keep the original order, identities and scores of every valid result.
+  return (jobs || []).filter(job => prepareJob(job,profile));
 }
 
 module.exports = {prepareJob,repairSnapshot,locationScope};
