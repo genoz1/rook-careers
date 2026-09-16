@@ -4,12 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <script>
-// Redirect v4 to v6 — all ad traffic now goes to the new onboarding flow.
+// Redirect legacy entry traffic to V7.
 // Preserve any UTM/query params from ad links.
 (function(){
-  var dest = '/rook-onboarding-v6.html';
+  var dest = '/rook-onboarding-v7.html';
   if (window.location.search) dest += window.location.search;
-  window.location.replace(dest);
+  window.location.replace(dest + window.location.hash);
 })();
 </script>
 <title>ROOK — Find Your Next Medical Sales Role</title>
