@@ -42,6 +42,20 @@ const { analyzeJob } = require("../ai/jobAnalysis");
 
 const BATCH_SIZE = 50; // one page of the active-jobs-with-no-analysis query at a time
 
+// analyzeJob() already has its own 45s internal timeout, but the
+// database write that follows it had none at all — confirmed directly
+// to be the likely cause of an apparent hang during a real run (no
+// further output for a long stretch after job 75, with progress only
+// logged every 25 jobs, made a slow stretch indistinguishable from a
+// true freeze). Wrapping both here guarantees this script can never
+// sit indefinitely on a single job.
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s`)), ms)),
+  ]);
+}
+
 function parseArgs() {
   const args = process.argv.slice(2);
   return { writeMode: args.includes("--write"), confirmed: args.includes("--confirm") };
@@ -101,7 +115,7 @@ async function runWrite(supabase) {
 
   for (const job of jobs) {
     try {
-      const analysis = await analyzeJob(job.title_original, job.description_text);
+      const analysis = await withTimeout(analyzeJob(job.title_original, job.description_text), 45_000, "analyzeJob");
       const hasSalesSignals = (
         (analysis?.product_categories?.length > 0) ||
         (analysis?.required_industries?.length > 0) ||
@@ -112,14 +126,23 @@ async function runWrite(supabase) {
       const statusUpdate = hasSalesSignals ? {} : { status: "closed" };
       if (!hasSalesSignals) closedNonSales++;
 
-      const { error } = await supabase.from("jobs").update({ ai_analysis: analysis, ...statusUpdate }).eq("id", job.id);
+      const { error } = await withTimeout(
+        supabase.from("jobs").update({ ai_analysis: analysis, ...statusUpdate }).eq("id", job.id),
+        15_000,
+        "database write"
+      );
       if (error) { failed++; failures.push({ id: job.id, error: error.message }); continue; }
       analyzed++;
-      if (analyzed % 25 === 0) console.log(`  ...${analyzed}/${jobs.length} done`);
+      // Direct instruction: log every job, not just every 25 — a run
+      // that goes quiet for a long stretch with no visible progress is
+      // indistinguishable from a genuine hang, which is exactly what
+      // happened here. One line per job is cheap and removes that
+      // ambiguity entirely.
+      console.log(`  [${analyzed + failed}/${jobs.length}] "${job.title_original}" (${job.company_name}) — analyzed${hasSalesSignals ? "" : ", marked closed (no sales signals)"}`);
     } catch (err) {
       failed++;
       failures.push({ id: job.id, error: err.message });
-      console.error(`  AI analysis failed for "${job.title_original}": ${err.message}`);
+      console.error(`  [${analyzed + failed}/${jobs.length}] FAILED "${job.title_original}" (${job.company_name}): ${err.message}`);
     }
   }
 
