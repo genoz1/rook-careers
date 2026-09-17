@@ -22,6 +22,7 @@
 const express = require("express");
 const {matches: matchesIndustry, normalizeSelection, classify} = require("../../public/rook-job-classification");
 const {readJobPool} = require("../jobPool");
+const {industryPrefilter} = require("../industryPrefilter");
 const { createClient } = require("@supabase/supabase-js");
 const { scoreJob, hasFullAccess, stateAbbrFromName } = require("../matching");
 const { scrubCompanyNameFromText, redactForNonSubscriber, redactForAnonymous } = require("../redaction");
@@ -261,6 +262,10 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
   const selectionInput = industries !== undefined ? String(industries) : (industry || "all");
   const selection = normalizeSelection(selectionInput.split(","));
   const industryPass = job => selectionInput === "all" || matchesIndustry(job, selection);
+  const selectedJobPool = query => {
+    const prefilter = selectionInput === 'all' ? '' : industryPrefilter(selection);
+    return readJobPool(prefilter ? query.or(prefilter) : query);
+  };
 
   // Anonymous browsing. Direct instruction: "copy the job search page
   // [...] and mask the job details so when the customer actually
@@ -311,7 +316,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
         .order("date_posted", { ascending: false });
 
       if (state) fallbackQuery = fallbackQuery.eq("state", state);
-      const { data: fallbackJobs, error: fallbackError } = await readJobPool(fallbackQuery);
+      const { data: fallbackJobs, error: fallbackError } = await selectedJobPool(fallbackQuery);
       if (fallbackError) return res.status(500).json({ error: fallbackError.message });
       const usOnly = (fallbackJobs || []).filter(isUsEligibleJob).filter(industryPass).slice(0, Number(limit));
       return res.json({ jobs: usOnly.map(redactForAnonymous).map(stripUnusedDescriptionFields), total_count: totalCount || 0, explored_location: false });
@@ -321,7 +326,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     const latDelta = EXPLORE_RADIUS_MILES / 69;
     const lngDelta = EXPLORE_RADIUS_MILES / (69 * Math.max(0.1, Math.cos((nearLat * Math.PI) / 180)));
 
-    const { data: boxJobs, error: boxError } = await readJobPool(supabaseAnon
+    const { data: boxJobs, error: boxError } = await selectedJobPool(supabaseAnon
       .from("jobs")
       .select(JOB_LIST_COLUMNS_NO_DESCRIPTION)
       .eq("status", "active")
@@ -350,7 +355,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
 
     if (state) noCoordsQuery = noCoordsQuery.eq("state", state);
     if (keyword) noCoordsQuery = noCoordsQuery.or(`title_original.ilike.%${keyword}%,company_name.ilike.%${keyword}%`);
-    const { data: noCoordsJobs, error: noCoordsError } = await readJobPool(noCoordsQuery);
+    const { data: noCoordsJobs, error: noCoordsError } = await selectedJobPool(noCoordsQuery);
     if (noCoordsError) return res.status(500).json({ error: noCoordsError.message });
 
     // The synthetic profile a visitor's ZIP produces — home_lat/lng and
@@ -390,7 +395,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     let query = supabaseAnon.from("jobs").select(JOB_LIST_COLUMNS_NO_DESCRIPTION).eq("status", "active").eq("moderation_status", "approved").order("date_posted", { ascending: false });
 
     if (state) query = query.eq("state", state);
-    const { data, error } = await readJobPool(query);
+    const { data, error } = await selectedJobPool(query);
     if (error) return res.status(500).json({error:error.message});
     return res.json((data || []).filter(isUsEligibleJob).filter(industryPass).slice(0, Number(limit)).map(stripUnusedDescriptionFields));
   }
@@ -451,7 +456,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     const latDelta = EXPLORE_RADIUS_MILES / 69;
     const lngDelta = EXPLORE_RADIUS_MILES / (69 * Math.max(0.1, Math.cos((nearLat * Math.PI) / 180)));
 
-    const { data: boxJobs, error: boxError } = await readJobPool(supabaseAdmin
+    const { data: boxJobs, error: boxError } = await selectedJobPool(supabaseAdmin
       .from("jobs")
       .select(JOB_LIST_COLUMNS_NO_DESCRIPTION)
       .eq("status", "active")
@@ -485,7 +490,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
 
     if (state) noCoordsQuery = noCoordsQuery.eq("state", state);
     if (keyword) noCoordsQuery = noCoordsQuery.or(`title_original.ilike.%${keyword}%,company_name.ilike.%${keyword}%`);
-    const { data: noCoordsJobs, error: noCoordsError } = await readJobPool(noCoordsQuery);
+    const { data: noCoordsJobs, error: noCoordsError } = await selectedJobPool(noCoordsQuery);
     if (noCoordsError) return res.status(500).json({ error: noCoordsError.message });
 
     // Scores against a location-shifted COPY of the real profile — every
@@ -579,7 +584,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     );
   }
 
-  const { data: allMatchingJobs, error: liveError } = await readJobPool(liveQuery);
+  const { data: allMatchingJobs, error: liveError } = await selectedJobPool(liveQuery);
   if (liveError) return res.status(500).json({ error: liveError.message });
 
   const { data: statusRows } = await supabaseAdmin

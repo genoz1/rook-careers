@@ -5,6 +5,7 @@ const {prepareJob} = require('./v7Location');
 const {distanceMiles} = require('./geocoding');
 const {matches, normalizeSelection} = require('../public/rook-job-classification');
 const {readJobPool} = require('./jobPool');
+const {industryPrefilter} = require('./industryPrefilter');
 const JOB_LIST_COLUMNS = "id, source_job_id, employer_id, source_type, source_url, application_url, title_original, title_normalized, company_name, description_html, description_text, ai_analysis, location_raw, location_evidence, job_lat, job_lng, city, state, region, territory, remote_status, employment_type, category, subcategory, industry, product_type, sales_type, experience_min_years, experience_max_years, salary_min, salary_max, compensation_text, travel_percentage, overnight_travel, required_skills, preferred_skills, required_experience, preferred_experience, degree_required, certifications, date_posted, first_seen_at, last_seen_at, status, source_verified, moderation_status, recruiter_name, recruiter_email, recruiter_company, recruiter_contact_method, recruiter_id, created_at, updated_at";
 const JOB_LIST_COLUMNS_NO_DESCRIPTION = JOB_LIST_COLUMNS.split(", ").filter((c) => c !== "description_html" && c !== "description_text").join(", ");
 
@@ -14,18 +15,6 @@ async function rank(db, profile, industrySelection = profile.desired_industries)
     const lngDelta = 300 / (69 * Math.max(0.1, Math.cos((profile.home_lat * Math.PI) / 180)));
 
     const selection = normalizeSelection(industrySelection);
-    const { data: jobs, error } = await readJobPool(db
-      .from("jobs")
-      .select(JOB_LIST_COLUMNS_NO_DESCRIPTION)
-      .eq("status", "active")
-      .eq("moderation_status", "approved")
-      .gte("job_lat", profile.home_lat - latDelta)
-      .lte("job_lat", profile.home_lat + latDelta)
-      .gte("job_lng", profile.home_lng - lngDelta)
-      .lte("job_lng", profile.home_lng + lngDelta));
-
-    if (error) throw new Error(error.message);
-
     // Word-for-word copy of dashboard titleLocSanityPass — plus state-center check
     const TITLE_LOC_CHECKS = {
       'south florida': { lat: 25.9, lng: -80.3 },
@@ -97,6 +86,24 @@ async function rank(db, profile, industrySelection = profile.desired_industries)
       const matched = prodCats.filter(p => terms.some(t => p.includes(t))).length;
       return matched / prodCats.length;
     }
+
+    let query = db
+      .from("jobs")
+      .select(JOB_LIST_COLUMNS_NO_DESCRIPTION)
+      .eq("status", "active")
+      .eq("moderation_status", "approved")
+      .gte("job_lat", profile.home_lat - latDelta)
+      .lte("job_lat", profile.home_lat + latDelta)
+      .gte("job_lng", profile.home_lng - lngDelta)
+      .lte("job_lng", profile.home_lng + lngDelta);
+
+    const marketFilter = industryPrefilter(selection);
+    if (marketFilter) query = query.or(marketFilter);
+    const {data: jobs,error} = await readJobPool(query, {
+      accept: j => prepareJob(j,profile) && titleLocSanityPass(j) && (!selection.length || matches(j,selection)),
+      maxAccepted: 400,
+    });
+    if (error) throw new Error(error.message);
 
     const scored = (jobs || [])
       .map(j => prepareJob(j,profile))

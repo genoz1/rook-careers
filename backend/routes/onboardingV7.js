@@ -96,7 +96,7 @@ router.get('/session', wrap(async (req,res) => {
   // Use the saved answers so purchasing never swaps in a different result set.
   const requested = req.query?.industries;
   const selection = requested === 'all' ? [] : String(requested || '').split(',');
-  const jobs = requested !== undefined
+  const jobs = req.query?.summary === '1' ? [] : requested !== undefined
     ? (requested !== 'all' && !normalizeSelection(selection).length ? [] : await rank(db,profile,selection))
     : repairSnapshot(s.jobs,s.profile);
   // Even a forged query param or a valid token for another paid user cannot unlock.

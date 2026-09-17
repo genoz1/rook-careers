@@ -11,8 +11,8 @@ async function rookV7Request(path, options={}) {
   const {data:{session}} = await rookV7Auth().auth.getSession();
   return fetch('/api/v7'+path, {...options, headers:{...options.headers,'X-ROOK-V7':sessionStorage.getItem('rook_v7_token') || '',...(session ? {Authorization:`Bearer ${session.access_token}`} : {})}});
 }
-async function rookV7Read() {
-  const res=await rookV7Request('/session');
+async function rookV7Read(query = '') {
+  const res=await rookV7Request('/session' + query);
   const data=await res.json();
   if(!res.ok) throw new Error(data.error || 'Unable to load your saved matches.');
   rookV7Snapshot=data; rookV7Unlocked=data.unlocked;
@@ -40,7 +40,7 @@ async function rookV7PrepareAccount() {
 }
 async function rookV7Init() {
   try {
-    await rookV7Read();
+    await rookV7Read('?summary=1');
     if(new URLSearchParams(location.search).get('trial') === 'started') {
       // Stripe activation can precede the webhook. Access stays masked until
       // the server confirms entitlement; never trust the return URL.

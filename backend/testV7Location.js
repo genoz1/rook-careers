@@ -72,10 +72,12 @@ function queryDb(rows) {const q={from(){return q;},select(){return q;},eq(){retu
   const routeRequire=createRequire(require.resolve('./routes/onboardingV7'));
   vm.runInNewContext(fs.readFileSync(require.resolve('./routes/onboardingV7'),'utf8'),{module:routeModule,require:n=>n==='@supabase/supabase-js'?{createClient:()=>db}:n==='../v7Matching'?{rank:async(db,p)=>{rankedLocation=p;return [{...control,id:'new-location-job'}];}}:routeRequire(n),process:{env:{SUPABASE_URL:'https://test.invalid',SUPABASE_SERVICE_ROLE_KEY:'fake'}},setInterval:()=>({unref(){}}),Buffer});
   const handler=routeModule.exports.stack.find(l=>l.route?.path==='/session'&&l.route.methods.get).route.stack[0].handle;
-  async function get(who) {let code=200,body;const res={status(n){code=n;return res;},json(v){body=v;return res;}};await handler({get:n=>n==='X-ROOK-V7'?'a'.repeat(64):`Bearer ${who}`},res);return {code,body};}
+  async function get(who,query={}) {let code=200,body;const res={status(n){code=n;return res;},json(v){body=v;return res;}};await handler({query,get:n=>n==='X-ROOK-V7'?'a'.repeat(64):`Bearer ${who}`},res);return {code,body};}
   let result=await get('owner');assert.equal(result.code,200);assert.equal(result.body.unlocked,false);assert.equal(result.body.jobs.length,1);assert(!JSON.stringify(result.body.jobs).includes('hidden.example'));
   paid=true;result=await get('owner');assert.equal(result.body.unlocked,true);assert.deepEqual(Array.from(result.body.jobs,j=>j.id),[control.id]);
   assert.equal((await get('other-account')).code,403);
+  assert.equal((await get('owner',{summary:'1'})).body.jobs.length,0);
+  assert.equal((await get('other-account',{summary:'1'})).code,403);
   const change=routeModule.exports.stack.find(l=>l.route?.path==='/location').route.stack[0].handle;
   async function move(who,body){let code=200;const res={status(n){code=n;return res;},json(){return res;}};await change({body,get:n=>n==='X-ROOK-V7'?'a'.repeat(64):`Bearer ${who}`},res);return code;}
   const newLocation={home_lat:42.36,home_lng:-71.06,home_city:'Boston',home_state:'MA',home_location_label:'Boston, MA',subscription_status:'active',desired_industries:['forged']};
