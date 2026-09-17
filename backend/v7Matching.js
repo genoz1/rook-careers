@@ -1,7 +1,7 @@
 // V7 uses the shared V6 scorer, with a V7-only location validity boundary
 // before ranking and the dashboard's 300-row display limit.
 const {scoreJob} = require('./matching');
-const {prepareJob} = require('./v7Location');
+const {prepareJob,allowsBroadLocations} = require('./v7Location');
 const {distanceMiles} = require('./geocoding');
 const {matches, normalizeSelection} = require('../public/rook-job-classification');
 const {readJobPool} = require('./jobPool');
@@ -91,8 +91,8 @@ async function rank(db, profile, industrySelection = profile.desired_industries)
       .from("jobs")
       .select(JOB_LIST_COLUMNS_NO_DESCRIPTION)
       .eq("status", "active")
-      .eq("moderation_status", "approved")
-      .or(`location_raw.ilike.%|%,and(job_lat.gte.${profile.home_lat-latDelta},job_lat.lte.${profile.home_lat+latDelta},job_lng.gte.${profile.home_lng-lngDelta},job_lng.lte.${profile.home_lng+lngDelta})`);
+      .eq("moderation_status", "approved");
+    if (!allowsBroadLocations(profile)) query = query.or(`location_raw.ilike.%|%,and(job_lat.gte.${profile.home_lat-latDelta},job_lat.lte.${profile.home_lat+latDelta},job_lng.gte.${profile.home_lng-lngDelta},job_lng.lte.${profile.home_lng+lngDelta})`);
 
     const marketFilter = industryPrefilter(selection);
     if (marketFilter) query = query.or(marketFilter);

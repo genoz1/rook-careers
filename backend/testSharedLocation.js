@@ -7,6 +7,20 @@ const base={title_original:'Veterinary Sales Representative',company_name:'Emplo
 (async()=>{
   assert.equal(prepareJob({...base,location_raw:'US Territory Field based',title_original:'Veterinary Sales Representative - Asheville',job_lat:null,job_lng:null},profile),null);
   assert.equal(prepareJob({...base,location_raw:'US NJ Remote | US NY Remote',state:'NJ',job_lat:40.1,job_lng:-74.5,remote_status:'remote'},profile),null);
+  const jacksonville={...profile,home_lat:30.33,home_lng:-81.66};
+  const georgia={...base,location_raw:'Brunswick, GA',state:'GA',job_lat:31.15,job_lng:-81.49};
+  assert(prepareJob(georgia,jacksonville));
+  assert.equal(prepareJob({...base,location_raw:'Miami, FL',job_lat:25.77,job_lng:-80.19},jacksonville),null);
+  const missing={...base,location_raw:'US Territory Field based',job_lat:null,job_lng:null};
+  for (const choice of ['national','remote']) {
+    const broad={...profile,territory_size_preferences:[choice]};
+    assert(prepareJob(missing,broad));
+    const nj=prepareJob({...base,location_raw:'US NJ Remote | US NY Remote',state:'NJ',job_lat:40.1,job_lng:-74.5,remote_status:'remote'},broad);
+    assert(nj);
+    const statewide=prepareJob({...base,location_raw:'Remote - Florida'},broad);assert(statewide);assert.equal(statewide.job_lat,null);
+    assert.equal(prepareJob({...missing,location_raw:'Warsaw, Poland'},broad),null);
+  }
+  assert.equal(prepareJob(missing,{...profile,territory_size_preferences:['regional']}),null);
   const local=prepareJob(base,profile);assert(local);assert.deepEqual(scoreJob(local,profile),scoreJob(base,profile));
   const raw="USA - Florida - Springhill | USA - Florida - Eustis | USA - Florida - Land O' Lakes | USA - Florida - The Villages";
   const point={lat:28.93,lng:-81.97,state:'Florida'};

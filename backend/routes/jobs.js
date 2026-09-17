@@ -26,7 +26,7 @@ const {industryPrefilter} = require("../industryPrefilter");
 const { createClient } = require("@supabase/supabase-js");
 const { scoreJob, hasFullAccess, stateAbbrFromName } = require("../matching");
 const { scrubCompanyNameFromText, redactForNonSubscriber, redactForAnonymous } = require("../redaction");
-const {prepareJob} = require('../v7Location');
+const {prepareJob,allowsBroadLocations} = require('../v7Location');
 const { isUsEligibleJob } = require("../jobEligibility");
 const { fetchActiveJobs } = require("../scoring/precompute");
 const { distanceMiles, geocodeZip } = require("../geocoding");
@@ -577,7 +577,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
   // they're never accidentally excluded. Uses 300-mile box (same radius
   // as the explore path) with a tighter SQL query rather than scoring
   // everything in-memory first.
-  if (profile.home_lat != null && profile.home_lng != null && !keyword) {
+  if (profile.home_lat != null && profile.home_lng != null && !keyword && !allowsBroadLocations(profile)) {
     const latDelta = 300 / 69;
     const lngDelta = 300 / (69 * Math.max(0.1, Math.cos((profile.home_lat * Math.PI) / 180)));
     liveQuery = liveQuery.or(
