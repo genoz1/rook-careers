@@ -430,10 +430,35 @@
     <div style="font-size:12.5px; color:#8B96AB; margin:-10px 0 16px;">Showing jobs within 300 miles of home, plus remote/territory roles with no single fixed location. Looking farther out, or considering a different city? Try <a href="rook-search.html" style="color:var(--royal, #1463FF); font-weight:600;">Job Search</a>.</div>
 
     <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:14px;">
-      <label style="display:flex; align-items:center; gap:7px; font-size:12.5px; color:#5B6B85; font-weight:600; cursor:pointer; margin:0;">
-        <input type="checkbox" id="showRecruiterToggle" checked onchange="applyRecruiterToggle()">
-        Show recruiter-posted jobs
-      </label>
+      <div style="display:flex; align-items:center; flex-wrap:wrap; gap:16px;">
+        <label style="display:flex; align-items:center; gap:7px; font-size:12.5px; color:#5B6B85; font-weight:600; cursor:pointer; margin:0;">
+          <input type="checkbox" id="showRecruiterToggle" checked onchange="applyRecruiterToggle()">
+          Show recruiter-posted jobs
+        </label>
+        <!-- Direct instruction: same category checkboxes as the Job Search
+             page, but filtering the dashboard's already-ranked list rather
+             than search results. All default to checked (nothing hidden)
+             so this never changes anyone's view until they touch it. -->
+        <div id="dashCategoryFilters" style="display:flex; align-items:center; flex-wrap:wrap; gap:12px; padding-left:12px; border-left:1px solid #E2E7F0;">
+          <span style="font-size:12.5px; color:#8B96AB; font-weight:600;">Categories:</span>
+          <label style="display:flex; align-items:center; gap:5px; font-size:12.5px; color:#5B6B85; font-weight:600; cursor:pointer; margin:0;">
+            <input type="checkbox" class="dash-filter-category" value="diagnostics" checked onchange="applyRecruiterToggle()">
+            Diagnostics
+          </label>
+          <label style="display:flex; align-items:center; gap:5px; font-size:12.5px; color:#5B6B85; font-weight:600; cursor:pointer; margin:0;">
+            <input type="checkbox" class="dash-filter-category" value="medical device" checked onchange="applyRecruiterToggle()">
+            Medical Device
+          </label>
+          <label style="display:flex; align-items:center; gap:5px; font-size:12.5px; color:#5B6B85; font-weight:600; cursor:pointer; margin:0;">
+            <input type="checkbox" class="dash-filter-category" value="pharmaceutical" checked onchange="applyRecruiterToggle()">
+            Pharmaceutical
+          </label>
+          <label style="display:flex; align-items:center; gap:5px; font-size:12.5px; color:#5B6B85; font-weight:600; cursor:pointer; margin:0;">
+            <input type="checkbox" class="dash-filter-category" value="veterinary" checked onchange="applyRecruiterToggle()">
+            Veterinary
+          </label>
+        </div>
+      </div>
       <label style="display:flex; align-items:center; gap:7px; font-size:12.5px; color:#5B6B85; font-weight:600; margin:0;">
         Sort by
         <select id="sortSelect" onchange="applyRecruiterToggle()" style="border:1px solid #E2E7F0; border-radius:8px; padding:5px 9px; font-size:12.5px; color:#3D4A63; font-weight:600; background:#fff;">
@@ -1172,6 +1197,42 @@
       visible = visible.filter((j) => j.saved);
     } else if (currentTierFilter === 'new') {
       visible = visible.filter(isNewJob);
+    }
+
+    // Direct instruction: category checkboxes, mirroring the Job Search
+    // page's INDUSTRY_GROUPS approach, but checked against the real
+    // ai_analysis data already used for scoring (product_categories /
+    // required_industries / preferred_industries) rather than the
+    // always-empty jobs.industry/jobs.category columns Search has to
+    // fall back to — this makes the dashboard's filter more accurate
+    // than Search's, not just consistent with it.
+    // All four boxes default to checked, so this is a no-op until the
+    // user actually unchecks one. A job with NO industry data at all
+    // (not yet AI-analyzed, or genuinely ambiguous) always stays
+    // visible — unchecking a box hides jobs CONFIRMED to be that
+    // category, it never hides jobs we simply don't have data for.
+    const checkedCategoryBoxes = Array.from(document.querySelectorAll('.dash-filter-category:checked')).map((el) => el.value);
+    const allCategoryBoxes = document.querySelectorAll('.dash-filter-category').length;
+    if (checkedCategoryBoxes.length < allCategoryBoxes) {
+      const CATEGORY_GROUPS = {
+        'diagnostics': ['diagnostics', 'reference laboratory', 'molecular', 'point-of-care', 'lab', 'pathology', 'clinical laboratory'],
+        'medical device': ['medical device', 'capital equipment', 'surgical', 'dme', 'consumables'],
+        'pharmaceutical': ['pharmaceutical', 'pharma', 'biotech', 'life sciences', 'specialty pharma'],
+        'veterinary': ['veterinary', 'animal health', 'vet'],
+      };
+      const uncheckedCategories = Array.from(document.querySelectorAll('.dash-filter-category:not(:checked)')).map((el) => el.value);
+      visible = visible.filter((j) => {
+        const aiProd = (j.ai_analysis?.product_categories || []).map((s) => String(s).toLowerCase());
+        const aiReq = (j.ai_analysis?.required_industries || []).map((s) => String(s).toLowerCase());
+        const aiPref = (j.ai_analysis?.preferred_industries || []).map((s) => String(s).toLowerCase());
+        const allTerms = [...aiProd, ...aiReq, ...aiPref];
+        if (allTerms.length === 0) return true; // no data — never hidden by this filter
+        const matchesUnchecked = uncheckedCategories.some((cat) => {
+          const group = CATEGORY_GROUPS[cat] || [cat];
+          return group.some((term) => allTerms.some((s) => s.includes(term)));
+        });
+        return !matchesUnchecked;
+      });
     }
 
     // "Best Match" is the default order the API already returns (sorted

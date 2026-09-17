@@ -8,6 +8,7 @@
     "ingest": "node backend/ingest.js",
     "ingest-adzuna": "node backend/ingestAdzuna.js",
     "discover-employers": "node backend/discoverEmployers.js",
+    "backfill-ai-analysis": "node backend/scripts/backfillMissingAiAnalysis.js",
     "send-digest": "node backend/sendDigest.js",
     "precompute-scores": "node backend/precomputeScores.js",
     "archive-old-jobs": "node backend/archiveOldJobs.js",
