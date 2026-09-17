@@ -147,6 +147,18 @@ const TARGET_EMPLOYERS = [
   ["STERIS", "medical device"], ["Natus Medical", "medical device"], ["LivaNova", "medical device"],
   ["ICU Medical", "medical device"], ["Inogen", "medical device"], ["iRhythm", "medical device"],
   ["Axonics", "medical device"],
+  // Medical device / MedTech — new additions, verified via real, current job
+  // postings directly on Greenhouse/Lever/Ashby (not guessed slugs)
+  ["Lexington Medical", "medical device"], ["Noctrix Health", "medical device"],
+  ["Jupiter Endovascular", "medical device"], ["Noah Medical", "medical device"],
+  ["Calyxo", "medical device"], ["CVRx", "medical device"],
+  // Healthcare SaaS — new additions, verified
+  ["AcuityMD", "healthcare saas"], ["SamaCare", "healthcare saas"],
+  // Home health / DME — new addition, verified
+  ["Dr. Comfort", "home health/dme"],
+  // Specialty pharma — new category; verified via a real, current multi-city
+  // Territory Manager hiring campaign on Greenhouse
+  ["Mineralys Therapeutics", "pharma"],
   // Diagnostics / lab / precision medicine
   ["Cepheid", "diagnostics"], ["Sysmex America", "diagnostics"], ["bioMerieux", "diagnostics"],
   ["Werfen", "diagnostics"], ["QuidelOrtho", "diagnostics"], ["Illumina", "diagnostics"],
@@ -213,6 +225,9 @@ const TARGET_EMPLOYERS = [
   ["Midmark", "animal health"], ["Putney", "animal health"], ["Assisi Animal Health", "animal health"],
   ["PetVivo Holdings", "animal health"], ["Piedmont Animal Health", "animal health"],
   ["Anivive Lifesciences", "animal health"],
+  // Animal health — verified via real, current job postings on Greenhouse/Lever
+  ["Pegasus Laboratories", "animal health"], ["Mixlab", "animal health"],
+  ["Koala Health", "animal health"],
   // Home health / respiratory / DME
   ["Rotech Healthcare", "home health/dme"], ["Apria", "home health/dme"], ["VieMed", "home health/dme"],
   ["Quipt Home Medical", "home health/dme"], ["Drive DeVilbiss Healthcare", "home health/dme"], ["Fisher & Paykel Healthcare", "home health/dme"],
