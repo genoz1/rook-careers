@@ -18,24 +18,48 @@ function locationScope(job) {
   return {stateOnly, imprecise:!!(stateOnly || generic || remoteHamlet)};
 }
 
+function allowsBroadLocations(profile) {
+  const choices = Array.isArray(profile.territory_size_preferences) ? profile.territory_size_preferences : [profile.territory_size_preference];
+  return choices.some(choice => ['national','remote'].includes(String(choice || '').toLowerCase()));
+}
+
 function prepareJob(job, profile) {
   if (!job || hasUnambiguousForeignCountryEvidence(job.location_raw)) return null;
   // Employer posting verified 2026-09-16: Tandem's bare Leiden is an on-site
   // Dutch role, despite legacy Nevada coordinates. Explicit US qualifiers
   // remain distinct; do not build a guessed world-city blacklist.
   if (/^(leiden|barcelona)$/i.test(String(job.location_raw || '').trim())) return null;
-  if (locationScope(job).imprecise || !isUsEligibleJob(job)) return null;
+  const points = job.location_evidence?.status === 'validated' && job.location_evidence.source_location === job.location_raw
+    ? (job.location_evidence.locations || []).filter(p => typeof p.lat === 'number' && typeof p.lng === 'number' && Number.isFinite(p.lat) && Number.isFinite(p.lng) && resolveUsStateCode(p.state)) : [];
+  if (points.length && Number.isFinite(profile.home_lat) && Number.isFinite(profile.home_lng)) {
+    const nearest = points.reduce((a,b) => distanceMiles(profile.home_lat,profile.home_lng,a.lat,a.lng) <= distanceMiles(profile.home_lat,profile.home_lng,b.lat,b.lng) ? a : b);
+    job = {...job, job_lat:nearest.lat, job_lng:nearest.lng, state:nearest.state};
+  }
+  if (!isUsEligibleJob(job)) return null;
+  const broad = allowsBroadLocations(profile);
+  // Work arrangement/state-level geocodes are not city distances.
+  if (locationScope(job).imprecise) {
+    if (!broad) return null;
+    job = {...job,job_lat:null,job_lng:null};
+  }
+  const hasPoint = [job.job_lat,job.job_lng].every(v => typeof v === 'number' && Number.isFinite(v));
+  if (!hasPoint) return broad ? {...job,job_lat:null,job_lng:null} : null;
   if (![job.job_lat,job.job_lng,profile.home_lat,profile.home_lng].every(v => typeof v === 'number' && Number.isFinite(v))) return null;
   // Bounding-box corners can exceed the radius. Reject before scoreJob;
-  // no work-style or territory preference can bypass the 300-mile boundary.
-  if (distanceMiles(profile.home_lat,profile.home_lng,job.job_lat,job.job_lng) > 300) return null;
+  // Broad territory choices explicitly allow locations beyond this radius.
+  if (!broad && distanceMiles(profile.home_lat,profile.home_lng,job.job_lat,job.job_lng) > 300) return null;
   return job;
 }
 
 function repairSnapshot(jobs, profile) {
   // Keep the original order, identities and scores of every valid result.
   const selected = normalizeSelection(profile.desired_industries);
-  return (jobs || []).filter(job => prepareJob(job,profile) && (!selected.length || matches(job, selected)));
+  return (jobs || []).map(job => {
+    const prepared = prepareJob(job,profile);
+    if (!prepared || (selected.length && !matches(prepared,selected))) return null;
+    if (prepared.job_lat === job.job_lat && prepared.job_lng === job.job_lng) return job;
+    return {...prepared, match:require('./matching').scoreJob(prepared,profile), distance_miles:prepared.job_lat == null ? null : Math.round(distanceMiles(profile.home_lat,profile.home_lng,prepared.job_lat,prepared.job_lng))};
+  }).filter(Boolean);
 }
 
-module.exports = {prepareJob,repairSnapshot,locationScope};
+module.exports = {prepareJob,repairSnapshot,locationScope,allowsBroadLocations};

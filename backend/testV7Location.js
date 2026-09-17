@@ -39,8 +39,8 @@ function queryDb(rows) {const q={from(){return q;},select(){return q;},eq(){retu
   const broad = {...profile,territory_size_preferences:['national']};
   const usRemote = {...records[1],location_raw:'Remote, US'};
   assert.equal(prepareJob(usRemote,profile),null);
-  assert.equal(prepareJob(usRemote,broad),null);
-  assert.equal(prepareJob({...control,job_lat:40.71,job_lng:-74,remote_status:'remote'},broad),null);
+  assert.equal(prepareJob(usRemote,broad).job_lat,null);
+  assert(prepareJob({...control,job_lat:40.71,job_lng:-74,remote_status:'remote'},broad));
   const stateWide = {...records[0],location_raw:'Remote - Nevada',state:'Nevada'};
   assert.equal(prepareJob(stateWide,profile),null);
   for(const location_raw of ['US CA Home Office','CA, United States','Remote - CA','California','United States Remote Office | California, USA']) assert.equal(prepareJob({...records[0],location_raw},profile),null);

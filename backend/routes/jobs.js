@@ -26,6 +26,7 @@ const {industryPrefilter} = require("../industryPrefilter");
 const { createClient } = require("@supabase/supabase-js");
 const { scoreJob, hasFullAccess, stateAbbrFromName } = require("../matching");
 const { scrubCompanyNameFromText, redactForNonSubscriber, redactForAnonymous } = require("../redaction");
+const {prepareJob,allowsBroadLocations} = require('../v7Location');
 const { isUsEligibleJob } = require("../jobEligibility");
 const { fetchActiveJobs } = require("../scoring/precompute");
 const { distanceMiles, geocodeZip } = require("../geocoding");
@@ -576,11 +577,11 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
   // they're never accidentally excluded. Uses 300-mile box (same radius
   // as the explore path) with a tighter SQL query rather than scoring
   // everything in-memory first.
-  if (profile.home_lat != null && profile.home_lng != null && !keyword) {
+  if (profile.home_lat != null && profile.home_lng != null && !keyword && !allowsBroadLocations(profile)) {
     const latDelta = 300 / 69;
     const lngDelta = 300 / (69 * Math.max(0.1, Math.cos((profile.home_lat * Math.PI) / 180)));
     liveQuery = liveQuery.or(
-      `job_lat.is.null,remote_status.eq.remote,and(job_lat.gte.${profile.home_lat - latDelta},job_lat.lte.${profile.home_lat + latDelta},job_lng.gte.${profile.home_lng - lngDelta},job_lng.lte.${profile.home_lng + lngDelta})`
+      `location_raw.ilike.%|%,and(job_lat.gte.${profile.home_lat - latDelta},job_lat.lte.${profile.home_lat + latDelta},job_lng.gte.${profile.home_lng - lngDelta},job_lng.lte.${profile.home_lng + lngDelta})`
     );
   }
 
@@ -644,8 +645,9 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
 
   let rows = (allMatchingJobs || [])
     .filter((job) => !dismissedJobIds.has(job.id))
+    .map(job => prepareJob(job, profile))
+    .filter(Boolean)
     .filter(industryPass)
-    .filter(isUsEligibleJob)
     .filter((job) => titleLocSanityPass(job))
     .map((job) => ({ jobs: job, job_id: job.id, overall_score: null, saved: savedJobIds.has(job.id), _liveMatch: scoreJob(job, profile) }))
     .sort((a, b) => {
