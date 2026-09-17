@@ -24,6 +24,12 @@ function prepareJob(job, profile) {
   // Dutch role, despite legacy Nevada coordinates. Explicit US qualifiers
   // remain distinct; do not build a guessed world-city blacklist.
   if (/^(leiden|barcelona)$/i.test(String(job.location_raw || '').trim())) return null;
+  const points = job.location_evidence?.status === 'validated' && job.location_evidence.source_location === job.location_raw
+    ? (job.location_evidence.locations || []).filter(p => typeof p.lat === 'number' && typeof p.lng === 'number' && Number.isFinite(p.lat) && Number.isFinite(p.lng) && resolveUsStateCode(p.state)) : [];
+  if (points.length && Number.isFinite(profile.home_lat) && Number.isFinite(profile.home_lng)) {
+    const nearest = points.reduce((a,b) => distanceMiles(profile.home_lat,profile.home_lng,a.lat,a.lng) <= distanceMiles(profile.home_lat,profile.home_lng,b.lat,b.lng) ? a : b);
+    job = {...job, job_lat:nearest.lat, job_lng:nearest.lng, state:nearest.state};
+  }
   if (locationScope(job).imprecise || !isUsEligibleJob(job)) return null;
   if (![job.job_lat,job.job_lng,profile.home_lat,profile.home_lng].every(v => typeof v === 'number' && Number.isFinite(v))) return null;
   // Bounding-box corners can exceed the radius. Reject before scoreJob;
@@ -35,7 +41,12 @@ function prepareJob(job, profile) {
 function repairSnapshot(jobs, profile) {
   // Keep the original order, identities and scores of every valid result.
   const selected = normalizeSelection(profile.desired_industries);
-  return (jobs || []).filter(job => prepareJob(job,profile) && (!selected.length || matches(job, selected)));
+  return (jobs || []).map(job => {
+    const prepared = prepareJob(job,profile);
+    if (!prepared || (selected.length && !matches(prepared,selected))) return null;
+    if (prepared.job_lat === job.job_lat && prepared.job_lng === job.job_lng) return job;
+    return {...prepared, match:require('./matching').scoreJob(prepared,profile), distance_miles:Math.round(distanceMiles(profile.home_lat,profile.home_lng,prepared.job_lat,prepared.job_lng))};
+  }).filter(Boolean);
 }
 
 module.exports = {prepareJob,repairSnapshot,locationScope};

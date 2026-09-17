@@ -92,10 +92,7 @@ async function rank(db, profile, industrySelection = profile.desired_industries)
       .select(JOB_LIST_COLUMNS_NO_DESCRIPTION)
       .eq("status", "active")
       .eq("moderation_status", "approved")
-      .gte("job_lat", profile.home_lat - latDelta)
-      .lte("job_lat", profile.home_lat + latDelta)
-      .gte("job_lng", profile.home_lng - lngDelta)
-      .lte("job_lng", profile.home_lng + lngDelta);
+      .or(`location_raw.ilike.%|%,and(job_lat.gte.${profile.home_lat-latDelta},job_lat.lte.${profile.home_lat+latDelta},job_lng.gte.${profile.home_lng-lngDelta},job_lng.lte.${profile.home_lng+lngDelta})`);
 
     const marketFilter = industryPrefilter(selection);
     if (marketFilter) query = query.or(marketFilter);
