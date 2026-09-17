@@ -201,6 +201,18 @@ const TARGET_EMPLOYERS = [
   ["PetIQ", "animal health"], ["Trupanion", "animal health"], ["Nutramax Laboratories", "animal health"],
   ["Vetsource", "animal health"], ["ezyVet", "animal health"], ["Instinct Science", "animal health"],
   ["PetDx", "animal health"], ["Embark Veterinary", "animal health"],
+  // Animal health / veterinary — new additions (manufacturers, diagnostics,
+  // pharma, and distribution, matching the pattern above; deliberately
+  // excludes hospital-operator groups like VCA and pet e-commerce/retail
+  // like Chewy per direct instruction — those aren't the field-sales-rep
+  // employer type this list targets)
+  ["Hill's Pet Nutrition", "animal health"], ["Nestle Purina PetCare", "animal health"],
+  ["Blue Buffalo", "animal health"], ["Henry Schein Animal Health", "animal health"],
+  ["Merck Animal Health", "animal health"], ["Mars Petcare", "animal health"],
+  ["Heska", "animal health"], ["Zomedica", "animal health"], ["Kindred Biosciences", "animal health"],
+  ["Midmark", "animal health"], ["Putney", "animal health"], ["Assisi Animal Health", "animal health"],
+  ["PetVivo Holdings", "animal health"], ["Piedmont Animal Health", "animal health"],
+  ["Anivive Lifesciences", "animal health"],
   // Home health / respiratory / DME
   ["Rotech Healthcare", "home health/dme"], ["Apria", "home health/dme"], ["VieMed", "home health/dme"],
   ["Quipt Home Medical", "home health/dme"], ["Drive DeVilbiss Healthcare", "home health/dme"], ["Fisher & Paykel Healthcare", "home health/dme"],
