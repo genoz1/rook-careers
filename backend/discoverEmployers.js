@@ -209,7 +209,7 @@ const TARGET_EMPLOYERS = [
   ["Hill's Pet Nutrition", "animal health"], ["Nestle Purina PetCare", "animal health"],
   ["Blue Buffalo", "animal health"], ["Henry Schein Animal Health", "animal health"],
   ["Merck Animal Health", "animal health"], ["Mars Petcare", "animal health"],
-  ["Heska", "animal health"], ["Zomedica", "animal health"], ["Kindred Biosciences", "animal health"],
+  ["Heska", "animal health"], ["Zomedica", "animal health"],
   ["Midmark", "animal health"], ["Putney", "animal health"], ["Assisi Animal Health", "animal health"],
   ["PetVivo Holdings", "animal health"], ["Piedmont Animal Health", "animal health"],
   ["Anivive Lifesciences", "animal health"],
