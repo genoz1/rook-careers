@@ -115,7 +115,13 @@ router.post('/claim', wrap(async (req,res) => {
   if (s.user_id !== u.id) return res.status(403).json({error:'These matches belong to another account.'});
   if (!s.transferred_at) {
     const name = [u.user_metadata?.first_name,u.user_metadata?.last_name].filter(Boolean).join(' ');
-    const {error} = await db.from('candidate_profiles').upsert({...s.profile,user_id:u.id,...(name ? {name}:{}),updated_at:new Date().toISOString()},{onConflict:'user_id'});
+    const existing = await db.from('candidate_profiles').select('utm_source').eq('user_id',u.id).maybeSingle();
+    if (existing.error) throw existing.error;
+    const profile = {...s.profile};
+    if (existing.data?.utm_source) {
+      for (const key of ['utm_source','utm_medium','utm_campaign','utm_term','utm_content']) delete profile[key];
+    }
+    const {error} = await db.from('candidate_profiles').upsert({...profile,user_id:u.id,...(name ? {name}:{}),updated_at:new Date().toISOString()},{onConflict:'user_id'});
     if (error) throw error;
     const done = await db.from(table).update({transferred_at:new Date().toISOString()}).eq('token_hash',s.token_hash).eq('user_id',u.id);
     if (done.error) throw done.error;

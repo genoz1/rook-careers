@@ -34,6 +34,12 @@
         any = true;
       }
     });
+    // Google auto-tagging identifies paid traffic even without manual UTMs.
+    if (params.get('gclid') || params.get('gbraid') || params.get('wbraid')) {
+      found.utm_source = found.utm_source || 'google';
+      found.utm_medium = found.utm_medium || 'cpc';
+      any = true;
+    }
     if (!any) return;
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(found));

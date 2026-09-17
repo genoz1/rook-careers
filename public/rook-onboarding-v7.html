@@ -306,7 +306,8 @@ async function loadAnonymousMatches(territories) {
       location: selectedLocation,
       industry: document.querySelector('input[name="industry"]:checked')?.value,
       years: Number(document.querySelector('input[name="years"]:checked')?.value),
-      territories
+      territories,
+      attribution: typeof rookGetStoredAttribution === 'function' ? rookGetStoredAttribution() : {}
     };
     const res = await fetch('/api/v7/session', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(answers) });
     const data = await res.json();

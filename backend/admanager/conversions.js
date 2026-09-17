@@ -20,7 +20,7 @@ const VALID_EVENTS = [
   "onboarding_started",
   "onboarding_completed",
   "trial_started",
-  "paid_subscription_started",
+  // Payments are recorded only by the signed Stripe webhook.
 ];
 
 function hashString(str) {

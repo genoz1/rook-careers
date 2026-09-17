@@ -268,21 +268,20 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
       const userId = data.user.id;
       const { firstName, lastName } = pending;
 
-      // Conversion: free account created — a real signup, but a
-      // SECONDARY conversion. The primary Google Ads/Meta conversion
-      // (trial_activated) only fires later, from rook-checkout.html's
-      // webhook-confirmed success — never here. No PII in the params.
-      if (typeof gtag !== 'undefined') {
-        gtag('event', 'sign_up', { event_category: 'conversion', event_label: 'free_account_v7', value: 0 });
-        gtag('event', 'account_created', { event_category: 'conversion', method: 'email' });
-      }
-
       const claim = await fetch('/api/v7/claim', {
         method:'POST', headers:{Authorization:`Bearer ${data.session.access_token}`, 'X-ROOK-V7':sessionStorage.getItem('rook_v7_token') || ''}
       });
       if (!claim.ok) throw new Error('Your email is verified. Return to your V7 dashboard to retry transferring your matches.');
       sessionStorage.removeItem('rook_v7_pending_email');
-      if (typeof gtag === 'function') gtag('event','v7_account_created');
+      // Emit only after the verified account and profile transfer succeed.
+      try {
+      const eventKey = 'rook_signup_tracked_' + userId;
+      if (typeof gtag === 'function' && !localStorage.getItem(eventKey)) {
+        gtag('event', 'sign_up', { method: 'email' });
+        gtag('event', 'v7_account_created');
+        localStorage.setItem(eventKey, '1');
+      }
+      } catch (_) { /* Analytics/storage must never block a verified signup. */ }
       window.location.href = 'rook-checkout-v7.html';
     } catch (err) {
       codeErr.textContent = err.message;

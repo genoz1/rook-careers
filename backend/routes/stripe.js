@@ -9,7 +9,7 @@
 //      secret in STRIPE_WEBHOOK_SECRET. Make sure the endpoint is
 //      subscribed to at least: checkout.session.completed,
 //      customer.subscription.updated, customer.subscription.deleted,
-//      and invoice.payment_failed.
+//      invoice.payment_failed, and invoice.payment_succeeded (or invoice.paid).
 //
 // Free trial (2026-09): TRIAL_PERIOD_DAYS controls the trial length
 // in days. Set it to 0 or remove it entirely to go back to charging
@@ -325,7 +325,7 @@ router.post("/stripe/create-subscription-from-setup", requireConfig, requireAuth
     // run, since we need trial_started_at regardless of that.
     const { data: profile } = await supabaseAdmin
       .from("candidate_profiles")
-      .select("stripe_customer_id, trial_started_at")
+      .select("stripe_customer_id, trial_started_at, utm_source, utm_medium, utm_campaign, utm_term, utm_content")
       .eq("user_id", req.user.id)
       .maybeSingle();
 
@@ -360,7 +360,7 @@ router.post("/stripe/create-subscription-from-setup", requireConfig, requireAuth
       customer: customerId,
       items: [{ price: process.env.STRIPE_PRICE_ID_MONTHLY }],
       default_payment_method: payment_method_id,
-      metadata: { user_id: req.user.id },
+      metadata: { user_id: req.user.id, ...pickUtmFields(profile || {}) },
     };
     if (trialDays > 0) {
       subParams.trial_period_days = trialDays;
@@ -774,26 +774,38 @@ async function handleStripeWebhookEvent(event, { stripe, supabaseAdmin }) {
         setOnceFields: sub.status === "active"
           ? [{ gate: "subscription_started_at", fields: { subscription_started_at: new Date().toISOString() } }]
           : [],
-        onceCallback: sub.status === "active" ? async (profile) => {
-          // Log first payment as a server-side conversion event for attribution
-          try {
-            await supabaseAdmin.from("ad_conversion_events").insert({
-              event_key: `first_payment_${profile.user_id}_${sub.id}`,
-              event_type: "paid_subscription_started",
-              user_id: profile.user_id,
-              utm_source: profile.utm_source || null,
-              utm_medium: profile.utm_medium || null,
-              utm_campaign: profile.utm_campaign || null,
-              platform_inferred: profile.utm_source || "organic",
-            });
-          } catch (_) { /* dedup constraint handles re-delivery */ }
-        } : null,
         // Only invoked on an exact-timestamp tie with another event —
         // re-fetches this exact subscription live rather than trusting
         // this event's own (possibly out-of-date-by-the-time-it's-
         // processed) embedded object.
         reconcile: async () => mapLiveSubscriptionToFields(await stripe.subscriptions.retrieve(sub.id)),
       });
+    }
+
+    // A positive paid invoice is evidence of payment; active status alone is not.
+    // The user-level unique key makes retries and later renewals harmless.
+    case "invoice.paid":
+    case "invoice.payment_succeeded": {
+      const invoice = event.data.object;
+      const subscriptionId = invoice.subscription || invoice.parent?.subscription_details?.subscription;
+      if (!subscriptionId || invoice.status !== "paid" || !(invoice.amount_paid > 0)) {
+        return { applied: false, reason: "not_a_positive_paid_subscription_invoice" };
+      }
+      const {data: profile, error: profileError} = await supabaseAdmin.from("candidate_profiles")
+        .select("user_id, utm_source, utm_medium, utm_campaign, utm_term, utm_content")
+        .eq("stripe_customer_id", invoice.customer).maybeSingle();
+      if (profileError) throw profileError;
+      if (!profile) throw new Error("Paid invoice has no matching candidate profile yet");
+      const {error} = await supabaseAdmin.from("ad_conversion_events").insert({
+        event_key: `first_paid_${profile.user_id}`,
+        event_type: "paid_subscription_started",
+        user_id: profile.user_id,
+        ...pickUtmFields(profile),
+        platform_inferred: profile.utm_source || "unknown",
+        occurred_at: new Date((invoice.status_transitions?.paid_at || event.created) * 1000).toISOString(),
+      });
+      if (error && error.code !== "23505") throw error;
+      return {applied: !error, reason: error ? "duplicate_paid_conversion" : undefined};
     }
 
     case "invoice.payment_failed": {
@@ -864,9 +876,8 @@ router.post("/stripe/webhook", requireConfig, async (req, res) => {
     }
   } catch (err) {
     console.error(`Webhook ${event.type} (${event.id}) handling failed: ${err.message}`);
-    // Still acknowledge receipt with 200 below rather than 500 — a
-    // handler bug shouldn't make Stripe retry-storm an event forever.
-    // The failure is logged for follow-up instead.
+    // Retry failed durable writes rather than silently lose a conversion.
+    return res.status(500).json({ received: false });
   }
 
   res.json({ received: true });
