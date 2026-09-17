@@ -16,7 +16,7 @@ const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
 const { analyzeJob } = require("../ai/jobAnalysis");
 const { generateEmbedding } = require("../ai/embeddings");
-const { geocodeLocation } = require("../geocoding");
+const { validateJobLocation } = require("../validateJobLocation");
 
 const router = express.Router();
 
@@ -148,6 +148,7 @@ router.post("/recruiter-postings", requireConfig, requireAuth, loadRecruiterId, 
     last_seen_at: new Date().toISOString(),
   };
 
+  Object.assign(jobRow, await validateJobLocation(jobRow));
   const { data: inserted, error } = await supabaseAdmin.from("jobs").insert(jobRow).select().single();
   if (error) return res.status(500).json({ error: error.message });
 
@@ -165,17 +166,7 @@ router.post("/recruiter-postings", requireConfig, requireAuth, loadRecruiterId, 
   } catch (err) {
     console.error(`Recruiter posting embedding failed: ${err.message}`);
   }
-  if (location_raw) {
-    try {
-      const coords = await geocodeLocation(location_raw);
-      // Same fix as backend/ingest.js — coords.state was previously
-      // dropped here too, an identical instance of the same defect
-      // in the recruiter-posting creation path.
-      if (coords) await supabaseAdmin.from("jobs").update({ job_lat: coords.lat, job_lng: coords.lng, state: coords.state }).eq("id", inserted.id);
-    } catch (err) {
-      console.error(`Recruiter posting geocoding failed: ${err.message}`);
-    }
-  }
+
 
   res.json({ ok: true, id: inserted.id, message: "Submitted for review. You'll see it live on your dashboard once approved." });
 });
@@ -227,6 +218,9 @@ router.put("/recruiter-postings/:id", requireConfig, requireAuth, loadRecruiterI
     moderation_status: "pending",
   };
 
+  updateRow.ai_analysis = null;
+  updateRow.job_embedding = null;
+  Object.assign(updateRow, await validateJobLocation(updateRow));
   const { error: updateError } = await supabaseAdmin.from("jobs").update(updateRow).eq("id", req.params.id);
   if (updateError) return res.status(500).json({ error: updateError.message });
 
@@ -245,17 +239,7 @@ router.put("/recruiter-postings/:id", requireConfig, requireAuth, loadRecruiterI
   } catch (err) {
     console.error(`Recruiter posting edit embedding failed: ${err.message}`);
   }
-  if (location_raw) {
-    try {
-      const coords = await geocodeLocation(location_raw);
-      // Same fix as backend/ingest.js — coords.state was previously
-      // dropped here too, an identical instance of the same defect
-      // in the recruiter-posting edit path.
-      if (coords) await supabaseAdmin.from("jobs").update({ job_lat: coords.lat, job_lng: coords.lng, state: coords.state }).eq("id", req.params.id);
-    } catch (err) {
-      console.error(`Recruiter posting edit geocoding failed: ${err.message}`);
-    }
-  }
+
 
   res.json({ ok: true, message: "Updated and resubmitted for review." });
 });

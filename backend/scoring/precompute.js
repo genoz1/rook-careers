@@ -112,7 +112,7 @@ async function _doFetchActiveJobs(supabase) {
   // seek straight to the right rows instead of scanning past others to
   // find them — see ROOK-Setup-Guide.pdf / ask Claude for the exact SQL.
   const PAGE_SIZE = 150;
-  const JOB_COLUMNS = "id, title_original, description_text, location_raw, job_lat, job_lng, industry, compensation_text, salary_min, salary_max, ai_analysis, job_embedding, remote_status, travel_percentage, date_posted, last_seen_at";
+  const JOB_COLUMNS = "id, title_original, description_text, location_raw, location_evidence, state, job_lat, job_lng, industry, compensation_text, salary_min, salary_max, ai_analysis, job_embedding, remote_status, travel_percentage, date_posted, last_seen_at";
   let activeJobs = [];
   for (let from = 0; ; from += PAGE_SIZE) {
     const { data: page, error } = await supabase

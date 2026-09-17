@@ -41,7 +41,8 @@
 // or bare-generic-term risk, and is out of scope for this project.
 
 const { hasUnambiguousForeignCountryEvidence, isBareGenericRemoteTerm, isBareAmbiguousForeignCityName } = require("./locationTextRules");
-const { resolveUsStateCode } = require("./jobEligibility");
+const { resolveUsStateCode, hasQualifiedUsLocation, US_COUNTRY_CODES } = require("./jobEligibility");
+const { normalizeCountryCode } = require('./locationTextRules');
 
 const USER_AGENT = "ROOK-Careers/1.0 (rookcareers.com; job-matching platform)";
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -132,11 +133,14 @@ async function geocodeZip(zip) {
  * entirely, same as a zero-result response. A "place"/"boundary"
  * category alone is necessary but not sufficient; direct instruction.
  */
-async function geocodeLocation(locationText) {
+async function geocodeLocation(locationText, options = {}) {
   if (!locationText || !locationText.trim()) return null;
   if (isBareGenericRemoteTerm(locationText)) return null;
   if (hasUnambiguousForeignCountryEvidence(locationText)) return null;
   if (isBareAmbiguousForeignCityName(locationText)) return null;
+  const sourceCountry = normalizeCountryCode(options.sourceCountryCode);
+  if (sourceCountry && !US_COUNTRY_CODES.has(sourceCountry)) return null;
+  if (!US_COUNTRY_CODES.has(sourceCountry) && !hasQualifiedUsLocation(locationText)) return null;
 
   await throttle();
   try {

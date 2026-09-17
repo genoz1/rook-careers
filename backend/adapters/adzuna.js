@@ -47,6 +47,8 @@ function normalizeAdzunaJob(raw) {
     title_original: raw.title || "",
     company_name: raw.company?.display_name || null,
     location_raw: raw.location?.display_name || null,
+    // This adapter fetches only the authoritative /jobs/us endpoint.
+    location_evidence: {version: 1, source_country_code: 'US', source_location: raw.location?.display_name || null},
     description_text: raw.description || null,
     salary_min: raw.salary_min ? Math.round(raw.salary_min) : null,
     salary_max: raw.salary_max ? Math.round(raw.salary_max) : null,

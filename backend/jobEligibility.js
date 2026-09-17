@@ -26,7 +26,8 @@
 // eligibility can never accidentally change matching/scoring behavior,
 // and so this module's correctness never depends on matching.js's.
 
-const { hasUnambiguousForeignCountryEvidence, hasExplicitUsLanguageEvidence } = require("./locationTextRules");
+const { hasUnambiguousForeignCountryEvidence, hasExplicitUsLanguageEvidence, normalizeCountryCode } = require("./locationTextRules");
+const US_COUNTRY_CODES = new Set(['US', 'PR', 'GU', 'VI', 'AS', 'MP']);
 
 // Temporary data quarantine for three confirmed bad-location records
 // that cannot yet be rejected reliably from location text alone:
@@ -116,6 +117,16 @@ function resolveUsStateCode(stateValue) {
  *      ELIGIBLE via the fallback.
  *   4. Otherwise, EXCLUDED as unresolved.
  */
+function hasQualifiedUsLocation(text) {
+  const raw = String(text || '').trim();
+  if (!raw || hasUnambiguousForeignCountryEvidence(raw)) return false;
+  if (hasExplicitUsLanguageEvidence(raw)) return true;
+  // A U.S. state must occur in the source location, not merely in a
+  // geocoder-written state column. Bare city names remain unresolved.
+  if (Object.keys(US_STATE_NAME_TO_CODE).some(name => new RegExp(`\\b${name.replace(/\./g, '\\.') }\\b`, 'i').test(raw))) return true;
+  return raw.split(/[,|\s–—-]+/).some(part => /^[A-Z]{2}$/.test(part) && US_ELIGIBLE_STATE_CODES.has(part));
+}
+
 function isUsEligibleJob(job) {
   if (!job) return false;
 
@@ -138,14 +149,21 @@ function isUsEligibleJob(job) {
     return false;
   }
 
-  const hasCoordinates = job.job_lat != null && job.job_lng != null;
+  const evidence = job.location_evidence;
+  const sourceCountry = normalizeCountryCode(evidence?.source_country_code);
+  if (sourceCountry && !US_COUNTRY_CODES.has(sourceCountry)) return false;
+  if (evidence && ['foreign', 'invalid'].includes(evidence.status)) return false;
+  if (evidence?.status === 'unresolved' && (job.job_lat != null || job.job_lng != null)) return false;
+  if (!US_COUNTRY_CODES.has(sourceCountry) && !hasQualifiedUsLocation(job.location_raw)) return false;
+
+  const hasCoordinates = [job.job_lat, job.job_lng].every(v => typeof v === 'number' && Number.isFinite(v)) && Math.abs(job.job_lat) <= 90 && Math.abs(job.job_lng) <= 180;
   const resolvedState = resolveUsStateCode(job.state);
 
   if (hasCoordinates && resolvedState) {
     return true;
   }
 
-  if (hasExplicitUsLanguageEvidence(job.location_raw)) {
+  if (US_COUNTRY_CODES.has(sourceCountry) || hasExplicitUsLanguageEvidence(job.location_raw)) {
     return true;
   }
 
@@ -156,4 +174,6 @@ module.exports = {
   isUsEligibleJob,
   resolveUsStateCode,
   US_ELIGIBLE_STATE_CODES,
+  US_COUNTRY_CODES,
+  hasQualifiedUsLocation,
 };

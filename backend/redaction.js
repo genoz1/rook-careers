@@ -75,7 +75,7 @@ function scrubCompanyNameFromText(text, companyName) {
 
 function redactForNonSubscriber(job) {
   const {
-    company_name, source_url, application_url,
+    company_name, source_url, application_url, location_evidence,
     recruiter_name, recruiter_email, recruiter_company, recruiter_contact_method, // same gate applies to recruiter postings
     description_text, description_preview,
     title_original, title_normalized,

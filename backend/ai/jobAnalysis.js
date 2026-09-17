@@ -19,6 +19,7 @@ Return ONLY a JSON object with this exact shape, no other text:
   "seniority_level": string|null,
   "sales_motion": [string],
   "product_categories": [string],
+  "market_industries": [string],
   "hard_requirements": [string],
   "preferred_requirements": [string]
 }
@@ -29,6 +30,8 @@ Classify each requirement's real strength based on the actual language used:
 - "boilerplate": generic phrases that appear in nearly every posting regardless of actual necessity (e.g. "excellent communication skills", "team player")
 
 Keep every string value SHORT — a few words each, not full sentences. This keeps the whole response well within the token budget even for long, detailed postings.
+
+market_industries describes what this job sells and the customers it serves, NOT the candidate backgrounds accepted in required_industries/preferred_industries. Use Medical Device, Diagnostics, Pharmaceutical, Veterinary, Capital Equipment, Healthcare SaaS, Dental, Distribution, Biotech/Life Sciences where directly supported. Multiple labels are allowed. A diagnostics sales job calling on veterinarians is both Veterinary and Diagnostics. A human-health job accepting veterinary sales experience is NOT Veterinary. If the posting does not establish the market, return an empty array. Never infer a market from the employer name alone.
 
 Use these controlled vocabularies where the posting content matches them, in addition to anything else genuinely stated:
 - industries: Medical Device, Diagnostics, Reference Laboratory, Point-of-Care Diagnostics, Pharmaceutical, Biotech/Life Sciences, Veterinary/Animal Health, Dental, Healthcare SaaS, Distribution, Capital Equipment, Consumables

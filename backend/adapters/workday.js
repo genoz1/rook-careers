@@ -232,7 +232,9 @@ function normalizeWorkdayJob(raw, employer) {
   // added to location_raw only if that country isn't already
   // genuinely mentioned there, so foreign-country detection can never
   // miss a posting regardless of how its location text was phrased.
-  const countryCode = info.jobRequisitionLocation?.country?.alpha2Code;
+  const { normalizeCountryCode } = require('../locationTextRules');
+  const country = info.jobRequisitionLocation?.country;
+  const countryCode = normalizeCountryCode(country?.alpha2Code || country?.descriptor || country?.name || (typeof country === 'string' ? country : null));
   const countryName = countryCode ? ALPHA2_TO_COUNTRY_NAME[countryCode] : null;
   if (countryName && !new RegExp(`\\b${countryName}\\b`, "i").test(location_raw)) {
     location_raw = location_raw ? `${location_raw}, ${countryName}` : countryName;
@@ -249,6 +251,7 @@ function normalizeWorkdayJob(raw, employer) {
     description_html: info.jobDescription || null,
     description_text: stripHtml(description),
     location_raw,
+    location_evidence: { version: 1, source_country_code: countryCode, source_location: location_raw },
     // Workday's list view only gives relative text ("Posted 3 Days Ago"),
     // not a real date — leaving this null rather than guessing.
     date_posted: null,

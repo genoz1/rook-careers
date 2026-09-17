@@ -4,6 +4,7 @@ const {resolveUsStateCode, isUsEligibleJob} = require('./jobEligibility');
 const {hasUnambiguousForeignCountryEvidence} = require('./locationTextRules');
 const {extractGeocodableLocation} = require('./locationExtraction');
 const {distanceMiles} = require('./geocoding');
+const {matches, normalizeSelection} = require('../public/rook-job-classification');
 
 function locationScope(job) {
   const raw = String(job.location_raw || '').trim();
@@ -33,7 +34,8 @@ function prepareJob(job, profile) {
 
 function repairSnapshot(jobs, profile) {
   // Keep the original order, identities and scores of every valid result.
-  return (jobs || []).filter(job => prepareJob(job,profile));
+  const selected = normalizeSelection(profile.desired_industries);
+  return (jobs || []).filter(job => prepareJob(job,profile) && (!selected.length || matches(job, selected)));
 }
 
 module.exports = {prepareJob,repairSnapshot,locationScope};

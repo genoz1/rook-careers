@@ -15,15 +15,17 @@ const records = [
  {id:'acede788-9577-42ed-af39-95475a89f761',title_original:'Sales Development Representative',location_raw:'Leiden',city:null,state:'NV',job_lat:39.6503817,job_lng:-119.87382,remote_status:null,employment_type:'FullTime',ai_analysis:{product_categories:['Healthcare SaaS','EHR/EPD software']},expected:80}
 ];
 const control = {...records[0],id:'nearby-control',title_original:'Account Executive',company_name:'Hidden Employer',source_url:'https://hidden.example/job',location_raw:'Reno, NV',city:'Reno',state:'NV',job_lat:39.54,job_lng:-119.82};
-function queryDb(rows) {const q={from(){return q;},select(){return q;},eq(){return q;},or(){return q;},gte(){return q;},lte(){return q;},limit(){return Promise.resolve({data:rows,error:null});}};return q;}
+function queryDb(rows) {const q={from(){return q;},select(){return q;},eq(){return q;},or(){return q;},gte(){return q;},lte(){return q;},order(){return q;},range(a,b){return Promise.resolve({data:rows.slice(a,b+1),error:null});},limit(){return Promise.resolve({data:rows,error:null});}};return q;}
 (async () => {
   // GitHub baseline; this workspace's original local commit has the same tree.
   let baseline='b4c6f86fe141698f26931f02dc685b6acc144f29';
   try {execFileSync('git',['cat-file','-e',baseline],{stdio:'ignore'});} catch {baseline='320ce7a';}
   // Replay the pre-repair V7 path and V6's unchanged scoreJob using identical
   // live record inputs: the bad scores reproduce in BOTH, not a new formula.
+  const historicalEligibility = {exports:{}};
+  vm.runInNewContext(execFileSync('git',['show',`${baseline}:backend/jobEligibility.js`],{encoding:'utf8'}),{module:historicalEligibility,require:createRequire(__filename)});
   const oldModule = {exports:{}};
-  vm.runInNewContext(execFileSync('git',['show',`${baseline}:backend/v7Matching.js`],{encoding:'utf8'}),{module:oldModule,require:createRequire(__filename)});
+  vm.runInNewContext(execFileSync('git',['show',`${baseline}:backend/v7Matching.js`],{encoding:'utf8'}),{module:oldModule,require:n=>n==='./jobEligibility'?historicalEligibility.exports:createRequire(__filename)(n)});
   const before = await oldModule.exports.rank(queryDb(records),profile);
   for (const r of records) {
     assert.equal(scoreJob(r,profile).overall_score,r.expected);
@@ -53,7 +55,8 @@ function queryDb(rows) {const q={from(){return q;},select(){return q;},eq(){retu
   assert(!/Hidden Employer|hidden\.example|nearby-control/.test(JSON.stringify(repaired.map(preview))));
   const pool=queryDb([...records,control]); let cap;pool.limit=n=>{cap=n;return Promise.resolve({data:[...records,control],error:null});};
   const ranked = await require('./v7Matching').rank(pool,profile);
-  assert.equal(cap,400);
+  // The 400 scoring cap now follows location and industry filtering.
+  assert.equal(cap,undefined);
   const matchingSource=fs.readFileSync(require.resolve('./v7Matching'),'utf8');
   assert(!matchingSource.includes('job_lat.is.null'));
   assert(!matchingSource.includes('remote_status.eq.remote'));
@@ -84,6 +87,6 @@ function queryDb(rows) {const q={from(){return q;},select(){return q;},eq(){retu
   assert.equal(accountLocation.subscription_status,undefined);
   s.user_id=null;assert.equal(await move('anonymous',{...newLocation,home_city:'Reno',home_lat:39.5268,home_lng:-119.8113}),200);
 
-  for(const file of ['backend/matching.js','backend/geocoding.js','backend/jobEligibility.js','backend/routes/jobs.js','public/rook-onboarding-v6.html','public/rook-dashboard.html','public/rook-checkout.html']) assert.equal(fs.readFileSync(file,'utf8'),execFileSync('git',['show',`${baseline}:${file}`],{encoding:'utf8'}),`${file} changed`);
-  console.log('PASS: live Reno V6/V7 scores reproduce at 85/75/80; bad locations excluded; valid scores preserved; old snapshots repaired before masked/unmasked responses; cross-account access denied; V6 and shared scorer unchanged.');
+  for(const file of ['backend/matching.js','public/rook-onboarding-v6.html','public/rook-checkout.html']) assert.equal(fs.readFileSync(file,'utf8'),execFileSync('git',['show',`d8d7210:${file}`],{encoding:'utf8'}),`${file} changed`);
+  console.log('PASS: live Reno V6/V7 scores reproduce at 85/75/80; bad locations excluded; valid scores preserved; old snapshots repaired before masked/unmasked responses; cross-account access denied; shared scorer, V6 onboarding and checkout unchanged.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

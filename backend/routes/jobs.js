@@ -20,6 +20,8 @@
 // annotated so the frontend can show the right button state.
 
 const express = require("express");
+const {matches: matchesIndustry, normalizeSelection, classify} = require("../../public/rook-job-classification");
+const {readJobPool} = require("../jobPool");
 const { createClient } = require("@supabase/supabase-js");
 const { scoreJob, hasFullAccess, stateAbbrFromName } = require("../matching");
 const { scrubCompanyNameFromText, redactForNonSubscriber, redactForAnonymous } = require("../redaction");
@@ -99,7 +101,7 @@ async function loadCandidateId(req, res, next) {
 // This explicit column list is every real column on jobs EXCEPT
 // job_embedding, kept as one shared constant so every listing query
 // gets the fix, not just the one that happened to get reported.
-const JOB_LIST_COLUMNS = "id, source_job_id, employer_id, source_type, source_url, application_url, title_original, title_normalized, company_name, description_html, description_text, ai_analysis, location_raw, job_lat, job_lng, city, state, region, territory, remote_status, employment_type, category, subcategory, industry, product_type, sales_type, experience_min_years, experience_max_years, salary_min, salary_max, compensation_text, travel_percentage, overnight_travel, required_skills, preferred_skills, required_experience, preferred_experience, degree_required, certifications, date_posted, first_seen_at, last_seen_at, status, source_verified, moderation_status, recruiter_name, recruiter_email, recruiter_company, recruiter_contact_method, recruiter_id, created_at, updated_at";
+const JOB_LIST_COLUMNS = "id, source_job_id, employer_id, source_type, source_url, application_url, title_original, title_normalized, company_name, description_html, description_text, ai_analysis, location_raw, location_evidence, job_lat, job_lng, city, state, region, territory, remote_status, employment_type, category, subcategory, industry, product_type, sales_type, experience_min_years, experience_max_years, salary_min, salary_max, compensation_text, travel_percentage, overnight_travel, required_skills, preferred_skills, required_experience, preferred_experience, degree_required, certifications, date_posted, first_seen_at, last_seen_at, status, source_verified, moderation_status, recruiter_name, recruiter_email, recruiter_company, recruiter_contact_method, recruiter_id, created_at, updated_at";
 const JOB_LIST_COLUMNS_NO_DESCRIPTION = JOB_LIST_COLUMNS.split(", ").filter((c) => c !== "description_html" && c !== "description_text").join(", ");
 
 function attachDistance(job, profile) {
@@ -163,8 +165,8 @@ function matchFromRow(row) {
 // scores, reasons, and ranking are entirely unaffected - only the
 // unused payload size changes.
 function stripUnusedDescriptionFields(job) {
-  const { description_html, description_text, description_preview, ...rest } = job;
-  return rest;
+  const { description_html, description_text, description_preview, location_evidence, ...rest } = job;
+  return {...rest, industry_classification: classify(job)};
 }
 
 // Builds the employer_note map (spec factor #43, employer-history
@@ -255,7 +257,10 @@ router.get("/public-geocode-zip", requireConfig, async (req, res) => {
 
 // GET /api/jobs?industry=Veterinary&state=FL&limit=20
 router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
-  const { industry, state, limit = 20, keyword } = req.query;
+  const { industry, industries, state, limit = 20, keyword } = req.query;
+  const selectionInput = industries !== undefined ? String(industries) : (industry || "all");
+  const selection = normalizeSelection(selectionInput.split(","));
+  const industryPass = job => selectionInput === "all" || matchesIndustry(job, selection);
 
   // Anonymous browsing. Direct instruction: "copy the job search page
   // [...] and mask the job details so when the customer actually
@@ -303,13 +308,12 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
         .select(JOB_LIST_COLUMNS_NO_DESCRIPTION)
         .eq("status", "active")
         .eq("moderation_status", "approved")
-        .order("date_posted", { ascending: false })
-        .limit(Number(limit));
-      if (industry) fallbackQuery = fallbackQuery.eq("industry", industry);
+        .order("date_posted", { ascending: false });
+
       if (state) fallbackQuery = fallbackQuery.eq("state", state);
-      const { data: fallbackJobs, error: fallbackError } = await fallbackQuery;
+      const { data: fallbackJobs, error: fallbackError } = await readJobPool(fallbackQuery);
       if (fallbackError) return res.status(500).json({ error: fallbackError.message });
-      const usOnly = (fallbackJobs || []).filter(isUsEligibleJob);
+      const usOnly = (fallbackJobs || []).filter(isUsEligibleJob).filter(industryPass).slice(0, Number(limit));
       return res.json({ jobs: usOnly.map(redactForAnonymous).map(stripUnusedDescriptionFields), total_count: totalCount || 0, explored_location: false });
     }
 
@@ -317,7 +321,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     const latDelta = EXPLORE_RADIUS_MILES / 69;
     const lngDelta = EXPLORE_RADIUS_MILES / (69 * Math.max(0.1, Math.cos((nearLat * Math.PI) / 180)));
 
-    const { data: boxJobs, error: boxError } = await supabaseAnon
+    const { data: boxJobs, error: boxError } = await readJobPool(supabaseAnon
       .from("jobs")
       .select(JOB_LIST_COLUMNS_NO_DESCRIPTION)
       .eq("status", "active")
@@ -325,7 +329,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
       .gte("job_lat", nearLat - latDelta)
       .lte("job_lat", nearLat + latDelta)
       .gte("job_lng", nearLng - lngDelta)
-      .lte("job_lng", nearLng + lngDelta);
+      .lte("job_lng", nearLng + lngDelta));
     if (boxError) return res.status(500).json({ error: boxError.message });
 
     const nearby = (boxJobs || []).filter((job) => {
@@ -343,10 +347,10 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
       .eq("status", "active")
       .eq("moderation_status", "approved")
       .is("job_lat", null);
-    if (industry) noCoordsQuery = noCoordsQuery.eq("industry", industry);
+
     if (state) noCoordsQuery = noCoordsQuery.eq("state", state);
     if (keyword) noCoordsQuery = noCoordsQuery.or(`title_original.ilike.%${keyword}%,company_name.ilike.%${keyword}%`);
-    const { data: noCoordsJobs, error: noCoordsError } = await noCoordsQuery;
+    const { data: noCoordsJobs, error: noCoordsError } = await readJobPool(noCoordsQuery);
     if (noCoordsError) return res.status(500).json({ error: noCoordsError.message });
 
     // The synthetic profile a visitor's ZIP produces — home_lat/lng and
@@ -356,8 +360,8 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     const anonymousProfile = { home_lat: nearLat, home_lng: nearLng, home_state: nearStateName };
     let scored = [...nearby, ...(noCoordsJobs || [])]
       .filter(isUsEligibleJob)
+      .filter(industryPass)
       .map((job) => ({ ...job, match: scoreJob(job, anonymousProfile) }))
-      .filter((job) => industry ? job.industry === industry : true)
       .filter((job) => state ? job.state === state : true)
       .sort((a, b) => (b.match?.overall_score ?? -1) - (a.match?.overall_score ?? -1));
     if (!keyword) scored = scored.slice(0, Number(limit));
@@ -383,11 +387,12 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     // scored branches below, description_text isn't even needed in
     // the query here — excluded directly rather than fetched and
     // stripped afterward.
-    let query = supabaseAnon.from("jobs").select(JOB_LIST_COLUMNS_NO_DESCRIPTION).eq("status", "active").eq("moderation_status", "approved").order("date_posted", { ascending: false }).limit(Number(limit));
-    if (industry) query = query.eq("industry", industry);
+    let query = supabaseAnon.from("jobs").select(JOB_LIST_COLUMNS_NO_DESCRIPTION).eq("status", "active").eq("moderation_status", "approved").order("date_posted", { ascending: false });
+
     if (state) query = query.eq("state", state);
-    const { data } = await query;
-    return res.json(data);
+    const { data, error } = await readJobPool(query);
+    if (error) return res.status(500).json({error:error.message});
+    return res.json((data || []).filter(isUsEligibleJob).filter(industryPass).slice(0, Number(limit)).map(stripUnusedDescriptionFields));
   }
 
   // "Explore a different location" — Job Search's "Show jobs near"
@@ -446,7 +451,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     const latDelta = EXPLORE_RADIUS_MILES / 69;
     const lngDelta = EXPLORE_RADIUS_MILES / (69 * Math.max(0.1, Math.cos((nearLat * Math.PI) / 180)));
 
-    const { data: boxJobs, error: boxError } = await supabaseAdmin
+    const { data: boxJobs, error: boxError } = await readJobPool(supabaseAdmin
       .from("jobs")
       .select(JOB_LIST_COLUMNS_NO_DESCRIPTION)
       .eq("status", "active")
@@ -454,7 +459,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
       .gte("job_lat", nearLat - latDelta)
       .lte("job_lat", nearLat + latDelta)
       .gte("job_lng", nearLng - lngDelta)
-      .lte("job_lng", nearLng + lngDelta);
+      .lte("job_lng", nearLng + lngDelta));
     if (boxError) return res.status(500).json({ error: boxError.message });
 
     const nearby = (boxJobs || []).filter((job) => {
@@ -477,10 +482,10 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
       .eq("status", "active")
       .eq("moderation_status", "approved")
       .is("job_lat", null);
-    if (industry) noCoordsQuery = noCoordsQuery.eq("industry", industry);
+
     if (state) noCoordsQuery = noCoordsQuery.eq("state", state);
     if (keyword) noCoordsQuery = noCoordsQuery.or(`title_original.ilike.%${keyword}%,company_name.ilike.%${keyword}%`);
-    const { data: noCoordsJobs, error: noCoordsError } = await noCoordsQuery;
+    const { data: noCoordsJobs, error: noCoordsError } = await readJobPool(noCoordsQuery);
     if (noCoordsError) return res.status(500).json({ error: noCoordsError.message });
 
     // Scores against a location-shifted COPY of the real profile — every
@@ -491,8 +496,8 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     const exploredProfile = { ...profile, home_lat: nearLat, home_lng: nearLng };
     let scored = [...nearby, ...(noCoordsJobs || [])]
       .filter(isUsEligibleJob)
+      .filter(industryPass)
       .map((job) => ({ ...job, match: scoreJob(job, exploredProfile) }))
-      .filter((job) => industry ? job.industry === industry : true)
       .filter((job) => state ? job.state === state : true)
       .sort((a, b) => (b.match?.overall_score ?? -1) - (a.match?.overall_score ?? -1));
     if (!keyword) scored = scored.slice(0, Number(limit));
@@ -554,7 +559,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     .select(JOB_LIST_COLUMNS_NO_DESCRIPTION)
     .eq("status", "active")
     .eq("moderation_status", "approved");
-  if (industry) liveQuery = liveQuery.eq("industry", industry);
+
   if (state) liveQuery = liveQuery.eq("state", state);
   if (keyword) {
     liveQuery = liveQuery.or(`title_original.ilike.%${keyword}%,company_name.ilike.%${keyword}%`);
@@ -574,7 +579,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     );
   }
 
-  const { data: allMatchingJobs, error: liveError } = await liveQuery;
+  const { data: allMatchingJobs, error: liveError } = await readJobPool(liveQuery);
   if (liveError) return res.status(500).json({ error: liveError.message });
 
   const { data: statusRows } = await supabaseAdmin
@@ -634,6 +639,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
 
   let rows = (allMatchingJobs || [])
     .filter((job) => !dismissedJobIds.has(job.id))
+    .filter(industryPass)
     .filter(isUsEligibleJob)
     .filter((job) => titleLocSanityPass(job))
     .map((job) => ({ jobs: job, job_id: job.id, overall_score: null, saved: savedJobIds.has(job.id), _liveMatch: scoreJob(job, profile) }))
@@ -842,7 +848,7 @@ router.get("/new-matches-today-count", requireConfig, requireAuth, loadCandidate
   // shouldn't be counted as one of their matches either.
   const { data: todaysJobs, error } = await supabaseAdmin
     .from("jobs")
-    .select("id, job_lat, job_lng, state, location_raw")
+    .select("id, job_lat, job_lng, state, location_raw, location_evidence")
     .eq("status", "active")
     .eq("moderation_status", "approved")
     .gte("date_posted", todayStart.toISOString());
@@ -1397,13 +1403,13 @@ router.post("/onboarding/anonymous-preview", requireConfig, async (req, res) => 
     const latDelta = 300 / 69;
     const lngDelta = 300 / (69 * Math.max(0.1, Math.cos((profile.home_lat * Math.PI) / 180)));
 
-    const { data: jobs, error } = await supabaseAdmin
+    const { data: jobs, error } = await readJobPool(supabaseAdmin
       .from("jobs")
       .select(JOB_LIST_COLUMNS_NO_DESCRIPTION)
       .eq("status", "active")
       .eq("moderation_status", "approved")
       .or(`job_lat.is.null,remote_status.eq.remote,and(job_lat.gte.${profile.home_lat - latDelta},job_lat.lte.${profile.home_lat + latDelta},job_lng.gte.${profile.home_lng - lngDelta},job_lng.lte.${profile.home_lng + lngDelta})`)
-      .limit(400);
+      );
 
     if (error) throw new Error(error.message);
 
@@ -1481,6 +1487,8 @@ router.post("/onboarding/anonymous-preview", requireConfig, async (req, res) => 
 
     const scored = (jobs || [])
       .filter(isUsEligibleJob)
+      .filter(job => !normalizeSelection(profile.desired_industries).length || matchesIndustry(job,profile.desired_industries))
+      .slice(0,400)
       .filter(j => titleLocSanityPass(j))
       .map(j => {
         const distMi = j.job_lat != null
@@ -1552,90 +1560,9 @@ router.get("/onboarding/match-preview", requireConfig, requireAuth, async (req, 
   const scoringPromise = (async () => {
     const t0 = Date.now();
 
-    // ── Fast path: use pre-computed scores from candidate_job_matches ──
-    // scoreAndStoreForCandidate (called during v3 onboarding background
-    // processing) writes scores here. Reading them is a single indexed
-    // DB query instead of 17+ sequential pages + in-memory scoring.
-    if (profile.id) {
-      const { data: precomputed, error: pcErr } = await supabaseAdmin
-        .from('candidate_job_matches')
-        .select(`
-          overall_score, excellent_match, recommendation, reasons,
-          jobs!inner(id, title_normalized, title_original, city, state, location_raw, company_name)
-        `)
-        .eq('candidate_id', profile.id)
-        .gt('overall_score', 0)
-        .order('overall_score', { ascending: false })
-        .limit(3);
-
-      if (pcErr) {
-        console.error(`[match-preview] uid=${userId.slice(0,8)} precomputed join error: ${pcErr.message}`);
-      }
-
-      // If no pre-computed scores yet, scoring may still be writing.
-      // Retry for up to 20 seconds (10 × 2s) before falling back to
-      // in-memory scoring — BUT only if the user has a résumé, since
-      // without one there's no background scoring job and we'd just
-      // waste 20 seconds waiting for scores that will never arrive.
-      const hasResume = profile.resume_url || profile.resume_uploaded_at;
-      if (!pcErr && !precomputed?.length && hasResume) {
-        for (let attempt = 0; attempt < 10; attempt++) {
-          await new Promise(r => setTimeout(r, 2000));
-          const { data: retry, error: retryErr } = await supabaseAdmin
-            .from('candidate_job_matches')
-            .select('overall_score, excellent_match, recommendation, reasons, jobs!inner(id, title_normalized, title_original, city, state, location_raw, company_name)')
-            .eq('candidate_id', profile.id)
-            .gt('overall_score', 0)
-            .order('overall_score', { ascending: false })
-            .limit(3);
-          if (!retryErr && retry?.length >= 1) {
-            console.log(`[match-preview] uid=${userId.slice(0,8)} precomputed scores ready after ${(attempt+1)*2}s wait`);
-            const { count } = await supabaseAdmin.from('candidate_job_matches').select('id', { count: 'exact', head: true }).eq('candidate_id', profile.id).gt('overall_score', 0);
-            return { count: count || retry.length, top_matches: retry.map(row => {
-              const job = row.jobs;
-              const rawTitle = job?.title_normalized || job?.title_original || null;
-              const safeTitle = (rawTitle && job?.company_name) ? (scrubCompanyNameFromText(rawTitle, job.company_name) || rawTitle) : rawTitle;
-              return { overall_score: Math.round(row.overall_score), excellent_match: Boolean(row.excellent_match), recommendation: row.recommendation || null, title: safeTitle, location_display: jobLocationDisplay(job), reasons: (row.reasons || []).slice(0, 2) };
-            }), scoring_complete: true, from_precomputed: true };
-          }
-          if (retryErr) break; // join failing — go to in-memory
-        }
-      }
-
-      if (!pcErr && precomputed?.length >= 1) {
-        const { count } = await supabaseAdmin
-          .from('candidate_job_matches')
-          .select('id', { count: 'exact', head: true })
-          .eq('candidate_id', profile.id)
-          .gt('overall_score', 0);
-
-        console.log(`[match-preview] uid=${userId.slice(0,8)} using precomputed scores ms=${Date.now()-t0} top=${precomputed[0]?.overall_score}`);
-
-        const topThree = precomputed.map(row => {
-          const job = row.jobs;
-          const rawTitle = job?.title_normalized || job?.title_original || null;
-          const safeTitle = (rawTitle && job?.company_name)
-            ? (scrubCompanyNameFromText(rawTitle, job.company_name) || rawTitle)
-            : rawTitle;
-          return {
-            overall_score:   Math.round(row.overall_score),
-            excellent_match: Boolean(row.excellent_match),
-            recommendation:  row.recommendation || null,
-            title:   safeTitle,
-            location_display: jobLocationDisplay(job),
-            reasons: (row.reasons || []).slice(0, 2),
-          };
-        });
-
-        return { count: count || precomputed.length, top_matches: topThree, scoring_complete: true, from_precomputed: true };
-      }
-    }
-
-    // ── Slow path: in-memory scoring (no pre-computed scores yet) ──
-    // Use a direct SQL bounding box query instead of fetchActiveJobs (which
-    // loads ALL 5,000+ jobs into memory). This cuts the fetch to ~300-400
-    // jobs and works even on a cold server with no warm cache.
-    const SCORE_COLS = "id, title_original, title_normalized, company_name, location_raw, job_lat, job_lng, city, state, industry, remote_status, employment_type, travel_percentage, salary_min, salary_max, compensation_text, ai_analysis, date_posted, last_seen_at";
+    // Read current source evidence and AI markets before the preview cutoff.
+    // A stale top-three score snapshot cannot establish location eligibility.
+    const SCORE_COLS = "id, title_original, title_normalized, company_name, location_raw, location_evidence, job_lat, job_lng, city, state, industry, remote_status, employment_type, travel_percentage, salary_min, salary_max, compensation_text, ai_analysis, date_posted, last_seen_at";
 
     let jobQuery = supabaseAdmin
       .from("jobs")
@@ -1657,7 +1584,7 @@ router.get("/onboarding/match-preview", requireConfig, requireAuth, async (req, 
       );
     }
 
-    const { data: activeJobs, error: jobFetchErr } = await jobQuery.limit(500);
+    const { data: activeJobs, error: jobFetchErr } = await readJobPool(jobQuery);
     if (jobFetchErr) throw new Error(`match-preview job fetch failed: ${jobFetchErr.message}`);
     const tFetch = Date.now();
 
@@ -1674,6 +1601,8 @@ router.get("/onboarding/match-preview", requireConfig, requireAuth, async (req, 
 
     const scored = activeJobs
       .filter(isUsEligibleJob)
+      .filter(job => !normalizeSelection(profile.desired_industries).length || matchesIndustry(job,profile.desired_industries))
+      .slice(0,500)
       .map((job) => ({ score: scoreJob(job, profile), jobId: job.id, job }))
       .filter((r) => r.score.overall_score != null && r.score.overall_score > 0)
       .sort((a, b) => b.score.overall_score - a.score.overall_score);

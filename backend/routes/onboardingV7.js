@@ -7,6 +7,7 @@ const {hasFullAccess} = require('../matching');
 const {preview, answersToProfile} = require('../v7Preview');
 const {rank} = require('../v7Matching');
 const {repairSnapshot} = require('../v7Location');
+const {normalizeSelection} = require('../../public/rook-job-classification');
 const router = express.Router();
 const db = process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
   ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY) : null;
@@ -93,7 +94,11 @@ router.get('/session', wrap(async (req,res) => {
   const unlocked = !!(s.user_id && u?.id === s.user_id && hasFullAccess(profile));
   // Revalidate old snapshots too, before either masked or unlocked serialization.
   // Use the saved answers so purchasing never swaps in a different result set.
-  const jobs = repairSnapshot(s.jobs,s.profile);
+  const requested = req.query?.industries;
+  const selection = requested === 'all' ? [] : String(requested || '').split(',');
+  const jobs = requested !== undefined
+    ? (requested !== 'all' && !normalizeSelection(selection).length ? [] : await rank(db,profile,selection))
+    : repairSnapshot(s.jobs,s.profile);
   // Even a forged query param or a valid token for another paid user cannot unlock.
   res.json({profile, unlocked, resume_pending:!!s.resume_path, jobs:unlocked ? jobs.map(j=>({...j,subscription_required:false})) : jobs.map(preview)});
 }));

@@ -35,8 +35,7 @@ const { fetchJazzHRJobs } = require("./adapters/jazzhr");
 const { fetchSuccessFactorsJobs, normalizeSuccessFactorsJob } = require("./adapters/successfactors");
 const { analyzeJob } = require("./ai/jobAnalysis");
 const { generateEmbedding } = require("./ai/embeddings");
-const { geocodeLocation } = require("./geocoding");
-const { extractGeocodableLocation } = require("./locationExtraction");
+const { validateJobLocation } = require('./validateJobLocation');
 
 // Use the SERVICE ROLE key here, never the anon key — ingestion writes
 // to the jobs table and must bypass row-level security intentionally.
@@ -146,17 +145,19 @@ async function ingestEmployer(employer) {
   // below (and only for jobs under this run's per-employer cap).
   const { data: existingAnalysisRows } = await supabase
     .from("jobs")
-    .select("source_job_id, ai_analysis")
+    .select("source_job_id, ai_analysis, title_original, description_text")
     .eq("employer_id", employer.id)
     .not("ai_analysis", "is", null);
   const existingAiAnalysisBySourceId = new Map((existingAnalysisRows || []).map((r) => [r.source_job_id, r.ai_analysis]));
+  const existingContentBySourceId = new Map((existingAnalysisRows || []).map(r => [r.source_job_id, r]));
 
   // All existing source IDs for this employer — used to detect new jobs
   // so first_seen_at is only set on insert, never overwritten on update.
   const { data: existingSourceRows } = await supabase
     .from("jobs")
-    .select("source_job_id")
+    .select("source_job_id, location_evidence, job_lat, job_lng, state")
     .eq("employer_id", employer.id);
+  const existingLocations = new Map((existingSourceRows || []).map(r => [r.source_job_id,r]));
   const existingSourceIds = new Set((existingSourceRows || []).map((r) => r.source_job_id));
 
   // Cap how many NEW AI analyses (job analysis + embedding) happen per
@@ -206,9 +207,25 @@ async function ingestEmployer(employer) {
     // posting is never stored at all, rather than relying on every
     // downstream reader (dashboard, digest, search) to correctly
     // demote it after the fact.
-    if (mentionsNonUsCountry(job.location_raw, null, job.title_original)) {
+    Object.assign(job, await validateJobLocation(job, undefined, existingLocations.get(job.source_job_id)));
+    if (job.location_evidence.status === 'foreign' || mentionsNonUsCountry(job.location_raw, null, job.title_original)) {
       nonUsSkippedCount++;
+      // An old record must not remain active after its source establishes
+      // that it is foreign. New foreign jobs are never inserted.
+      if (existingSourceIds.has(job.source_job_id)) {
+        const {error: closeError} = await supabase.from('jobs').update({location_raw: job.location_raw, job_lat: null, job_lng: null, state: null, location_evidence: job.location_evidence, status: 'closed'}).eq('employer_id', employer.id).eq('source_job_id', job.source_job_id);
+        if (closeError) console.error(`  Foreign location refresh failed: ${closeError.message}`);
+      }
       continue;
+    }
+
+    // Validate before saving, independently of the per-employer AI cap.
+    // Replaces old coordinates even when location evidence is unresolved.
+    const priorContent = existingContentBySourceId.get(job.source_job_id);
+    if (priorContent && (priorContent.title_original !== job.title_original || priorContent.description_text !== job.description_text)) {
+      job.ai_analysis = null;
+      job.job_embedding = null;
+      existingAiAnalysisBySourceId.delete(job.source_job_id);
     }
 
     const { data: upsertedRow, error } = await supabase
@@ -241,10 +258,9 @@ async function ingestEmployer(employer) {
       continue; // saved, but AI analysis deferred to a later run
     }
 
-    // AI job analysis + embedding both run once per job, ever — not on
-    // every re-ingestion run. This keeps API cost bounded: a job already
-    // analyzed on a previous run is skipped even if it's seen again
-    // today. A failure here doesn't affect the job being saved — it
+    // AI job analysis and embedding are reused until the title or
+    // description changes. This keeps API cost bounded while avoiding
+    // stale market evidence after a posting is edited. A failure here doesn't affect the job being saved — it
     // just means that job scores without the AI-derived factors until a
     // later run retries it.
     if (!upsertedRow.ai_analysis) {
@@ -289,32 +305,6 @@ async function ingestEmployer(employer) {
       }
     }
 
-    // Always re-geocode from location_raw — never trust coordinates from job boards.
-    // Job boards frequently provide wrong coordinates (company HQ instead of job
-    // location, incorrect geocoding, etc.) which causes jobs to appear in the wrong
-    // city for candidates. We extract a clean, geocodable location string from
-    // location_raw and use that as the source of truth.
-    //
-    // Fixed: previously only job_lat/job_lng were written here — coords.state
-    // (now returned by geocodeLocation(), see backend/geocoding.js) was silently
-    // dropped, which was the entire reason the `state` column was null for every
-    // job in the database regardless of whether geocoding succeeded. That was a
-    // separate, compounding defect from the foreign-country/bad-result-type issue
-    // fixed in geocoding.js itself — this ingestion code simply never asked for
-    // or saved the field, even when a geocode succeeded correctly.
-    if (upsertedRow.location_raw) {
-      try {
-        const geoLoc = extractGeocodableLocation(upsertedRow.location_raw);
-        if (geoLoc) {
-          const coords = await geocodeLocation(geoLoc);
-          if (coords) {
-            await supabase.from("jobs").update({ job_lat: coords.lat, job_lng: coords.lng, state: coords.state }).eq("id", upsertedRow.id);
-          }
-        }
-      } catch (err) {
-        console.error(`  Geocoding failed for "${job.location_raw}": ${err.message}`);
-      }
-    }
   }
 
   // Mark jobs that disappeared from the source as closed, rather than

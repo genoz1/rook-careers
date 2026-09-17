@@ -3,15 +3,18 @@
 const {scoreJob} = require('./matching');
 const {prepareJob} = require('./v7Location');
 const {distanceMiles} = require('./geocoding');
-const JOB_LIST_COLUMNS = "id, source_job_id, employer_id, source_type, source_url, application_url, title_original, title_normalized, company_name, description_html, description_text, ai_analysis, location_raw, job_lat, job_lng, city, state, region, territory, remote_status, employment_type, category, subcategory, industry, product_type, sales_type, experience_min_years, experience_max_years, salary_min, salary_max, compensation_text, travel_percentage, overnight_travel, required_skills, preferred_skills, required_experience, preferred_experience, degree_required, certifications, date_posted, first_seen_at, last_seen_at, status, source_verified, moderation_status, recruiter_name, recruiter_email, recruiter_company, recruiter_contact_method, recruiter_id, created_at, updated_at";
+const {matches, normalizeSelection} = require('../public/rook-job-classification');
+const {readJobPool} = require('./jobPool');
+const JOB_LIST_COLUMNS = "id, source_job_id, employer_id, source_type, source_url, application_url, title_original, title_normalized, company_name, description_html, description_text, ai_analysis, location_raw, location_evidence, job_lat, job_lng, city, state, region, territory, remote_status, employment_type, category, subcategory, industry, product_type, sales_type, experience_min_years, experience_max_years, salary_min, salary_max, compensation_text, travel_percentage, overnight_travel, required_skills, preferred_skills, required_experience, preferred_experience, degree_required, certifications, date_posted, first_seen_at, last_seen_at, status, source_verified, moderation_status, recruiter_name, recruiter_email, recruiter_company, recruiter_contact_method, recruiter_id, created_at, updated_at";
 const JOB_LIST_COLUMNS_NO_DESCRIPTION = JOB_LIST_COLUMNS.split(", ").filter((c) => c !== "description_html" && c !== "description_text").join(", ");
 
-async function rank(db, profile) {
-    // Preserve the existing 400-row cap for fast anonymous matching.
+async function rank(db, profile, industrySelection = profile.desired_industries) {
+    // Apply the existing 400-row scoring cap after eligibility and market filtering.
     const latDelta = 300 / 69;
     const lngDelta = 300 / (69 * Math.max(0.1, Math.cos((profile.home_lat * Math.PI) / 180)));
 
-    const { data: jobs, error } = await db
+    const selection = normalizeSelection(industrySelection);
+    const { data: jobs, error } = await readJobPool(db
       .from("jobs")
       .select(JOB_LIST_COLUMNS_NO_DESCRIPTION)
       .eq("status", "active")
@@ -19,8 +22,7 @@ async function rank(db, profile) {
       .gte("job_lat", profile.home_lat - latDelta)
       .lte("job_lat", profile.home_lat + latDelta)
       .gte("job_lng", profile.home_lng - lngDelta)
-      .lte("job_lng", profile.home_lng + lngDelta)
-      .limit(400);
+      .lte("job_lng", profile.home_lng + lngDelta));
 
     if (error) throw new Error(error.message);
 
@@ -100,6 +102,8 @@ async function rank(db, profile) {
       .map(j => prepareJob(j,profile))
       .filter(Boolean)
       .filter(j => titleLocSanityPass(j))
+      .filter(j => !selection.length || matches(j, selection))
+      .slice(0, 400)
       .map(j => {
         const distMi = j.job_lat != null
           ? Math.round(distanceMiles(profile.home_lat, profile.home_lng, j.job_lat, j.job_lng))

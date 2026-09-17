@@ -158,6 +158,12 @@ function hasExplicitUsLanguageEvidence(locationRaw) {
 }
 
 module.exports = {
+  normalizeCountryCode(value) {
+    const raw = String(value || '').trim();
+    if (/^(US|USA|PR|GU|VI|AS|MP)$/i.test(raw)) return raw.toUpperCase() === 'USA' ? 'US' : raw.toUpperCase();
+    if (/^[a-z]{2}$/i.test(raw) && countries.isValid(raw.toUpperCase())) return raw.toUpperCase();
+    return countries.getAlpha2Code(raw, 'en') || null;
+  },
   normalizeLocationText,
   hasUnambiguousForeignCountryEvidence,
   isBareGenericRemoteTerm,

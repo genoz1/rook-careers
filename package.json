@@ -1,7 +1,7 @@
 {
   "name": "rook-careers",
   "version": "0.2.0",
-  "description": "ROOK Careers — UI prototype plus Phase 1 backend scaffold (Supabase, Stripe, ATS ingestion adapters).",
+  "description": "ROOK Careers \u2014 UI prototype plus Phase 1 backend scaffold (Supabase, Stripe, ATS ingestion adapters).",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -28,7 +28,8 @@
     "social:scheduler-status": "node backend/socialPublishWorker.js scheduler-status",
     "test-ui-copy": "node backend/testUiCopy.js",
     "ad-manager": "node backend/admanager/manager.js",
-    "test-ad-manager": "node backend/admanager/test.js"
+    "test-ad-manager": "node backend/admanager/test.js",
+    "test-industry-location": "node backend/testIndustryLocation.js && node backend/testV7Location.js"
   },
   "engines": {
     "node": ">=18.0.0"

@@ -481,6 +481,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="rook-config.js"></script>
 <script src="rook-auth.js"></script>
+<script src="rook-job-classification.js"></script>
 <script>
   // Same live-data pattern as rook-dashboard.html: try to replace the demo
   // rows with real, scored jobs; leave demo data in place (with a banner
@@ -527,7 +528,7 @@
       // go back to the candidate's own precomputed top matches.
       nearLocationCoords = null;
       status.textContent = '';
-      await loadJobs();
+      await window.reloadSearchJobs?.();
       return;
     }
 
@@ -567,7 +568,8 @@
       // it says for any X, not just near-variants of the candidate's
       // own home.
       status.textContent = 'Searching near "' + query + '"...';
-      const jobsRes = await rookApiFetch(`/jobs?limit=300&near_lat=${data.lat}&near_lng=${data.lng}`);
+      const selected = Array.from(document.querySelectorAll('.filter-industry:checked'), el => el.value);
+      const jobsRes = await rookApiFetch(`/jobs?limit=300&near_lat=${data.lat}&near_lng=${data.lng}&industries=${encodeURIComponent(selected.length ? selected.join(',') : 'all')}`);
       const jobsData = await jobsRes.json();
       if (mySeq !== searchRequestSeq) return; // a newer search has since started — drop this one
       const jobs = Array.isArray(jobsData) ? jobsData : (jobsData.jobs || []);
@@ -596,7 +598,7 @@
     nearLocationCoords = null;
     document.getElementById('nearLocationInput').value = '';
     document.getElementById('nearLocationStatus').textContent = '';
-    loadJobs();
+    window.reloadSearchJobs?.();
   }
 
   (async () => {
@@ -638,10 +640,35 @@
       setTimeout(poll, 4000);
     }
 
+      // Wire up every filter control to re-filter on change.
+      // Reported directly: keyword search only ever filtered whatever
+      // was already fetched (the candidate's top 300 jobs by score) -
+      // an employer search could miss most of that company's real
+      // postings if they scored lower than other employers' jobs
+      // elsewhere. Debounced re-fetch from the server instead, which
+      // now matches the keyword directly against title/company with no
+      // score-based limit (see fetchScoredRows in jobs.js) - so a
+      // keyword search genuinely shows every matching job.
+      let keywordDebounce;
+      document.getElementById('filterKeyword').addEventListener('input', (e) => {
+        clearTimeout(keywordDebounce);
+        keywordDebounce = setTimeout(() => loadJobs(e.target.value.trim()), 400);
+      });
+      document.getElementById('remoteOnlyFilter').addEventListener('change', applyFiltersAndRender);
+      document.querySelectorAll('.filter-industry').forEach((el) => el.addEventListener('change', () => loadJobs(document.getElementById('filterKeyword').value.trim())));
+      document.querySelectorAll('.filter-travel').forEach((el) => el.addEventListener('change', applyFiltersAndRender));
+      document.getElementById('filterMatchScore').addEventListener('input', applyFiltersAndRender);
+      document.getElementById('filterComp').addEventListener('input', applyFiltersAndRender);
+      document.getElementById('sortSelect').addEventListener('change', applyFiltersAndRender);
+      document.getElementById('showRecruiterFilter').addEventListener('change', applyFiltersAndRender);
+
     async function loadJobs(keyword) {
     try {
       const params = new URLSearchParams({ limit: '300' });
+      const selected = Array.from(document.querySelectorAll('.filter-industry:checked'), el => el.value);
+      params.set('industries', selected.length ? selected.join(',') : 'all');
       if (keyword) params.set('keyword', keyword);
+      if (nearLocationCoords) { params.set('near_lat', nearLocationCoords.lat); params.set('near_lng', nearLocationCoords.lng); }
       const [jobsRes, profileRes] = await Promise.all([
         rookApiFetch('/jobs?' + params.toString()),
         rookApiFetch('/profile').catch(() => null),
@@ -656,8 +683,11 @@
         return;
       }
 
+      allJobs = Array.isArray(jobs) ? jobs : [];
+      document.getElementById('jobList').dataset.demo = 'false';
       if (!Array.isArray(jobs) || jobs.length === 0) {
-        showBanner('No live jobs yet. Add employers and run <code>npm run ingest</code> — see ROOK-Setup-Guide.pdf. Showing example matches below in the meantime.');
+        applyFiltersAndRender();
+        showBanner('No jobs match the selected industries. Try clearing the industry filter.');
         revealDemo();
         return;
       }
@@ -682,33 +712,13 @@
         }
       } catch {}
 
-      // Wire up every filter control to re-filter on change.
-      // Reported directly: keyword search only ever filtered whatever
-      // was already fetched (the candidate's top 300 jobs by score) -
-      // an employer search could miss most of that company's real
-      // postings if they scored lower than other employers' jobs
-      // elsewhere. Debounced re-fetch from the server instead, which
-      // now matches the keyword directly against title/company with no
-      // score-based limit (see fetchScoredRows in jobs.js) - so a
-      // keyword search genuinely shows every matching job.
-      let keywordDebounce;
-      document.getElementById('filterKeyword').addEventListener('input', (e) => {
-        clearTimeout(keywordDebounce);
-        keywordDebounce = setTimeout(() => loadJobs(e.target.value.trim()), 400);
-      });
-      document.getElementById('remoteOnlyFilter').addEventListener('change', applyFiltersAndRender);
-      document.querySelectorAll('.filter-industry').forEach((el) => el.addEventListener('change', applyFiltersAndRender));
-      document.querySelectorAll('.filter-travel').forEach((el) => el.addEventListener('change', applyFiltersAndRender));
-      document.getElementById('filterMatchScore').addEventListener('input', applyFiltersAndRender);
-      document.getElementById('filterComp').addEventListener('input', applyFiltersAndRender);
-      document.getElementById('sortSelect').addEventListener('change', applyFiltersAndRender);
-      document.getElementById('showRecruiterFilter').addEventListener('change', applyFiltersAndRender);
     } catch (err) {
       showBanner('Could not reach the ROOK API (' + err.message + '). Showing example matches below — see ROOK-Setup-Guide.pdf to get the backend running.');
       revealDemo();
     }
     }
 
+    window.reloadSearchJobs = loadJobs;
     await loadJobs();
   })();
 
@@ -936,32 +946,7 @@
       }
 
       if (selectedIndustries.length > 0) {
-        // Industry groups — a filter selection matches several related DB values
-        // because the AI uses specific sub-categories (e.g. "Reference Laboratory")
-        // that users wouldn't know to search for.
-        const INDUSTRY_GROUPS = {
-          'diagnostics': ['diagnostics', 'reference laboratory', 'molecular', 'point-of-care', 'lab', 'pathology', 'clinical laboratory'],
-          'medical device': ['medical device', 'capital equipment', 'surgical', 'dme', 'consumables'],
-          'pharmaceutical': ['pharmaceutical', 'pharma', 'biotech', 'life sciences', 'specialty pharma'],
-          'veterinary': ['veterinary', 'animal health', 'vet'],
-        };
-
-        const jobIndustry = (job.industry || '').toLowerCase();
-        const jobCategory = (job.category || '').toLowerCase();
-        const jobTitle = (job.title_original || '').toLowerCase();
-        const jobCompany = (job.company_name || '').toLowerCase();
-
-        const matchesAny = selectedIndustries.some((ind) => {
-          // Expand the filter value to its group of related terms
-          const group = INDUSTRY_GROUPS[ind] || [ind];
-          return group.some((term) =>
-            jobIndustry.includes(term) ||
-            jobCategory.includes(term) ||
-            jobTitle.includes(term) ||
-            jobCompany.includes(term)
-          );
-        });
-        if (!matchesAny) return false;
+        if (!RookJobClassification.matches(job, selectedIndustries)) return false;
       }
 
       if (minMatchScore > 0) {
@@ -1123,7 +1108,7 @@
     document.getElementById('filterMatchScore').value = 0;
     document.getElementById('filterComp').value = 0;
     document.getElementById('sortSelect').value = 'match';
-    applyFiltersAndRender();
+    window.reloadSearchJobs?.();
   }
 
   // Uses the authoritative engine classification from the backend —

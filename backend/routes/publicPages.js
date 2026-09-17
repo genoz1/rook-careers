@@ -517,7 +517,7 @@ router.get("/jobs", async (req, res) => {
   if (!Number.isSafeInteger(page * pageSize)) return res.status(404).send("Page not found.");
   try {
     const { data, error } = await supabaseAnon.from("jobs")
-      .select("id, title_original, title_normalized, location_raw, job_lat, job_lng, state")
+      .select("id, title_original, title_normalized, location_raw, location_evidence, job_lat, job_lng, state")
       .eq("status", "active").eq("moderation_status", "approved")
       .order("id", { ascending: true })
       .range((page - 1) * pageSize, page * pageSize);
@@ -563,7 +563,7 @@ router.get("/sitemap.xml", async (req, res) => {
     let offset = 0;
     while (true) {
       const { data: jobs, error } = await supabaseAnon.from("jobs")
-        .select("id, job_lat, job_lng, state, location_raw").eq("status", "active").eq("moderation_status", "approved")
+        .select("id, job_lat, job_lng, state, location_raw, location_evidence").eq("status", "active").eq("moderation_status", "approved")
         .order("id", { ascending: true }).range(offset, offset + 499);
       if (error || !Array.isArray(jobs)) throw new Error("Sitemap query failed");
       if (!jobs.length) break;

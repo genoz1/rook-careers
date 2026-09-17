@@ -1,6 +1,7 @@
 // Only explicitly allowed values cross the anonymous boundary. Never spread
 // a job or its AI analysis into an anonymous response.
 const { scrubCompanyNameFromText } = require('./redaction');
+const {classify} = require('../public/rook-job-classification');
 const number = v => typeof v === 'number' && Number.isFinite(v) ? v : null;
 function safeText(value, job) {
   let text = String(value || '').replace(/<[^>]*>/g, ' ');
@@ -19,6 +20,7 @@ function preview(job, index) {
     salary_min: number(job.salary_min), salary_max: number(job.salary_max),
     date_posted: /^\d{4}-\d{2}-\d{2}/.test(job.date_posted || '') ? job.date_posted.slice(0,10) : null,
     subscription_required: true,
+    industry_classification: classify(job),
     match: {
       overall_score: number(job.match?.overall_score),
       preference_fit: number(job.match?.preference_fit),

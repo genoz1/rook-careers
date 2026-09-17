@@ -69,7 +69,17 @@ async function rookV7Fetch(path,options={}) {
     if(res.ok) await rookV7Read();
     return res;
   }
-  if(path.startsWith('/jobs?')) return reply({jobs:data.jobs});
+  if(path.startsWith('/jobs?')) {
+    const params = new URLSearchParams(path.split('?')[1]);
+    if (params.has('industries')) {
+      const res = await rookV7Request('/session?industries=' + encodeURIComponent(params.get('industries')));
+      if (!res.ok) return res;
+      const refreshed = await res.json();
+      rookV7Snapshot = refreshed; rookV7Unlocked = refreshed.unlocked;
+      return reply({jobs:refreshed.jobs});
+    }
+    return reply({jobs:data.jobs});
+  }
   if(path === '/new-matches-today-count') return reply({new_today:data.jobs.filter(j=>(j.date_posted || '').slice(0,10)===new Date().toISOString().slice(0,10)).length});
   if(!rookV7Unlocked) {
     if(path === '/applications') return reply([]);

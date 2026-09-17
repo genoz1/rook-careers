@@ -427,13 +427,34 @@
         <span class="chip" onclick="setTierFilter('saved', this)">Saved</span>
       </div>
     </div>
-    <div style="font-size:12.5px; color:#8B96AB; margin:-10px 0 16px;">Showing jobs within 300 miles of home, plus remote/territory roles with no single fixed location. Looking farther out, or considering a different city? Try <a href="rook-search.html" style="color:var(--royal, #1463FF); font-weight:600;">Job Search</a>.</div>
+    <div style="font-size:12.5px; color:#8B96AB; margin:-10px 0 16px;">Showing jobs with a verified U.S. location within 300 miles of home. Looking farther out, or considering a different city? Try <a href="rook-search.html" style="color:var(--royal, #1463FF); font-weight:600;">Job Search</a>.</div>
 
     <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:14px;">
       <label style="display:flex; align-items:center; gap:7px; font-size:12.5px; color:#5B6B85; font-weight:600; cursor:pointer; margin:0;">
         <input type="checkbox" id="showRecruiterToggle" checked onchange="applyRecruiterToggle()">
         Show recruiter-posted jobs
       </label>
+        <div id="dashCategoryFilters" style="display:flex; align-items:center; flex-wrap:wrap; gap:12px; padding-left:12px; border-left:1px solid #E2E7F0;">
+          <span style="font-size:12.5px; color:#8B96AB; font-weight:600;">Categories:</span>
+          <label style="display:flex; align-items:center; gap:5px; font-size:12.5px; color:#5B6B85; font-weight:600; cursor:pointer; margin:0;">
+            <input type="checkbox" class="dash-filter-category" value="diagnostics" checked onchange="changeIndustryFilter()">
+            Diagnostics
+          </label>
+          <label style="display:flex; align-items:center; gap:5px; font-size:12.5px; color:#5B6B85; font-weight:600; cursor:pointer; margin:0;">
+            <input type="checkbox" class="dash-filter-category" value="medical device" checked onchange="changeIndustryFilter()">
+            Medical Device
+          </label>
+          <label style="display:flex; align-items:center; gap:5px; font-size:12.5px; color:#5B6B85; font-weight:600; cursor:pointer; margin:0;">
+            <input type="checkbox" class="dash-filter-category" value="pharmaceutical" checked onchange="changeIndustryFilter()">
+            Pharmaceutical
+          </label>
+          <label style="display:flex; align-items:center; gap:5px; font-size:12.5px; color:#5B6B85; font-weight:600; cursor:pointer; margin:0;">
+            <input type="checkbox" class="dash-filter-category" value="veterinary" checked onchange="changeIndustryFilter()">
+            Veterinary
+          </label>
+        <button type="button" onclick="showEveryIndustry()" style="border:0;background:none;color:#1463FF;cursor:pointer;">All industries</button>
+          <span style="font-size:11px;color:#8B96AB;">Scores reflect your saved preferences.</span>
+        </div>
       <label style="display:flex; align-items:center; gap:7px; font-size:12.5px; color:#5B6B85; font-weight:600; margin:0;">
         Sort by
         <select id="sortSelect" onchange="applyRecruiterToggle()" style="border:1px solid #E2E7F0; border-radius:8px; padding:5px 9px; font-size:12.5px; color:#3D4A63; font-weight:600; background:#fff;">
@@ -487,6 +508,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="rook-config.js"></script>
 <script src="rook-auth.js"></script>
+<script src="rook-job-classification.js"></script>
 <script src="rook-v7.js"></script>
 <script src="rook-location-widget.js"></script>
 <script>
@@ -505,6 +527,35 @@
   // exists; the demo rows only ever appear as a genuine fallback, not
   // as a default first frame.
   let currentJobs = [];
+  let industryFiltersInitialized = false;
+  let showAllIndustries = true;
+  let jobsLoadVersion = 0;
+  function selectedIndustries() {
+    return Array.from(document.querySelectorAll('.dash-filter-category:checked'), el => el.value);
+  }
+  function initializeIndustryFilters(profile) {
+    if (industryFiltersInitialized) return;
+    industryFiltersInitialized = true;
+    const desired = RookJobClassification.normalizeSelection(profile?.desired_industries);
+    const boxes = Array.from(document.querySelectorAll('.dash-filter-category'));
+    if (boxes.some(box => desired.includes(RookJobClassification.normalizeSelection([box.value])[0]))) {
+      showAllIndustries = false;
+      boxes.forEach(box => { box.checked = desired.includes(RookJobClassification.normalizeSelection([box.value])[0]); });
+    }
+  }
+  function changeIndustryFilter() {
+    industryFiltersInitialized = true;
+    showAllIndustries = false;
+    applyRecruiterToggle();
+    window.reloadIndustryJobs?.();
+  }
+  function showEveryIndustry() {
+    industryFiltersInitialized = true;
+    showAllIndustries = true;
+    document.querySelectorAll('.dash-filter-category').forEach(box => { box.checked = true; });
+    window.reloadIndustryJobs?.();
+  }
+
   // Safe default (matches the original, pre-trial wording) until
   // loadJobs()'s prefetch resolves — see rookLockedJobCtaLabel() in
   // rook-auth.js.
@@ -884,6 +935,7 @@
     }
 
     async function loadJobs() {
+    const requestVersion = ++jobsLoadVersion;
     try {
       // Kicked off in parallel here, awaited just before rendering
       // below — overlaps with the rest of this function's own fetches
@@ -891,6 +943,7 @@
       const ctaLabelPromise = Promise.resolve('Unlock Job');
       const profileRes = await rookV7Fetch('/profile');
       const profileForLocation = profileRes.ok ? await profileRes.json() : null;
+      initializeIndustryFilters(profileForLocation);
 
       // Update the Primary Job-Search Location label in the UI
       updateLocationLabel(profileForLocation);
@@ -912,6 +965,7 @@
           jobsUrl = `/jobs?limit=300&near_lat=${geo.lat}&near_lng=${geo.lng}`;
         }
       }
+      jobsUrl += '&industries=' + encodeURIComponent(showAllIndustries ? 'all' : selectedIndustries().join(','));
       const res = await rookV7Fetch(jobsUrl);
       if (!res.ok) throw new Error('API returned ' + res.status);
       const data = await res.json();
@@ -922,12 +976,17 @@
         return;
       }
 
+      if (requestVersion !== jobsLoadVersion) return;
+      currentJobs = Array.isArray(jobs) ? jobs : [];
+      jobList.dataset.demo = 'false';
       if (!Array.isArray(jobs) || jobs.length === 0) {
+        applyRecruiterToggle();
+        updateStats([]);
         const _mc0 = document.getElementById('mobileJobCount');
         const _ms0 = document.getElementById('mobileJobSub');
         if (_mc0) _mc0.textContent = '0';
         if (_ms0) _ms0.textContent = 'No ranked opportunities yet.';
-        showBanner('No matches found for these preferences. You can return to the questions and try another location.');
+        showBanner('No jobs match the selected industries. Try All industries or another location.');
         revealDemo();
         return;
       }
@@ -935,6 +994,7 @@
       // Real jobs exist — replace the demo rows and update the stat
       // cards / greeting to reflect real counts instead of the original
       // hardcoded mockup numbers.
+      if (requestVersion !== jobsLoadVersion) return;
       currentJobs = jobs;
 
       // The "Show recruiter-posted jobs" toggle implies recruiter jobs
@@ -963,6 +1023,7 @@
     }
     }
 
+    window.reloadIndustryJobs = loadJobs;
     await loadJobs();
   })();
 
@@ -1097,6 +1158,10 @@
       visible = visible.filter((j) => j.saved);
     } else if (currentTierFilter === 'new') {
       visible = visible.filter(isNewJob);
+    }
+
+    if (!showAllIndustries) {
+      visible = visible.filter(j => RookJobClassification.matches(j, selectedIndustries()));
     }
 
     // "Best Match" is the default order the API already returns (sorted

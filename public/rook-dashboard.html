@@ -442,21 +442,23 @@
         <div id="dashCategoryFilters" style="display:flex; align-items:center; flex-wrap:wrap; gap:12px; padding-left:12px; border-left:1px solid #E2E7F0;">
           <span style="font-size:12.5px; color:#8B96AB; font-weight:600;">Categories:</span>
           <label style="display:flex; align-items:center; gap:5px; font-size:12.5px; color:#5B6B85; font-weight:600; cursor:pointer; margin:0;">
-            <input type="checkbox" class="dash-filter-category" value="diagnostics" checked onchange="applyRecruiterToggle()">
+            <input type="checkbox" class="dash-filter-category" value="diagnostics" checked onchange="changeIndustryFilter()">
             Diagnostics
           </label>
           <label style="display:flex; align-items:center; gap:5px; font-size:12.5px; color:#5B6B85; font-weight:600; cursor:pointer; margin:0;">
-            <input type="checkbox" class="dash-filter-category" value="medical device" checked onchange="applyRecruiterToggle()">
+            <input type="checkbox" class="dash-filter-category" value="medical device" checked onchange="changeIndustryFilter()">
             Medical Device
           </label>
           <label style="display:flex; align-items:center; gap:5px; font-size:12.5px; color:#5B6B85; font-weight:600; cursor:pointer; margin:0;">
-            <input type="checkbox" class="dash-filter-category" value="pharmaceutical" checked onchange="applyRecruiterToggle()">
+            <input type="checkbox" class="dash-filter-category" value="pharmaceutical" checked onchange="changeIndustryFilter()">
             Pharmaceutical
           </label>
           <label style="display:flex; align-items:center; gap:5px; font-size:12.5px; color:#5B6B85; font-weight:600; cursor:pointer; margin:0;">
-            <input type="checkbox" class="dash-filter-category" value="veterinary" checked onchange="applyRecruiterToggle()">
+            <input type="checkbox" class="dash-filter-category" value="veterinary" checked onchange="changeIndustryFilter()">
             Veterinary
           </label>
+        <button type="button" onclick="showEveryIndustry()" style="border:0;background:none;color:#1463FF;cursor:pointer;">All industries</button>
+          <span style="font-size:11px;color:#8B96AB;">Scores reflect your saved preferences.</span>
         </div>
       </div>
       <label style="display:flex; align-items:center; gap:7px; font-size:12.5px; color:#5B6B85; font-weight:600; margin:0;">
@@ -584,6 +586,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="rook-config.js"></script>
 <script src="rook-auth.js"></script>
+<script src="rook-job-classification.js"></script>
 <script src="rook-location-widget.js"></script>
 <script>
   // Every job row currently in the HTML is sample/demo data — clearly
@@ -601,6 +604,35 @@
   // exists; the demo rows only ever appear as a genuine fallback, not
   // as a default first frame.
   let currentJobs = [];
+  let industryFiltersInitialized = false;
+  let showAllIndustries = true;
+  let jobsLoadVersion = 0;
+  function selectedIndustries() {
+    return Array.from(document.querySelectorAll('.dash-filter-category:checked'), el => el.value);
+  }
+  function initializeIndustryFilters(profile) {
+    if (industryFiltersInitialized) return;
+    industryFiltersInitialized = true;
+    const desired = RookJobClassification.normalizeSelection(profile?.desired_industries);
+    const boxes = Array.from(document.querySelectorAll('.dash-filter-category'));
+    if (boxes.some(box => desired.includes(RookJobClassification.normalizeSelection([box.value])[0]))) {
+      showAllIndustries = false;
+      boxes.forEach(box => { box.checked = desired.includes(RookJobClassification.normalizeSelection([box.value])[0]); });
+    }
+  }
+  function changeIndustryFilter() {
+    industryFiltersInitialized = true;
+    showAllIndustries = false;
+    applyRecruiterToggle();
+    window.reloadIndustryJobs?.();
+  }
+  function showEveryIndustry() {
+    industryFiltersInitialized = true;
+    showAllIndustries = true;
+    document.querySelectorAll('.dash-filter-category').forEach(box => { box.checked = true; });
+    window.reloadIndustryJobs?.();
+  }
+
   // Safe default (matches the original, pre-trial wording) until
   // loadJobs()'s prefetch resolves — see rookLockedJobCtaLabel() in
   // rook-auth.js.
@@ -975,6 +1007,7 @@
     }
 
     async function loadJobs() {
+    const requestVersion = ++jobsLoadVersion;
     try {
       // Kicked off in parallel here, awaited just before rendering
       // below — overlaps with the rest of this function's own fetches
@@ -982,6 +1015,7 @@
       const ctaLabelPromise = rookLockedJobCtaLabel();
       const profileRes = await rookApiFetch('/profile');
       const profileForLocation = profileRes.ok ? await profileRes.json() : null;
+      initializeIndustryFilters(profileForLocation);
 
       // Update the Primary Job-Search Location label in the UI
       updateLocationLabel(profileForLocation);
@@ -1003,6 +1037,7 @@
           jobsUrl = `/jobs?limit=300&near_lat=${geo.lat}&near_lng=${geo.lng}`;
         }
       }
+      jobsUrl += '&industries=' + encodeURIComponent(showAllIndustries ? 'all' : selectedIndustries().join(','));
       const res = await rookApiFetch(jobsUrl);
       if (!res.ok) throw new Error('API returned ' + res.status);
       const data = await res.json();
@@ -1013,12 +1048,17 @@
         return;
       }
 
+      if (requestVersion !== jobsLoadVersion) return;
+      currentJobs = Array.isArray(jobs) ? jobs : [];
+      jobList.dataset.demo = 'false';
       if (!Array.isArray(jobs) || jobs.length === 0) {
+        applyRecruiterToggle();
+        updateStats([]);
         const _mc0 = document.getElementById('mobileJobCount');
         const _ms0 = document.getElementById('mobileJobSub');
         if (_mc0) _mc0.textContent = '0';
         if (_ms0) _ms0.textContent = 'No ranked opportunities yet.';
-        showBanner('No live jobs yet. Add employers and run <code>npm run ingest</code> — see ROOK-Setup-Guide.pdf. Showing example matches below in the meantime.');
+        showBanner('No jobs match the selected industries. Try All industries or another location.');
         revealDemo();
         return;
       }
@@ -1026,6 +1066,7 @@
       // Real jobs exist — replace the demo rows and update the stat
       // cards / greeting to reflect real counts instead of the original
       // hardcoded mockup numbers.
+      if (requestVersion !== jobsLoadVersion) return;
       currentJobs = jobs;
 
       // The "Show recruiter-posted jobs" toggle implies recruiter jobs
@@ -1041,6 +1082,7 @@
         const recRes = await rookApiFetch('/recruiter-jobs');
         if (recRes.ok) {
           const recJobs = await recRes.json();
+          if (requestVersion !== jobsLoadVersion) return;
           const knownIds = new Set(currentJobs.map((j) => j.id));
           const missing = (Array.isArray(recJobs) ? recJobs : []).filter((j) => !knownIds.has(j.id));
           currentJobs = [...currentJobs, ...missing];
@@ -1049,6 +1091,7 @@
 
       jobList.dataset.demo = 'false';
       lockedJobCtaLabel = await ctaLabelPromise;
+      if (requestVersion !== jobsLoadVersion) return;
       applyRecruiterToggle();
       updateStats(jobs);
       showBanner('Showing live jobs from your database, ranked by your real match score.', 'info');
@@ -1063,6 +1106,7 @@
     }
     }
 
+    window.reloadIndustryJobs = loadJobs;
     await loadJobs();
   })();
 
@@ -1199,40 +1243,8 @@
       visible = visible.filter(isNewJob);
     }
 
-    // Direct instruction: category checkboxes, mirroring the Job Search
-    // page's INDUSTRY_GROUPS approach, but checked against the real
-    // ai_analysis data already used for scoring (product_categories /
-    // required_industries / preferred_industries) rather than the
-    // always-empty jobs.industry/jobs.category columns Search has to
-    // fall back to — this makes the dashboard's filter more accurate
-    // than Search's, not just consistent with it.
-    // All four boxes default to checked, so this is a no-op until the
-    // user actually unchecks one. A job with NO industry data at all
-    // (not yet AI-analyzed, or genuinely ambiguous) always stays
-    // visible — unchecking a box hides jobs CONFIRMED to be that
-    // category, it never hides jobs we simply don't have data for.
-    const checkedCategoryBoxes = Array.from(document.querySelectorAll('.dash-filter-category:checked')).map((el) => el.value);
-    const allCategoryBoxes = document.querySelectorAll('.dash-filter-category').length;
-    if (checkedCategoryBoxes.length < allCategoryBoxes) {
-      const CATEGORY_GROUPS = {
-        'diagnostics': ['diagnostics', 'reference laboratory', 'molecular', 'point-of-care', 'lab', 'pathology', 'clinical laboratory'],
-        'medical device': ['medical device', 'capital equipment', 'surgical', 'dme', 'consumables'],
-        'pharmaceutical': ['pharmaceutical', 'pharma', 'biotech', 'life sciences', 'specialty pharma'],
-        'veterinary': ['veterinary', 'animal health', 'vet'],
-      };
-      const uncheckedCategories = Array.from(document.querySelectorAll('.dash-filter-category:not(:checked)')).map((el) => el.value);
-      visible = visible.filter((j) => {
-        const aiProd = (j.ai_analysis?.product_categories || []).map((s) => String(s).toLowerCase());
-        const aiReq = (j.ai_analysis?.required_industries || []).map((s) => String(s).toLowerCase());
-        const aiPref = (j.ai_analysis?.preferred_industries || []).map((s) => String(s).toLowerCase());
-        const allTerms = [...aiProd, ...aiReq, ...aiPref];
-        if (allTerms.length === 0) return true; // no data — never hidden by this filter
-        const matchesUnchecked = uncheckedCategories.some((cat) => {
-          const group = CATEGORY_GROUPS[cat] || [cat];
-          return group.some((term) => allTerms.some((s) => s.includes(term)));
-        });
-        return !matchesUnchecked;
-      });
+    if (!showAllIndustries) {
+      visible = visible.filter(j => RookJobClassification.matches(j, selectedIndustries()));
     }
 
     // "Best Match" is the default order the API already returns (sorted

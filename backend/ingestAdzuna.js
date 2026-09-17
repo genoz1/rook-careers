@@ -24,7 +24,7 @@ const { createClient } = require("@supabase/supabase-js");
 const { fetchAdzunaJobs, normalizeAdzunaJob } = require("./adapters/adzuna");
 const { analyzeJob } = require("./ai/jobAnalysis");
 const { generateEmbedding } = require("./ai/embeddings");
-const { geocodeLocation } = require("./geocoding");
+const { validateJobLocation } = require("./validateJobLocation");
 const { titleLooksRelevant } = require("./relevanceFilter");
 
 const supabase = createClient(
@@ -156,6 +156,7 @@ async function run() {
       totalAgencyMatched++;
 
       const job = normalizeAdzunaJob(raw);
+      Object.assign(job, await validateJobLocation(job));
       if (!titleLooksRelevant(job.title_original)) continue;
 
       // Manual check-then-write rather than .upsert()+onConflict: the
@@ -167,7 +168,7 @@ async function run() {
       // entirely instead of fighting it.
       const { data: existing } = await supabase
         .from("jobs")
-        .select("id, ai_analysis, job_embedding, job_lat, location_raw")
+        .select("id, ai_analysis, job_embedding, job_lat, location_raw, title_original, description_text")
         .eq("source_type", "agency_aggregated")
         .eq("source_job_id", job.source_job_id)
         .maybeSingle();
@@ -187,13 +188,17 @@ async function run() {
         const recentCutoff = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
         const { data: candidates } = await supabase
           .from("jobs")
-          .select("id, title_original")
+          .select("id, title_original, description_text")
           .eq("source_type", "agency_aggregated")
           .eq("company_name", companyName)
           .gte("first_seen_at", recentCutoff);
         fuzzyDuplicate = (candidates || []).find((c) => normalizeAgencyTitle(c.title_original) === normalizedTitle) || null;
       }
       const matchedRow = existing || fuzzyDuplicate;
+      if (matchedRow && (matchedRow.title_original !== job.title_original || matchedRow.description_text !== job.description_text)) {
+        job.ai_analysis = null;
+        job.job_embedding = null;
+      }
 
       let upsertedRow;
       let error;
@@ -239,19 +244,7 @@ async function run() {
         }
       }
 
-      if (upsertedRow.job_lat == null && upsertedRow.location_raw) {
-        try {
-          const coords = await geocodeLocation(upsertedRow.location_raw);
-          if (coords) {
-            // Same fix as backend/ingest.js — coords.state was previously
-            // dropped here too, an identical instance of the same defect
-            // in this separate (Adzuna) ingestion pathway.
-            await supabase.from("jobs").update({ job_lat: coords.lat, job_lng: coords.lng, state: coords.state }).eq("id", upsertedRow.id);
-          }
-        } catch (err) {
-          console.error(`  Geocoding failed for "${job.location_raw}": ${err.message}`);
-        }
-      }
+
     }
   }
 
