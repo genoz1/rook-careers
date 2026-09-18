@@ -571,7 +571,11 @@
       // own home.
       status.textContent = 'Searching near "' + query + '"...';
       const selected = Array.from(document.querySelectorAll('.filter-industry:checked'), el => el.value);
-      const jobsRes = await rookApiFetch(`/jobs?limit=300&near_lat=${data.lat}&near_lng=${data.lng}&industries=${encodeURIComponent(selected.length ? selected.join(',') : 'all')}`);
+      const params = new URLSearchParams({limit:'300', near_lat:data.lat, near_lng:data.lng, near_state:data.stateAbbr || data.state || '', industries:selected.length ? selected.join(',') : 'all'});
+      const keyword = document.getElementById('filterKeyword').value.trim();
+      if (keyword) params.set('keyword', keyword);
+      const jobsRes = await rookApiFetch('/jobs?' + params.toString());
+      if (!jobsRes.ok) throw new Error('Job search failed (' + jobsRes.status + ')');
       const jobsData = await jobsRes.json();
       if (mySeq !== searchRequestSeq) return; // a newer search has since started — drop this one
       const jobs = Array.isArray(jobsData) ? jobsData : (jobsData.jobs || []);
@@ -664,13 +668,13 @@
       document.getElementById('sortSelect').addEventListener('change', applyFiltersAndRender);
       document.getElementById('showRecruiterFilter').addEventListener('change', applyFiltersAndRender);
 
-    async function loadJobs(keyword) {
+    async function loadJobs(keyword = document.getElementById('filterKeyword').value.trim()) {
     try {
       const params = new URLSearchParams({ limit: '300' });
       const selected = Array.from(document.querySelectorAll('.filter-industry:checked'), el => el.value);
       params.set('industries', selected.length ? selected.join(',') : 'all');
       if (keyword) params.set('keyword', keyword);
-      if (nearLocationCoords) { params.set('near_lat', nearLocationCoords.lat); params.set('near_lng', nearLocationCoords.lng); }
+      if (nearLocationCoords) { params.set('near_lat', nearLocationCoords.lat); params.set('near_lng', nearLocationCoords.lng); params.set('near_state', nearLocationCoords.stateAbbr || nearLocationCoords.state || ''); }
       const [jobsRes, profileRes] = await Promise.all([
         rookApiFetch('/jobs?' + params.toString()),
         rookApiFetch('/profile').catch(() => null),

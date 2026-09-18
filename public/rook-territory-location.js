@@ -9,7 +9,12 @@
   function matchesState(job, stateCode) {
     return !!stateCode && territories(job).some(g => g.states.includes(stateCode));
   }
-  const api = {territories, matchesState};
+  // Do not lose territory openings merely because exact-point jobs filled
+  // the ranked-result cap before the browser applied its radius filter.
+  function retainMatches(rows, limit, stateCode, jobOf = row => row) {
+    return rows.filter((row, index) => index < limit || matchesState(jobOf(row), stateCode));
+  }
+  const api = {territories, matchesState, retainMatches};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.RookTerritoryLocation = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
