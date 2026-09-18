@@ -47,7 +47,8 @@ async function fetchGreenhouseJobs(boardToken) {
     throw new Error(`Greenhouse fetch failed for "${boardToken}": ${res.status} ${res.statusText}`);
   }
   const data = await res.json();
-  return data.jobs || [];
+  if (!Array.isArray(data?.jobs)) throw new Error("Greenhouse malformed listing response");
+  return data.jobs;
 }
 
 /**
