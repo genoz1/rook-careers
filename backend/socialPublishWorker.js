@@ -16,6 +16,7 @@
 
 require("dotenv").config();
 const { createClient } = require("@supabase/supabase-js");
+const { isUsEligibleJob } = require("./jobEligibility");
 const {
   evaluateEligibility,
   scoreAndSortCandidates,
@@ -119,8 +120,12 @@ async function selectTopCandidate(supabaseAdmin, config, { excludedJobIds = new 
 }
 
 async function provePublicUrlValid(supabaseAnon, jobId) {
-  const { data } = await supabaseAnon.from("jobs").select("id").eq("id", jobId).eq("status", "active").maybeSingle();
-  return Boolean(data);
+  // Match the public job page's eligibility gate, including source-country
+  // evidence for remote jobs. An active record alone is not a usable page.
+  const { data, error } = await supabaseAnon.from("jobs")
+    .select("id, location_raw, location_evidence, job_lat, job_lng, state")
+    .eq("id", jobId).eq("status", "active").maybeSingle();
+  return !error && Boolean(data) && isUsEligibleJob(data);
 }
 
 async function fetchFreshJob(supabaseAdmin, jobId) {
