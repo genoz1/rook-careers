@@ -1,8 +1,9 @@
 // GET /api/geocode?q=<text> — lets the frontend geocode an arbitrary
 // place name on demand, used by the Job Search page's "show jobs near a
 // place" feature (searching near somewhere other than the candidate's
-// saved home ZIP — e.g. "what's available in Tampa" even if they live
-// in Oxford). Kept server-side (not called directly from the browser)
+// saved home ZIP — e.g. "what's available in Tampa, FL" even if they live
+// in Oxford). ZIP and exact city searches use the bundled local dataset.
+// Other qualified location text uses the existing geocoder server-side
 // so the real request to OpenStreetMap's Nominatim goes through the
 // same throttled, User-Agent-labeled client as ingestion's job
 // geocoding — calling Nominatim directly from a browser would violate
@@ -36,7 +37,9 @@ router.get("/geocode", requireAuth, async (req, res) => {
   if (!query) return res.status(400).json({ error: "Missing ?q= query text" });
 
   try {
-    const coords = await geocodeLocation(query);
+    const local = resolveSearchLocation(query);
+    if (local.ambiguous) return res.status(400).json({ error: 'More than one city matches. Please include the state, for example Springfield, IL.' });
+    const coords = local.coords || (/^\d/.test(query) ? null : await geocodeLocation(query));
     if (!coords) return res.status(404).json({ error: `Could not find a location matching "${query}"` });
     res.json(coords);
   } catch (err) {
@@ -211,6 +214,25 @@ function searchLocal(q) {
 
   // --- Plain prefix city name search (no state hint) ---
   return cityPrefixSearch(trimmed);
+}
+
+// Candidate-entered ZIPs and cities are different from employer location
+// evidence. Resolve complete local matches without weakening ingestion rules
+// or depending on an external geocoder for ordinary U.S. searches.
+function resolveSearchLocation(query) {
+  const q = query.trim();
+  if (/^\d{5}(?:-\d{4})?$/.test(q)) {
+    const entry = zipcodes.lookup(q.slice(0, 5));
+    return { coords: entry && abbrToStateName(entry.state) ? zipToSuggestion(entry) : null };
+  }
+  const normalize = value => value.toLowerCase().replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
+  const key = normalize(q);
+  const matches = [];
+  for (const entry of getCityIndex().values()) {
+    if ([entry.city, `${entry.city} ${entry.state}`, `${entry.city} ${abbrToStateName(entry.state)}`].some(value => normalize(value) === key)) matches.push(entry);
+  }
+  if (matches.length > 1) return { ambiguous: true };
+  return { coords: matches.length === 1 ? entryToSuggestion(matches[0]) : null };
 }
 
 // Prime the city index at startup so the first user request is fast
