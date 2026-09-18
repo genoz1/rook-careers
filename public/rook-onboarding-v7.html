@@ -7,6 +7,7 @@
   <title>Find Medical Sales Jobs — ROOK</title>
   <link rel="icon" href="assets/favicon.ico" sizes="any">
   <script src="rook-attribution.js"></script>
+<script src="rook-tracking.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="rook-mobile.css">
@@ -69,10 +70,7 @@
   gtag('js', new Date());
   gtag('config', 'AW-18428232873');
   gtag('config', 'G-LDG2CL5Z8R');
-  // Fires once, on first load of the welcome screen — the true top of
-  // the funnel (account_created / dashboard_viewed / trial_activated
-  // are the later steps, tracked on their own pages). No PII in params.
-  gtag('event', 'onboarding_started', { event_category: 'onboarding', event_label: 'v6' });
+  // The welcome CTA records onboarding_started; page_view measures arrivals.
 </script>
 <body>
 
@@ -246,7 +244,7 @@ function goBack() {
 window.goBack = goBack;
 
 // ── Welcome ─────────────────────────────────────────────────────────────────
-document.getElementById('btnWelcomeStart').addEventListener('click', () => show('details'));
+document.getElementById('btnWelcomeStart').addEventListener('click', () => { if (typeof rookTrackFunnelEvent === 'function') rookTrackFunnelEvent('onboarding_started', {event_category:'onboarding', event_label:'v7'}); show('details'); });
 
 // ── Location ────────────────────────────────────────────────────────────────
 const _locInput = document.getElementById('locationInput');
@@ -317,7 +315,7 @@ async function loadAnonymousMatches(territories) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Unable to load matches. Please try again.');
     sessionStorage.setItem('rook_v7_token', data.token);
-    if (typeof gtag === 'function') gtag('event', 'v7_questions_completed', {event_category:'onboarding'});
+    if (typeof rookTrackFunnelEvent === 'function') rookTrackFunnelEvent('v7_questions_completed', {event_category:'onboarding'});
     window.location.href = 'rook-dashboard-v7.html';
   } catch (err) {
     document.getElementById('matchesHeadline').textContent = 'Unable to load your matches';

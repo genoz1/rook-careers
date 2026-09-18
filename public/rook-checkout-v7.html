@@ -288,6 +288,8 @@
       .card-row { grid-template-columns: 1fr; }
     }
   </style>
+<script src="rook-attribution.js"></script>
+<script src="rook-tracking.js"></script>
 <script src="rook-v7.js"></script>
 </head>
 <!-- Google tag — was missing from this page entirely before now, which
@@ -495,7 +497,7 @@
   try {
     await rookV7PrepareAccount();
     btn.disabled = false;
-    if (typeof gtag === 'function') gtag('event','v7_checkout_started');
+    if (typeof rookTrackFunnelEvent === 'function') rookTrackFunnelEvent('v7_checkout_started');
   } catch (error) {
     showErr(error.message);
     const retry = document.createElement('button');

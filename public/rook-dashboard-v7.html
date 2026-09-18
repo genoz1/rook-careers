@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <script src="rook-attribution.js"></script>
+<script src="rook-tracking.js"></script>
 <!-- Google tag (gtag.js) -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=AW-18428232873"></script>
 <script>
@@ -1018,7 +1019,7 @@
       lockedJobCtaLabel = 'Unlock Job';
       applyRecruiterToggle();
       updateStats(jobs);
-      rookTrackEvent(rookV7Unlocked ? 'v7_unmasked_dashboard_viewed' : 'v7_masked_dashboard_viewed');
+      if (typeof rookTrackFunnelEvent === 'function') rookTrackFunnelEvent(rookV7Unlocked ? 'v7_unmasked_dashboard_viewed' : 'v7_masked_dashboard_viewed');
       revealDemo();
     } catch (err) {
       const _mce = document.getElementById('mobileJobCount');

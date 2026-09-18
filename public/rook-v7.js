@@ -42,16 +42,18 @@ async function rookV7Init() {
   try {
     await rookV7Read('?summary=1');
     if(new URLSearchParams(location.search).get('trial') === 'started') {
+      try { sessionStorage.setItem('rook_v7_trial_pending', '1'); } catch (_) {}
       // Stripe activation can precede the webhook. Access stays masked until
       // the server confirms entitlement; never trust the return URL.
       for(let i=0;!rookV7Unlocked && i<10;i++) {
         await new Promise(resolve=>setTimeout(resolve,2000)); await rookV7Read();
       }
-      if(rookV7Unlocked && rookV7Snapshot.profile.subscription_status === 'trialing') {
-        if(!sessionStorage.getItem('rook_v7_trial_event')) {
-          rookTrackEvent('v7_trial_activated'); sessionStorage.setItem('rook_v7_trial_event','1');
-        }
-      }
+    }
+    var pendingTrial = new URLSearchParams(location.search).get('trial') === 'started';
+    try { pendingTrial = pendingTrial || sessionStorage.getItem('rook_v7_trial_pending') === '1'; } catch (_) {}
+    if(pendingTrial && rookV7Unlocked && rookV7Snapshot.profile.subscription_status === 'trialing') {
+      if (typeof rookTrackFunnelEvent === 'function') rookTrackFunnelEvent('v7_trial_activated', {}, rookV7Snapshot.profile.user_id || sessionStorage.getItem('rook_v7_token'));
+      try { sessionStorage.removeItem('rook_v7_trial_pending'); } catch (_) {}
     }
     return 'v7-session';
   } catch(e) {

@@ -7,6 +7,7 @@
 <title>ROOK — Unlock Your Matches</title>
 <link rel="icon" href="assets/favicon.ico">
 <script src="rook-attribution.js"></script>
+<script src="rook-tracking.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <script src="rook-config.js"></script>
@@ -161,6 +162,8 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
     return;
   }
 
+  if (typeof rookTrackFunnelEvent === 'function') rookTrackFunnelEvent('v7_signup_started');
+
   function updateResend() {
     const remaining = Math.ceil((resendAvailableAt - Date.now()) / 1000);
     resendBtn.disabled = remaining > 0;
@@ -278,14 +281,8 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
       if (!claim.ok) throw new Error('Your email is verified. Return to your V7 dashboard to retry transferring your matches.');
       sessionStorage.removeItem('rook_v7_pending_email');
       // Emit only after the verified account and profile transfer succeed.
-      try {
-      const eventKey = 'rook_signup_tracked_' + userId;
-      if (typeof gtag === 'function' && !localStorage.getItem(eventKey)) {
-        gtag('event', 'sign_up', { method: 'email' });
-        gtag('event', 'v7_account_created');
-        localStorage.setItem(eventKey, '1');
-      }
-      } catch (_) { /* Analytics/storage must never block a verified signup. */ }
+      if (typeof rookTrackFunnelEvent === 'function') rookTrackFunnelEvent('sign_up', { method: 'email' }, userId);
+      if (typeof rookTrackFunnelEvent === 'function') rookTrackFunnelEvent('v7_account_created', {}, userId);
       window.location.href = 'rook-checkout-v7.html';
     } catch (err) {
       codeErr.textContent = err.message;
