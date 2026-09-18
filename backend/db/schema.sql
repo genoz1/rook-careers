@@ -16,7 +16,7 @@ create table if not exists employers (
   careers_url text,
   industry text,
   subindustry text,
-  ats_type text not null check (ats_type in ('greenhouse','lever','ashby','workday','talentbrew','workable','smartrecruiters','clinchtalent','oraclehcm','phenom','jobvite','applicantpro','icims','drupalcareers','teamtailor','pinpoint','eightfold','paylocity','adp','ukg','jazzhr','custom','manual')),
+  ats_type text not null check (ats_type in ('greenhouse','lever','ashby','workday','talentbrew','workable','smartrecruiters','clinchtalent','oraclehcm','phenom','jobvite','applicantpro','icims','drupalcareers','teamtailor','pinpoint','eightfold','paylocity','adp','ukg','jazzhr','custom_html','custom','manual')),
   ats_identifier text,               -- greenhouse board token / lever site / ashby job board name
   source_url text,
   active boolean default true,
@@ -91,6 +91,7 @@ create table if not exists jobs (
   last_seen_at timestamptz default now(),
   status text default 'active' check (status in ('active','closed')),
   source_verified boolean default true,
+  extraction_evidence jsonb,          -- parsing confidence/status/territories; separate from source verification
 
   -- Recruiter-submitted postings: unlike every other source_type (all
   -- ATS-pulled and inherently verified), a recruiter can submit

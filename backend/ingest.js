@@ -33,6 +33,7 @@ const { fetchAdpJobs }    = require("./adapters/adp");
 const { fetchUkgJobs }    = require("./adapters/ukg");
 const { fetchJazzHRJobs } = require("./adapters/jazzhr");
 const { fetchSuccessFactorsJobs, normalizeSuccessFactorsJob } = require("./adapters/successfactors");
+const { fetchCustomHtmlJobs, normalizeCustomHtmlJob } = require("./adapters/customHtml");
 const { analyzeJob } = require("./ai/jobAnalysis");
 const { generateEmbedding } = require("./ai/embeddings");
 const { validateJobLocation } = require('./validateJobLocation');
@@ -51,7 +52,16 @@ async function ingestEmployer(employer) {
   let normalize;
 
   try {
-    if (employer.ats_type === "greenhouse") {
+    if (employer.ats_type === "custom_html") {
+      // Explicit allowlist keeps the first-source pilot out of broad scheduled runs.
+      const enabledIds = (process.env.CUSTOM_HTML_EMPLOYER_IDS || "").split(",").map(id => id.trim());
+      if (!enabledIds.includes(employer.id)) {
+        console.log("  Skipping custom_html — employer is not enabled for this run");
+        return;
+      }
+      rawJobs = await fetchCustomHtmlJobs(employer);
+      normalize = normalizeCustomHtmlJob;
+    } else if (employer.ats_type === "greenhouse") {
       rawJobs = await fetchGreenhouseJobs(employer.ats_identifier);
       normalize = normalizeGreenhouseJob;
     } else if (employer.ats_type === "lever") {
@@ -254,6 +264,8 @@ async function ingestEmployer(employer) {
     }
     savedCount++;
 
+    if (job.status !== "active") continue;
+
     if (aiAnalyzedThisRun >= AI_ANALYSIS_CAP_PER_EMPLOYER) {
       continue; // saved, but AI analysis deferred to a later run
     }
@@ -443,4 +455,5 @@ async function run() {
   console.log(`\nIngestion run complete. Processed ${processedCount} / ${employers.length} employer(s).`);
 }
 
-run();
+if (require.main === module) run();
+module.exports = { ingestEmployer, run };

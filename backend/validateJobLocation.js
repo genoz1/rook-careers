@@ -15,6 +15,9 @@ async function validateJobLocation(job, geocode = geocodeLocation, previous = nu
     return cleared;
   }
   if (!US_COUNTRY_CODES.has(country) && !hasQualifiedUsLocation(raw)) return cleared;
+  // A named sales territory is not a city point. Preserve its source country
+  // and structured groups without inventing centroid-based distances.
+  if (job.source_type === 'custom_html' && job.extraction_evidence?.location_scope === 'state_or_region') return cleared;
   // Reuse only points validated by this version against identical source
   // evidence. Legacy geocodes have no provenance and are never reused.
   const old = previous?.location_evidence;

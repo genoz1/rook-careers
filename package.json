@@ -14,7 +14,8 @@
     "archive-old-jobs": "node backend/archiveOldJobs.js",
     "test-trial-flow": "node backend/testTrialFlow.js",
     "test-job-eligibility": "node backend/testJobEligibility.js",
-    "test-all": "npm run test-job-eligibility && npm run test-trial-flow && npm run test-ui-copy && npm run test-v6-email-code && npm run test-daily-digest-location",
+    "test-custom-html": "node --test backend/testCustomHtml.js",
+    "test-all": "npm run test-custom-html && npm run test-job-eligibility && npm run test-trial-flow && npm run test-ui-copy && npm run test-v6-email-code && npm run test-daily-digest-location",
     "test-daily-digest-location": "node backend/testDailyDigestLocation.js",
     "test-v6-email-code": "node backend/testV6EmailCode.js",
     "test-resume-achievements": "node backend/testResumeAchievements.js",
@@ -36,6 +37,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
+    "cheerio": "1.0.0",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "i18n-iso-countries": "^7.14.0",
