@@ -14,9 +14,35 @@ const BASE_URL = "https://boards-api.greenhouse.io/v1/boards";
  * @param {string} boardToken - e.g. "stripe"
  * @returns {Promise<Array>} raw Greenhouse job objects
  */
+// Diagnosed via a live diagnostic run (Sept 2026): requests with no
+// headers at all — the original state of this function — were getting
+// 404s from production for boards confirmed live and correct (verified
+// 10x Genomics' board directly; same URL succeeds when called with a
+// normal browser-like User-Agent). A bare Node fetch with no User-Agent
+// is a common trigger for bot-protection layers in front of APIs like
+// this one, so a realistic User-Agent and Accept header are added here,
+// plus a timeout so one stalled board can't hang an ingestion run.
+async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        Accept: "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        ...options.headers,
+      },
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function fetchGreenhouseJobs(boardToken) {
   const url = `${BASE_URL}/${boardToken}/jobs?content=true`;
-  const res = await fetch(url);
+  const res = await fetchWithTimeout(url);
   if (!res.ok) {
     throw new Error(`Greenhouse fetch failed for "${boardToken}": ${res.status} ${res.statusText}`);
   }

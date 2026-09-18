@@ -3,21 +3,22 @@
 // UKG Pro careers pages are hosted at recruiting.ultipro.com or
 // recruiting2.ultipro.com. The public job-listing API is unauthenticated.
 //
-// URL pattern:
-//   https://recruiting[2].ultipro.com/{ORG_CODE}/{display_name}/JobBoard/{board_id}
+// URL pattern (confirmed against live career pages for ARUP Laboratories,
+// Genova Diagnostics and Ionis Pharmaceuticals — no display-name segment):
+//   https://recruiting[2].ultipro.com/{ORG_CODE}/JobBoard/{board_id}
 //
 // Public JSON API:
-//   POST https://recruiting[2].ultipro.com/{ORG_CODE}/{display_name}/JobBoard/{board_id}/api/apply/jobs/search
+//   POST https://recruiting[2].ultipro.com/{ORG_CODE}/JobBoard/{board_id}/api/apply/jobs/search
 //   Body: { "pageSize": 100, "pageNumber": 1, "openings": true }
 //
 // Store in employers.ats_identifier as: "host|ORG_CODE|board_id"
 //   e.g. "recruiting.ultipro.com|GEN1019|bb822312-e746-def8-5d38-36b1544138df"
 //   or   "recruiting2.ultipro.com|ARU1000ARUP|62cc791d-612e-42e6-909f-0de27efe2038"
 //
-// The display_name segment in the path is cosmetic and can be inferred
-// from the company slug, but the org code and board ID are the real
-// identifiers. The POST endpoint doesn't need the display name — the
-// org code and board ID are sufficient.
+// A previous version of this file inserted the employer's company_slug
+// as a display-name segment before "JobBoard" — that URL 404s. The org
+// code and board ID are the only real identifiers; no display name goes
+// in the URL at all.
 //
 // NOTE: UKG does not officially document this endpoint for third-party
 // use. It's the same endpoint UKG's own careers-page widget calls.
@@ -89,8 +90,18 @@ async function fetchUkgJobs(employer) {
   const jobs = [];
   let page = 1;
 
+  // Diagnosed via a live diagnostic run (Sept 2026): the real, working
+  // career-board URLs for these UKG tenants (confirmed directly against
+  // ARUP Laboratories, Genova Diagnostics and Ionis Pharmaceuticals'
+  // stored careers_url) have NO display-name segment between the org
+  // code and "JobBoard" — e.g. ".../ARU1000ARUP/JobBoard/...", not
+  // ".../ARU1000ARUP/arup-laboratories/JobBoard/...". Inserting
+  // employer.company_slug there (as this previously did) produced a URL
+  // that doesn't exist and 404s. The file header's claim that "the POST
+  // endpoint doesn't need the display name" turns out to mean it must be
+  // OMITTED, not that any value works — so it's dropped here entirely.
   while (true) {
-    const url = `https://${host}/${orgCode}/${employer.company_slug}/JobBoard/${boardId}/api/apply/jobs/search`;
+    const url = `https://${host}/${orgCode}/JobBoard/${boardId}/api/apply/jobs/search`;
     const res = await fetchWithTimeout(url, {
       method:  'POST',
       body:    JSON.stringify({ pageSize: PAGE_SIZE, pageNumber: page, openings: true }),

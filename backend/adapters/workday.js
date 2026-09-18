@@ -52,11 +52,29 @@ const { titleLooksRelevant } = require('../relevanceFilter');
 // Wraps fetch() with a timeout so one stalled request can't hang the
 // entire ingestion run forever — without this, a single unresponsive
 // endpoint blocks every job after it indefinitely.
+// Diagnosed via a live diagnostic run (Sept 2026): every single Workday
+// employer (9 different tenants, all correct identifiers) failed with
+// the identical generic "422 Unprocessable Entity" + empty message +
+// unique error case ID — that uniformity across unrelated tenants points
+// to Workday's own request-validation layer rejecting the request
+// itself, not 9 coincidentally-wrong database entries. Reference
+// material on working Workday scrapers confirms the request needs a
+// User-Agent and a Referer header that mirrors the real careers-page
+// origin (the page a candidate would actually be browsing when their
+// browser makes this same call) — this adapter previously sent neither.
 async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetch(url, { ...options, signal: controller.signal });
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        Accept: "application/json",
+        ...options.headers,
+      },
+    });
   } finally {
     clearTimeout(timer);
   }
@@ -65,6 +83,7 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
 async function fetchWorkdayJobs(identifier) {
   const { tenant, wdNumber, site } = parseWorkdayIdentifier(identifier);
   const baseUrl = `https://${tenant}.${wdNumber}.myworkdayjobs.com/wday/cxs/${tenant}/${site}`;
+  const refererUrl = `https://${tenant}.${wdNumber}.myworkdayjobs.com/${site}`;
 
   const allPostings = [];
   const pageSize = 20;
@@ -74,7 +93,7 @@ async function fetchWorkdayJobs(identifier) {
   while (offset < total) {
     const res = await fetchWithTimeout(`${baseUrl}/jobs`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Referer: refererUrl },
       body: JSON.stringify({ appliedFacets: {}, limit: pageSize, offset, searchText: "" }),
     });
     if (!res.ok) {
