@@ -33,7 +33,7 @@ const { fetchAdpJobs }    = require("./adapters/adp");
 const { fetchUkgJobs }    = require("./adapters/ukg");
 const { fetchJazzHRJobs } = require("./adapters/jazzhr");
 const { fetchSuccessFactorsJobs, normalizeSuccessFactorsJob } = require("./adapters/successfactors");
-const { fetchCustomHtmlJobs, normalizeCustomHtmlJob } = require("./adapters/customHtml");
+const { fetchCustomHtmlJobs, normalizeCustomHtmlJob, splitTerritoryOpenings } = require("./adapters/customHtml");
 const { analyzeJob } = require("./ai/jobAnalysis");
 const { generateEmbedding } = require("./ai/embeddings");
 const { validateJobLocation } = require('./validateJobLocation');
@@ -60,6 +60,9 @@ async function ingestEmployer(employer) {
         return;
       }
       rawJobs = await fetchCustomHtmlJobs(employer);
+      if ((process.env.CUSTOM_HTML_SPLIT_TERRITORIES_IDS || "").split(",").map(id => id.trim()).includes(employer.id)) {
+        rawJobs = splitTerritoryOpenings(rawJobs);
+      }
       normalize = normalizeCustomHtmlJob;
     } else if (employer.ats_type === "greenhouse") {
       rawJobs = await fetchGreenhouseJobs(employer.ats_identifier);
@@ -155,10 +158,12 @@ async function ingestEmployer(employer) {
   // below (and only for jobs under this run's per-employer cap).
   const { data: existingAnalysisRows } = await supabase
     .from("jobs")
-    .select("source_job_id, ai_analysis, title_original, description_text")
+    .select(employer.ats_type === "custom_html" ? "source_job_id, ai_analysis, job_embedding, extraction_evidence, title_original, description_text" : "source_job_id, ai_analysis, title_original, description_text")
     .eq("employer_id", employer.id)
     .not("ai_analysis", "is", null);
   const existingAiAnalysisBySourceId = new Map((existingAnalysisRows || []).map((r) => [r.source_job_id, r.ai_analysis]));
+  const sharedAnalysisKey = j => `${j.extraction_evidence?.original_title || j.title_original}\n${j.description_text}`;
+  const sharedCustomAnalysis = new Map((existingAnalysisRows || []).map(j => [sharedAnalysisKey(j), j]));
   const existingContentBySourceId = new Map((existingAnalysisRows || []).map(r => [r.source_job_id, r]));
 
   // All existing source IDs for this employer — used to detect new jobs
@@ -236,6 +241,17 @@ async function ingestEmployer(employer) {
       job.ai_analysis = null;
       job.job_embedding = null;
       existingAiAnalysisBySourceId.delete(job.source_job_id);
+    }
+
+    // Territory children share unchanged requirements with their parent posting.
+    // Reuse only exact original-title/description matches within this employer.
+    if (job.source_type === 'custom_html' && !job.ai_analysis) {
+      const shared = sharedCustomAnalysis.get(sharedAnalysisKey(job));
+      if (shared?.ai_analysis) {
+        job.ai_analysis = shared.ai_analysis;
+        job.job_embedding = shared.job_embedding || null;
+        existingAiAnalysisBySourceId.set(job.source_job_id, shared.ai_analysis);
+      }
     }
 
     const { data: upsertedRow, error } = await supabase

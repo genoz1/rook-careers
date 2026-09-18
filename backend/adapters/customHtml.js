@@ -151,6 +151,11 @@ function territoryGroup(label) {
   const states = parts.map(resolveUsStateCode);
   return {label, scope:states.length && states.every(Boolean) ? 'state_or_region' : 'unspecified', states:[...new Set(states.filter(Boolean))]};
 }
+function splitTerritoryOpenings(jobs) {
+  return jobs.flatMap(raw => raw.tier === 'static_section' && raw.locations.length > 1
+    ? raw.locations.map(label => ({...raw, originalTitle:raw.title, title:`${raw.title} — ${label}`, locations:[label], identifier:`${canonical(raw.url)}#${raw.title.toLowerCase()}#territory:${label.toLowerCase()}`}))
+    : [raw]);
+}
 function normalizeCustomHtmlJob(raw, employer) {
   const verified = verifiedSource(raw.url,employer);
   const locs = [...new Set(raw.locations || [])];
@@ -173,7 +178,7 @@ function normalizeCustomHtmlJob(raw, employer) {
     expires_at:raw.validThrough && Number.isFinite(Date.parse(raw.validThrough)) ? new Date(raw.validThrough).toISOString() : null,
     source_verified:verified, status:active ? 'active' : 'closed',
     ...(regional ? {location_evidence:{source_country_code:'US'}} : {}),
-    extraction_evidence:{version:1, tier:raw.tier, confidence:raw.confidence, posting_status:raw.status, territories:groups, location_scope:regional ? 'state_or_region' : 'unspecified', application_destinations:raw.applications || [], content_hash:hash(text(raw.html)), page_hash:raw.pageHash || null}
+    extraction_evidence:{version:1, original_title:raw.originalTitle || raw.title, tier:raw.tier, confidence:raw.confidence, posting_status:raw.status, territories:groups, location_scope:regional ? 'state_or_region' : 'unspecified', application_destinations:raw.applications || [], content_hash:hash(text(raw.html)), page_hash:raw.pageHash || null}
   };
 }
 async function fetchCustomHtmlJobs(employer, { fetchPage, now = new Date() } = {}) {
@@ -218,4 +223,4 @@ async function fetchCustomHtmlJobs(employer, { fetchPage, now = new Date() } = {
   for (const raw of rows) if (!raw.identifier && rows.filter(j=>j.title.toLowerCase() === raw.title.toLowerCase()).length > 1) raw.identifier = `${canonical(raw.url)}#${raw.title.toLowerCase()}#${[...raw.locations].sort().join('|')}`;
   return rows;
 }
-module.exports = {parseCareersPage, fetchCustomHtmlJobs, normalizeCustomHtmlJob, classify, verifiedSource};
+module.exports = {splitTerritoryOpenings, parseCareersPage, fetchCustomHtmlJobs, normalizeCustomHtmlJob, classify, verifiedSource};

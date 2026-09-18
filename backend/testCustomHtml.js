@@ -98,9 +98,9 @@ test('existing ATS normalizers retain their contracts',()=>{
 
 test('ingestion dispatcher: custom current/future rows, failed fetch safety and unchanged ATS path',async()=>{
  const vm=require('node:vm');
- async function run(type,{failure=false}={}){
+ async function run(type,{failure=false,sharedParent=false}={}){
   const writes=[],calls=[];
-  const db={from(table){const q={table,op:'select',values:null,filters:[],select(){return q;},eq(k,v){q.filters.push([k,v]);return q;},not(){return q;},update(v){q.op='update';q.values=v;return q;},upsert(v){q.op='upsert';q.values=v;return q;},in(k,v){q.filters.push([k,v]);return q;},single(){return Promise.resolve({data:{...q.values,id:'new',ai_analysis:{sales_motion:['sales']},job_embedding:[1]},error:null}).then(r=>{writes.push({...q});return r;});},then(resolve,reject){if(q.op!=='select')writes.push({...q});return Promise.resolve({data:[],error:null}).then(resolve,reject);}};return q;}};
+  const db={from(table){const q={table,op:'select',values:null,filters:[],select(){return q;},eq(k,v){q.filters.push([k,v]);return q;},not(){q.analysis=true;return q;},update(v){q.op='update';q.values=v;return q;},upsert(v){q.op='upsert';q.values=v;return q;},in(k,v){q.filters.push([k,v]);return q;},single(){return Promise.resolve({data:{...q.values,id:'new',ai_analysis:{sales_motion:['sales']},job_embedding:[1]},error:null}).then(r=>{writes.push({...q});return r;});},then(resolve,reject){if(q.op!=='select')writes.push({...q});return Promise.resolve({data:sharedParent && q.analysis ? [{source_job_id:'parent',title_original:'Sales Representative',description_text:detail,ai_analysis:{product_categories:['veterinary diagnostics']},job_embedding:[0.5]}] : [],error:null}).then(resolve,reject);}};return q;}};
   const custom=require('./adapters/customHtml');
   const localRequire=name=>{
    if(name==='dotenv')return {config(){}};
@@ -123,6 +123,9 @@ test('ingestion dispatcher: custom current/future rows, failed fetch safety and 
  }
  const custom=await run('custom_html');assert.deepEqual(custom.calls,['custom']);
  const saved=custom.writes.filter(q=>q.op==='upsert');assert.equal(saved.length,2);assert.equal(saved[0].values.status,'active');assert.equal(saved[1].values.status,'closed');
+ const reused=await run('custom_html',{sharedParent:true});
+ assert.deepEqual(reused.writes.find(q=>q.op==='upsert').values.ai_analysis,{product_categories:['veterinary diagnostics']});
+ assert.deepEqual(reused.writes.find(q=>q.op==='upsert').values.job_embedding,[0.5]);
  const failed=await run('custom_html',{failure:true});assert(!failed.writes.some(q=>q.table==='jobs'));assert.equal(failed.writes[0].values.sync_status,'error');
  const ats=await run('greenhouse');assert.deepEqual(ats.calls,['greenhouse']);assert.equal(ats.writes.find(q=>q.op==='upsert').values.source_type,'greenhouse');
 });
@@ -151,4 +154,17 @@ test('source city, configured industry and website original link survive normali
  assert.equal(normalizeCustomHtmlJob({...raw,locations:['Boston, MA','Dallas, TX']},employer).city,null);
  const dashboard=fs.readFileSync(path.join(__dirname,'../public/rook-dashboard-v7.html'),'utf8');
  assert(dashboard.includes('href="${job.source_url || \'#\'}" target="_blank" class="btn btn-outline btn-sm">View Original'));
+});
+test('opt-in territory split produces eight stable distinct listings with the same source and description',()=>{
+ const {splitTerritoryOpenings}=require('./adapters/customHtml');
+ const raw=parseCareersPage(fixture('bionote'),'https://www.bionote.com/careers').jobs;
+ const children=splitTerritoryOpenings(raw);
+ const sales=children.filter(j=>titleLooksRelevant(j.title));assert.equal(sales.length,8);
+ const rows=sales.map(j=>normalizeCustomHtmlJob(j,{...employer,careers_url:j.url}));
+ assert.equal(new Set(rows.map(j=>j.source_job_id)).size,8);
+ assert(rows.every(j=>j.location_raw && !j.location_raw.includes('|')));
+ assert(rows.every(j=>j.city===null && j.extraction_evidence.original_title==='Diagnostic Sales Specialist (DSS)'));
+ assert(rows.every(j=>j.source_url==='https://www.bionote.com/careers' && j.description_text===rows[0].description_text));
+ const reverse=splitTerritoryOpenings([{...raw[0],locations:[...raw[0].locations].reverse()}]).map(j=>normalizeCustomHtmlJob(j,employer).source_job_id).sort();
+ assert.deepEqual(reverse,rows.map(j=>j.source_job_id).sort());
 });
