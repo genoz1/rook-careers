@@ -47,7 +47,8 @@ async function fetchPinpointJobs(identifier) {
   if (!res.ok) throw new Error(`Pinpoint fetch failed for "${identifier}": ${res.status} ${res.statusText}`);
   const data = await res.json();
   // Docs show the top-level shape as a bare array of posting objects.
-  const rawJobs = Array.isArray(data) ? data : (data?.postings || data?.data || []);
+  const rawJobs = Array.isArray(data) ? data : (data?.postings ?? data?.data);
+  if (!Array.isArray(rawJobs)) throw new Error("Pinpoint malformed listing response");
   console.log(`    ...listed ${rawJobs.length} posting(s)`);
   return rawJobs;
 }
