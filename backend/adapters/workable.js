@@ -53,7 +53,9 @@ async function fetchWorkableJobs(accountSlug) {
  * Convert one raw Workable job into ROOK's canonical job shape.
  */
 function normalizeWorkableJob(raw, employer) {
-  const location = raw.location?.location_str || raw.location?.city || "";
+  const formatLocation = loc => loc?.location_str || [loc?.city, loc?.state || loc?.region, loc?.country || loc?.countryCode].filter(Boolean).join(', ');
+  const locations = (raw.locations || []).filter(loc => !loc.hidden).map(formatLocation).filter(Boolean);
+  const location = [...new Set(locations)].join(' | ') || formatLocation(raw.location) || formatLocation(raw);
   const description = [raw.description, raw.full_description].filter(Boolean).join(" ");
 
   return {
