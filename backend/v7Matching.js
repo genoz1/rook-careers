@@ -6,7 +6,7 @@ const {distanceMiles} = require('./geocoding');
 const {matches, normalizeSelection} = require('../public/rook-job-classification');
 const {readJobPool} = require('./jobPool');
 const {industryPrefilter} = require('./industryPrefilter');
-const JOB_LIST_COLUMNS = "id, source_job_id, employer_id, source_type, source_url, application_url, title_original, title_normalized, company_name, description_html, description_text, ai_analysis, location_raw, location_evidence, job_lat, job_lng, city, state, region, territory, remote_status, employment_type, category, subcategory, industry, product_type, sales_type, experience_min_years, experience_max_years, salary_min, salary_max, compensation_text, travel_percentage, overnight_travel, required_skills, preferred_skills, required_experience, preferred_experience, degree_required, certifications, date_posted, first_seen_at, last_seen_at, status, source_verified, moderation_status, recruiter_name, recruiter_email, recruiter_company, recruiter_contact_method, recruiter_id, created_at, updated_at";
+const JOB_LIST_COLUMNS = "id, source_job_id, employer_id, source_type, source_url, application_url, title_original, title_normalized, company_name, description_html, description_text, ai_analysis, location_raw, location_evidence, extraction_evidence, job_lat, job_lng, city, state, region, territory, remote_status, employment_type, category, subcategory, industry, product_type, sales_type, experience_min_years, experience_max_years, salary_min, salary_max, compensation_text, travel_percentage, overnight_travel, required_skills, preferred_skills, required_experience, preferred_experience, degree_required, certifications, date_posted, first_seen_at, last_seen_at, status, source_verified, moderation_status, recruiter_name, recruiter_email, recruiter_company, recruiter_contact_method, recruiter_id, created_at, updated_at";
 const JOB_LIST_COLUMNS_NO_DESCRIPTION = JOB_LIST_COLUMNS.split(", ").filter((c) => c !== "description_html" && c !== "description_text").join(", ");
 
 async function rank(db, profile, industrySelection = profile.desired_industries) {
@@ -92,7 +92,7 @@ async function rank(db, profile, industrySelection = profile.desired_industries)
       .select(JOB_LIST_COLUMNS_NO_DESCRIPTION)
       .eq("status", "active")
       .eq("moderation_status", "approved");
-    if (!allowsBroadLocations(profile)) query = query.or(`location_raw.ilike.%|%,and(job_lat.gte.${profile.home_lat-latDelta},job_lat.lte.${profile.home_lat+latDelta},job_lng.gte.${profile.home_lng-lngDelta},job_lng.lte.${profile.home_lng+lngDelta})`);
+    if (!allowsBroadLocations(profile)) query = query.or(`and(source_type.eq.custom_html,job_lat.is.null),location_raw.ilike.%|%,and(job_lat.gte.${profile.home_lat-latDelta},job_lat.lte.${profile.home_lat+latDelta},job_lng.gte.${profile.home_lng-lngDelta},job_lng.lte.${profile.home_lng+lngDelta})`);
 
     const marketFilter = industryPrefilter(selection);
     if (marketFilter) query = query.or(marketFilter);

@@ -483,6 +483,7 @@
 <script src="rook-config.js"></script>
 <script src="rook-auth.js"></script>
 <script src="rook-job-classification.js"></script>
+<script src="rook-territory-location.js"></script>
 <script>
   // Same live-data pattern as rook-dashboard.html: try to replace the demo
   // rows with real, scored jobs; leave demo data in place (with a banner
@@ -582,7 +583,7 @@
       const radiusVal = document.getElementById('radiusSelect').value;
       const radiusNote = radiusVal === '0' ? '' : ` within ${radiusVal} miles`;
       const nearOrSorted = radiusVal === '0' ? 'sorted by distance from' : 'near';
-      status.innerHTML = `Showing jobs closest to "${escapeHtml(query)}" first${radiusNote}${radiusVal === '0' ? ' — no distance limit applied' : ''}. <a href="#" onclick="clearNearLocation(); return false;" style="color:var(--royal); font-weight:600;">Clear</a>`;
+      status.innerHTML = `Showing jobs closest to "${escapeHtml(query)}" first${radiusNote}; same-state territory opportunities may also appear${radiusVal === '0' ? ' — no distance limit applied' : ''}. <a href="#" onclick="clearNearLocation(); return false;" style="color:var(--royal); font-weight:600;">Clear</a>`;
       applyFiltersAndRender();
       showBanner(`Showing jobs ${nearOrSorted} "${escapeHtml(query)}"${radiusNote}.`, 'info');
     } catch (err) {
@@ -976,24 +977,16 @@
         return false;
       }
 
-      // Deliberately does NOT exclude a job just because it has no
-      // coordinates whenever a "near me" search is merely active — that
-      // search auto-fills with the candidate's saved ZIP by default on
-      // every page load, so the old blanket check silently hid every
-      // job with ungeocodable location text ("Field Based - Southeast",
-      // "Multiple US Locations") from every candidate by default, all
-      // the time — not just during a temporary geocoding backlog.
-      // Common phrasing for exactly the field/territory sales roles
-      // ROOK is built around. Only exclude for missing coordinates when
-      // the candidate has actively chosen a specific mile radius (not
-      // "Any distance") — in that narrower case, we genuinely can't
-      // verify the job is in range, so excluding it is the candidate's
-      // own explicit intent, not a silent default.
+      // Territory jobs have no point distance. Include same-state possibilities
+      // with an explicit coverage caveat instead of silently dropping them.
       const radiusMiles = Number(document.getElementById('radiusSelect').value);
       if (nearLocationCoords && radiusMiles > 0) {
-        if (job.job_lat == null || job.job_lng == null) return false;
-        const dist = distanceMilesClient(nearLocationCoords.lat, nearLocationCoords.lng, job.job_lat, job.job_lng);
-        if (dist > radiusMiles) return false;
+        if (job.job_lat == null || job.job_lng == null) {
+          if (!RookTerritoryLocation.matchesState(job, nearLocationCoords.stateAbbr)) return false;
+        } else {
+          const dist = distanceMilesClient(nearLocationCoords.lat, nearLocationCoords.lng, job.job_lat, job.job_lng);
+          if (dist > radiusMiles) return false;
+        }
       }
 
       return true;
@@ -1172,7 +1165,8 @@
       );
       // distanceMilesClient returns Infinity when job lat/lng are unavailable.
       // Omit the line entirely rather than rendering "Infinity miles" or NaN.
-      if (!isFinite(dist)) return '';
+      if (!isFinite(dist)) return RookTerritoryLocation.matchesState(job, nearLocationCoords.stateAbbr)
+        ? '<div style="font-size:12px; color:var(--royal); margin-top:4px;">Territory in your search state — confirm coverage; exact distance unavailable</div>' : '';
       return `<div style="font-size:12px; color:var(--royal); font-weight:600; margin-top:4px;">${Math.round(dist)} miles from your search location</div>`;
     })();
 

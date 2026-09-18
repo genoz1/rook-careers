@@ -34,6 +34,7 @@ const { fetchUkgJobs }    = require("./adapters/ukg");
 const { fetchJazzHRJobs } = require("./adapters/jazzhr");
 const { fetchSuccessFactorsJobs, normalizeSuccessFactorsJob } = require("./adapters/successfactors");
 const { fetchCustomHtmlJobs, normalizeCustomHtmlJob, splitTerritoryOpenings } = require("./adapters/customHtml");
+const reviewedHtmlSources = require("./customHtmlSources.json");
 const { analyzeJob } = require("./ai/jobAnalysis");
 const { generateEmbedding } = require("./ai/embeddings");
 const { validateJobLocation } = require('./validateJobLocation');
@@ -53,14 +54,16 @@ async function ingestEmployer(employer) {
 
   try {
     if (employer.ats_type === "custom_html") {
-      // Explicit allowlist keeps the first-source pilot out of broad scheduled runs.
-      const enabledIds = (process.env.CUSTOM_HTML_EMPLOYER_IDS || "").split(",").map(id => id.trim());
+      // Reviewed sources participate in normal scheduled runs. An explicit env
+      // allowlist overrides the registry (an empty value disables every source).
+      const enabledIds = (process.env.CUSTOM_HTML_EMPLOYER_IDS ?? Object.keys(reviewedHtmlSources).join(",")).split(",").map(id => id.trim());
       if (!enabledIds.includes(employer.id)) {
         console.log("  Skipping custom_html — employer is not enabled for this run");
         return;
       }
       rawJobs = await fetchCustomHtmlJobs(employer);
-      if ((process.env.CUSTOM_HTML_SPLIT_TERRITORIES_IDS || "").split(",").map(id => id.trim()).includes(employer.id)) {
+      const splitIds = (process.env.CUSTOM_HTML_SPLIT_TERRITORIES_IDS ?? Object.keys(reviewedHtmlSources).filter(id => reviewedHtmlSources[id].splitTerritories).join(",")).split(",").map(id => id.trim());
+      if (splitIds.includes(employer.id)) {
         rawJobs = splitTerritoryOpenings(rawJobs);
       }
       normalize = normalizeCustomHtmlJob;

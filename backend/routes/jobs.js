@@ -103,7 +103,7 @@ async function loadCandidateId(req, res, next) {
 // This explicit column list is every real column on jobs EXCEPT
 // job_embedding, kept as one shared constant so every listing query
 // gets the fix, not just the one that happened to get reported.
-const JOB_LIST_COLUMNS = "id, source_job_id, employer_id, source_type, source_url, application_url, title_original, title_normalized, company_name, description_html, description_text, ai_analysis, location_raw, location_evidence, job_lat, job_lng, city, state, region, territory, remote_status, employment_type, category, subcategory, industry, product_type, sales_type, experience_min_years, experience_max_years, salary_min, salary_max, compensation_text, travel_percentage, overnight_travel, required_skills, preferred_skills, required_experience, preferred_experience, degree_required, certifications, date_posted, first_seen_at, last_seen_at, status, source_verified, moderation_status, recruiter_name, recruiter_email, recruiter_company, recruiter_contact_method, recruiter_id, created_at, updated_at";
+const JOB_LIST_COLUMNS = "id, source_job_id, employer_id, source_type, source_url, application_url, title_original, title_normalized, company_name, description_html, description_text, ai_analysis, location_raw, location_evidence, extraction_evidence, job_lat, job_lng, city, state, region, territory, remote_status, employment_type, category, subcategory, industry, product_type, sales_type, experience_min_years, experience_max_years, salary_min, salary_max, compensation_text, travel_percentage, overnight_travel, required_skills, preferred_skills, required_experience, preferred_experience, degree_required, certifications, date_posted, first_seen_at, last_seen_at, status, source_verified, moderation_status, recruiter_name, recruiter_email, recruiter_company, recruiter_contact_method, recruiter_id, created_at, updated_at";
 const JOB_LIST_COLUMNS_NO_DESCRIPTION = JOB_LIST_COLUMNS.split(", ").filter((c) => c !== "description_html" && c !== "description_text").join(", ");
 
 function attachDistance(job, profile) {
@@ -167,8 +167,8 @@ function matchFromRow(row) {
 // scores, reasons, and ranking are entirely unaffected - only the
 // unused payload size changes.
 function stripUnusedDescriptionFields(job) {
-  const { description_html, description_text, description_preview, location_evidence, ...rest } = job;
-  return {...rest, industry_classification: classify(job)};
+  const { description_html, description_text, description_preview, location_evidence, extraction_evidence, ...rest } = job;
+  return {...rest, territory_locations: require('../../public/rook-territory-location').territories(job), industry_classification: classify(job)};
 }
 
 // Builds the employer_note map (spec factor #43, employer-history
@@ -581,7 +581,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     const latDelta = 300 / 69;
     const lngDelta = 300 / (69 * Math.max(0.1, Math.cos((profile.home_lat * Math.PI) / 180)));
     liveQuery = liveQuery.or(
-      `location_raw.ilike.%|%,and(job_lat.gte.${profile.home_lat - latDelta},job_lat.lte.${profile.home_lat + latDelta},job_lng.gte.${profile.home_lng - lngDelta},job_lng.lte.${profile.home_lng + lngDelta})`
+      `and(source_type.eq.custom_html,job_lat.is.null),location_raw.ilike.%|%,and(job_lat.gte.${profile.home_lat - latDelta},job_lat.lte.${profile.home_lat + latDelta},job_lng.gte.${profile.home_lng - lngDelta},job_lng.lte.${profile.home_lng + lngDelta})`
     );
   }
 
@@ -1569,7 +1569,7 @@ router.get("/onboarding/match-preview", requireConfig, requireAuth, async (req, 
 
     // Read current source evidence and AI markets before the preview cutoff.
     // A stale top-three score snapshot cannot establish location eligibility.
-    const SCORE_COLS = "id, title_original, title_normalized, company_name, location_raw, location_evidence, job_lat, job_lng, city, state, industry, remote_status, employment_type, travel_percentage, salary_min, salary_max, compensation_text, ai_analysis, date_posted, last_seen_at";
+    const SCORE_COLS = "id, title_original, title_normalized, company_name, location_raw, location_evidence, extraction_evidence, job_lat, job_lng, city, state, industry, remote_status, employment_type, travel_percentage, salary_min, salary_max, compensation_text, ai_analysis, date_posted, last_seen_at";
 
     let jobQuery = supabaseAdmin
       .from("jobs")

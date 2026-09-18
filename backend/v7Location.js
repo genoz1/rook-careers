@@ -3,6 +3,7 @@
 const {resolveUsStateCode, isUsEligibleJob} = require('./jobEligibility');
 const {hasUnambiguousForeignCountryEvidence} = require('./locationTextRules');
 const {extractGeocodableLocation} = require('./locationExtraction');
+const {matchesState} = require('../public/rook-territory-location');
 const {distanceMiles} = require('./geocoding');
 const {matches, normalizeSelection} = require('../public/rook-job-classification');
 
@@ -37,6 +38,9 @@ function prepareJob(job, profile) {
   }
   if (!isUsEligibleJob(job)) return null;
   const broad = allowsBroadLocations(profile);
+  if (job.job_lat == null && job.job_lng == null && matchesState(job, resolveUsStateCode(profile.home_state))) {
+    return {...job, job_lat:null, job_lng:null, territory_match:'state_overlap'};
+  }
   // Work arrangement/state-level geocodes are not city distances.
   if (locationScope(job).imprecise) {
     if (!broad) return null;

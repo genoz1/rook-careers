@@ -58,7 +58,7 @@ function queryDb(rows) {const q={from(){return q;},select(){return q;},eq(){retu
   // The 400 scoring cap now follows location and industry filtering.
   assert.equal(cap,undefined);
   const matchingSource=fs.readFileSync(require.resolve('./v7Matching'),'utf8');
-  assert(!matchingSource.includes('job_lat.is.null'));
+  assert(matchingSource.includes('and(source_type.eq.custom_html,job_lat.is.null)')); // Only reviewed HTML territories enter the no-point pool.
   assert(!matchingSource.includes('remote_status.eq.remote'));
   assert.deepEqual(ranked.map(j=>j.id),[control.id]);
   assert.deepEqual(ranked[0].match,scoreJob(control,profile));

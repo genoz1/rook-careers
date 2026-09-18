@@ -75,7 +75,7 @@ function scrubCompanyNameFromText(text, companyName) {
 
 function redactForNonSubscriber(job) {
   const {
-    company_name, source_url, application_url, location_evidence,
+    company_name, source_url, application_url, location_evidence, extraction_evidence,
     recruiter_name, recruiter_email, recruiter_company, recruiter_contact_method, // same gate applies to recruiter postings
     description_text, description_preview,
     title_original, title_normalized,
@@ -84,6 +84,7 @@ function redactForNonSubscriber(job) {
   const scrubbedFullText = scrubCompanyNameFromText(description_text, company_name);
   return {
     ...rest,
+    territory_locations: require('../public/rook-territory-location').territories(job),
     // Real gate bypass this closes: a job's TITLE can name the employer
     // directly (e.g. "Regional Manager - MWI"), and neither this
     // function nor its callers ever touched title_original/

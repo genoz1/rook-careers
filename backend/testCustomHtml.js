@@ -98,7 +98,7 @@ test('existing ATS normalizers retain their contracts',()=>{
 
 test('ingestion dispatcher: custom current/future rows, failed fetch safety and unchanged ATS path',async()=>{
  const vm=require('node:vm');
- async function run(type,{failure=false,sharedParent=false}={}){
+ async function run(type,{failure=false,sharedParent=false,env={CUSTOM_HTML_EMPLOYER_IDS:'test'},id='test'}={}){
   const writes=[],calls=[];
   const db={from(table){const q={table,op:'select',values:null,filters:[],select(){return q;},eq(k,v){q.filters.push([k,v]);return q;},not(){q.analysis=true;return q;},update(v){q.op='update';q.values=v;return q;},upsert(v){q.op='upsert';q.values=v;return q;},in(k,v){q.filters.push([k,v]);return q;},single(){return Promise.resolve({data:{...q.values,id:'new',ai_analysis:{sales_motion:['sales']},job_embedding:[1]},error:null}).then(r=>{writes.push({...q});return r;});},then(resolve,reject){if(q.op!=='select')writes.push({...q});return Promise.resolve({data:sharedParent && q.analysis ? [{source_job_id:'parent',title_original:'Sales Representative',description_text:detail,ai_analysis:{product_categories:['veterinary diagnostics']},job_embedding:[0.5]}] : [],error:null}).then(resolve,reject);}};return q;}};
   const custom=require('./adapters/customHtml');
@@ -117,10 +117,13 @@ test('ingestion dispatcher: custom current/future rows, failed fetch safety and 
    if(name==='./ai/embeddings')return {generateEmbedding:async()=>{throw Error('Unexpected paid embedding');}};
    return require(name);
   };
-  const context={require:localRequire,module:{exports:{}},console:{log(){},error(){}},process:{env:{CUSTOM_HTML_EMPLOYER_IDS:'test'},argv:[]},Set,Map,Date};
+  const context={require:localRequire,module:{exports:{}},console:{log(){},error(){}},process:{env,argv:[]},Set,Map,Date};
   vm.runInNewContext(fs.readFileSync(path.join(__dirname,'ingest.js'),'utf8'),context);
-  await context.module.exports.ingestEmployer({...employer,ats_type:type});return {writes,calls};
+  await context.module.exports.ingestEmployer({...employer,id,ats_type:type});return {writes,calls};
  }
+ const scheduled=await run('custom_html',{env:{},id:'83ada8b6-a0a0-4c62-8384-d507015275cb'});assert.deepEqual(scheduled.calls,['custom']);
+ assert.deepEqual((await run('custom_html',{env:{}})).calls,[]);
+ assert.deepEqual((await run('custom_html',{env:{CUSTOM_HTML_EMPLOYER_IDS:''},id:'83ada8b6-a0a0-4c62-8384-d507015275cb'})).calls,[]);
  const custom=await run('custom_html');assert.deepEqual(custom.calls,['custom']);
  const saved=custom.writes.filter(q=>q.op==='upsert');assert.equal(saved.length,2);assert.equal(saved[0].values.status,'active');assert.equal(saved[1].values.status,'closed');
  const reused=await run('custom_html',{sharedParent:true});
@@ -167,4 +170,31 @@ test('opt-in territory split produces eight stable distinct listings with the sa
  assert(rows.every(j=>j.source_url==='https://www.bionote.com/careers' && j.description_text===rows[0].description_text));
  const reverse=splitTerritoryOpenings([{...raw[0],locations:[...raw[0].locations].reverse()}]).map(j=>normalizeCustomHtmlJob(j,employer).source_job_id).sort();
  assert.deepEqual(reverse,rows.map(j=>j.source_job_id).sort());
+});
+
+
+test('34484 radius search retains the Florida territory without invented city coordinates',()=>{
+ const {splitTerritoryOpenings} = require('./adapters/customHtml');
+ const {matchesState,territories} = require('../public/rook-territory-location');
+ const {redactForNonSubscriber} = require('./redaction');
+ const zip = require('zipcodes').lookup('34484');
+ const profile = {home_lat:zip.latitude,home_lng:zip.longitude,home_state:'Florida',territory_size_preferences:['local']};
+ const raw = parseCareersPage(fixture('bionote'),'https://www.bionote.com/careers').jobs;
+ const rows = splitTerritoryOpenings(raw).map(r=>normalizeCustomHtmlJob(r,{...employer,careers_url:'https://www.bionote.com/careers'})).filter(r=>r.status==='active');
+ assert.equal(rows.length,8);
+ const found = rows.filter(r=>prepareJob(r,profile));
+ assert.equal(found.length,1); assert.equal(found[0].location_raw,'Central/Northern Florida');
+ assert.equal(prepareJob(found[0],profile).job_lat,null); assert.equal(found[0].city,null);
+ assert(matchesState(found[0],'FL')); assert(!matchesState(found[0],'CA'));
+ const masked = redactForNonSubscriber(found[0]);
+ assert(!masked.extraction_evidence); assert(!JSON.stringify(masked.territory_locations).includes('mailto:'));
+ assert.deepEqual(territories(masked),territories(found[0]));
+ // Execute the real radius-filter block for the reported 100-mile search.
+ const page = fs.readFileSync(path.join(__dirname,'../public/rook-search.html'),'utf8');
+ const start = page.indexOf("      const radiusMiles = Number(document.getElementById('radiusSelect').value);");
+ const end = page.indexOf('      return true;',start);
+ const filter = new Function('job','nearLocationCoords','document','RookTerritoryLocation','distanceMilesClient',page.slice(start,end)+'return true;');
+ const run = (job,dist=0)=>filter(job,{lat:zip.latitude,lng:zip.longitude,stateAbbr:'FL'},{getElementById:()=>({value:'100'})},{matchesState},()=>dist);
+ assert(run(found[0])); assert(!run(rows[0])); assert(!run({job_lat:null,job_lng:null}));
+ assert(run({job_lat:28,job_lng:-82},99)); assert(!run({job_lat:28,job_lng:-82},101));
 });
