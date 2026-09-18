@@ -56,6 +56,9 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
 .spinner{width:18px;height:18px;border:2.5px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
 @keyframes spin{to{transform:rotate(360deg)}}
 @media(max-width:400px){.name-row{grid-template-columns:1fr}}
+
+.privacy-trust{background:#EFF8F6;border:1px solid #CDE8E1;border-radius:12px;padding:14px 16px;margin:16px 0;color:#345A57;font-size:13px;line-height:1.55;text-align:left;}
+.privacy-trust strong{display:block;color:#176557;font-size:14px;font-weight:700;margin-bottom:4px;}
 </style>
 </head>
 <!-- Google tag -->
@@ -93,7 +96,7 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
 
     <div class="form-section" id="createSection">
       <div class="form-section-label">Create your account</div>
-      <p style="font-size:13px;line-height:1.5;color:var(--muted);margin:0 0 16px;"><strong>Your job search stays private.</strong> Employers and recruiters cannot see your profile, résumé, or job-search activity.</p>
+      <div class="privacy-trust"><strong>🔒 Private &amp; confidential</strong>Creating an account does not make you visible to employers or recruiters.</div>
       <div class="field-group">
         <div class="name-row">
           <div>
