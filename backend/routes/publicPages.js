@@ -133,7 +133,7 @@ router.get("/jobs/:id", async (req, res, next) => {
 
   const { data: job, error } = await supabaseAnon
     .from("jobs")
-    .select("id, title_original, title_normalized, location_raw, compensation_text, salary_min, salary_max, description_text, date_posted, status, company_name, ai_analysis, remote_status, travel_percentage, job_lat, job_lng, state")
+    .select("id, title_original, title_normalized, location_raw, location_evidence, compensation_text, salary_min, salary_max, description_text, date_posted, status, company_name, ai_analysis, remote_status, travel_percentage, job_lat, job_lng, state")
     .eq("id", req.params.id)
     .eq("status", "active")
     .maybeSingle();
