@@ -38,6 +38,23 @@ const { fetchAshbyJobs } = require("./adapters/ashby");
 const { fetchSmartRecruitersJobs } = require("./adapters/smartrecruiters");
 const { fetchWorkableJobs } = require("./adapters/workable");
 const { fetchWorkdayJobs } = require("./adapters/workday");
+// Added later than the original 6 above — these adapters were built
+// afterward (to fix specific already-known employers) and never wired
+// into discovery, even though each one only needs a single guessable
+// slug/subdomain, exactly like Greenhouse/Lever/Ashby/etc. UKG,
+// Eightfold, Phenom, Oracle HCM, ADP, JazzHR and Paylocity are
+// deliberately left out here — each needs a real per-employer ID (an
+// org code, a tenant number, a GUID) that can't be derived from the
+// company name, so blind-guessing them would risk exactly the kind of
+// wrong-but-plausible identifier this script is designed to avoid.
+const { fetchIcimsJobs } = require("./adapters/icims");
+const { fetchApplicantProJobs } = require("./adapters/applicantpro");
+const { fetchJobviteJobs } = require("./adapters/jobvite");
+const { fetchTeamtailorJobs } = require("./adapters/teamtailor");
+const { fetchPinpointJobs } = require("./adapters/pinpoint");
+const { fetchClinchTalentJobs } = require("./adapters/clinchtalent");
+const { fetchDrupalCareersJobs } = require("./adapters/drupalcareers");
+const { fetchTalentBrewJobs } = require("./adapters/talentbrew");
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -269,6 +286,14 @@ async function run() {
     if (!result) { result = await tryPlatform(fetchSmartRecruitersJobs, candidates); if (result) atsType = "smartrecruiters"; }
     if (!result) { result = await tryPlatform(fetchWorkableJobs, candidates); if (result) atsType = "workable"; }
     if (!result) { result = await tryWorkday(candidates); if (result) atsType = "workday"; }
+    if (!result) { result = await tryPlatform(fetchIcimsJobs, candidates); if (result) atsType = "icims"; }
+    if (!result) { result = await tryPlatform(fetchApplicantProJobs, candidates); if (result) atsType = "applicantpro"; }
+    if (!result) { result = await tryPlatform(fetchJobviteJobs, candidates); if (result) atsType = "jobvite"; }
+    if (!result) { result = await tryPlatform(fetchTeamtailorJobs, candidates); if (result) atsType = "teamtailor"; }
+    if (!result) { result = await tryPlatform(fetchPinpointJobs, candidates); if (result) atsType = "pinpoint"; }
+    if (!result) { result = await tryPlatform(fetchClinchTalentJobs, candidates); if (result) atsType = "clinchtalent"; }
+    if (!result) { result = await tryPlatform(fetchDrupalCareersJobs, candidates); if (result) atsType = "drupalcareers"; }
+    if (!result) { result = await tryPlatform(fetchTalentBrewJobs, candidates); if (result) atsType = "talentbrew"; }
 
     if (result) {
       const { error: insertErr } = await supabase
