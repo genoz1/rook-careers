@@ -133,7 +133,7 @@ router.get("/jobs/:id", async (req, res, next) => {
 
   const { data: job, error } = await supabaseAnon
     .from("jobs")
-    .select("id, title_original, title_normalized, location_raw, location_evidence, compensation_text, salary_min, salary_max, description_text, date_posted, status, company_name, ai_analysis, remote_status, travel_percentage, job_lat, job_lng, state")
+    .select("id, source_type, city, title_original, title_normalized, location_raw, location_evidence, compensation_text, salary_min, salary_max, description_text, date_posted, status, company_name, ai_analysis, remote_status, travel_percentage, job_lat, job_lng, state")
     .eq("id", req.params.id)
     .eq("status", "active")
     .maybeSingle();
@@ -191,7 +191,8 @@ router.get("/jobs/:id", async (req, res, next) => {
 
   const title = job.title_original || job.title_normalized || "Open role";
   const comp = job.compensation_text || (job.salary_min ? `$${job.salary_min}${job.salary_max ? "–$" + job.salary_max : "+"}` : "");
-  const locShort = shortLocation(job.location_raw);
+  const locShort = job.source_type === "custom_html" && !job.city && (job.location_raw || "").includes("|")
+    ? "multiple territories" : shortLocation(job.location_raw);
   const titleWithLoc = locShort ? `${title} in ${locShort}` : title;
 
   // Structured teaser built from the AI-extracted job attributes
