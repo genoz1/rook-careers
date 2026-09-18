@@ -104,21 +104,28 @@ async function fetchWorkdayJobs(identifier) {
       );
     }
     const data = await res.json();
+    if (!Array.isArray(data?.jobPostings) || (offset === 0 && (!Number.isInteger(data.total) || data.total < 0))) {
+      throw new Error("Workday incomplete extraction: malformed listing response");
+    }
+    if (data.jobPostings.some(p => !p || !p.externalPath || typeof p.title !== 'string')) throw new Error("Workday malformed posting");
     // Only trust a new total if it's a real positive number — some
     // Workday tenants omit or zero out `total` on paginated (non-first)
     // requests, which was silently truncating results to just the first
     // couple pages for several employers (Covetrus, Elanco, Cardinal
     // Health, MWI all stopped at 40 jobs regardless of their real count).
     if (typeof data.total === "number" && data.total > 0) {
-      total = data.total;
+      total = total === Infinity ? data.total : Math.max(total, data.total);
     }
-    allPostings.push(...(data.jobPostings || []));
-    offset += pageSize;
+    if (offset === 0 && data.total === 0) total = 0;
+    if (data.jobPostings.length === 0 && offset < total) throw new Error("Workday incomplete extraction: premature empty page");
+    allPostings.push(...data.jobPostings);
+    if (new Set(allPostings.map(p => p.externalPath)).size !== allPostings.length) throw new Error("Workday incomplete extraction: duplicate pagination");
+    offset += data.jobPostings.length;
     console.log(`    ...listed ${allPostings.length} / ${total} postings`);
 
     // Safety cap so a very large employer (or an unexpected API response)
     // can't loop forever.
-    if (offset > 2000) break;
+    if (offset > 2000 && offset < total) throw new Error("Workday incomplete extraction: pagination safety limit reached");
   }
 
   // Only fetch full detail for postings that already look relevant by
@@ -130,15 +137,12 @@ async function fetchWorkdayJobs(identifier) {
   const detailed = [];
   for (let i = 0; i < relevantPostings.length; i++) {
     const posting = relevantPostings[i];
-    try {
+    {
       const detailRes = await fetchWithTimeout(`${baseUrl}${posting.externalPath}`);
-      if (!detailRes.ok) continue;
+      if (!detailRes.ok) throw new Error(`Workday detail fetch failed: ${detailRes.status}`);
       const detail = await detailRes.json();
+      if (!detail?.jobPostingInfo || typeof detail.jobPostingInfo !== "object") throw new Error("Workday malformed detail response");
       detailed.push({ ...posting, detail });
-    } catch {
-      // Skip jobs whose detail fetch fails (including timeouts) rather
-      // than aborting the whole run.
-      continue;
     }
     if ((i + 1) % 10 === 0 || i === relevantPostings.length - 1) {
       console.log(`    ...fetched details for ${i + 1} / ${relevantPostings.length}`);
