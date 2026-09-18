@@ -296,11 +296,12 @@
   <div class="profile-gate-card">
     <h2 id="profileGateTitle">Finish setting up your profile</h2>
     <p id="profileGateBody">We can't score jobs against your background yet — a couple of things are still missing.</p>
+    <p><strong>Your résumé stays private.</strong> ROOK uses it only to improve your matches. Employers and recruiters cannot see or access it.</p>
     <!-- Inline resume upload — no navigation to another page -->
     <input type="file" id="profileGateResumeInput" accept=".pdf,.doc,.docx" style="display:none">
     <a class="btn-primary" href="rook-settings.html" id="profileGateLink" style="background:var(--royal); color:#fff;">Complete My Profile →</a>
     <div id="profileGateUploadStatus" style="display:none;font-size:13px;color:var(--royal);font-weight:600;margin-top:8px;text-align:center;"></div>
-    <button type="button" class="dismiss" id="profileGateDismiss">Skip</button>
+    <button type="button" class="dismiss" id="profileGateDismiss">Skip — résumé upload is optional</button>
   </div>
 </div>
 <div class="linkedin-popover-overlay" id="linkedinPopoverOverlay" onclick="if(event.target === this) this.classList.remove('active')">
@@ -430,10 +431,13 @@
     <div style="font-size:12.5px; color:#8B96AB; margin:-10px 0 16px;">Local/regional searches use a 300-mile radius across state lines. Large/national or remote/inside selections also include broader U.S. locations. Looking farther out, or considering a different city? Try <a href="rook-search.html" style="color:var(--royal, #1463FF); font-weight:600;">Job Search</a>.</div>
 
     <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:14px;">
-      <label style="display:flex; align-items:center; gap:7px; font-size:12.5px; color:#5B6B85; font-weight:600; cursor:pointer; margin:0;">
+      <div>
+        <label style="display:flex; align-items:center; gap:7px; font-size:12.5px; color:#5B6B85; font-weight:600; cursor:pointer; margin:0;">
         <input type="checkbox" id="showRecruiterToggle" checked onchange="applyRecruiterToggle()">
         Show recruiter-posted jobs
       </label>
+        <div style="font-size:12px;line-height:1.5;color:#5B6B85;margin-top:4px;">Recruiter-posted jobs are listings only. Recruiters cannot see ROOK job seekers.</div>
+      </div>
         <div id="dashCategoryFilters" style="display:flex; align-items:center; flex-wrap:wrap; gap:12px; padding-left:12px; border-left:1px solid #E2E7F0;">
           <span style="font-size:12.5px; color:#8B96AB; font-weight:600;">Categories:</span>
           <label style="display:flex; align-items:center; gap:5px; font-size:12.5px; color:#5B6B85; font-weight:600; cursor:pointer; margin:0;">
