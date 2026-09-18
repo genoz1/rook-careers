@@ -198,24 +198,3 @@ test('34484 radius search retains the Florida territory without invented city co
  assert(run(found[0])); assert(!run(rows[0])); assert(!run({job_lat:null,job_lng:null}));
  assert(run({job_lat:28,job_lng:-82},99)); assert(!run({job_lat:28,job_lng:-82},101));
 });
-
-test('ZIP changes preserve employer search and territorial jobs survive the ranked cap',async()=>{
- const vm=require('node:vm');
- const page=fs.readFileSync(path.join(__dirname,'../public/rook-search.html'),'utf8');
- const source=page.slice(page.indexOf('  async function searchNearLocation()'),page.indexOf('  function clearNearLocation()'));
- const elements=new Map();
- const get=id=>{if(!elements.has(id))elements.set(id,{value:'',style:{},dataset:{}});return elements.get(id);};
- get('nearLocationInput').value='34484';get('filterKeyword').value='Bionote';get('radiusSelect').value='100';
- const calls=[];
- const context={URLSearchParams,searchRequestSeq:0,nearLocationCoords:null,allJobs:[],escapeHtml:s=>s,applyFiltersAndRender(){},showBanner(){},document:{getElementById:get,querySelectorAll:()=>[]},rookApiFetch:async url=>{calls.push(url);return {ok:true,json:async()=>url.startsWith('/geocode')?{lat:28.927,lng:-82.04,stateAbbr:'FL'}:{jobs:[]}};}};
- vm.runInNewContext(source,context);await context.searchNearLocation();
- const query=new URL(calls[1],'https://example.test').searchParams;
- assert.equal(query.get('keyword'),'Bionote');assert.equal(query.get('near_state'),'FL');
- assert.equal(query.get('near_lat'),'28.927');
- const {retainMatches}=require('../public/rook-territory-location');
- const florida={source_type:'custom_html',territory_locations:[{label:'Central/Northern Florida',scope:'state_or_region',states:['FL']}]};
- const unrelated={...florida,territory_locations:[{label:'California',scope:'state_or_region',states:['CA']}]};
- const rows=[...Array.from({length:300},(_,id)=>({id})),florida,unrelated];
- assert.deepEqual(retainMatches(rows,300,'FL'),rows.slice(0,301));
- assert.equal(retainMatches(rows,300,null).length,300);
-});

@@ -27,8 +27,7 @@ const { createClient } = require("@supabase/supabase-js");
 const { scoreJob, hasFullAccess, stateAbbrFromName } = require("../matching");
 const { scrubCompanyNameFromText, redactForNonSubscriber, redactForAnonymous } = require("../redaction");
 const {prepareJob,allowsBroadLocations} = require('../v7Location');
-const {retainMatches} = require("../../public/rook-territory-location");
-const { resolveUsStateCode, isUsEligibleJob } = require("../jobEligibility");
+const { isUsEligibleJob } = require("../jobEligibility");
 const { fetchActiveJobs } = require("../scoring/precompute");
 const { distanceMiles, geocodeZip } = require("../geocoding");
 const { sendEmail } = require("../email/resend");
@@ -371,7 +370,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
       .map((job) => ({ ...job, match: scoreJob(job, anonymousProfile) }))
       .filter((job) => state ? job.state === state : true)
       .sort((a, b) => (b.match?.overall_score ?? -1) - (a.match?.overall_score ?? -1));
-    if (!keyword) scored = retainMatches(scored, Number(limit), resolveUsStateCode(nearStateName));
+    if (!keyword) scored = scored.slice(0, Number(limit));
 
     const results = scored.map((job) => ({
       ...attachDistance(job, anonymousProfile),
@@ -500,14 +499,14 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     // the candidate's own real, actual profile; only the point distance
     // is measured from shifts to the explored location, which is the
     // entire point of "what if I lived here instead."
-    const exploredProfile = { ...profile, home_lat: nearLat, home_lng: nearLng, home_state: resolveUsStateCode(req.query.near_state) || null };
+    const exploredProfile = { ...profile, home_lat: nearLat, home_lng: nearLng };
     let scored = [...nearby, ...(noCoordsJobs || [])]
       .filter(isUsEligibleJob)
       .filter(industryPass)
       .map((job) => ({ ...job, match: scoreJob(job, exploredProfile) }))
       .filter((job) => state ? job.state === state : true)
       .sort((a, b) => (b.match?.overall_score ?? -1) - (a.match?.overall_score ?? -1));
-    if (!keyword) scored = retainMatches(scored, Number(limit), exploredProfile.home_state);
+    if (!keyword) scored = scored.slice(0, Number(limit));
 
     const { appStatusByJob, noteFor } = await loadEmployerHistory(profile.id);
     // saved status lives on candidate_job_matches, which this live-scoring
@@ -660,7 +659,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
       const bDist = b.jobs.job_lat ? distanceMiles(profile.home_lat, profile.home_lng, b.jobs.job_lat, b.jobs.job_lng) : 9999;
       return aDist - bDist;
     });
-  if (!keyword) rows = retainMatches(rows, Number(limit), resolveUsStateCode(profile.home_state), row => row.jobs);
+  if (!keyword) rows = rows.slice(0, Number(limit));
 
   const { appStatusByJob, noteFor } = await loadEmployerHistory(profile.id);
 

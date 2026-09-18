@@ -19,6 +19,22 @@
 // there. Built to the documented public widget response shape; treat the
 // first real ingestion run against a Workable employer as the real test,
 // same caveat as the Workday adapter when it was first built.
+//
+// LOCATION FIX (Sept 2026): the previous version only ever read the
+// single `raw.location` object. Workable's own documented schema also
+// carries a separate `raw.locations` array for multi-location postings
+// (confirmed via Workable's public API docs and third-party integration
+// write-ups, not guessed) — a single job req open across several states
+// or offices lists every one of them there, not just a primary location.
+// Reading only `location` silently collapsed a multi-state/national
+// territory posting down to whichever single location Workable happens
+// to consider primary — exactly the "dropped locations" failure mode a
+// prior review of an Ascendis Pharma test run described. (That review's
+// claim that a fix for this was already published couldn't be confirmed
+// anywhere in this repository — this is that fix, written now, not a
+// verification of a pre-existing one.) Every distinct location in
+// `locations` is now preserved and joined, the same convention used by
+// custom_html's territory handling, rather than picking one.
 
 const BASE_URL = "https://apply.workable.com/api/v1/widget/accounts";
 
@@ -52,10 +68,27 @@ async function fetchWorkableJobs(accountSlug) {
 /**
  * Convert one raw Workable job into ROOK's canonical job shape.
  */
+function labelForLocation(loc) {
+  if (!loc) return "";
+  if (loc.location_str) return loc.location_str;
+  const parts = [loc.city, loc.state_code || loc.region, loc.country_name].filter(Boolean);
+  if (parts.length) return parts.join(", ");
+  if (loc.telecommuting || loc.workplace_type === "remote") return "Remote";
+  return "";
+}
+
+function workableLocation(raw) {
+  const many = Array.isArray(raw.locations) ? raw.locations : [];
+  const labels = [...new Set(many.map(labelForLocation).filter(Boolean))];
+  if (labels.length > 1) return labels.join(" | ");
+  if (labels.length === 1) return labels[0];
+  // Single-location postings (the common case) don't carry a `locations`
+  // array at all — fall back to the primary `location` object.
+  return labelForLocation(raw.location);
+}
+
 function normalizeWorkableJob(raw, employer) {
-  const formatLocation = loc => loc?.location_str || [loc?.city, loc?.state || loc?.region, loc?.country || loc?.countryCode].filter(Boolean).join(', ');
-  const locations = (raw.locations || []).filter(loc => !loc.hidden).map(formatLocation).filter(Boolean);
-  const location = [...new Set(locations)].join(' | ') || formatLocation(raw.location) || formatLocation(raw);
+  const location = workableLocation(raw);
   const description = [raw.description, raw.full_description].filter(Boolean).join(" ");
 
   return {
@@ -93,4 +126,4 @@ function stripHtml(html) {
     .trim();
 }
 
-module.exports = { fetchWorkableJobs, normalizeWorkableJob };
+module.exports = { fetchWorkableJobs, normalizeWorkableJob, workableLocation, labelForLocation };

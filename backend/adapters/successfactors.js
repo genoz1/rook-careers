@@ -1,303 +1,274 @@
 // SAP SuccessFactors Career Site Builder (CSB) adapter
 //
-// Public, unauthenticated endpoint — no signup, no API key required.
-// SuccessFactors Career Site Builder exposes a REST API that backs the
-// search box on a company's own public careers site. This is the same
-// API the browser calls when a visitor searches for jobs.
+// REPLACED Sept 2026 — the previous version of this file guessed at a
+// public "/api/rest/2.0/posting" JSON endpoint. That endpoint does not
+// exist for CSB tenants: SuccessFactors' real public-facing OData API
+// (/odata/v2/JobRequisition) is tenant-gated behind OAuth credentials
+// ROOK doesn't have and can't get without each employer's cooperation —
+// confirmed via SAP's own documented behavior, not assumed. This is why
+// every SuccessFactors employer in production was failing identically
+// (Astellas, Boehringer Ingelheim, Daiichi Sankyo, Novo Nordisk all
+// sync_status=error) regardless of tenant: the guessed endpoint was
+// simply wrong for all of them, not four unrelated bugs.
 //
-// IDENTIFIER FORMAT: the base hostname of the company's careers site
-//   e.g. "jobs.boehringer-ingelheim.com"
-//        "careers.astellas.com"
-//        "careers.daiichisankyo.com"
+// WHAT ACTUALLY WORKS: CSB's own public search-results page, the same
+// HTML a visitor's browser loads. Checked directly against 10 real CSB
+// tenants (Astellas, Getinge, Boston Scientific, Olympus, Teleflex,
+// Terumo, Dentsply Sirona, KARL STORZ, DiaSorin, Boehringer Ingelheim) —
+// all ten returned real, specific job titles and detail links in the
+// page's own markup, no JavaScript execution needed to see them. Two
+// more (Kedrion, Ambu) returned nothing at all on the same request
+// shape; that's consistent with either a genuinely JS-rendered results
+// grid OR a cookie-consent interstitial swallowing the real content
+// server-side for EU-based sites — those two tenants could not be
+// distinguished from research alone and are NOT wired up below; treat
+// them as NEEDS_ADAPTER until someone inspects the real response.
 //
-// ENDPOINT PATTERNS (tried in order):
-//   1. /api/rest/2.0/posting?start=0&limit=100&lang=en_US
-//   2. /api/rest/2.0/posting?offset=0&limit=100&lang=en_US
-//   3. /api/rest/2.0/requisition?start=0&limit=100
+// URL SHAPE (consistent across every CSB tenant checked):
+//   results page:  https://{host}/search/?q={query}&startrow={n}
+//   detail page:   https://{host}/job/{City-Job-Title-ST-ZIP}/{numericId}/
+// The detail URL's own slug reliably encodes city + 2-letter state code
+// + 5-digit ZIP right before the numeric ID — used below as a fallback
+// location source when the results row itself doesn't carry a separate
+// location cell, since that slug format was consistent across every
+// tenant inspected.
 //
-// SuccessFactors paginates; this adapter walks all pages.
-// All jobs are pre-filtered for US relevance before being returned.
+// IDENTIFIER FORMAT: identical to before — the base hostname of the
+// company's careers site, e.g. "careers.astellas.com".
 //
-// NOTES:
-//   - SuccessFactors CSB API shapes are broadly standardized but individual
-//     clients may customize field names. The normalizer handles the most
-//     common variants.
-//   - Some employers add a country filter to their portal; others show all
-//     global jobs. The ingest pipeline's US-filter handles post-fetch.
-//   - Treat the first real ingestion run against each new employer as a test —
-//     inspect the raw output to confirm the field mapping is correct.
+// NOT VERIFIED AGAINST LIVE RAW HTML: this environment has no outbound
+// network access to arbitrary external hosts (see repo README / any
+// other adapter's header for the same caveat), so the exact row/cell
+// markup below is inferred from a research tool's structural
+// descriptions of these pages, not confirmed byte-for-byte. The
+// selectors are written defensively (several fallback strategies per
+// field, see extractRows/extractLocation) for exactly that reason.
+// Treat the first real ingestion run against each tenant as the actual
+// test, same convention as every other "not verified live" adapter in
+// this codebase (icims.js, ukg.js, workday.js when first written).
 
+const cheerio = require("cheerio");
 const { titleLooksRelevant } = require("../relevanceFilter");
+const { resolveUsStateCode } = require("../jobEligibility");
 
-const DEFAULT_TIMEOUT_MS = 20000;
-const PAGE_SIZE = 100;
+const MAX_PAGES = 10; // safety cap — 10 pages * 25/page = up to 250 rows examined per employer per run
+const MAX_DETAIL_FETCHES = 60; // only relevant (sales-filtered) rows get a detail-page fetch for full description
 
-// ── HTML stripper (shared with other adapters) ────────────────────────────
-
-function stripHtml(html) {
-  return (html || "")
-    .replace(/<[^>]*>/g, " ")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&#39;|&apos;|&rsquo;|&lsquo;/gi, "'")
-    .replace(/&quot;|&rdquo;|&ldquo;/gi, '"')
-    .replace(/&ndash;/gi, "-")
-    .replace(/&mdash;/gi, "\u2014")
-    .replace(/&hellip;/gi, "...")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/\s+/g, " ")
-    .trim();
+function clean(value) {
+  return String(value || "").replace(/[​ ]/g, " ").replace(/\s+/g, " ").trim();
 }
 
-// ── Timeout-aware fetch ───────────────────────────────────────────────────
-
-async function fetchWithTimeout(url, options = {}, timeoutMs = DEFAULT_TIMEOUT_MS) {
+async function fetchWithTimeout(url, options = {}, timeoutMs = 20000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetch(url, { ...options, signal: controller.signal });
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        Accept: "text/html",
+        ...options.headers,
+      },
+    });
   } finally {
     clearTimeout(timer);
   }
 }
 
-// ── API endpoint patterns ─────────────────────────────────────────────────
+// Pull city/state/zip out of a CSB detail URL's own slug — the one part
+// of this adapter checked against several *different* real tenants'
+// actual URLs (see file header), not just described secondhand:
+//   .../job/Boston-Territory-Manager%2C-Surgical-Workplace-MA-02108/1424825633/
+//   .../job/AUSTIN-Molecular-Account-Executive-Upstate-New-York-TX-78727/1372240657/
+function locationFromDetailUrl(detailUrl) {
+  try {
+    const path = decodeURIComponent(new URL(detailUrl).pathname);
+    const slugMatch = path.match(/\/job\/([^/]+)\/\d+\/?$/);
+    if (!slugMatch) return null;
+    const slug = slugMatch[1];
+    const tail = slug.match(/^(.*?)-([A-Za-z]{2})-(\d{5})$/);
+    if (!tail) return null;
+    const stateCode = resolveUsStateCode(tail[2]);
+    if (!stateCode) return null;
+    const cityGuess = clean(tail[1].split("-")[0]);
+    return cityGuess ? `${cityGuess}, ${stateCode}` : stateCode;
+  } catch {
+    return null;
+  }
+}
 
-// SuccessFactors CSB sites use one of a few URL shapes depending on the
-// version of the platform and how the employer configured their portal.
-// We try each in sequence until one returns a valid JSON response.
-const ENDPOINT_PATTERNS = [
-  (host, start) => `https://${host}/api/rest/2.0/posting?start=${start}&limit=${PAGE_SIZE}&lang=en_US`,
-  (host, start) => `https://${host}/api/rest/2.0/posting?offset=${start}&limit=${PAGE_SIZE}&lang=en_US`,
-  (host, start) => `https://${host}/api/rest/2.0/requisition?start=${start}&limit=${PAGE_SIZE}&lang=en_US`,
-  // Some SF sites use a "jobs" endpoint variant
-  (host, start) => `https://${host}/api/rest/2.0/jobs?start=${start}&limit=${PAGE_SIZE}&lang=en_US`,
-];
-
-// ── Normalize field names (SF uses multiple naming conventions) ───────────
-
-function extractField(obj, ...keys) {
-  for (const k of keys) {
-    if (obj[k] !== undefined && obj[k] !== null && obj[k] !== "") return obj[k];
+// A results row's own visible text sometimes carries the real location
+// (whatever cell layout the tenant's CSB skin uses) — tried first since
+// it's more precise than the URL-slug fallback when present.
+function locationFromRowText(rowText, title) {
+  const withoutTitle = clean(rowText.replace(title, ""));
+  // Matches "City, ST" or "City, State" anywhere in the row's remaining
+  // text, which is what's left once the title itself is stripped out.
+  const match = withoutTitle.match(/\b([A-Za-z .'-]{2,40}),\s*([A-Za-z]{2})\b/);
+  if (match) {
+    const stateCode = resolveUsStateCode(match[2]);
+    if (stateCode) return `${clean(match[1])}, ${stateCode}`;
   }
   return null;
 }
 
-function extractLocation(raw) {
-  // SuccessFactors stores location in several possible shapes
-  const city    = extractField(raw, "city", "City", "jobCity");
-  const state   = extractField(raw, "stateCode", "state", "State", "jobState");
-  const country = extractField(raw, "country", "Country", "countryCode");
-  const locStr  = extractField(raw, "location", "Location", "locationDesc", "jobLocation");
-
-  if (locStr && typeof locStr === "string") return locStr;
-  if (city && state) return `${city}, ${state}`;
-  if (city && country) return `${city}, ${country}`;
-  if (city) return city;
-  if (locStr && typeof locStr === "object") {
-    // Some SF versions return location as an object
-    const parts = [locStr.city, locStr.stateCode || locStr.state, locStr.country].filter(Boolean);
-    return parts.join(", ");
-  }
-  return null;
-}
-
-function extractDescription(raw) {
-  const html = extractField(
-    raw,
-    "jobDescription", "JobDescription", "descriptionHtml",
-    "externalDesc", "description", "Description"
-  );
-  if (html) return { html, text: stripHtml(html) };
-  const text = extractField(raw, "descriptionText", "jobDescriptionText");
-  if (text) return { html: text, text: stripHtml(text) };
-  return { html: "", text: "" };
-}
-
-function extractPostedDate(raw) {
-  const raw_date = extractField(
-    raw,
-    "postingDate", "PostingDate", "startDate",
-    "jobStartDate", "postedDate", "createdDate", "publishedDate"
-  );
-  if (!raw_date) return null;
-  // Handle epoch ms, ISO string, or YYYY-MM-DD
-  if (typeof raw_date === "number") {
-    return new Date(raw_date).toISOString().slice(0, 10);
-  }
-  if (typeof raw_date === "string") {
-    // "/Date(1693440000000)/" format common in OData
-    const epochMatch = raw_date.match(/\/Date\((\d+)\)\//);
-    if (epochMatch) return new Date(parseInt(epochMatch[1])).toISOString().slice(0, 10);
-    // ISO or YYYY-MM-DD
-    return raw_date.slice(0, 10);
-  }
-  return null;
-}
-
-function extractJobId(raw) {
-  return String(
-    extractField(raw, "id", "jobReqId", "requisitionId", "jobId", "postingId") || ""
-  );
-}
-
-function extractTitle(raw) {
-  return extractField(raw, "title", "Title", "jobTitle", "name");
-}
-
-function extractJobUrl(raw, host) {
-  const url = extractField(raw, "jobUrl", "externalJobUrl", "url", "applyUrl");
-  if (url) return url.startsWith("http") ? url : `https://${host}${url}`;
-  const path = extractField(raw, "externalPath", "jobPath", "path");
-  if (path) return `https://${host}${path}`;
-  const id = extractJobId(raw);
-  return id ? `https://${host}/job/${id}` : null;
-}
-
-// ── Parse the paginated response ──────────────────────────────────────────
-
-function parseResponse(data) {
-  // SF CSB returns results in different wrapper shapes:
-  //   { total, reqPostings: [...] }
-  //   { totalCount, results: [...] }
-  //   { total, items: [...] }
-  //   { count, value: [...] }      (OData)
-  //   [ ... ]                      (flat array — rare)
-  if (Array.isArray(data)) return { jobs: data, total: data.length };
-
-  const jobs =
-    data.reqPostings  ??
-    data.results      ??
-    data.items        ??
-    data.value        ??
-    data.postings     ??
-    data.jobs         ??
-    [];
-
-  const total =
-    data.total      ??
-    data.totalCount ??
-    data.count      ??
-    jobs.length;
-
-  return { jobs, total: Number(total) || jobs.length };
-}
-
-// ── Probe which endpoint pattern works for this employer ──────────────────
-
-async function probeEndpoint(host) {
-  for (const pattern of ENDPOINT_PATTERNS) {
-    const url = pattern(host, 0);
+// Extracts every job row from one results page: a link to a /job/...
+// detail page, whose visible text is the title. Works whether the
+// tenant's skin uses a literal <table> (Astellas) or a div-based grid —
+// this only depends on the /job/ URL pattern and doesn't assume a
+// specific wrapping tag, deliberately, since that varies by tenant skin
+// even within the same CSB template family.
+function extractRows($, host) {
+  const rows = [];
+  const seen = new Set();
+  $("a[href]").each((_, a) => {
+    const href = $(a).attr("href");
+    if (!href || !/\/job\/[^/]+\/\d+\/?/.test(href)) return;
+    let detailUrl;
     try {
-      const res = await fetchWithTimeout(url, {
-        headers: { Accept: "application/json", "User-Agent": "Mozilla/5.0" },
-      }, 12000);
-      if (!res.ok) continue;
-      const ct = res.headers.get("content-type") || "";
-      if (!ct.includes("json")) continue;
-      const data = await res.json();
-      const { jobs } = parseResponse(data);
-      if (Array.isArray(jobs)) return pattern; // this pattern works
-    } catch (_) {
-      // try next pattern
+      detailUrl = new URL(href, `https://${host}`).href;
+    } catch {
+      return;
+    }
+    if (seen.has(detailUrl)) return;
+    const title = clean($(a).text());
+    if (!title || title.length < 4 || title.length > 160) return;
+    seen.add(detailUrl);
+
+    // Look at the row's own text (nearest <tr>, else immediate parent) for
+    // a location the results grid may already display next to the title.
+    const row = $(a).closest("tr");
+    const rowText = clean((row.length ? row.text() : $(a).parent().text()) || "");
+    const location = locationFromRowText(rowText, title) || locationFromDetailUrl(detailUrl);
+
+    rows.push({ title, detailUrl, location });
+  });
+  return rows;
+}
+
+// Finds the next results-page URL if the page provides one — several
+// href shapes are tried rather than one hardcoded pagination parameter,
+// since CSB doesn't standardize that across every tenant skin.
+function findNextPageUrl($, currentUrl) {
+  const candidates = $('a[rel="next"], a.next, .pagination a, a[href*="startrow"], a[href*="&p="]');
+  for (const el of candidates.toArray()) {
+    const label = clean($(el).text()).toLowerCase();
+    const href = $(el).attr("href");
+    if (!href) continue;
+    if (label && !/next|»|>/.test(label) && !/startrow|&p=/.test(href)) continue;
+    try {
+      const url = new URL(href, currentUrl).href;
+      if (url !== currentUrl) return url;
+    } catch {
+      continue;
     }
   }
   return null;
 }
 
-// ── Main fetch function ───────────────────────────────────────────────────
+async function fetchDetailDescription(detailUrl) {
+  try {
+    const res = await fetchWithTimeout(detailUrl);
+    if (!res.ok) return "";
+    const html = await res.text();
+    const $ = cheerio.load(html);
+    $("script, style, nav, header, footer").remove();
+    // CSB detail pages generally render the description in a main content
+    // area; fall back to the whole body text if no obviously-scoped
+    // container is found, rather than returning nothing.
+    const main = $("main, .jobdescription, #jobdescription, article").first();
+    return clean((main.length ? main : $("body")).text());
+  } catch {
+    return "";
+  }
+}
 
 /**
- * Fetch all published US-relevant jobs from a SuccessFactors Career Site.
- *
+ * Fetch all relevant jobs from a SuccessFactors Career Site Builder site.
  * @param {string} identifier - hostname, e.g. "careers.astellas.com"
- * @returns {Promise<Array>} raw SF job objects
+ * @returns {Promise<Array>} raw row objects (title, detailUrl, location, description)
  */
 async function fetchSuccessFactorsJobs(identifier) {
   const host = identifier.replace(/^https?:\/\//, "").replace(/\/$/, "");
+  let url = `https://${host}/search/?q=sales`;
+  const allRows = [];
+  const seenUrls = new Set();
 
-  // Find which endpoint pattern this employer uses
-  const workingPattern = await probeEndpoint(host);
-  if (!workingPattern) {
-    throw new Error(
-      `SuccessFactors: could not find a working API endpoint for "${host}". ` +
-      `Check the career site URL and confirm it's SuccessFactors CSB.`
-    );
-  }
-
-  const allJobs = [];
-  let start = 0;
-  let total = Infinity;
-
-  while (start < total) {
-    const url = workingPattern(host, start);
-    const res = await fetchWithTimeout(url, {
-      headers: { Accept: "application/json", "User-Agent": "Mozilla/5.0" },
-    });
-
+  for (let page = 0; page < MAX_PAGES && url; page++) {
+    const res = await fetchWithTimeout(url);
     if (!res.ok) {
-      throw new Error(`SuccessFactors fetch failed for "${host}" at offset ${start}: ${res.status} ${res.statusText}`);
+      if (page === 0) throw new Error(`SuccessFactors fetch failed for "${host}": ${res.status} ${res.statusText}`);
+      break; // a later page failing doesn't invalidate rows already collected
     }
-
-    const data = await res.json();
-    const { jobs, total: pageTotal } = parseResponse(data);
-
-    if (!Array.isArray(jobs) || jobs.length === 0) break;
-
-    total = pageTotal;
-    allJobs.push(...jobs);
-    start += jobs.length;
-
-    // Guard: if the API isn't paginating properly, stop after first page
-    if (jobs.length < PAGE_SIZE) break;
+    const html = await res.text();
+    const $ = cheerio.load(html);
+    const rows = extractRows($, host).filter((r) => !seenUrls.has(r.detailUrl));
+    if (rows.length === 0 && page === 0) {
+      // Nothing at all on the first page. This is NOT automatically a
+      // legitimate "zero jobs" result — treating it as one would let
+      // ingest.js close every existing job for this employer just
+      // because a cookie-consent wall or a JS-only results grid
+      // swallowed the real content (exactly the Kedrion/Ambu shape
+      // noted in this file's header). Only accept it as empty when the
+      // page itself explicitly says so in visible text; otherwise this
+      // is indistinguishable from a blocked/broken fetch and must fail
+      // loudly so the caller's existing-jobs-stay-open safeguard holds.
+      const pageText = clean($("body").text()).toLowerCase();
+      const explicitlyEmpty = /no (?:current |open |available )?(?:positions|jobs|openings|vacancies|results) (?:found|available|matching)?|0 results/i.test(
+        pageText
+      );
+      if (explicitlyEmpty) break;
+      throw new Error(
+        `SuccessFactors "${host}" returned no job rows and no explicit empty-results text — likely blocked, JS-rendered, or a cookie-consent wall, not a genuine zero-job result`
+      );
+    }
+    for (const r of rows) seenUrls.add(r.detailUrl);
+    allRows.push(...rows);
+    url = findNextPageUrl($, url);
   }
 
-  return allJobs;
+  const relevant = allRows.filter((r) => titleLooksRelevant(r.title));
+
+  const withDescriptions = [];
+  for (let i = 0; i < relevant.length; i++) {
+    const row = relevant[i];
+    const description = i < MAX_DETAIL_FETCHES ? await fetchDetailDescription(row.detailUrl) : "";
+    withDescriptions.push({ ...row, description });
+  }
+  return withDescriptions;
 }
 
-// ── Normalize one raw SF job to ROOK's canonical shape ───────────────────
-
-/**
- * @param {Object} raw - one raw SuccessFactors job object
- * @param {Object} employer - ROOK employer row { id, company_name, ... }
- * @param {string} host - the career site hostname
- */
 function normalizeSuccessFactorsJob(raw, employer, host) {
-  const title = extractTitle(raw);
-  if (!title) return null; // skip malformed records
-
-  const location = extractLocation(raw);
-  const { html: descHtml, text: descText } = extractDescription(raw);
-  const jobId = extractJobId(raw);
-  const jobUrl = extractJobUrl(raw, host);
-  const datePosted = extractPostedDate(raw);
-
-  // Compensation — SF sometimes includes salary bands
-  const salaryMin = extractField(raw, "salaryMin", "minimumSalary", "salaryFrom") || null;
-  const salaryMax = extractField(raw, "salaryMax", "maximumSalary", "salaryTo") || null;
-
-  // Employment type
-  const empType = extractField(raw, "employmentType", "jobType", "type");
+  const idMatch = raw.detailUrl.match(/\/job\/[^/]+\/(\d+)\/?/);
+  const jobId = idMatch ? idMatch[1] : raw.detailUrl;
 
   return {
-    source_job_id:    jobId,
-    employer_id:      employer.id,
-    source_type:      "successfactors",
-    source_url:       jobUrl,
-    application_url:  jobUrl,
-    title_original:   title,
-    company_name:     employer.company_name,
-    description_html: descHtml,
-    description_text: descText,
-    location_raw:     location,
-    salary_min:       salaryMin ? Number(salaryMin) || null : null,
-    salary_max:       salaryMax ? Number(salaryMax) || null : null,
-    employment_type:  empType   ? String(empType)          : null,
-    date_posted:      datePosted,
-    status:           "active",
-    source_verified:  true,
+    source_job_id: jobId,
+    employer_id: employer.id,
+    source_type: "successfactors",
+    source_url: raw.detailUrl,
+    application_url: raw.detailUrl,
+    title_original: raw.title,
+    company_name: employer.company_name,
+    description_html: "",
+    description_text: raw.description || "",
+    location_raw: raw.location || "",
+    date_posted: null,
+    status: "active",
+    // The detail page itself is fetched and read (not guessed), so this
+    // is a real first-party posting even where location parsing missed —
+    // an empty location_raw doesn't mean the job itself is unverified.
+    source_verified: true,
   };
 }
 
-module.exports = { fetchSuccessFactorsJobs, normalizeSuccessFactorsJob };
+module.exports = {
+  fetchSuccessFactorsJobs,
+  normalizeSuccessFactorsJob,
+  // exported for testing
+  extractRows,
+  locationFromDetailUrl,
+  locationFromRowText,
+  findNextPageUrl,
+};

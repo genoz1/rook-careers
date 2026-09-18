@@ -60,10 +60,26 @@ async function fetchClinchTalentJobs(hostname) {
     let res;
     try {
       res = await fetchWithTimeout(url);
-    } catch {
+    } catch (err) {
+      // A later page failing to even connect doesn't invalidate rows
+      // already collected — but the first page failing this way means
+      // nothing was collected at all, same as a non-ok response below.
+      if (page === 1) throw new Error(`ClinchTalent fetch failed for "${hostname}": ${err.message}`);
       break;
     }
-    if (!res.ok) break;
+    if (!res.ok) {
+      // REFRESH SAFETY: this used to just `break` here on any page,
+      // including the first — which meant a blocked page, a 5xx, or a
+      // timeout on page 1 produced the exact same rawJobs=[] as a
+      // genuinely empty careers page. ingest.js closes every existing
+      // job for an employer whose adapter returns zero rows, so a
+      // transient failure on page 1 would have silently closed every
+      // real posting. Only a later page's failure is safe to swallow
+      // (rows from earlier pages are already collected); a first-page
+      // failure must fail loudly instead.
+      if (page === 1) throw new Error(`ClinchTalent fetch failed for "${hostname}": ${res.status} ${res.statusText}`);
+      break;
+    }
     const html = await res.text();
 
     // ClinchTalent job links observed as: <a href="/jobs/{slug}">{title}</a>
@@ -79,7 +95,23 @@ async function fetchClinchTalentJobs(hostname) {
     }
     console.log(`    ...page ${page}: ${foundOnPage} listing(s) found (${rawJobs.length} total so far)`);
 
-    if (foundOnPage === 0) break;
+    if (foundOnPage === 0) {
+      // Zero rows on page 1 itself is only safe to treat as a genuine
+      // empty result if the page explicitly says so; otherwise it's
+      // indistinguishable from a blocked/broken/JS-only response, same
+      // reasoning as the SuccessFactors adapter's equivalent guard.
+      if (page === 1) {
+        const explicitlyEmpty = /no (?:current |open |available )?(?:positions|jobs|openings|vacancies|results) (?:found|available|matching)?/i.test(
+          html
+        );
+        if (!explicitlyEmpty) {
+          throw new Error(
+            `ClinchTalent "${hostname}" returned no job links and no explicit empty-results text on page 1 — likely blocked or a markup change, not a genuine zero-job result`
+          );
+        }
+      }
+      break;
+    }
   }
 
   const seen = new Set();

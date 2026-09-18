@@ -14,6 +14,17 @@
 // You only need the employer's Pinpoint subdomain, e.g.:
 //   ats_identifier = "exactech"
 // (from https://exactech.pinpointhq.com)
+//
+// CUSTOM DOMAIN SUPPORT (Sept 2026): some employers CNAME their own
+// domain onto Pinpoint instead of using the branded *.pinpointhq.com
+// subdomain — confirmed live for Align Technology, whose careers site is
+// "Powered by" Pinpoint (footer credit + postings.json still present)
+// but served at jobs.aligntech.com, not a pinpointhq.com subdomain. This
+// is a reusable variation, not an Align-specific hack: any employer on a
+// CNAME'd domain hits the same problem. ats_identifier now accepts
+// either a bare subdomain ("exactech" → exactech.pinpointhq.com) or a
+// full custom hostname ("jobs.aligntech.com", used as-is) — distinguished
+// by whether the value contains a dot.
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
   const controller = new AbortController();
@@ -25,10 +36,15 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
   }
 }
 
-async function fetchPinpointJobs(subdomain) {
-  const url = `https://${subdomain}.pinpointhq.com/postings.json`;
+function pinpointHost(identifier) {
+  return identifier.includes(".") ? identifier : `${identifier}.pinpointhq.com`;
+}
+
+async function fetchPinpointJobs(identifier) {
+  const host = pinpointHost(identifier);
+  const url = `https://${host}/postings.json`;
   const res = await fetchWithTimeout(url);
-  if (!res.ok) throw new Error(`Pinpoint fetch failed for "${subdomain}": ${res.status} ${res.statusText}`);
+  if (!res.ok) throw new Error(`Pinpoint fetch failed for "${identifier}": ${res.status} ${res.statusText}`);
   const data = await res.json();
   // Docs show the top-level shape as a bare array of posting objects.
   const rawJobs = Array.isArray(data) ? data : (data?.postings || data?.data || []);
@@ -42,7 +58,7 @@ async function fetchPinpointJobs(subdomain) {
  * pubDate) match Pinpoint's own documented example response.
  */
 function normalizePinpointJob(raw, employer) {
-  const jobUrl = raw.link || raw.url || `https://${employer.ats_identifier}.pinpointhq.com`;
+  const jobUrl = raw.link || raw.url || `https://${pinpointHost(employer.ats_identifier)}`;
   const jobId = raw.id || jobUrl.split("/").filter(Boolean).pop();
 
   return {
@@ -62,4 +78,4 @@ function normalizePinpointJob(raw, employer) {
   };
 }
 
-module.exports = { fetchPinpointJobs, normalizePinpointJob };
+module.exports = { fetchPinpointJobs, normalizePinpointJob, pinpointHost };

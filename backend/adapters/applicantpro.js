@@ -87,7 +87,21 @@ async function fetchApplicantProJobs(subdomain) {
   const res = await fetchWithTimeout(`https://${subdomain}.applicantpro.com/core/jobs/${domainId}`);
   if (!res.ok) throw new Error(`ApplicantPro fetch failed for "${subdomain}": ${res.status} ${res.statusText}`);
   const data = await res.json();
-  const rawJobs = Array.isArray(data) ? data : (data?.jobs || []);
+  // REFRESH SAFETY (Round 3 audit, same failure class found in
+  // SuccessFactors/ClinchTalent): `data?.jobs || []` used to treat a
+  // malformed/unexpected JSON shape (e.g. the assumed field name is
+  // wrong, or the endpoint returned an error object instead of a job
+  // list) identically to a genuine "employer currently has zero
+  // openings" response — both silently became []. A real empty jobs
+  // array from this endpoint has an explicit `jobs` key present (even if
+  // empty); its total absence, on an object response, means the shape
+  // assumption itself failed, which must not be read as "no jobs."
+  if (!Array.isArray(data) && (data == null || typeof data !== "object" || !("jobs" in data))) {
+    throw new Error(
+      `ApplicantPro "${subdomain}" returned an unexpected response shape (no "jobs" field) — likely a wrong domain_id or a changed API shape, not a genuine zero-job result`
+    );
+  }
+  const rawJobs = Array.isArray(data) ? data : data.jobs || [];
   console.log(`    ...listed ${rawJobs.length} posting(s)`);
 
   const relevant = rawJobs.filter((j) => titleLooksRelevant(j.title || j.job_title || ""));
