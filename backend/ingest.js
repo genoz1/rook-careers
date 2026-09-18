@@ -38,6 +38,7 @@ const reviewedHtmlSources = require("./customHtmlSources.json");
 const { analyzeJob } = require("./ai/jobAnalysis");
 const { generateEmbedding } = require("./ai/embeddings");
 const { validateJobLocation } = require('./validateJobLocation');
+const { geocodeLocation } = require('./geocoding');
 
 // Use the SERVICE ROLE key here, never the anon key — ingestion writes
 // to the jobs table and must bypass row-level security intentionally.
@@ -200,6 +201,46 @@ async function ingestEmployer(employer) {
   // cleared.
   const AI_ANALYSIS_CAP_PER_EMPLOYER = 10;
 
+  // Same shape of problem as the AI-analysis cap above, for a different
+  // resource: validateJobLocation() geocodes any job whose location text
+  // is new or changed (a cached, still-valid point from a PRIOR run is
+  // reused instantly — see validateJobLocation.js — so this only counts
+  // genuinely NEW geocode lookups). Every one of those lookups goes
+  // through geocoding.js's fetchWithTimeout(), which is throttled to
+  // Nominatim's ~1 request/second usage policy (MIN_DELAY_BETWEEN_CALLS_MS
+  // = 1100ms) via a single counter SHARED ACROSS THE WHOLE PROCESS, not
+  // per employer — so it's already a process-wide bottleneck even before
+  // considering any one employer. Unlike AI analysis, this had no cap at
+  // all: a never-synced employer with, say, 400 relevant jobs (all new,
+  // so none can reuse a cached point) forces ~400 throttled calls in a
+  // row — over 7 minutes on the throttle alone, for ONE employer, before
+  // its fetch/adapter time or anything else is even counted. Capping
+  // this the same way AI analysis is capped (save the job normally,
+  // defer its geocoding to a later run) keeps one large or never-synced
+  // employer from being able to consume most of a run's 25-minute time
+  // budget by itself — see Nightly Ingestion Capacity Review,
+  // Sept 2026, for the analysis that identified this as the main driver
+  // of employers going un-synced despite the nightly schedule.
+  const GEOCODE_CAP_PER_EMPLOYER = 40;
+  let geocodeCallsThisRun = 0;
+  let geocodeDeferredThisRun = 0;
+  const cappedGeocode = async (text, opts) => {
+    if (geocodeCallsThisRun >= GEOCODE_CAP_PER_EMPLOYER) {
+      geocodeDeferredThisRun++;
+      // Mirrors how validateJobLocation already treats a genuine geocode
+      // failure (network error, no match) — see its `catch { return
+      // cleared; }` — so a deferred-for-cap job is indistinguishable
+      // from an ordinary transient failure: no coordinates are recorded
+      // (never a stale/wrong point), and because the result isn't
+      // marked "validated", it is NOT cached, so it's retried — and, if
+      // capacity allows, resolved — on the very next run rather than
+      // staying stuck.
+      throw new Error("GEOCODE_CAP_REACHED — deferred to a later run");
+    }
+    geocodeCallsThisRun++;
+    return geocodeLocation(text, opts);
+  };
+
   for (const raw of rawJobs) {
     const job = normalize(raw, employer);
     seenSourceIds.add(job.source_job_id);
@@ -225,7 +266,7 @@ async function ingestEmployer(employer) {
     // posting is never stored at all, rather than relying on every
     // downstream reader (dashboard, digest, search) to correctly
     // demote it after the fact.
-    Object.assign(job, await validateJobLocation(job, undefined, existingLocations.get(job.source_job_id)));
+    Object.assign(job, await validateJobLocation(job, cappedGeocode, existingLocations.get(job.source_job_id)));
     if (job.location_evidence.status === 'foreign' || mentionsNonUsCountry(job.location_raw, null, job.title_original)) {
       nonUsSkippedCount++;
       // An old record must not remain active after its source establishes
@@ -364,7 +405,8 @@ async function ingestEmployer(employer) {
     .eq("id", employer.id);
 
   console.log(
-    `  Done — ${savedCount} relevant job(s) saved (${rawJobs.length} total posting(s) examined), ${closedIds.length} closed, ${nonUsSkippedCount} non-US posting(s) skipped.`
+    `  Done — ${savedCount} relevant job(s) saved (${rawJobs.length} total posting(s) examined), ${closedIds.length} closed, ${nonUsSkippedCount} non-US posting(s) skipped` +
+      (geocodeDeferredThisRun > 0 ? `, ${geocodeDeferredThisRun} location lookup(s) deferred to a later run (per-employer geocode cap reached).` : `.`)
   );
 }
 
@@ -395,6 +437,49 @@ const { titleLooksRelevant: looksRelevant } = require('./relevanceFilter');
 // just vanishing mid-request.
 const TIME_BUDGET_MS = 25 * 60 * 1000; // 25 min — 5 min of buffer under DO's 30-min hard limit
 
+// Guards against two overlapping `npm run ingest` invocations (e.g. a
+// scheduled run that hasn't finished when the next one fires 30 minutes
+// later). This is a plain conditional row UPDATE, not a Postgres
+// session-scoped primitive like pg_advisory_lock — deliberately, since
+// requests through Supabase's client go over pooled connections, and a
+// session lock isn't guaranteed to be held by the same connection across
+// separate calls the way this run needs it to be. See
+// migration_ingestion_lock.sql for the one-row table this needs, which
+// has NOT been created yet — this function fails OPEN (treats the lock
+// as acquired) if that table doesn't exist, so deploying this code is
+// safe before the migration is applied; it simply has no overlap
+// protection until then.
+const INGEST_LOCK_STALE_MS = 35 * 60 * 1000; // a little over DO's 30-min hard timeout, so a genuinely-killed run's lock doesn't block forever
+const INGEST_LOCK_ROW_ID = 1;
+
+async function tryAcquireIngestLock() {
+  const staleBefore = new Date(Date.now() - INGEST_LOCK_STALE_MS).toISOString();
+  const { data, error } = await supabase
+    .from("ingestion_run_lock")
+    .update({ locked_at: new Date().toISOString(), locked_by: `pid:${process.pid}` })
+    .eq("id", INGEST_LOCK_ROW_ID)
+    .or(`locked_at.is.null,locked_at.lt.${staleBefore}`)
+    .select()
+    .maybeSingle();
+  if (error) {
+    console.log(
+      `  Ingestion lock unavailable (${error.message}) — proceeding without overlap protection. ` +
+        `See migration_ingestion_lock.sql (not yet applied).`
+    );
+    return { acquired: true, failOpen: true };
+  }
+  return { acquired: !!data, failOpen: false };
+}
+
+async function releaseIngestLock() {
+  try {
+    await supabase.from("ingestion_run_lock").update({ locked_at: null, locked_by: null }).eq("id", INGEST_LOCK_ROW_ID);
+  } catch {
+    // Best-effort — if this fails, INGEST_LOCK_STALE_MS clears the lock
+    // on its own the next time someone tries to acquire it.
+  }
+}
+
 async function run() {
   const startedAt = Date.now();
 
@@ -404,6 +489,30 @@ async function run() {
   // else's turn in the normal oldest-first order below.
   const employerFilter = process.argv[2];
 
+  // A single-employer debug run is a manual, supervised invocation, not
+  // the unattended scheduled job overlap protection exists for — skip
+  // the lock for it entirely so it can never be blocked by, or block, a
+  // real scheduled run.
+  let lock = { acquired: true, failOpen: true };
+  if (!employerFilter) {
+    lock = await tryAcquireIngestLock();
+    if (!lock.acquired) {
+      console.log(
+        "Another ingestion run appears to already be in progress (lock held and not stale) — " +
+          "exiting without processing any employer."
+      );
+      return;
+    }
+  }
+
+  try {
+    await runEmployerLoop(startedAt, employerFilter);
+  } finally {
+    if (!employerFilter && !lock.failOpen) await releaseIngestLock();
+  }
+}
+
+async function runEmployerLoop(startedAt, employerFilter) {
   // Order by last_checked_at ascending (nulls first) rather than
   // whatever order the table happens to return — this means employers
   // that have never synced, or synced longest ago, get processed first.
@@ -475,4 +584,4 @@ async function run() {
 }
 
 if (require.main === module) run();
-module.exports = { ingestEmployer, run };
+module.exports = { ingestEmployer, run, runEmployerLoop, tryAcquireIngestLock, releaseIngestLock };
