@@ -130,28 +130,24 @@ async function fetchPhenomJobs(domain) {
       refNum,
       ddoKey: "refineSearch",
     };
-    let res;
-    try {
-      res = await fetchWithTimeout(`https://${domain}/widgets`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-    } catch {
-      break;
-    }
-    if (!res.ok) break;
+    const res = await fetchWithTimeout(`https://${domain}/widgets`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(`Phenom fetch failed: ${res.status}`);
     const data = await res.json();
     // Confirmed real response shape (found via a working third-party
     // example against a different Phenom-hosted employer): the actual
     // job array lives at data.refineSearch.data.jobs, not data.jobs.data
     // as originally guessed here.
-    const pageJobs = data?.refineSearch?.data?.jobs || [];
-    if (!Array.isArray(pageJobs) || pageJobs.length === 0) break;
+    const pageJobs = data?.refineSearch?.data?.jobs;
+    if (!Array.isArray(pageJobs)) throw new Error("Phenom incomplete extraction: malformed listing");
+    if (pageJobs.some(j => !j || !(j.job_req_id || j.jobId || j.job_seq_no || j.id) || typeof (j.title || j.job_title) !== 'string')) throw new Error("Phenom malformed posting");
+    if (pageJobs.length === 0) break;
 
     rawJobs.push(...pageJobs);
     console.log(`    ...listed ${rawJobs.length} posting(s) so far`);
     if (pageJobs.length < size) break; // last page
+    if (page === maxPages - 1) throw new Error("Phenom incomplete extraction: pagination safety limit reached");
     from += size;
   }
 
