@@ -103,19 +103,25 @@ async function fetchOracleHcmJobs(identifier) {
       throw new Error(`Oracle HCM fetch failed for "${identifier}": ${res.status} ${res.statusText}`);
     }
     const data = await res.json();
-    const searchItem = (data.items || [])[0];
-    const jobs = searchItem?.requisitionList || [];
-    if (jobs.length === 0) break;
+    const searchItem = data?.items?.[0];
+    const jobs = searchItem?.requisitionList;
+    if (!Array.isArray(jobs) || (total === null && (!Number.isInteger(searchItem.TotalJobsCount) || searchItem.TotalJobsCount < 0))) throw new Error("Oracle HCM incomplete extraction: malformed listing");
+    if (total === null) total = searchItem.TotalJobsCount;
+    if (jobs.some(j => !j || j.Id == null || typeof j.Title !== 'string')) throw new Error("Oracle HCM malformed posting");
+    if (jobs.length === 0) {
+      if (offset < total) throw new Error("Oracle HCM incomplete extraction: premature empty page");
+      break;
+    }
 
     allJobs.push(...jobs);
-    if (total === null) total = searchItem.TotalJobsCount || 0;
+    if (new Set(allJobs.map(j => String(j.Id))).size !== allJobs.length) throw new Error("Oracle HCM incomplete extraction: duplicate pagination");
     console.log(`    ...listed ${allJobs.length} / ${total} postings`);
 
     offset += jobs.length;
     // Paginate on TotalJobsCount, NOT the response's top-level hasMore
     // flag — see file header re: why that flag can't be trusted here.
-    if (total && offset >= total) break;
-    if (offset > 3000) break; // safety cap, same pattern as the Workday adapter
+    if (offset >= total) break;
+    if (offset > 3000) throw new Error("Oracle HCM incomplete extraction: pagination safety limit reached");
   }
 
   const relevantJobs = allJobs.filter((j) => titleLooksRelevant(j.Title));
@@ -125,18 +131,16 @@ async function fetchOracleHcmJobs(identifier) {
   const detailed = [];
   for (let i = 0; i < relevantJobs.length; i++) {
     const job = relevantJobs[i];
-    try {
+    {
       // finder's quotes/punctuation must also stay literal here.
       const finder = `ById;Id="${job.Id}",siteNumber=${siteNumber}`;
       const url = `https://${domain}${detailsPath}?expand=all&onlyData=true&finder=${finder}`;
       const detailRes = await fetchWithTimeout(url, { headers: oracleHeaders() });
-      if (!detailRes.ok) continue;
+      if (!detailRes.ok) throw new Error(`Oracle HCM detail fetch failed: ${detailRes.status}`);
       const detailData = await detailRes.json();
       const detail = (detailData.items || [])[0];
-      if (!detail) continue;
+      if (!detail || typeof detail !== "object" || detail.Id == null) throw new Error("Oracle HCM malformed detail response");
       detailed.push({ ...job, detail });
-    } catch {
-      continue;
     }
     if ((i + 1) % 10 === 0 || i === relevantJobs.length - 1) {
       console.log(`    ...fetched details for ${i + 1} / ${relevantJobs.length}`);
