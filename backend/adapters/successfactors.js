@@ -51,7 +51,7 @@ const cheerio = require("cheerio");
 const { titleLooksRelevant } = require("../relevanceFilter");
 const { resolveUsStateCode } = require("../jobEligibility");
 
-const MAX_PAGES = 10; // safety cap — 10 pages * 25/page = up to 250 rows examined per employer per run
+const MAX_PAGES = 1000; // Defensive ceiling: unfinished pagination must fail, never truncate.
 const MAX_DETAIL_FETCHES = 60; // only relevant (sales-filtered) rows get a detail-page fetch for full description
 
 function clean(value) {
@@ -151,20 +151,29 @@ function extractRows($, host) {
 // href shapes are tried rather than one hardcoded pagination parameter,
 // since CSB doesn't standardize that across every tenant skin.
 function findNextPageUrl($, currentUrl) {
-  const candidates = $('a[rel="next"], a.next, .pagination a, a[href*="startrow"], a[href*="&p="]');
-  for (const el of candidates.toArray()) {
-    const label = clean($(el).text()).toLowerCase();
-    const href = $(el).attr("href");
-    if (!href) continue;
-    if (label && !/next|»|>/.test(label) && !/startrow|&p=/.test(href)) continue;
-    try {
-      const url = new URL(href, currentUrl).href;
-      if (url !== currentUrl) return url;
-    } catch {
+  const current = new URL(currentUrl);
+  const forwards = [];
+  for (const el of $('a[rel="next"], a.next, .pagination a, a[href*="startrow"], a[href*="p="]').toArray()) {
+    if ($(el).attr('aria-disabled') === 'true' || $(el).hasClass('disabled')) continue;
+    const explicit = $(el).attr('rel') === 'next' || $(el).hasClass('next') || /^(next|»|>)$/i.test(clean($(el).text()));
+    const href = $(el).attr('href');
+    if (!href) { if (explicit) throw new Error('SuccessFactors incomplete pagination: missing next href'); continue; }
+    let next;
+    try { next = new URL(href, current); } catch { throw new Error('SuccessFactors incomplete pagination: invalid next URL'); }
+    if (next.origin !== current.origin || next.pathname !== current.pathname) {
+      if (explicit) throw new Error('SuccessFactors incomplete pagination: unexpected next URL');
       continue;
     }
+    if (explicit) return next.href;
+    for (const key of ['startrow', 'p']) {
+      if (!next.searchParams.has(key)) continue;
+      const n = Number(next.searchParams.get(key));
+      const previous = Number(current.searchParams.get(key) || (key === 'p' ? 1 : 0));
+      if (Number.isFinite(n) && n > previous) forwards.push({ url: next.href, n });
+    }
   }
-  return null;
+  forwards.sort((a, b) => a.n - b.n);
+  return forwards[0]?.url || null;
 }
 
 async function fetchDetailDescription(detailUrl) {
@@ -189,22 +198,28 @@ async function fetchDetailDescription(detailUrl) {
  * @param {string} identifier - hostname, e.g. "careers.astellas.com"
  * @returns {Promise<Array>} raw row objects (title, detailUrl, location, description)
  */
-async function fetchSuccessFactorsJobs(identifier) {
+async function fetchSuccessFactorsJobs(identifier, { maxPages = MAX_PAGES } = {}) {
+  if (!Number.isInteger(maxPages) || maxPages < 1) throw new Error("Invalid SuccessFactors page limit");
   const host = identifier.replace(/^https?:\/\//, "").replace(/\/$/, "");
   let url = `https://${host}/search/?q=sales`;
   const allRows = [];
   const seenUrls = new Set();
 
-  for (let page = 0; page < MAX_PAGES && url; page++) {
+  const visited = new Set();
+  for (let page = 0; url; page++) {
+    if (page >= maxPages) throw new Error("SuccessFactors incomplete extraction: pagination safety limit reached");
+    const canonical = new URL(url); canonical.searchParams.sort();
+    if (visited.has(canonical.href)) throw new Error("SuccessFactors incomplete extraction: pagination cycle");
+    visited.add(canonical.href);
     const res = await fetchWithTimeout(url);
     if (!res.ok) {
-      if (page === 0) throw new Error(`SuccessFactors fetch failed for "${host}": ${res.status} ${res.statusText}`);
-      break; // a later page failing doesn't invalidate rows already collected
+      throw new Error(`SuccessFactors fetch failed for "${host}": ${res.status} ${res.statusText}`);
     }
     const html = await res.text();
     const $ = cheerio.load(html);
     const rows = extractRows($, host).filter((r) => !seenUrls.has(r.detailUrl));
-    if (rows.length === 0 && page === 0) {
+    const nextUrl = findNextPageUrl($, url);
+    if (rows.length === 0) {
       // Nothing at all on the first page. This is NOT automatically a
       // legitimate "zero jobs" result — treating it as one would let
       // ingest.js close every existing job for this employer just
@@ -218,14 +233,14 @@ async function fetchSuccessFactorsJobs(identifier) {
       const explicitlyEmpty = /no (?:current |open |available )?(?:positions|jobs|openings|vacancies|results) (?:found|available|matching)?|0 results/i.test(
         pageText
       );
-      if (explicitlyEmpty) break;
+      if (explicitlyEmpty && page === 0 && !nextUrl) break;
       throw new Error(
         `SuccessFactors "${host}" returned no job rows and no explicit empty-results text — likely blocked, JS-rendered, or a cookie-consent wall, not a genuine zero-job result`
       );
     }
     for (const r of rows) seenUrls.add(r.detailUrl);
     allRows.push(...rows);
-    url = findNextPageUrl($, url);
+    url = nextUrl;
   }
 
   const relevant = allRows.filter((r) => titleLooksRelevant(r.title));
