@@ -1,6 +1,17 @@
 // Shared auth helpers for ROOK frontend pages.
 // Requires rook-config.js and the Supabase JS CDN script to be loaded first.
 
+// Member résumé navigation opens the document manager, not onboarding.
+function rookLinkResumeManager(){
+  document.querySelectorAll('a[href]').forEach(link=>{
+    if(/^My Résumés?$/.test(link.textContent.trim()))link.href='rook-resume.html';
+  });
+}
+if(typeof document!=='undefined'){
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',rookLinkResumeManager);
+  else rookLinkResumeManager();
+}
+
 const rookSupabase = window.supabase.createClient(
   window.ROOK_CONFIG.SUPABASE_URL,
   window.ROOK_CONFIG.SUPABASE_ANON_KEY

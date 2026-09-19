@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><title>My Résumé — ROOK</title>
+<link rel="icon" href="assets/rook-icon-192.png"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f5f8fc;color:#071e41;font-family:Inter,Arial,sans-serif}header{background:#fff;border-bottom:1px solid #dce7f0;padding:18px 5%;display:flex;align-items:center;justify-content:space-between}header a{color:#071e41;text-decoration:none;font-weight:700}.brand{display:flex;align-items:center;gap:12px;letter-spacing:2px}.brand img{width:38px;height:38px}main{max-width:1050px;padding:32px 24px 60px;margin:auto}h1{font-size:28px;margin:0 0 10px}h2{font-size:19px;margin:0 0 16px}p{line-height:1.6;color:#536880}.card{background:white;border:1px solid #dce7f0;border-radius:18px;padding:24px;margin-top:24px}.file-name{font-weight:600;overflow-wrap:anywhere}.actions{display:flex;gap:12px;flex-wrap:wrap;margin:18px 0}.button,button{display:inline-flex;justify-content:center;align-items:center;min-height:44px;padding:12px 20px;border-radius:24px;border:1px solid #cedbec;background:#fff;color:#174476;font:600 14px Inter,Arial;text-decoration:none;cursor:pointer}.primary{background:#245df5;color:white;border:0}button:disabled{opacity:.6;cursor:wait}label{display:block;font-weight:600;margin-bottom:10px}input{max-width:100%;font:inherit}small{display:block;color:#64758a;line-height:1.6;margin-top:10px}iframe{width:100%;height:650px;border:1px solid #dce7f0;border-radius:10px}#status{white-space:pre-line}#status.error{color:#a42424}[hidden]{display:none!important}@media(max-width:640px){main{padding:24px 16px 45px}.card{padding:20px}h1{font-size:25px}iframe{height:450px}.actions .button,.actions button{width:100%}}
+</style></head><body>
+<header><a class="brand" href="rook-dashboard.html"><img src="assets/rook-logo.png" alt="">ROOK</a><a href="rook-mobile-menu.html">Menu</a></header>
+<main><h1>My Résumé</h1><p>View the résumé currently on your account, or upload a replacement.</p><a href="rook-dashboard.html">← Back to My Job Matches</a>
+<section class="card" aria-labelledby="currentTitle"><h2 id="currentTitle">Current résumé</h2><p id="loading" role="status">Loading your résumé…</p><div id="current" hidden><div class="file-name" id="filename"></div><small id="uploadedAt"></small><div class="actions"><a id="openResume" class="button" target="_blank" rel="noopener noreferrer">Open / download résumé</a></div><iframe id="preview" title="Your uploaded résumé" hidden></iframe><p id="documentNote" hidden>Use Open / download to view this Word document.</p></div><p id="empty" hidden>No résumé has been uploaded yet.</p></section>
+<section class="card" aria-labelledby="replaceTitle"><h2 id="replaceTitle">Upload a résumé</h2><form id="uploadForm"><label for="resumeFile">Choose a PDF or Word document</label><input id="resumeFile" name="resume" type="file" accept=".pdf,.doc,.docx" required><small>Up to 10 MB. Uploading replaces the résumé used for your matches. Your résumé stays private.</small><div class="actions"><button class="primary" id="uploadButton" type="submit" disabled>Upload résumé</button></div></form><p id="status" role="status" aria-live="polite"></p></section></main>
+<script src="rook-config.js"></script><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="rook-auth.js"></script>
+<script>
+const byId=id=>document.getElementById(id);let uploading=false;
+async function loadResume(){
+  const response=await rookApiFetch('/resume-url');
+  if(!response.ok)throw new Error('Unable to load your résumé. Please refresh and try again.');
+  const resume=await response.json();byId('loading').hidden=true;byId('current').hidden=!resume;byId('empty').hidden=!!resume;
+  if(!resume)return;
+  byId('filename').textContent=resume.filename || 'Uploaded résumé';
+  byId('uploadedAt').textContent=resume.uploaded_at?'Uploaded '+new Date(resume.uploaded_at).toLocaleDateString():'';
+  if(!resume.url)throw new Error('Your résumé is saved, but its viewing link is unavailable. Please refresh.');
+  const url=new URL(resume.url);if(url.protocol!=='https:')throw new Error('Unable to open this résumé link.');
+  byId('openResume').href=url.href;
+  const pdf=/\.pdf$/i.test(resume.filename||'');byId('preview').hidden=!pdf;byId('documentNote').hidden=pdf;
+  if(pdf)byId('preview').src=url.href;else byId('preview').removeAttribute('src');
+  byId('replaceTitle').textContent='Replace your résumé';byId('uploadButton').textContent='Upload replacement';
+}
+function showStatus(message,error=false){byId('status').textContent=message;byId('status').classList.toggle('error',error);}
+byId('uploadForm').addEventListener('submit',async event=>{
+  event.preventDefault();if(uploading)return;const file=byId('resumeFile').files[0];
+  if(!file || !/\.(pdf|doc|docx)$/i.test(file.name))return showStatus('Choose a PDF, DOC, or DOCX résumé.',true);
+  if(file.size>10*1024*1024)return showStatus('Choose a file smaller than 10 MB.',true);
+  uploading=true;byId('uploadButton').disabled=true;byId('resumeFile').disabled=true;showStatus('Uploading and updating your résumé. This may take a minute…');
+  try{
+    const body=new FormData();body.append('resume',file);const response=await rookApiFetch('/resume',{method:'POST',body});const result=await response.json().catch(()=>({}));
+    if(!response.ok || !result.ok)throw new Error('The upload did not complete. Please try again.');
+    byId('resumeFile').value='';
+    showStatus(result.analysis_status==='ok'?'Your résumé was replaced. Your matches will refresh shortly.':'Your résumé was uploaded, but its analysis did not finish. You can view the new file below or try uploading a PDF.');
+    try{await loadResume();}catch(_){showStatus('Your résumé was uploaded. Refresh this page to view the new file.');}
+  }catch(error){showStatus(error.message,true);}finally{uploading=false;byId('uploadButton').disabled=false;byId('resumeFile').disabled=false;}
+});
+window.addEventListener('beforeunload',event=>{if(uploading){event.preventDefault();event.returnValue='';}});
+(async()=>{if(!await rookRequireAuth())return;byId('uploadButton').disabled=false;try{await loadResume();}catch(error){byId('loading').textContent=error.message;}})();
+</script></body></html>
