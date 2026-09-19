@@ -1364,10 +1364,11 @@
   function renderRealJobRow(job) {
     const comp = job.compensation_text || (job.salary_min ? `$${job.salary_min}${job.salary_max ? '–$' + job.salary_max : '+'}` : '');
     const match = job.match;
-    // When no résumé is uploaded, overall_score is null but preference_fit
-    // is a real score (location + industry + years + territory).
-    // Also handle match being null entirely (no precomputed score, no live score).
+    // Keep the existing score and recommendation rules. Label partial scores
+    // explicitly so preference fit is not mistaken for a qualification assessment.
+    const completeMatch = Number.isFinite(match?.candidate_fit) && Number.isFinite(match?.preference_fit) && Number.isFinite(match?.overall_score);
     const displayScore = match?.overall_score ?? match?.preference_fit ?? null;
+    const scoreBasis = completeMatch ? 'Overall match' : Number.isFinite(match?.candidate_fit) ? 'Qualification fit only' : Number.isFinite(match?.preference_fit) ? 'Preference fit only' : 'Not scored yet';
     const scoreDisplay = displayScore != null ? `${Math.round(displayScore)}%` : '—';
     const scorePct     = displayScore != null ? Math.round(displayScore) : 0;
 
@@ -1420,7 +1421,7 @@
       : '';
     const subScores = (match?.candidate_fit != null || match?.preference_fit != null)
       ? `<div style="font-size:11px; color:#8B96AB; margin-top:2px;">
-          Qualifications ${match.candidate_fit ?? '—'}% · Preferences ${match.preference_fit ?? '—'}%
+          Qualifications ${match.candidate_fit != null ? Math.round(match.candidate_fit) + '%' : 'not scored yet'} · Preference fit ${match.preference_fit != null ? Math.round(match.preference_fit) + '%' : 'not scored yet'}
         </div>`
       : '';
     const employerNote = job.employer_note
@@ -1502,22 +1503,23 @@
 
     return `
       <div class="job-row" data-job-id="${escapeHtml(job.id)}" style="${rowStyle}">
-        <div class="score-ring" style="--pct:${scorePct};"><span>${scoreDisplay}</span></div>
+        <div class="score-ring" style="--pct:${scorePct};" aria-label="${scoreBasis}: ${scoreDisplay}"><span>${scoreDisplay}</span></div>
         <div class="job-info">
           ${justPostedBadge}
           <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
             <h4 style="margin:0;">${escapeHtml(job.title_original || job.title_normalized || 'Untitled role')}</h4>
             ${newBadge}
             ${recBadge}
+            ${!completeMatch && displayScore != null ? `<span class="score-basis" style="font-size:12px;font-weight:700;color:#5B6B85;">${scoreBasis === 'Preference fit only' ? 'Based on your onboarding answers' : scoreBasis}</span>` : ''}
             ${recruiterBadge}
           </div>
           <div class="company">${companyLine}</div>
           ${subScores}
-          <div class="category-grid-wrap">${renderCategoryRows(match?.categories)}</div>
+          <div class="category-grid-wrap">${match?.categories ? renderCategoryRows(match.categories) : completeMatch ? '<div style="font-size:12px;color:#5B6B85;margin-top:8px;">Detailed category scoring is not available in this preview.</div>' : '<div style="font-size:12px;color:#5B6B85;margin-top:8px;line-height:1.5;">Qualification match is not complete. Upload a résumé or complete your profile to assess your experience and qualifications.</div>'}</div>
           ${summarySentence}
           ${employerNote}
           ${isApplied ? `<div style="font-size:11.5px; color:#00806E; font-weight:600; margin-top:4px;">✓ Application status: ${escapeHtml(job.application_status)}</div>` : ''}
-          <div class="job-meta-line">${job.date_posted ? 'Posted ' + escapeHtml(job.date_posted) : ''}${(!isRemoteJob(job) && job.distance_miles != null) ? ' · ' + job.distance_miles + ' mi away' : ''}</div>
+          <div class="job-meta-line">${job.subscription_required ? escapeHtml(job.freshness_label || (isNewJob(job) ? 'Recently posted' : 'Current opportunity')) : (job.date_posted ? 'Posted ' + escapeHtml(job.date_posted) : '')}${(!isRemoteJob(job) && job.distance_miles != null) ? ' · ' + job.distance_miles + ' mi away' : ''}</div>
         </div>
         <div class="job-actions">
           <a href="rook-job-analysis.html?job=${escapeHtml(job.id)}" class="btn btn-outline btn-sm">View Analysis</a>
