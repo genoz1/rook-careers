@@ -44,10 +44,17 @@ test('Any distance has no hidden geographic cutoff in catalog route', () => {
   assert.match(searchHtml, /nearLocationCoords && radiusMiles > 0/);
 });
 
-test('finite radius is exact and mobile shows only one location control', () => {
+test('finite radius is exact and mobile shows one ZIP control with distance choices', () => {
   assert.match(searchHtml, /nearLocationCoords && radiusMiles > 0/);
   assert.match(searchHtml, /job\.job_lat == null \|\| job\.job_lng == null\)[\s\S]{0,220}return false/);
   assert.match(searchHtml, /#desktopLocationFilterGroup\{display:none;\}/);
   assert.match(searchHtml, /id="desktopLocationFilterGroup"/);
+  assert.match(searchHtml, /id="mobileRadiusSelect"/);
+  assert.match(searchHtml, /mobileRadius\.addEventListener\('change'/);
   assert.match(searchHtml, /Jobs without exact coordinates are excluded/);
+});
+
+test('nearest is the default Job Search sort', () => {
+  assert.match(searchHtml, /<option value="closest" selected>Nearest<\/option>/);
+  assert.match(searchHtml, /document\.getElementById\('sortSelect'\)\.value = 'closest'/);
 });

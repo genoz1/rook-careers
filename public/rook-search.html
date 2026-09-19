@@ -180,6 +180,16 @@
     transition:border-color .15s;
   }
   .mobile-zip-input:focus{ border-color:var(--royal, #1463FF); }
+  .mobile-radius-select{
+    width:100%;
+    margin-top:2px;
+    border:1px solid var(--border, #E3E8F0);
+    border-radius:9px;
+    padding:10px 12px;
+    font:600 13px var(--font-body);
+    color:var(--navy, #071E41);
+    background:#fff;
+  }
   .mobile-zip-go{
     height:42px;
     padding:0 16px;
@@ -387,8 +397,8 @@
       <div class="sort-row">
         Sort by
         <select id="sortSelect">
+          <option value="closest" selected>Nearest</option>
           <option value="newest">Newest</option>
-          <option value="closest">Closest to Search Location</option>
           <option value="comp">Highest Compensation</option>
         </select>
       </div>
@@ -618,6 +628,11 @@
   }
 
   function handleRadiusChange() {
+    const mobileRadius = document.getElementById('mobileRadiusSelect');
+    const mainRadius = document.getElementById('radiusSelect');
+    if (mobileRadius && mainRadius && mobileRadius.value !== mainRadius.value) {
+      mobileRadius.value = mainRadius.value;
+    }
     updateNearLocationStatus();
     applyFiltersAndRender();
   }
@@ -834,6 +849,14 @@
           title="Clear location filter"
         >✕</button>
       </div>
+      <label class="mobile-zip-label" for="mobileRadiusSelect">Distance</label>
+      <select id="mobileRadiusSelect" class="mobile-radius-select" aria-label="Distance from search location">
+        <option value="0">Any distance</option>
+        <option value="10">Within 10 miles</option>
+        <option value="25">Within 25 miles</option>
+        <option value="50">Within 50 miles</option>
+        <option value="100">Within 100 miles</option>
+      </select>
       <div id="mobileZipStatus" class="mobile-zip-status" aria-live="polite"></div>
     `;
     // Insert immediately after the Filters toggle so it appears first in the results area
@@ -843,9 +866,17 @@
     const mobileStatus = document.getElementById('mobileZipStatus');
     const mainInput    = document.getElementById('nearLocationInput');
     const mainStatus   = document.getElementById('nearLocationStatus');
+    const mobileRadius = document.getElementById('mobileRadiusSelect');
+    const mainRadius   = document.getElementById('radiusSelect');
 
     // Seed from current value (profile may have loaded before injection).
     if (mainInput && mainInput.value) mobileInput.value = mainInput.value;
+    if (mainRadius) mobileRadius.value = mainRadius.value;
+
+    mobileRadius.addEventListener('change', () => {
+      if (mainRadius) mainRadius.value = mobileRadius.value;
+      handleRadiusChange();
+    });
 
     // Bidirectional sync for user-typed changes in either input.
     mobileInput.addEventListener('input', () => {
@@ -1055,9 +1086,11 @@
     document.getElementById('filterKeyword').value = '';
     document.getElementById('remoteOnlyFilter').checked = false;
     document.getElementById('radiusSelect').value = '0';
+    const mobileRadius = document.getElementById('mobileRadiusSelect');
+    if (mobileRadius) mobileRadius.value = '0';
     document.querySelectorAll('.filter-industry, .filter-travel').forEach((el) => (el.checked = false));
     document.getElementById('filterComp').value = 0;
-    document.getElementById('sortSelect').value = 'newest';
+    document.getElementById('sortSelect').value = 'closest';
     window.reloadSearchJobs?.();
   }
 
