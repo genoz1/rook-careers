@@ -44,13 +44,13 @@ test('Any distance has no hidden geographic cutoff in catalog route', () => {
   assert.match(searchHtml, /nearLocationCoords && radiusMiles > 0/);
 });
 
-test('finite radius is exact and mobile shows one ZIP control with distance choices', () => {
+test('finite radius is exact and mobile keeps the location and distance controls in the open filter panel', () => {
   assert.match(searchHtml, /nearLocationCoords && radiusMiles > 0/);
   assert.match(searchHtml, /job\.job_lat == null \|\| job\.job_lng == null\)[\s\S]{0,220}return false/);
-  assert.match(searchHtml, /#desktopLocationFilterGroup\{display:none;\}/);
+  assert.match(searchHtml, /#desktopLocationFilterGroup\{display:block;\}/);
   assert.match(searchHtml, /id="desktopLocationFilterGroup"/);
-  assert.match(searchHtml, /id="mobileRadiusSelect"/);
-  assert.match(searchHtml, /mobileRadius\.addEventListener\('change'/);
+  assert.match(searchHtml, /\.filters,\.filters\.mobile-open\{display:block;/);
+  assert.match(searchHtml, /\.mobile-filters-toggle,\.mobile-zip-row\{display:none !important;\}/);
   assert.match(searchHtml, /Jobs without exact coordinates are excluded/);
 });
 
@@ -64,6 +64,12 @@ test('mobile result controls cannot force horizontal overflow', () => {
   assert.match(searchHtml, /\.results-count\{width:100%;\}/);
   assert.match(searchHtml, /\.sort-row\{width:100%; min-width:0;/);
   assert.match(searchHtml, /\.sort-row select\{flex:1; min-width:0; max-width:100%;\}/);
+});
+
+test('mobile search filters are always visible in one panel', () => {
+  assert.match(searchHtml, /<h3>Search &amp; Filters<\/h3>/);
+  assert.match(searchHtml, /\.filters-column\{display:block; width:100%;\}/);
+  assert.match(searchHtml, /<label>ZIP code or city<\/label>/);
 });
 
 test('sparse compensation and default-zero travel data do not expose misleading filters', () => {

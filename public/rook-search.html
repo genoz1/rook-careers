@@ -251,7 +251,8 @@
     /* On mobile the toggle button lives inside <main> (not in the grid),
        and the filters aside is display:none. The .filters-column wrapper
        is hidden entirely so it takes no grid row and creates no blank gap. */
-    .filters-column{display:none;}
+    /* Mobile uses one always-open search panel above the results. */
+    .filters-column{display:block; width:100%;}
     .filters-column.mobile-open-parent{display:block;}
     /* Job card: score-ring is col 1 (auto = 56px), job-info is col 2.
        job-actions must span BOTH columns (grid-column:1/-1) — without
@@ -271,13 +272,9 @@
     .jtag-extra{display:none;}
     .tag-row.expanded .jtag-extra{display:inline-block;}
     .jtag-toggle{display:inline-block;}
-    .filters{display:none;}
-    .filters.mobile-open{display:block;}
-    /* The always-visible mobile ZIP row is the single location input.
-       Hide the duplicate desktop location field inside expanded filters. */
-    #desktopLocationFilterGroup{display:none;}
-    .mobile-filters-toggle{display:flex;}
-    .mobile-zip-row{display:flex;}
+    .filters,.filters.mobile-open{display:block; width:100%; padding:18px;}
+    #desktopLocationFilterGroup{display:block;}
+    .mobile-filters-toggle,.mobile-zip-row{display:none !important;}
   }
 .spinner {
   width: 32px; height: 32px; margin: 0 auto 12px;
@@ -302,7 +299,7 @@
     .job-row .job-info h4{font-size:16px; color:#062d55; margin:0 0 4px;}
     .job-row .company,.job-info .company{font-size:12px; color:#47637c; font-weight:750;}
     .job-actions{display:flex; flex-wrap:wrap; gap:6px; margin-top:10px;}
-    .mobile-filters-toggle{display:flex !important; margin-bottom:12px;}
+    .mobile-filters-toggle{display:none !important;}
   }
 
 </style>
@@ -345,13 +342,13 @@
   <div class="layout">
   <div class="filters-column">
     <aside class="filters" id="filtersPanel">
-    <h3>Filters</h3>
+    <h3>Search &amp; Filters</h3>
     <div class="filter-group">
       <label>Keyword</label>
       <input type="text" id="filterKeyword" placeholder="Title, company, product...">
     </div>
     <div class="filter-group" id="desktopLocationFilterGroup">
-      <label>Show jobs near</label>
+      <label>ZIP code or city</label>
       <div style="display:flex; gap:6px;">
         <input type="text" id="nearLocationInput" placeholder="Tampa, FL or 33602" style="flex:1;">
         <a href="#" class="btn btn-outline" onclick="searchNearLocation(); return false;" style="padding:9px 14px; font-size:13px; white-space:nowrap;">Go</a>
@@ -386,8 +383,8 @@
     </div>
     <div class="filter-group">
       <label>Source</label>
-      <div class="check-row"><input type="checkbox" id="showRecruiterFilter" checked> Show recruiter-posted jobs</div>
-      <p style="font-size:12px;line-height:1.5;color:#5B6B85;">Recruiter-posted jobs are listings only. Recruiters cannot see ROOK job seekers.</p>
+      <div class="check-row" id="recruiterPostedFilterRow"><input type="checkbox" id="showRecruiterFilter" checked> Show recruiter-posted jobs</div>
+      <p id="recruiterPostedFilterHelp" style="font-size:12px;line-height:1.5;color:#5B6B85;">Recruiter-posted jobs are listings only. Recruiters cannot see ROOK job seekers.</p>
       <div class="check-row"><input type="checkbox" id="remoteOnlyFilter"> Remote only</div>
     </div>
     <a href="#" class="clear-link" onclick="clearAllFilters(); return false;">Clear all filters</a>
@@ -631,11 +628,7 @@
   }
 
   function handleRadiusChange() {
-    const mobileRadius = document.getElementById('mobileRadiusSelect');
     const mainRadius = document.getElementById('radiusSelect');
-    if (mobileRadius && mainRadius && mobileRadius.value !== mainRadius.value) {
-      mobileRadius.value = mainRadius.value;
-    }
     updateNearLocationStatus();
     applyFiltersAndRender();
   }
@@ -746,6 +739,8 @@
     const meaningfulCoverage = (count) => count >= 25 && count / Math.max(1, Number(totalCount) || 0) >= 0.05;
     document.getElementById('compensationFilterGroup').style.display = meaningfulCoverage(coverage.compensation) ? '' : 'none';
     document.getElementById('travelFilterGroup').style.display = meaningfulCoverage(coverage.travel) ? '' : 'none';
+    document.getElementById('recruiterPostedFilterRow').style.display = coverage.recruiter_posted > 0 ? '' : 'none';
+    document.getElementById('recruiterPostedFilterHelp').style.display = coverage.recruiter_posted > 0 ? '' : 'none';
     for (const row of document.querySelectorAll('[data-industry-option]')) {
       const label = row.dataset.industryOption;
       row.style.display = (coverage.industries?.[label] || 0) > 0 ? '' : 'none';
@@ -1093,8 +1088,6 @@
     document.getElementById('filterKeyword').value = '';
     document.getElementById('remoteOnlyFilter').checked = false;
     document.getElementById('radiusSelect').value = '0';
-    const mobileRadius = document.getElementById('mobileRadiusSelect');
-    if (mobileRadius) mobileRadius.value = '0';
     document.querySelectorAll('.filter-industry, .filter-travel').forEach((el) => (el.checked = false));
     document.getElementById('filterComp').value = 0;
     document.getElementById('sortSelect').value = 'closest';
