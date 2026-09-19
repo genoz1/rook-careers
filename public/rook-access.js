@@ -41,6 +41,7 @@
   document.addEventListener('click',async event=>{
     const link=event.target.closest?.('a[href]');
     if(!link || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    if(link.getAttribute('href')?.startsWith('#')) return;
     const url=new URL(link.href,location.href);
     if(url.origin!==location.origin || !/\/(rook-browse|rook-search|rook-onboarding(?:-v[2-7])?)\.html$/.test(url.pathname)) return;
     event.preventDefault();
