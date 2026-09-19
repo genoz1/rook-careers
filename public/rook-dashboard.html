@@ -294,6 +294,21 @@
 </style>
 <link rel="stylesheet" href="rook-mobile.css">
 <link rel="stylesheet" href="rook-pretrial.css">
+<style>
+  .rook-tour-overlay{display:none;position:fixed;inset:0;z-index:1000;background:rgba(4,20,43,.72);backdrop-filter:blur(2px)}
+  .rook-tour-overlay.active{display:block}
+  .rook-tour-highlight{position:relative!important;z-index:1002!important;background:#fff!important;color:#062d55!important;box-shadow:0 0 0 5px #39a9ff,0 10px 34px rgba(0,0,0,.35)!important}
+  .rook-tour-card{position:fixed;z-index:1003;width:min(360px,calc(100vw - 32px));background:#fff;border-radius:18px;padding:20px;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+  .rook-tour-step{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#0877d1;margin-bottom:7px}
+  .rook-tour-card h2{font-size:21px;color:#062d55;margin:0 0 8px}
+  .rook-tour-card p{font-size:14px;line-height:1.55;color:#47637c;margin:0 0 18px}
+  .rook-tour-actions{display:flex;align-items:center;gap:8px}
+  .rook-tour-actions button{border:0;border-radius:999px;padding:10px 16px;font:700 13px inherit;cursor:pointer}
+  .rook-tour-skip{background:transparent;color:#637589;margin-right:auto}
+  .rook-tour-back{background:#edf3f8;color:#062d55}
+  .rook-tour-next{background:#1463ff;color:#fff}
+  @media(max-width:900px){.rook-tour-card{left:16px!important;right:16px!important;bottom:98px!important;top:auto!important;width:auto}.rook-tour-highlight{z-index:1004!important}}
+</style>
 </head>
 <body>
 <div class="profile-gate-overlay" id="profileGateOverlay">
@@ -594,6 +609,19 @@
     </div>
     <div id="dashboardPagination" style="display:flex; justify-content:center; gap:8px; margin-top:24px;"></div>
   </main>
+</div>
+
+<div class="rook-tour-overlay" id="rookProductTour" role="dialog" aria-modal="true" aria-labelledby="rookTourTitle">
+  <div class="rook-tour-card" id="rookTourCard">
+    <div class="rook-tour-step" id="rookTourStep"></div>
+    <h2 id="rookTourTitle"></h2>
+    <p id="rookTourBody"></p>
+    <div class="rook-tour-actions">
+      <button type="button" class="rook-tour-skip" id="rookTourSkip">Skip</button>
+      <button type="button" class="rook-tour-back" id="rookTourBack">Back</button>
+      <button type="button" class="rook-tour-next" id="rookTourNext">Next</button>
+    </div>
+  </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -1690,6 +1718,76 @@
   }
 </script>
 
+<script>
+  (function setupRookProductTour() {
+    const steps = [
+      { href: 'rook-dashboard.html', title: 'Dashboard', body: 'These are personalized recommendations ranked against your profile and preferences.' },
+      { href: 'rook-search.html', title: 'Job Search', body: 'Search ROOK’s complete active-job database by company, location, distance, or industry.' },
+      { href: 'rook-saved.html', title: 'Saved Jobs', body: 'Save promising roles here so you can quickly return to them later.' },
+    ];
+    let index = 0;
+    let user = null;
+    let highlighted = null;
+    const overlay = document.getElementById('rookProductTour');
+    const card = document.getElementById('rookTourCard');
+
+    function targetFor(step) {
+      const scope = window.innerWidth <= 900 ? '.rm-bottomnav' : '.side-nav';
+      return document.querySelector(`${scope} a[href="${step.href}"]`);
+    }
+    function clearHighlight() {
+      highlighted?.classList.remove('rook-tour-highlight');
+      highlighted = null;
+    }
+    function render() {
+      clearHighlight();
+      const step = steps[index];
+      highlighted = targetFor(step);
+      highlighted?.classList.add('rook-tour-highlight');
+      document.getElementById('rookTourStep').textContent = `Step ${index + 1} of ${steps.length}`;
+      document.getElementById('rookTourTitle').textContent = step.title;
+      document.getElementById('rookTourBody').textContent = step.body;
+      document.getElementById('rookTourBack').style.visibility = index === 0 ? 'hidden' : 'visible';
+      document.getElementById('rookTourNext').textContent = index === steps.length - 1 ? 'Finish' : 'Next';
+      if (window.innerWidth > 900 && highlighted) {
+        const rect = highlighted.getBoundingClientRect();
+        card.style.left = `${Math.min(window.innerWidth - 376, rect.right + 18)}px`;
+        card.style.top = `${Math.max(20, Math.min(window.innerHeight - card.offsetHeight - 20, rect.top - 8))}px`;
+      }
+    }
+    async function complete() {
+      clearHighlight();
+      overlay.classList.remove('active');
+      try {
+        await rookSupabase.auth.updateUser({ data: { rook_product_tour_completed: true } });
+      } catch (_) {
+        if (user?.id) localStorage.setItem(`rook_product_tour_completed_${user.id}`, '1');
+      }
+    }
+    async function startWhenReady() {
+      const { data } = await rookSupabase.auth.getUser();
+      user = data?.user;
+      if (!user || user.user_metadata?.rook_product_tour_completed) return;
+      if (localStorage.getItem(`rook_product_tour_completed_${user.id}`) === '1') return;
+      // Avoid stacking this tour on top of the résumé/profile completion dialog.
+      if (document.getElementById('profileGateOverlay')?.classList.contains('active')) {
+        setTimeout(startWhenReady, 1000);
+        return;
+      }
+      overlay.classList.add('active');
+      render();
+    }
+    document.getElementById('rookTourNext').addEventListener('click', () => {
+      if (index === steps.length - 1) complete();
+      else { index += 1; render(); }
+    });
+    document.getElementById('rookTourBack').addEventListener('click', () => { if (index > 0) { index -= 1; render(); } });
+    document.getElementById('rookTourSkip').addEventListener('click', complete);
+    window.addEventListener('resize', () => { if (overlay.classList.contains('active')) render(); });
+    setTimeout(startWhenReady, 1800);
+  })();
+</script>
+
 <script type="text/javascript">
 _linkedin_partner_id = "9629410";
 window._linkedin_data_partner_ids = window._linkedin_data_partner_ids || [];
@@ -1707,5 +1805,11 @@ s.parentNode.insertBefore(b, s);})(window.lintrk);
 <noscript>
 <img height="1" width="1" style="display:none;" alt="" src="https://px.ads.linkedin.com/collect/?pid=9629410&fmt=gif" />
 </noscript>
+<nav class="rm-bottomnav">
+  <a href="rook-dashboard.html" class="rm-bn-item rm-active"><span>⌂</span>Home</a>
+  <a href="rook-search.html" class="rm-bn-item"><span>⌕</span>Job Search</a>
+  <a href="rook-saved.html" class="rm-bn-item"><span>♡</span>Saved</a>
+  <a href="rook-settings.html" class="rm-bn-item"><span>◉</span>Profile</a>
+</nav>
 </body>
 </html>

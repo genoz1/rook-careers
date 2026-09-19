@@ -84,6 +84,18 @@ test('Dashboard and Job Search explain their distinct purposes and cross-link', 
   assert.match(dashboardHtml, /Looking for a specific company, location, or industry\? Use Job Search/);
 });
 
+test('first-sign-in product tour distinguishes Dashboard, Job Search, and Saved Jobs', () => {
+  assert.match(dashboardHtml, /id="rookProductTour"/);
+  assert.match(dashboardHtml, /rook_product_tour_completed/);
+  assert.match(dashboardHtml, /These are personalized recommendations ranked against your profile and preferences/);
+  assert.match(dashboardHtml, /Search ROOK’s complete active-job database by company, location, distance, or industry/);
+  assert.match(dashboardHtml, /Save promising roles here/);
+  assert.match(dashboardHtml, /rookSupabase\.auth\.updateUser/);
+  assert.match(dashboardHtml, /id="rookTourSkip"/);
+  assert.match(dashboardHtml, /id="rookTourBack"/);
+  assert.match(dashboardHtml, /id="rookTourNext"/);
+});
+
 test('sparse compensation and default-zero travel data do not expose misleading filters', () => {
   assert.match(jobsRoute, /Number\(job\.travel_percentage\) > 0/);
   assert.match(searchHtml, /count \/ Math\.max\(1, Number\(totalCount\) \|\| 0\) >= 0\.05/);
