@@ -1,3 +1,4 @@
+const { maskedTitle, freshness } = require('./maskedPresentation');
 // Only explicitly allowed values cross the anonymous boundary. Never spread
 // a job or its AI analysis into an anonymous response.
 const { scrubCompanyNameFromText } = require('./redaction');
@@ -13,12 +14,13 @@ function safeText(value, job) {
 function preview(job, index) {
   return {
     id: `locked-${index}`, // Never disclose source identifiers or real job IDs.
-    title_original: job.company_name ? safeText(job.title_original || job.title_normalized, job) : 'Medical sales opportunity',
+    title_original: maskedTitle(job),
     location_raw: safeText([job.city, job.state].filter(Boolean).join(', ') || (job.remote_status === 'remote' ? 'Remote' : ''), job),
     remote_status: job.remote_status === 'remote' ? 'remote' : 'field',
     distance_miles: number(job.distance_miles),
     salary_min: number(job.salary_min), salary_max: number(job.salary_max),
     date_posted: /^\d{4}-\d{2}-\d{2}/.test(job.date_posted || '') ? job.date_posted.slice(0,10) : null,
+    freshness_label: freshness(job),
     subscription_required: true,
     industry_classification: classify(job),
     match: {

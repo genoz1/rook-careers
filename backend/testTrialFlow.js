@@ -890,10 +890,10 @@ async function run() {
     assert.strictEqual(result.match, undefined, "an anonymous visitor must not see match score/recommendation/reasons/concerns at all");
   });
 
-  test("a job with no company_name on file is left otherwise intact by the scrub (no company name to leak in the first place)", () => {
+  test("a job with no company_name still withholds unknown employer or product tokens", () => {
     const jobWithNoCompany = { ...SAMPLE_JOB, company_name: undefined };
     const result = redactForNonSubscriber(jobWithNoCompany);
-    assert.strictEqual(result.title_original, SAMPLE_JOB.title_original, "falls back to the original title when there's no company name to scrub against");
+    assert.ok(!/medtronic/i.test(result.title_original), "unknown identifying terms must not be exposed when employer metadata is missing");
   });
 
   test("scrubCompanyNameFromText catches a short ALL-CAPS acronym brand name even though it's under the length filter", () => {

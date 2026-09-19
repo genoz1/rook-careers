@@ -1,3 +1,4 @@
+const { maskedTitle } = require('../maskedPresentation');
 // Public job-listing routes. Auth is optional here: signed-out visitors
 // can browse jobs same as before, but a signed-in candidate sees their
 // PRECOMPUTED match scores — see backend/scoring/precompute.js and
@@ -1246,9 +1247,7 @@ router.get('/onboarding/job-preview', async (req, res) => {
     console.log('[job-preview] rows returned:', jobs?.length, 'first:', jobs?.[0]?.title_original);
 
     const masked = (jobs || []).slice(0, 5).map(j => ({
-      title_original: j.company_name
-        ? (scrubCompanyNameFromText(j.title_original, j.company_name) || j.title_original)
-        : j.title_original,
+      title_original: maskedTitle(j),
       city: j.city,
       state: j.state,
       remote_status: j.remote_status,

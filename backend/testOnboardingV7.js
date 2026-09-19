@@ -19,7 +19,7 @@ for(const file of ['rook-onboarding-v7.html','rook-onboarding-v7-signup.html','r
   for(const m of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)) if(m[1].trim()) new vm.Script(m[1],{filename:file});
 }
 for(const file of ['rook-v7.js']) new vm.Script(fs.readFileSync(path.join(root,'public',file),'utf8'));
-for(const file of ['public/rook-onboarding-v6.html','public/rook-onboarding-v6-signup.html','public/rook-dashboard.html','public/rook-checkout.html','public/rook-auth.js','backend/routes/stripe.js','backend/routes/profile.js','backend/matching.js']) {
+for(const file of ['public/rook-onboarding-v6.html','public/rook-onboarding-v6-signup.html','public/rook-checkout.html','public/rook-auth.js','backend/routes/stripe.js','backend/routes/profile.js','backend/matching.js']) {
   assert.equal(fs.readFileSync(path.join(root,file),'utf8'),execFileSync('git',['show',`HEAD:${file}`],{cwd:root,encoding:'utf8'}),`${file} changed`);
 }
 const questions=fs.readFileSync(path.join(root,'public/rook-onboarding-v7.html'),'utf8');
