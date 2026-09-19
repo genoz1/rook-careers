@@ -136,9 +136,11 @@
   .ml-strong{background:var(--strong-bg); color:var(--strong);}
   .ml-possible{background:var(--possible-bg); color:var(--possible);}
 
-  .pagination{display:flex; justify-content:center; gap:8px; margin-top:28px;}
+  .pagination{display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:6px; margin-top:28px;}
   .pagination a{width:34px; height:34px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:600; background:#fff; box-shadow:0 2px 8px -4px rgba(11,29,58,0.1);}
   .pagination a.active{background:var(--navy); color:#fff;}
+  .pagination a.page-direction{width:auto;padding:0 10px;}
+  .pagination .page-gap{color:var(--muted);padding:0 2px;}
 
   /* ── Mobile ZIP row — always visible above results on mobile ── */
   /* Hidden on desktop; shown inside the same max-width:900px block
@@ -1074,12 +1076,17 @@
       paginationEl.style.display = 'none';
     } else {
       paginationEl.style.display = '';
-      let html = '';
-      for (let p = 1; p <= totalPages; p++) {
-        html += `<a href="#" class="${p === currentPage ? 'active' : ''}" onclick="goToSearchPage(${p}); return false;">${p}</a>`;
+      let html = currentPage > 1 ? `<a href="#" class="page-direction" aria-label="Previous page" onclick="goToSearchPage(${currentPage - 1}); return false;">Previous</a>` : '';
+      const pages = [...new Set([1, currentPage - 1, currentPage, currentPage + 1, totalPages])]
+        .filter(p => p >= 1 && p <= totalPages).sort((a,b) => a-b);
+      let previous = 0;
+      for (const p of pages) {
+        if (previous && p - previous > 1) html += '<span class="page-gap" aria-hidden="true">…</span>';
+        html += `<a href="#" aria-label="Page ${p}" ${p === currentPage ? 'aria-current="page"' : ''} class="${p === currentPage ? 'active' : ''}" onclick="goToSearchPage(${p}); return false;">${p}</a>`;
+        previous = p;
       }
       if (currentPage < totalPages) {
-        html += `<a href="#" onclick="goToSearchPage(${currentPage + 1}); return false;">→</a>`;
+        html += `<a href="#" class="page-direction" aria-label="Next page" onclick="goToSearchPage(${currentPage + 1}); return false;">Next</a>`;
       }
       paginationEl.innerHTML = html;
     }
