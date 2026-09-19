@@ -639,6 +639,8 @@
   }
 
   (async () => {
+    const access = await window.rookAccessReady;
+    if (access?.locked) return; // Access guard returns saved matches before login can race it.
     const token = await rookRequireAuth();
     if (!token) return;
     rookPopulateSidebar();
