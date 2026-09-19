@@ -84,6 +84,14 @@ router.get('/session', wrap(async (req,res) => {
   if (!s) return res.status(410).json({error:'Your saved matches expired. Please start again.'});
   const u = await user(req);
   if (s.user_id && s.user_id !== u?.id) return res.status(403).json({error:'Sign in to your account to continue.'});
+  // Keep an opened dashboard recoverable for 30 days. Refresh at most daily;
+  // possession and account ownership are checked before extending the session.
+  const now = Date.now();
+  if (Date.parse(s.expires_at) < now + 29*24*60*60*1000) {
+    const renewed = await db.from(table).update({expires_at:new Date(now + 30*24*60*60*1000).toISOString()})
+      .eq('token_hash',s.token_hash).eq('expires_at',s.expires_at);
+    if (renewed.error) throw renewed.error;
+  }
   let profile = {...s.profile, resume_file_path:s.resume_path ? 'pending' : null};
   if (u && s.user_id === u.id) {
     const {data,error} = await db.from('candidate_profiles').select('*').eq('user_id',u.id).maybeSingle();

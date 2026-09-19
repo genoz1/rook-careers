@@ -53,7 +53,7 @@
       if(session){const r=await fetch('/api/profile',{headers:{Authorization:'Bearer '+session.access_token}});if(r.ok)profile=await r.json();}
       if(token){
         const r=await fetch('/api/v7/session?summary=1',{headers:{'X-ROOK-V7':token,...(session?{Authorization:'Bearer '+session.access_token}:{})}});
-        if(r.ok){const snapshot=await r.json();snapshotValid=true;profile=snapshot.profile;try{localStorage.setItem('rook_v7_return_token',token);}catch(_){}}
+        if(r.ok){const snapshot=await r.json();snapshotValid=true;profile=profile || snapshot.profile;try{localStorage.setItem('rook_v7_return_token',token);}catch(_){}}
       }
     }catch(_){}
     const full=typeof rookHasFullAccess==='function' && rookHasFullAccess(profile);

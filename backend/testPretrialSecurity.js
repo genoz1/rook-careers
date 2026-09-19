@@ -3,6 +3,14 @@ const {project}=require('./pretrialProjection');const {hasFullAccess}=require('.
 const {preview}=require('./v7Preview');const {redactForNonSubscriber,redactForAnonymous}=require('./redaction');
 const canary={id:'private-job-id',title_original:'Unique Oncology Account Manager BrandXYZ',title_normalized:'Unique Title',company_name:'HiddenEmployer',source_job_id:'ReqSecret8842',source_url:'https://secret.example/source',application_url:'https://secret.example/apply',description_text:'Confidential job description and BrandXYZ',description_html:'<p>HiddenEmployer</p>',location_raw:'DistinctCity, FL',city:'DistinctCity',territory:'Unique District Wording',product_type:'BrandXYZ',employer_note:'HiddenEmployer employment history',new_sensitive_field:'future secret',ai_analysis:{product_categories:['Pharmaceutical'],unrecognized:'secret AI text'},category:'Account Management',distance_miles:48,match:{overall_score:100,preference_fit:100,candidate_fit:null,recommendation:'Strong Match',reasons:['HiddenEmployer'],concerns:['DistinctCity'],categories:{secret:'BrandXYZ'}}};
 const permitted=['id','subscription_required','industry_classification','role_type','distance_miles','territory_type','freshness_label','match'].sort();
+test('authenticated entitlement takes precedence over a retained anonymous preview',async()=>{
+ const vm=require('node:vm');
+ for(const full of [true,false]) {
+  const redirects=[];const context={URL,Map,location:{pathname:'/rook-search.html',href:'https://rookcareers.com/rook-search.html',origin:'https://rookcareers.com',replace:value=>redirects.push(value)},document:{addEventListener(){},querySelector(){return null;},querySelectorAll(){return [];}},sessionStorage:{getItem(){return 'a'.repeat(64);},setItem(){}},localStorage:{getItem(){return null;},setItem(){}},rookSupabase:{auth:{getSession:async()=>({data:{session:{access_token:'test'}}})}},rookHasFullAccess:hasFullAccess,fetch:async url=>({ok:true,json:async()=>url==='/api/profile'?{subscription_status:full?'active':'incomplete'}:{profile:{},unlocked:false}})};
+  context.window=context;vm.runInNewContext(fs.readFileSync(require('node:path').join(__dirname,'../public/rook-access.js'),'utf8'),context);
+  const access=await context.rookAccessReady;assert.equal(access.full,full);assert.equal(access.locked,!full);assert.deepEqual(redirects,full?[]:['/rook-dashboard-v7.html']);
+ }
+});
 test('all locked projectors omit arbitrary source fields and nested text without mutating source',()=>{
  const original=JSON.stringify(canary);
  for(const fn of [project,preview,redactForNonSubscriber]){

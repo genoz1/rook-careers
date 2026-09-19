@@ -68,6 +68,9 @@ const express=require('express');const app=express();app.use(express.json());app
  try {
   let r=await call('/session','POST',null,answer);assert.equal(r.status,200);capability=(await r.json()).token;
   r=await call('/session');assert.equal(r.headers.get('cache-control'),'private, no-store');let data=await r.json();assert.equal(data.jobs.length,2);assert.equal(data.unlocked,false);assert(!/SECRET|ACME|real-job|secret.example/i.test(JSON.stringify(data.jobs)));
+  assert(Date.parse(tables.onboarding_v7_sessions[0].expires_at)>Date.now()+29*24*60*60*1000,'opened matches remain recoverable beyond 24 hours');
+  const renewedExpiry=tables.onboarding_v7_sessions[0].expires_at;
+  await call('/session');assert.equal(tables.onboarding_v7_sessions[0].expires_at,renewedExpiry,'reads do not repeatedly write expiry');
   const fd=new FormData();fd.append('resume',new Blob(['private resume bytes'],{type:'application/pdf'}),'resume.pdf');
   r=await call('/resume','POST',null,fd);assert.equal(r.status,200);assert.equal(files.size,1);
   r=await call('/session');data=await r.json();assert.equal(data.profile.resume_file_path,'pending');
