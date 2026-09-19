@@ -1,9 +1,9 @@
+const { maskedTitle, freshness } = require('./maskedPresentation');
 // Server-side redaction logic for free/non-subscribed candidates and
 // anonymous visitors — the actual enforcement mechanism behind the free
 // dashboard's "employer name, full description, source/application URL,
 // and recruiter contact info are never sent to the client" rule. Pulled
-// out of routes/jobs.js into its own file, with zero external
-// dependencies, specifically so it's directly unit-testable (see
+// out of routes/jobs.js into its own file specifically so it's directly unit-testable (see
 // testTrialFlow.js) without requiring jobs.js itself, which pulls in
 // email/geocoding/scoring modules that expect real env vars/network
 // access to construct safely.
@@ -85,17 +85,11 @@ function redactForNonSubscriber(job) {
   return {
     ...rest,
     territory_locations: require('../public/rook-territory-location').territories(job),
-    // Real gate bypass this closes: a job's TITLE can name the employer
-    // directly (e.g. "Regional Manager - MWI"), and neither this
-    // function nor its callers ever touched title_original/
-    // title_normalized before now — every other field was gated, but
-    // the title was shown completely unredacted to every non-subscribed
-    // and anonymous viewer regardless. Reported directly with a real
-    // example. Falls back to the original title only when scrubbing
-    // isn't possible (no company_name on file) rather than showing
-    // nothing.
-    title_original: scrubCompanyNameFromText(title_original, company_name) ?? title_original,
-    title_normalized: scrubCompanyNameFromText(title_normalized, company_name) ?? title_normalized,
+    // Locked titles use the shared role/specialty vocabulary and territory rules.
+    // Original job objects and subscriber responses are never modified.
+    title_original: maskedTitle(job, title_original || title_normalized),
+    title_normalized: title_normalized ? maskedTitle(job, title_normalized) : null,
+    freshness_label: freshness(job),
     description_text: scrubbedFullText,
     description_preview: scrubCompanyNameFromText(description_preview, company_name) ?? (scrubbedFullText ? scrubbedFullText.slice(0, 300) : undefined),
     subscription_required: true,
