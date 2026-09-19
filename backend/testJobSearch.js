@@ -8,6 +8,7 @@ const root = path.join(__dirname, '..');
 const searchHtml = fs.readFileSync(path.join(root, 'public/rook-search.html'), 'utf8');
 const jobsRoute = fs.readFileSync(path.join(root, 'backend/routes/jobs.js'), 'utf8');
 const mobileMenu = fs.readFileSync(path.join(root, 'public/rook-mobile-menu.html'), 'utf8');
+const dashboardHtml = fs.readFileSync(path.join(root, 'public/rook-dashboard.html'), 'utf8');
 
 test('Job Search uses its own unscored full-catalog endpoint', () => {
   assert.match(searchHtml, /rookApiFetch\('\/job-search\?'/);
@@ -74,6 +75,13 @@ test('mobile search filters are always visible in one panel', () => {
 
 test('desktop search grid fills the available shell instead of centering a shrink-wrapped panel', () => {
   assert.match(searchHtml, /\.layout\{width:100%; max-width:1320px;/);
+});
+
+test('Dashboard and Job Search explain their distinct purposes and cross-link', () => {
+  assert.match(searchHtml, /Job Search:<\/strong> Search all active ROOK jobs by company, location, distance, or industry/);
+  assert.match(searchHtml, /Want personalized recommendations\? View Dashboard/);
+  assert.match(dashboardHtml, /Dashboard:<\/strong> Personalized job recommendations ranked for your profile and preferences/);
+  assert.match(dashboardHtml, /Looking for a specific company, location, or industry\? Use Job Search/);
 });
 
 test('sparse compensation and default-zero travel data do not expose misleading filters', () => {
