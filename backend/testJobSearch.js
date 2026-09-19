@@ -72,6 +72,10 @@ test('mobile search filters are always visible in one panel', () => {
   assert.match(searchHtml, /<label>ZIP code or city<\/label>/);
 });
 
+test('desktop search grid fills the available shell instead of centering a shrink-wrapped panel', () => {
+  assert.match(searchHtml, /\.layout\{width:100%; max-width:1320px;/);
+});
+
 test('sparse compensation and default-zero travel data do not expose misleading filters', () => {
   assert.match(jobsRoute, /Number\(job\.travel_percentage\) > 0/);
   assert.match(searchHtml, /count \/ Math\.max\(1, Number\(totalCount\) \|\| 0\) >= 0\.05/);
