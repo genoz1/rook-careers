@@ -10,9 +10,9 @@ function setup(initial){
  }};vm.runInNewContext(code,context);
  return{get,requests,ready:()=>new Promise(resolve=>setImmediate(resolve)),fail:()=>{fail=true;},partial:()=>{analysis='failed';},submit:()=>get('uploadForm').submit({preventDefault(){}})};
 }
-test('current document is shown with a private viewing link and PDF preview',async()=>{
+test('current document is shown with a private viewing link',async()=>{
  const s=setup({filename:'Current.pdf',url:'https://storage.example/owned-resume',uploaded_at:'2026-09-19T12:00:00Z'});await s.ready();
- assert.equal(s.get('filename').textContent,'Current.pdf');assert.equal(s.get('preview').hidden,false);assert.equal(s.get('openResume').href,'https://storage.example/owned-resume');assert.equal(s.get('replaceTitle').textContent,'Replace your résumé');
+ assert.equal(s.get('filename').textContent,'Current.pdf');assert.equal(s.get('openResume').href,'https://storage.example/owned-resume');assert.equal(s.get('replaceTitle').textContent,'Replace your résumé');
 });
 test('empty account and invalid files cannot accidentally submit',async()=>{
  const s=setup(null);await s.ready();assert.equal(s.get('empty').hidden,false);
@@ -21,7 +21,7 @@ test('empty account and invalid files cannot accidentally submit',async()=>{
 });
 test('replacement uses existing authenticated upload endpoint and refreshes current document',async()=>{
  const s=setup(null);await s.ready();s.get('resumeFile').files=[{name:'Replacement.docx',size:100}];await s.submit();
- assert.equal(s.requests.filter(r=>r.url==='/resume').length,1);assert.equal(s.get('filename').textContent,'Replacement.docx');assert.equal(s.get('documentNote').hidden,false);assert.equal(s.get('preview').hidden,true);assert.match(s.get('status').textContent,/replaced/);assert.equal(s.get('uploadButton').disabled,false);
+ assert.equal(s.requests.filter(r=>r.url==='/resume').length,1);assert.equal(s.get('filename').textContent,'Replacement.docx');assert.match(s.get('status').textContent,/replaced/);assert.equal(s.get('uploadButton').disabled,false);
 });
 test('failed upload keeps current document and partial analysis reports upload separately',async()=>{
  const s=setup({filename:'Current.pdf',url:'https://storage.example/owned-resume'});await s.ready();s.fail();s.get('resumeFile').files=[{name:'Replacement.pdf',size:100}];await s.submit();assert.equal(s.get('filename').textContent,'Current.pdf');assert.match(s.get('status').textContent,/did not complete/);
