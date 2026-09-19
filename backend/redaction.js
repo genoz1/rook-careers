@@ -73,27 +73,8 @@ function scrubCompanyNameFromText(text, companyName) {
   return result;
 }
 
-function redactForNonSubscriber(job) {
-  const {
-    company_name, source_url, application_url, location_evidence, extraction_evidence,
-    recruiter_name, recruiter_email, recruiter_company, recruiter_contact_method, // same gate applies to recruiter postings
-    description_text, description_preview,
-    title_original, title_normalized,
-    ...rest
-  } = job;
-  const scrubbedFullText = scrubCompanyNameFromText(description_text, company_name);
-  return {
-    ...rest,
-    territory_locations: require('../public/rook-territory-location').territories(job),
-    // Locked titles use the shared role/specialty vocabulary and territory rules.
-    // Original job objects and subscriber responses are never modified.
-    title_original: maskedTitle(job, title_original || title_normalized),
-    title_normalized: title_normalized ? maskedTitle(job, title_normalized) : null,
-    freshness_label: freshness(job),
-    description_text: scrubbedFullText,
-    description_preview: scrubCompanyNameFromText(description_preview, company_name) ?? (scrubbedFullText ? scrubbedFullText.slice(0, 300) : undefined),
-    subscription_required: true,
-  };
+function redactForNonSubscriber(job, index) {
+  return require('./pretrialProjection').project(job, index);
 }
 
 // Stricter than redactForNonSubscriber: an anonymous visitor has no
@@ -104,8 +85,8 @@ function redactForNonSubscriber(job) {
 // format" — same card layout and same real scoreJob()-driven ranking
 // as a signed-in candidate would see, just with everything that would
 // reveal the fit or the employer removed rather than shown for free.
-function redactForAnonymous(job) {
-  const withCompanyRedacted = redactForNonSubscriber(job);
+function redactForAnonymous(job, index) {
+  const withCompanyRedacted = redactForNonSubscriber(job, index);
   const { match, ...rest } = withCompanyRedacted;
   return rest;
 }

@@ -16,10 +16,12 @@ const { getTrialPeriodDays } = require("../routes/stripe");
 const { isUsEligibleJob } = require("../jobEligibility");
 
 const router = express.Router();
+const {project} = require('../pretrialProjection');
+router.use((req,res,next)=>{res.set('Cache-Control','private, no-store');next();});
 
-const isConfigured = Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY);
+const isConfigured = Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
 const supabaseAnon = isConfigured
-  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
   : null;
 
 const APP_BASE_URL = process.env.PUBLIC_APP_URL || "https://seashell-app-hbjuo.ondigitalocean.app";
@@ -99,6 +101,8 @@ function pageShell({ title, description, canonicalUrl, ogImage, bodyHtml, jsonLd
   </div>
   <script src="/rook-config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="/rook-auth.js"></script>
+  <script src="/rook-access.js"></script>
   ${jobId ? `<script>
   (async () => {
     try {
@@ -114,7 +118,7 @@ function pageShell({ title, description, canonicalUrl, ogImage, bodyHtml, jsonLd
       if (!res.ok) return;
       const profile = await res.json();
       const status = profile.subscription_status;
-      if (status === 'active' || status === 'trialing') {
+      if (rookHasFullAccess(profile)) {
         window.location.replace('/rook-job-analysis.html?job=${escapeHtml(jobId)}');
       }
     } catch (_) {}
@@ -189,102 +193,22 @@ router.get("/jobs/:id", async (req, res, next) => {
 </html>`);
   }
 
-  const title = job.title_original || job.title_normalized || "Open role";
-  const comp = job.compensation_text || (job.salary_min ? `$${job.salary_min}${job.salary_max ? "–$" + job.salary_max : "+"}` : "");
-  const locShort = job.source_type === "custom_html" && !job.city
-    ? (title.endsWith(job.location_raw || "") ? "" : (job.location_raw || "").includes("|") ? "multiple territories" : job.location_raw)
-    : shortLocation(job.location_raw);
-  const titleWithLoc = locShort ? `${title} in ${locShort}` : title;
-
-  // Structured teaser built from the AI-extracted job attributes
-  const ai = job.ai_analysis || {};
-  const teaserFacts = [];
-  if (Array.isArray(ai.required_industries) && ai.required_industries.length) teaserFacts.push(`Industry: ${ai.required_industries[0]}`);
-  else if (Array.isArray(ai.preferred_industries) && ai.preferred_industries.length) teaserFacts.push(`Industry: ${ai.preferred_industries[0]}`);
-  if (Array.isArray(ai.product_categories) && ai.product_categories.length) teaserFacts.push(`Focus: ${ai.product_categories[0]}`);
-  if (ai.seniority_level) teaserFacts.push(`Level: ${ai.seniority_level}`);
-  const travelPct = job.travel_percentage ?? ai.travel_percentage;
-  if (travelPct != null) teaserFacts.push(`Travel: ${travelPct}%`);
-  if (job.remote_status) teaserFacts.push(job.remote_status === "remote" ? "Remote-friendly" : "Field-based");
-
-  const preview = teaserFacts.length > 0
-    ? teaserFacts.join(" · ")
-    : "Full role details — including responsibilities, requirements, and who's hiring — are visible after you sign up.";
-
+  const safe = project(job);
+  const title = [...safe.industry_classification.labels, safe.role_type].filter(Boolean).join(' · ') || 'Medical and veterinary sales opportunity';
   const canonicalUrl = `${APP_BASE_URL}/jobs/${job.id}`;
-  const metaDescription = `${titleWithLoc}${comp ? " — " + comp : ""}. See the employer and apply on ROOK — medical & veterinary sales careers.`.slice(0, 300);
+  const description = `${title}. View personalized opportunities on ROOK. Job titles and employers are hidden until you unlock access.`;
+  const facts = [safe.territory_type,safe.freshness_label].filter(Boolean).join(' · ');
+  const bodyHtml = `<h1 style="font-size:28px;margin-bottom:20px">${escapeHtml(title)}</h1>
+    <p style="margin-bottom:24px">${escapeHtml(facts)}</p>
+    <section style="background:white;border:1px solid var(--border);padding:24px;border-radius:14px">
+      <h2 style="font-size:18px;margin-bottom:12px">🔒 Job title and employer hidden</h2>
+      <p style="line-height:1.7;margin-bottom:20px">Start your 3-day free trial to view the full opportunity details and apply directly.</p>
+      <a class="btn btn-primary" href="/rook-onboarding-v7.html">Find My Matches</a>
+      <p style="font-size:13px;margin-top:16px">3 days free, then $19.99/month. Cancel anytime.</p>
+    </section><p style="margin-top:24px"><a href="/jobs">Browse current opportunities</a></p>`;
+  res.send(pageShell({title:`${title} — ROOK`,description,canonicalUrl,bodyHtml,jobId:job.id,
+    jsonLd:{'@context':'https://schema.org','@type':'WebPage',name:title,description,url:canonicalUrl}}));
 
-  // Fetch similar jobs for internal linking — same state, different job
-  let similarJobsHtml = "";
-  try {
-    const stateGuess = (job.location_raw || "").split(",").map(s => s.trim()).filter(s => /^[A-Z]{2}$/.test(s))[0]
-      || (job.location_raw || "").split(",")[1]?.trim() || null;
-    const similarQuery = supabaseAnon
-      .from("jobs")
-      .select("id, title_original, location_raw, company_name, job_lat, job_lng, state")
-      .eq("status", "active")
-      .eq("moderation_status", "approved")
-      .neq("id", job.id)
-      .limit(16); // fetch extra — some will be filtered out by isUsEligibleJob below
-    const { data: similarRaw } = stateGuess
-      ? await similarQuery.ilike("location_raw", `%${stateGuess}%`)
-      : await similarQuery;
-    // Same eligibility gate as the primary job above — a foreign
-    // posting must never appear as a "similar role" link either.
-    const similar = (similarRaw || []).filter(isUsEligibleJob).slice(0, 4);
-    if (similar.length > 0) {
-      similarJobsHtml = `
-      <div style="margin-top:32px;">
-        <div style="font-size:12.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:12px;">Similar Roles</div>
-        ${similar.map(s => `
-          <a href="/jobs/${escapeHtml(s.id)}" style="display:block;background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:8px;">
-            <div style="font-weight:600;font-size:14px;margin-bottom:3px;">${escapeHtml(s.title_original || "Open role")}</div>
-            <div style="font-size:12.5px;color:var(--muted);">${escapeHtml(s.location_raw || "")}</div>
-          </a>`).join("")}
-      </div>`;
-    }
-  } catch (_) {}
-
-  // This is a public preview of a paid service, not a Google Jobs listing.
-  // JobPosting requires full public details and a way to apply without payment.
-  // Describe the actual preview page without exposing members-only fields or
-  // inventing missing employer posting dates to satisfy rich-result validation.
-  const jsonLd = {
-    "@context": "https://schema.org/",
-    "@type": "WebPage",
-    name: titleWithLoc,
-    description: preview,
-    url: canonicalUrl,
-  };
-
-  const trialDays = getTrialPeriodDays();
-  const ctaBlock = trialDays > 0
-    ? `<div style="color:#fff;font-size:15px;font-weight:700;margin-bottom:2px;">${trialDays} days free, then $19.99/month</div>
-      <div style="color:#B9C4DB;font-size:13px;font-weight:600;margin-bottom:18px;">Cancel anytime.</div>
-      <a href="/rook-onboarding-v4.html" class="btn btn-primary">Start Your ${trialDays}-Day Free Trial</a>
-      <div style="color:#8B96AB;font-size:12px;margin-top:10px;">$0 today. Full ROOK access during your trial.</div>`
-    : `<div style="color:#fff;font-size:15px;font-weight:700;margin-bottom:18px;">$19.99/month · Cancel anytime</div>
-      <a href="/rook-onboarding-v4.html" class="btn btn-primary">Get Started</a>
-      <div style="color:#8B96AB;font-size:12px;margin-top:10px;">One membership. Full ROOK access.</div>`;
-
-  const bodyHtml = `
-    <div style="background:rgba(20,99,255,0.08);color:var(--royal);display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;padding:6px 12px;border-radius:999px;margin-bottom:16px;">🔒 Employer revealed with ROOK access</div>
-    <h1 style="font-size:28px;margin-bottom:10px;">${escapeHtml(titleWithLoc)}</h1>
-    <div style="font-size:14.5px;color:var(--muted);margin-bottom:24px;">${escapeHtml(job.location_raw || "")}${comp ? " · " + escapeHtml(comp) : ""}${job.date_posted ? " · Posted " + escapeHtml(job.date_posted) : ""}</div>
-    <div style="background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:24px;margin-bottom:24px;font-size:14.5px;line-height:1.7;color:var(--navy);">
-      ${escapeHtml(preview)}
-      <div style="margin-top:16px;padding-top:16px;border-top:1px dashed var(--border);color:var(--muted);font-style:italic;">ROOK members see the employer, full opportunity details, direct application link, and personalized match score.</div>
-    </div>
-    <div style="background:var(--navy);border-radius:var(--radius);padding:28px 24px;text-align:center;">
-      <h3 style="color:#fff;font-size:19px;margin-bottom:8px;">Ready to see who's hiring?</h3>
-      <p style="color:#B9C4DB;font-size:13.5px;margin-bottom:14px;">See the employer, apply directly, and get this job — and every other opportunity — scored against your experience.</p>
-      ${ctaBlock}
-    </div>
-    ${similarJobsHtml}
-    <div style="text-align:center;margin-top:24px;"><a href="/jobs" style="color:var(--royal);font-size:13px;font-weight:600;">← Browse all open roles</a></div>
-  `;
-
-  res.send(pageShell({ title: `${titleWithLoc} — ROOK`, description: metaDescription, canonicalUrl, bodyHtml, jsonLd, jobId: req.params.id }));
 });
 
 // Real, curated set of job categories for server-rendered landing
@@ -519,7 +443,7 @@ router.get("/jobs", async (req, res) => {
   if (!Number.isSafeInteger(page * pageSize)) return res.status(404).send("Page not found.");
   try {
     const { data, error } = await supabaseAnon.from("jobs")
-      .select("id, title_original, title_normalized, location_raw, location_evidence, job_lat, job_lng, state")
+      .select("id, title_original, title_normalized, location_raw, location_evidence, job_lat, job_lng, state, ai_analysis, category, sales_type, territory, remote_status, date_posted, first_seen_at")
       .eq("status", "active").eq("moderation_status", "approved")
       .order("id", { ascending: true })
       .range((page - 1) * pageSize, page * pageSize);
@@ -529,14 +453,14 @@ router.get("/jobs", async (req, res) => {
     const pageUrl = (number) => number === 1 ? "/jobs" : `/jobs?page=${number}`;
     const bodyHtml = `
       <h1 style="font-size:28px;margin-bottom:16px;">Medical sales job previews${page > 1 ? ` — page ${page}` : ""}</h1>
-      <p style="line-height:1.7;margin-bottom:24px;">Browse titles and locations of current opportunities. ROOK membership unlocks employer names, full job details, application links, and personalized matching.</p>
+      <p style="line-height:1.7;margin-bottom:24px;">Explore current opportunities by broad industry and role. ROOK membership unlocks job titles, employers, full details and application links.</p>
       <p style="margin-bottom:24px;"><a href="/rook-browse.html" style="color:var(--royal);">Find roles near your ZIP code</a></p>
-      ${eligibleData.slice(0, pageSize).map(job => `<a href="/jobs/${escapeHtml(job.id)}" style="display:block;background:#fff;border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:12px;"><h2 style="font-size:17px;margin-bottom:6px;">${escapeHtml(job.title_original || job.title_normalized || "Open role")}</h2><p style="color:var(--muted);">${escapeHtml(job.location_raw || "Location not specified")}</p></a>`).join("") || "<p>No open roles right now. Please check back soon.</p>"}
+      ${eligibleData.slice(0, pageSize).map(job => `<a href="/jobs/${escapeHtml(job.id)}" style="display:block;background:#fff;border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:12px;"><h2 style="font-size:17px;margin-bottom:6px;">${escapeHtml(project(job).industry_classification.labels.join(' · ') || 'Sales opportunity')}</h2><p style="color:var(--muted);">${escapeHtml([project(job).role_type,project(job).territory_type,project(job).freshness_label].filter(Boolean).join(' · '))}</p></a>`).join("") || "<p>No open roles right now. Please check back soon.</p>"}
       <nav aria-label="Job directory pages" style="display:flex;justify-content:space-between;gap:16px;margin-top:24px;">
         ${page > 1 ? `<a href="${pageUrl(page - 1)}" class="btn btn-outline">Previous page</a>` : ""}
         ${data.length > pageSize ? `<a href="${pageUrl(page + 1)}" class="btn btn-outline">Next page</a>` : ""}
       </nav>`;
-    return res.send(pageShell({ title: `Medical Sales Job Previews${page > 1 ? ` — Page ${page}` : ""} — ROOK`, description: "Browse current medical sales job titles and locations. Unlock employer details and personalized matching with ROOK membership.", canonicalUrl: `${APP_BASE_URL}${pageUrl(page)}`, bodyHtml }));
+    return res.send(pageShell({ title: `Medical Sales Job Previews${page > 1 ? ` — Page ${page}` : ""} — ROOK`, description: "Explore current medical sales opportunities. Unlock job titles, employer details and personalized matching with ROOK membership.", canonicalUrl: `${APP_BASE_URL}${pageUrl(page)}`, bodyHtml }));
   } catch (_) {
     return res.status(503).set("Retry-After", "300").send("Job directory temporarily unavailable.");
   }

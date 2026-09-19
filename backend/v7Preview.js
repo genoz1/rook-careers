@@ -1,38 +1,5 @@
-const { maskedTitle, freshness } = require('./maskedPresentation');
-// Only explicitly allowed values cross the anonymous boundary. Never spread
-// a job or its AI analysis into an anonymous response.
-const { scrubCompanyNameFromText } = require('./redaction');
-const {classify} = require('../public/rook-job-classification');
-const number = v => typeof v === 'number' && Number.isFinite(v) ? v : null;
-function safeText(value, job) {
-  let text = String(value || '').replace(/<[^>]*>/g, ' ');
-  for (const name of [job.company_name, job.recruiter_company, job.recruiter_name, job.source_type]) {
-    text = scrubCompanyNameFromText(text, name);
-  }
-  return text.replace(/(?:https?:\/\/|www\.)\S+|\b[\w.+-]+@[\w.-]+\.[a-z]{2,}\b|\b[\w-]+\.(?:com|org|net|io|co|jobs)\b/gi, '[hidden]').slice(0, 180);
-}
-function preview(job, index) {
-  return {
-    id: `locked-${index}`, // Never disclose source identifiers or real job IDs.
-    title_original: maskedTitle(job),
-    location_raw: safeText([job.city, job.state].filter(Boolean).join(', ') || (job.remote_status === 'remote' ? 'Remote' : ''), job),
-    remote_status: job.remote_status === 'remote' ? 'remote' : 'field',
-    distance_miles: number(job.distance_miles),
-    salary_min: number(job.salary_min), salary_max: number(job.salary_max),
-    date_posted: /^\d{4}-\d{2}-\d{2}/.test(job.date_posted || '') ? job.date_posted.slice(0,10) : null,
-    freshness_label: freshness(job),
-    subscription_required: true,
-    industry_classification: classify(job),
-    match: {
-      overall_score: number(job.match?.overall_score),
-      preference_fit: number(job.match?.preference_fit),
-      candidate_fit: number(job.match?.candidate_fit),
-      excellent_match: job.match?.excellent_match === true,
-      recommendation: ['Strong Match','Apply','Stretch Apply','Skip'].includes(job.match?.recommendation) ? job.match.recommendation : null,
-      reasons: [], concerns: []
-    }
-  };
-}
+// Shared allowlisted dashboard projection; onboarding answers and flow are unchanged.
+const preview = require('./pretrialProjection').project;
 function answersToProfile(a) {
   const l = a?.location;
   if (!l || typeof l.lat !== 'number' || typeof l.lng !== 'number' || !Number.isFinite(l.lat) || !Number.isFinite(l.lng) || Math.abs(l.lat)>90 || Math.abs(l.lng)>180) throw new Error('Select a valid location.');

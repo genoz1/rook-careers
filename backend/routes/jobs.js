@@ -38,6 +38,7 @@ function escapeHtmlServer(str) {
 }
 
 const router = express.Router();
+router.use((req,res,next)=>{res.set("Cache-Control","private, no-store");next();});
 
 const isConfigured = Boolean(
   process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY && process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -70,6 +71,13 @@ async function requireAuth(req, res, next) {
   const { data, error } = await supabaseAnon.auth.getUser(token);
   if (error || !data.user) return res.status(401).json({ error: "Invalid or expired token" });
   req.user = data.user;
+  next();
+}
+
+async function requireFullAccess(req, res, next) {
+  const {data:profile,error} = await supabaseAdmin.from("candidate_profiles").select("subscription_status,trial_ends_at,subscription_cancel_at").eq("user_id",req.user.id).maybeSingle();
+  if(error) return res.status(503).json({error:"Unable to verify access."});
+  if(!hasFullAccess(profile)) return res.status(403).json({subscription_required:true,error:"Start your free trial to unlock this feature."});
   next();
 }
 
@@ -130,19 +138,8 @@ function matchFromRow(row) {
   };
 }
 
-// The actual paywall: a signed-in candidate without full access (no
-// active trial or paid subscription) still sees their REAL match
-// score, reasons, and every other job detail — that's what makes the
-// paywall worth paying past, unlike the anonymous teaser, which hides
-// that too. Only the employer's identity and the real way to apply are
-// withheld, the same two fields gated from anonymous visitors.
-// subscription_status is written by the Stripe webhook
-// (backend/routes/stripe.js). Gating decision itself moved to
-// matching.js's hasFullAccess() — centralized there so every gate in
-// the app (Dashboard, Job Search, saved jobs, job detail, and the
-// daily digest) uses the exact same definition of "full access," which
-// now includes a trialing candidate as well as an actively paying one.
-// See that file's comment for the reasoning.
+// Locked responses use a strict structured projection. Entitlement remains
+// centralized in matching.js; source records and scoring are unchanged.
 
 // Redaction logic (scrubCompanyNameFromText, redactForNonSubscriber,
 // redactForAnonymous) now lives in backend/redaction.js — extracted so
@@ -168,6 +165,7 @@ function matchFromRow(row) {
 // scores, reasons, and ranking are entirely unaffected - only the
 // unused payload size changes.
 function stripUnusedDescriptionFields(job) {
+  if (job.subscription_required) return job;
   const { description_html, description_text, description_preview, location_evidence, extraction_evidence, ...rest } = job;
   return {...rest, territory_locations: require('../../public/rook-territory-location').territories(job), industry_classification: classify(job)};
 }
@@ -211,7 +209,7 @@ async function loadEmployerHistory(candidateId) {
 // 200 real job rows plus does an IP geolocation lookup even when a
 // caller only wants the headline number.
 router.get("/public-job-count", requireConfig, async (req, res) => {
-  const { count, error } = await supabaseAnon
+  const { count, error } = await supabaseAdmin
     .from("jobs")
     .select("id", { count: "exact", head: true })
     .eq("status", "active")
@@ -228,7 +226,7 @@ router.get("/public-job-count", requireConfig, async (req, res) => {
 // onboarded once but currently has zero live postings shouldn't count
 // toward "employers we're sourcing from right now."
 router.get("/public-employer-count", requireConfig, async (req, res) => {
-  const { data, error } = await supabaseAnon
+  const { data, error } = await supabaseAdmin
     .from("jobs")
     .select("employer_id")
     .eq("status", "active")
@@ -262,7 +260,7 @@ router.get("/public-geocode-zip", requireConfig, async (req, res) => {
 // This endpoint is intentionally separate from GET /api/jobs, which powers
 // the personalized Dashboard and may geographically prefilter and score a
 // candidate pool. Job Search always starts from every active, approved job.
-router.get("/job-search", requireConfig, requireAuth, async (req, res) => {
+router.get("/job-search", requireConfig, requireAuth, requireFullAccess, async (req, res) => {
   const { keyword = "", industries = "all", near_lat, near_lng } = req.query;
   const selectionInput = String(industries || "all");
   const selection = normalizeSelection(selectionInput.split(","));
@@ -343,6 +341,12 @@ router.get("/job-search", requireConfig, requireAuth, async (req, res) => {
 
 // GET /api/jobs?industry=Veterinary&state=FL&limit=20
 router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
+  if(req.query.keyword) {
+    if(!req.user) return res.status(403).json({subscription_required:true});
+    const {data:p,error}=await supabaseAdmin.from('candidate_profiles').select('subscription_status,trial_ends_at,subscription_cancel_at').eq('user_id',req.user.id).maybeSingle();
+    if(error) return res.status(503).json({error:'Unable to verify access.'});
+    if(!hasFullAccess(p)) return res.status(403).json({subscription_required:true});
+  }
   const { industry, industries, state, limit = 20, keyword } = req.query;
   const selectionInput = industries !== undefined ? String(industries) : (industry || "all");
   const selection = normalizeSelection(selectionInput.split(","));
@@ -372,7 +376,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     // real active jobs) — which made the whole platform look far
     // thinner than it actually is right at the moment meant to convince
     // someone to pay.
-    const { count: totalCount } = await supabaseAnon
+    const { count: totalCount } = await supabaseAdmin
       .from("jobs")
       .select("id", { count: "exact", head: true })
       .eq("status", "active")
@@ -393,7 +397,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
       // than a mandatory gate, so plenty of requests will genuinely
       // have no location yet. Falls back to a plain recency-ordered,
       // redacted list rather than erroring or showing nothing.
-      let fallbackQuery = supabaseAnon
+      let fallbackQuery = supabaseAdmin
         .from("jobs")
         .select(JOB_LIST_COLUMNS_NO_DESCRIPTION)
         .eq("status", "active")
@@ -411,7 +415,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     const latDelta = EXPLORE_RADIUS_MILES / 69;
     const lngDelta = EXPLORE_RADIUS_MILES / (69 * Math.max(0.1, Math.cos((nearLat * Math.PI) / 180)));
 
-    const { data: boxJobs, error: boxError } = await selectedJobPool(supabaseAnon
+    const { data: boxJobs, error: boxError } = await selectedJobPool(supabaseAdmin
       .from("jobs")
       .select(JOB_LIST_COLUMNS_NO_DESCRIPTION)
       .eq("status", "active")
@@ -431,7 +435,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     // ever match jobs that HAVE real coordinates — fetched separately so
     // a vague multi-location or never-geocoded posting isn't silently
     // dropped, just scored through scoreJob()'s own honest fallback.
-    let noCoordsQuery = supabaseAnon
+    let noCoordsQuery = supabaseAdmin
       .from("jobs")
       .select(JOB_LIST_COLUMNS_NO_DESCRIPTION)
       .eq("status", "active")
@@ -477,12 +481,12 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     // scored branches below, description_text isn't even needed in
     // the query here — excluded directly rather than fetched and
     // stripped afterward.
-    let query = supabaseAnon.from("jobs").select(JOB_LIST_COLUMNS_NO_DESCRIPTION).eq("status", "active").eq("moderation_status", "approved").order("date_posted", { ascending: false });
+    let query = supabaseAdmin.from("jobs").select(JOB_LIST_COLUMNS_NO_DESCRIPTION).eq("status", "active").eq("moderation_status", "approved").order("date_posted", { ascending: false });
 
     if (state) query = query.eq("state", state);
     const { data, error } = await selectedJobPool(query);
     if (error) return res.status(500).json({error:error.message});
-    return res.json((data || []).filter(isUsEligibleJob).filter(industryPass).slice(0, Number(limit)).map(stripUnusedDescriptionFields));
+    return res.json((data || []).filter(isUsEligibleJob).filter(industryPass).slice(0, Number(limit)).map(redactForNonSubscriber).map(stripUnusedDescriptionFields));
   }
 
   // "Explore a different location" — Job Search's "Show jobs near"
@@ -795,7 +799,7 @@ router.get("/scoring-status", requireConfig, requireAuth, loadCandidateId, async
 // "how to apply" (agency_aggregated has no real recruiter_email and
 // must link to its real source_url, never ROOK's in-site Apply flow).
 router.get("/recruiter-jobs", requireConfig, optionalAuth, async (req, res) => {
-  const { data: jobsData, error } = await supabaseAnon
+  const { data: jobsData, error } = await supabaseAdmin
     .from("jobs")
     .select("*")
     .in("source_type", ["recruiter_posted", "agency_aggregated"])
@@ -958,7 +962,7 @@ router.get("/new-matches-today-count", requireConfig, requireAuth, loadCandidate
 // to reach the recruiter by email (there's no ATS to submit into for a
 // manually-posted job), but the candidate never sees that — they get a
 // real in-product application experience with a real "Applied" record.
-router.post("/jobs/:id/apply", requireConfig, requireAuth, loadCandidateId, async (req, res) => {
+router.post("/jobs/:id/apply", requireConfig, requireAuth, requireFullAccess, loadCandidateId, async (req, res) => {
   // TEMPORARY DIAGNOSTIC LOGGING — this route has been failing with no
   // trace at all in Runtime Logs (raw DO URL, Cloudflare bypassed, no
   // console output, no crash recorded). That pattern points to a step
@@ -1117,7 +1121,7 @@ router.post("/jobs/:id/apply", requireConfig, requireAuth, loadCandidateId, asyn
 
 // GET /api/jobs/:id
 router.get("/jobs/:id", requireConfig, optionalAuth, async (req, res) => {
-  const { data, error } = await supabaseAnon
+  const { data, error } = await supabaseAdmin
     .from("jobs")
     .select("*")
     .eq("id", req.params.id)
@@ -1142,20 +1146,7 @@ router.get("/jobs/:id", requireConfig, optionalAuth, async (req, res) => {
     return res.status(404).json({ error: "Job not found" });
   }
 
-  if (!req.user) {
-    return res.json({
-      id: data.id,
-      title_original: data.title_original,
-      title_normalized: data.title_normalized,
-      location_raw: data.location_raw,
-      compensation_text: data.compensation_text,
-      salary_min: data.salary_min,
-      salary_max: data.salary_max,
-      date_posted: data.date_posted,
-      description_preview: scrubCompanyNameFromText((data.description_text || "").slice(0, 300), data.company_name),
-      gated: true,
-    });
-  }
+  if (!req.user) return res.json(redactForAnonymous(data));
 
   const { data: profile } = await supabaseAdmin
     .from("candidate_profiles")
@@ -1163,7 +1154,7 @@ router.get("/jobs/:id", requireConfig, optionalAuth, async (req, res) => {
     .eq("user_id", req.user.id)
     .maybeSingle();
 
-  if (!profile) return res.json(data);
+  if (!hasFullAccess(profile)) return res.status(403).json({subscription_required:true,error:"Start your free trial to view job details."});
 
   // Single-job page: fall back to a live score if no precomputed row
   // exists yet, OR if the row that does exist predates the scoring
@@ -1220,7 +1211,7 @@ router.get("/jobs/:id", requireConfig, optionalAuth, async (req, res) => {
 });
 
 // POST /api/jobs/:id/save — toggle whether this job is saved. Body: { saved: true|false }.
-router.post("/jobs/:id/save", requireConfig, requireAuth, loadCandidateId, async (req, res) => {
+router.post("/jobs/:id/save", requireConfig, requireAuth, requireFullAccess, loadCandidateId, async (req, res) => {
   const saved = req.body.saved !== false;
   const { data, error } = await supabaseAdmin
     .from("candidate_job_matches")
@@ -1236,7 +1227,7 @@ router.post("/jobs/:id/save", requireConfig, requireAuth, loadCandidateId, async
 
 // POST /api/jobs/:id/dismiss — mark a job as not interested; it stops
 // appearing in GET /api/jobs for this candidate from then on.
-router.post("/jobs/:id/dismiss", requireConfig, requireAuth, loadCandidateId, async (req, res) => {
+router.post("/jobs/:id/dismiss", requireConfig, requireAuth, requireFullAccess, loadCandidateId, async (req, res) => {
   const dismissed = req.body.dismissed !== false;
   const { data, error } = await supabaseAdmin
     .from("candidate_job_matches")
@@ -1252,7 +1243,7 @@ router.post("/jobs/:id/dismiss", requireConfig, requireAuth, loadCandidateId, as
 
 // GET /api/saved-jobs — full job details for everything the caller has
 // saved, with precomputed scores (same source as the main listing).
-router.get("/saved-jobs", requireConfig, requireAuth, loadCandidateId, async (req, res) => {
+router.get("/saved-jobs", requireConfig, requireAuth, requireFullAccess, loadCandidateId, async (req, res) => {
   const { data: rows, error } = await supabaseAdmin
     .from("candidate_job_matches")
     .select(`*, jobs(${JOB_LIST_COLUMNS})`)
@@ -1315,7 +1306,7 @@ router.get('/onboarding/job-preview', async (req, res) => {
   if (!checkJobPreviewRate(ip)) return res.status(429).json({ error: 'Too many requests' });
 
   try {
-    const { data: jobs, error } = await supabaseAnon.from('jobs')
+    const { data: jobs, error } = await supabaseAdmin.from('jobs')
       .select('title_original, city, state, remote_status, compensation_text, company_name')
       .eq('status', 'active')
       .eq('moderation_status', 'approved')
@@ -1330,11 +1321,11 @@ router.get('/onboarding/job-preview', async (req, res) => {
     console.log('[job-preview] rows returned:', jobs?.length, 'first:', jobs?.[0]?.title_original);
 
     const masked = (jobs || []).slice(0, 5).map(j => ({
-      title_original: maskedTitle(j),
-      city: j.city,
-      state: j.state,
+      title_original: "Personalized opportunity",
+      city: null,
+      state: null,
       remote_status: j.remote_status,
-      compensation_text: j.compensation_text,
+      compensation_text: null,
     }));
 
     res.json({ jobs: masked, total_count: jobs?.length || 0 });
@@ -1599,10 +1590,10 @@ router.post("/onboarding/anonymous-preview", requireConfig, async (req, res) => 
     const top3 = scored.map(({ job, score, distMi }) => {
       return {
         overall_score: Math.round(score.overall_score),
-        title: job.title_original || job.title_normalized || "Medical Sales Role",
-        location_display: jobLocationDisplay(job),
+        title: "Personalized opportunity",
+        location_display: "Location hidden",
         distance_miles: distMi,
-        reasons: (score.reasons || []).filter(r => !/miles? from you/i.test(r)).slice(0, 1),
+        reasons: [],
       };
     });
 
@@ -1715,9 +1706,9 @@ router.get("/onboarding/match-preview", requireConfig, requireAuth, async (req, 
         excellent_match: Boolean(r.score.excellent_match),
         recommendation:  r.score.recommendation || null,
         // Preview-safe job detail
-        title:        safeTitle,
-        location_display: jobLocationDisplay(job),
-        reasons: (r.score.reasons || []).slice(0, 2),
+        title:        "Personalized opportunity",
+        location_display: "Location hidden",
+        reasons: [],
       };
     });
 

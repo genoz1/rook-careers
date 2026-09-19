@@ -185,6 +185,11 @@ async function rookPopulateSidebar() {
 // Routes to rook-onboarding-v2.html (Stage 2) for new users.
 // Existing subscribers and trialing users with a profile go to the dashboard.
 async function rookRouteAfterLogin() {
+  try {
+    const r=await rookApiFetch('/profile');
+    const profile=r.ok ? await r.json() : null;
+    if(profile && !rookHasFullAccess(profile)) {window.location.href='rook-dashboard.html';return;}
+  } catch(_) {}
   // Restore the page the user was trying to reach before being sent to login
   try {
     const returnUrl = sessionStorage.getItem("rook_login_return");

@@ -267,7 +267,7 @@ router.get("/profile", requireConfig, requireAuth, async (req, res) => {
 
 // PUT /api/profile — create or update the caller's candidate profile
 router.put("/profile", requireConfig, requireAuth, async (req, res) => {
-  const payload = { ...req.body, user_id: req.user.id, updated_at: new Date().toISOString() };
+  const payload = { ...require("../profileWriteBoundary")(req.body), user_id: req.user.id, updated_at: new Date().toISOString() };
 
   // First-touch UTM attribution: set once, at whichever save is this
   // candidate's first (normally onboarding), then never touched again —

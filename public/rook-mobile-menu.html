@@ -13,6 +13,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="rook-config.js"></script>
 <script src="rook-auth.js"></script>
+<script src="rook-access.js"></script>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:Inter,ui-sans-serif,-apple-system,sans-serif;background:#f7fbfe;min-height:100vh}
@@ -193,7 +194,17 @@
 
     document.getElementById('loadingPanel').style.display = 'none';
 
-    if (session) {
+    const access = await rookAccessReady;
+    if (access.locked) {
+      const panel=document.getElementById('publicPanel');
+      panel.style.display='block';
+      panel.querySelector('.primary').textContent='Start 3-Day Free Trial';
+      panel.querySelector('.primary').href='#';
+      panel.querySelector('.primary').onclick=()=>{rookStartExistingTrial();return false;};
+      const login=panel.querySelector('.btn-secondary');
+      if(access.signedIn) {login.textContent='Log Out';login.href='#';login.onclick=()=>{rookSignOut('index.html');return false;};}
+      document.getElementById('brandLink').href=rookMatchesUrl();
+    } else if (session) {
       document.getElementById('memberPanel').style.display = 'block';
       // Update brand link to go to dashboard for signed-in users
       document.getElementById('brandLink').href = 'rook-dashboard.html';

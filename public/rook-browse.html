@@ -449,7 +449,7 @@ function renderTeaserJobRow(job) {
     <a href="/jobs/${escapeHtml(job.id)}" class="job-row" style="${rowStyle}">
       <div class="score-ring">🔒</div>
       <div class="job-info">
-        <h4>${escapeHtml(job.title_original || job.title_normalized || 'Untitled role')}${sourceBadge}</h4>
+        <h4>${escapeHtml(job.title_original || job.title_normalized || 'Job title hidden')}${sourceBadge}</h4>
         <div class="company"><span style="color:#7C3AED; font-weight:600;">🔒 Employer revealed with ROOK</span> — ${escapeHtml(job.location_raw || '')}${comp ? ' &nbsp;·&nbsp; ' + escapeHtml(comp) : ''}</div>
         <div class="job-meta-line">${job.date_posted ? 'Posted ' + escapeHtml(job.date_posted) : ''}</div>
       </div>
@@ -482,5 +482,9 @@ s.parentNode.insertBefore(b, s);})(window.lintrk);
   <a href="rook-onboarding-v2.html" class="rm-btn-primary">Get My Personalized Matches</a>
   <div class="rm-trust">3-day free trial · Cancel anytime</div>
 </div>
+<script src="rook-config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="rook-auth.js"></script>
+<script src="rook-access.js"></script>
 </body>
 </html>

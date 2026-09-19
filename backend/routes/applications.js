@@ -6,7 +6,7 @@
 
 const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
-const { scoreJob } = require("../matching");
+const { scoreJob, hasFullAccess } = require("../matching");
 
 const router = express.Router();
 
@@ -41,11 +41,12 @@ async function requireAuth(req, res, next) {
 async function loadCandidateId(req, res, next) {
   const { data, error } = await supabaseAdmin
     .from("candidate_profiles")
-    .select("id")
+    .select("id,subscription_status,trial_ends_at,subscription_cancel_at")
     .eq("user_id", req.user.id)
     .maybeSingle();
   if (error) return res.status(500).json({ error: error.message });
   if (!data) return res.status(404).json({ error: "Complete onboarding before tracking applications" });
+  if (!hasFullAccess(data)) return res.status(403).json({subscription_required:true,error:"Start your free trial to access applications."});
   req.candidateId = data.id;
   next();
 }

@@ -5,7 +5,7 @@ const path=require('node:path');
 const {execFileSync}=require('node:child_process');
 const {preview,answersToProfile}=require('./v7Preview');
 const root=path.resolve(__dirname,'..');
-const secretJob={id:'real-job-1',company_name:'ACME Corporation',recruiter_company:'SECRET Agency',recruiter_name:'SECRET Person',source_type:'hidden-source',source_job_id:'hidden-source-id',employer_id:'hidden-employer',source_url:'https://secret.example/apply',application_url:'https://secret.example/apply',description_html:'SECRET HTML',description_text:'SECRET text',ai_analysis:{source:'SECRET analysis'},title_original:'Sales Manager at ACME https://secret.example/apply',city:'Boston',state:'MA',location_raw:'SECRET office',date_posted:'2026-09-16',job_lat:42,job_lng:-71,distance_miles:4,match:{overall_score:84,preference_fit:84,candidate_fit:null,reasons:['SECRET reason'],concerns:['SECRET concern'],categories:{company:'SECRET'},recommendation:'Apply'}};
+const secretJob={id:'real-job-1',company_name:'ACME Corporation',recruiter_company:'SECRET Agency',recruiter_name:'SECRET Person',source_type:'hidden-source',source_job_id:'hidden-source-id',employer_id:'hidden-employer',source_url:'https://secret.example/apply',application_url:'https://secret.example/apply',description_html:'SECRET HTML',description_text:'SECRET text',ai_analysis:{source:'SECRET analysis',product_categories:['Medical Device']},title_original:'Sales Manager at ACME https://secret.example/apply',city:'Boston',state:'MA',location_raw:'Boston, MA, United States',date_posted:'2026-09-16',job_lat:42,job_lng:-71,distance_miles:4,match:{overall_score:84,preference_fit:84,candidate_fit:null,reasons:['SECRET reason'],concerns:['SECRET concern'],categories:{company:'SECRET'},recommendation:'Apply'}};
 const answer={location:{lat:42,lng:-71,city:'Boston',state:'MA',label:'Boston, MA'},industry:'Medical Device',years:5.5,territories:['local','regional']};
 assert.equal(answersToProfile(answer).total_sales_years,5.5);
 assert.doesNotThrow(()=>answersToProfile({...answer,industry:'Breaking In'}));
@@ -19,7 +19,7 @@ for(const file of ['rook-onboarding-v7.html','rook-onboarding-v7-signup.html','r
   for(const m of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)) if(m[1].trim()) new vm.Script(m[1],{filename:file});
 }
 for(const file of ['rook-v7.js']) new vm.Script(fs.readFileSync(path.join(root,'public',file),'utf8'));
-for(const file of ['public/rook-onboarding-v6.html','public/rook-onboarding-v6-signup.html','public/rook-checkout.html','public/rook-auth.js','backend/routes/stripe.js','backend/routes/profile.js','backend/matching.js']) {
+for(const file of ['public/rook-onboarding-v6.html','public/rook-onboarding-v6-signup.html','public/rook-checkout.html','backend/routes/stripe.js','backend/matching.js']) {
   assert.equal(fs.readFileSync(path.join(root,file),'utf8'),execFileSync('git',['show',`HEAD:${file}`],{cwd:root,encoding:'utf8'}),`${file} changed`);
 }
 const questions=fs.readFileSync(path.join(root,'public/rook-onboarding-v7.html'),'utf8');

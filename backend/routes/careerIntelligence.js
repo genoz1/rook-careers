@@ -39,11 +39,12 @@ async function requireAuth(req, res, next) {
 router.get("/career-intelligence", requireConfig, requireAuth, async (req, res) => {
   const { data: profile } = await supabaseAdmin
     .from("candidate_profiles")
-    .select("resume_structured, suggested_roles")
+    .select("resume_structured, suggested_roles, subscription_status, trial_ends_at, subscription_cancel_at")
     .eq("user_id", req.user.id)
     .maybeSingle();
 
-  if (!profile || !profile.resume_structured) {
+  if (!require("../matching").hasFullAccess(profile)) return res.status(403).json({subscription_required:true,error:"Unlock access to Career Intelligence."});
+  if (!profile.resume_structured) {
     return res.json({ has_resume: false });
   }
   const resume = profile.resume_structured;

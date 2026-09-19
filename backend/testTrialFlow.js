@@ -859,29 +859,13 @@ async function run() {
     assert.strictEqual(result.subscription_required, true, "frontend needs this flag to render the locked state");
   });
 
-  test("redactForNonSubscriber keeps everything the free spec explicitly allows", () => {
+  test("locked projection preserves numeric scores but never source text or real IDs", () => {
     const result = redactForNonSubscriber(SAMPLE_JOB);
-    assert.strictEqual(result.location_raw, "Dallas, TX");
-    assert.strictEqual(result.date_posted, "2026-09-01");
-    assert.deepStrictEqual(result.match, SAMPLE_JOB.match, "match score/recommendation must survive for a signed-in free candidate — only redactForAnonymous strips it");
-    assert.ok(result.id, "job id must survive — needed for save/dismiss/detail links");
-  });
-
-  test("redactForNonSubscriber scrubs the employer name out of the title, not just the company_name field", () => {
-    const result = redactForNonSubscriber(SAMPLE_JOB);
-    assert.ok(!/medtronic/i.test(result.title_original), `title must not leak the employer name: "${result.title_original}"`);
-    assert.ok(!/medtronic/i.test(result.title_normalized));
-  });
-
-  test("redactForNonSubscriber scrubs the employer name out of the full description AND the preview, including a shortened self-reference", () => {
-    const result = redactForNonSubscriber(SAMPLE_JOB);
-    assert.ok(!/medtronic/i.test(result.description_text), `full description must not leak the employer name: "${result.description_text}"`);
-    assert.ok(!/medtronic/i.test(result.description_preview));
-    // The description's own second sentence refers to the employer only
-    // as "Medtronic" again here, but this specifically exercises the
-    // shortened/informal self-reference gap the word-level scrub exists
-    // to close (see scrubCompanyNameFromText's own comments).
-    assert.ok(result.description_text.toLowerCase().includes("this employer"), "scrubbed text should read naturally with the neutral placeholder");
+    assert.equal(result.match.overall_score, SAMPLE_JOB.match.overall_score);
+    assert.equal(result.match.preference_fit, SAMPLE_JOB.match.preference_fit ?? null);
+    assert.deepEqual(result.match.reasons, []);
+    assert.equal(result.id, 'locked-0');
+    for(const key of ['title_original','title_normalized','location_raw','date_posted','description_text','description_preview','description_html','source_job_id','ai_analysis']) assert.equal(result[key],undefined,key);
   });
 
   test("redactForAnonymous does everything redactForNonSubscriber does, PLUS strips the match score entirely", () => {

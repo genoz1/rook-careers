@@ -294,6 +294,7 @@
 .privacy-trust strong{display:block;color:#176557;font-size:14px;font-weight:700;margin-bottom:4px;}
 </style>
 <link rel="stylesheet" href="rook-mobile.css">
+<link rel="stylesheet" href="rook-pretrial.css">
 </head>
 <body>
 <div class="profile-gate-overlay" id="profileGateOverlay">
@@ -432,10 +433,10 @@
         <span class="chip" onclick="setTierFilter('saved', this)">Saved</span>
       </div>
     </div>
-    <div style="font-size:12.5px; color:#8B96AB; margin:-10px 0 16px;">Local/regional searches use a 300-mile radius across state lines. Large/national or remote/inside selections also include broader U.S. locations. Looking farther out, or considering a different city? Try <a href="rook-search.html" style="color:var(--royal, #1463FF); font-weight:600;">Job Search</a>.</div>
+    <div class="full-dashboard-explainer" style="font-size:12.5px; color:#8B96AB; margin:-10px 0 16px;">Local/regional searches use a 300-mile radius across state lines. Large/national or remote/inside selections also include broader U.S. locations. Looking farther out, or considering a different city? Try <a href="rook-search.html" style="color:var(--royal, #1463FF); font-weight:600;">Job Search</a>.</div>
 
     <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:14px;">
-      <div>
+      <div class="full-dashboard-recruiters">
         <label style="display:flex; align-items:center; gap:7px; font-size:12.5px; color:#5B6B85; font-weight:600; cursor:pointer; margin:0;">
         <input type="checkbox" id="showRecruiterToggle" checked onchange="applyRecruiterToggle()">
         Show recruiter-posted jobs
@@ -516,6 +517,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="rook-config.js"></script>
 <script src="rook-auth.js"></script>
+<script src="rook-access.js"></script>
+<script src="rook-pretrial.js"></script>
 <script src="rook-job-classification.js"></script>
 <script src="rook-v7.js"></script>
 <script src="rook-location-widget.js"></script>
@@ -620,6 +623,7 @@
         // banner being hidden/shown has no bearing on what data the
         // job-listing endpoints actually return; that's enforced
         // server-side regardless of whether this script runs at all.
+        rookApplyPretrialPresentation(profile,!rookHasFullAccess(profile));
         const unlockBanner = document.getElementById('unlockBanner');
         if (unlockBanner) unlockBanner.style.display = rookHasFullAccess(profile) ? 'none' : 'block';
 
@@ -1280,6 +1284,7 @@
   }
 
   function renderRealJobRow(job) {
+    if(job.subscription_required) return rookRenderMaskedJob(job);
     const comp = job.compensation_text || (job.salary_min ? `$${job.salary_min}${job.salary_max ? '–$' + job.salary_max : '+'}` : '');
     const match = job.match;
     // Keep the existing score and recommendation rules. Label partial scores

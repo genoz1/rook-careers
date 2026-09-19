@@ -33,16 +33,17 @@ function setup(rows, { cap = 1000, failAt = Infinity, configured = true } = {}) 
       return query;
     },
   };
-  const router = { get(route, handler) { handlers[route] = handler; } };
+  const router = { use() {}, get(route, handler) { handlers[route] = handler; } };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, "routes/publicPages.js"), "utf8"), {
     require(name) {
+      if (name === "../pretrialProjection") return require("./pretrialProjection");
       if (name === "express") return { Router: () => router };
       if (name === "@supabase/supabase-js") return { createClient: () => client };
       if (name === "../routes/stripe") return { getTrialPeriodDays: () => 3 };
       if (name === "../jobEligibility") return { isUsEligibleJob: (job) => job.location_raw !== "Kuwait" };
       throw new Error(`Unexpected dependency: ${name}`);
     },
-    process: { env: configured ? { SUPABASE_URL: "https://example.test", SUPABASE_ANON_KEY: "test", PUBLIC_APP_URL: "https://rookcareers.com" } : {} },
+    process: { env: configured ? { SUPABASE_URL: "https://example.test", SUPABASE_ANON_KEY: "test", SUPABASE_SERVICE_ROLE_KEY: "server-test", PUBLIC_APP_URL: "https://rookcareers.com" } : {} },
     module: { exports: {} },
   });
   return async (route, { query = {}, params = {} } = {}) => {
@@ -132,8 +133,9 @@ test("job previews use ordinary WebPage metadata, retain gates, and escape conte
   assert.equal(JSON.parse(json[1]).url, `https://rookcareers.com/jobs/${row.id}`);
   assert.ok(!res.body.includes('"@type":"JobPosting"'));
   assert.ok(!res.body.includes("PRIVATE_") && !res.body.includes("private-application"));
-  assert.ok(res.body.includes("Employer revealed with ROOK access"));
-  assert.ok(res.body.includes("ROOK members see the employer"));
-  assert.ok(res.body.includes("&lt;script&gt;"));
+  assert.ok(res.body.includes("Job title and employer hidden"));
+  assert.ok(res.body.includes("full opportunity details"));
+  assert.ok(!res.body.includes("&lt;script&gt;"), "original title is withheld, not escaped into metadata");
+  assert.ok(!res.body.includes("Tampa"));
   assert.ok(!res.body.includes('<script>alert("x")</script>'));
 });

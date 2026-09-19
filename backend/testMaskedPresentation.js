@@ -20,8 +20,8 @@ const cases = [
 for (const [title,company,expected,location] of cases) {
  const job={title_original:title,company_name:company,location_raw:location};const original=JSON.stringify(job);
  assert.equal(maskedTitle(job),expected,title);
- assert.equal(preview(job,0).title_original,expected);
- assert.equal(redactForNonSubscriber(job).title_original,expected);
+ assert.equal(preview(job,0).title_original,undefined);
+ assert.equal(redactForNonSubscriber(job).title_original,undefined);
  assert.equal(JSON.stringify(job),original,'source job must remain unchanged');
 }
 assert.equal(freshness({date_posted:'2026-09-16'},Date.parse('2026-09-19')),'Recently posted');
@@ -35,19 +35,19 @@ function renderer(file) {
  const next=html.indexOf('\n  function ',start+15);
  const source=html.slice(start,Math.min(...[end,next].filter(x=>x>start)));
  const context={Number,Date,Math,escapeHtml:s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'),isRemoteJob:()=>false,isNewJob:()=>false,renderCategoryRows:()=>'<div>Full category scoring</div>',lockedJobCtaLabel:'Unlock this job'};
- vm.createContext(context);vm.runInContext(source,context);return {render:context.renderRealJobRow,html};
+ context.window=context;vm.createContext(context);vm.runInContext(fs.readFileSync(require('node:path').join(__dirname,'../public/rook-pretrial.js'),'utf8'),context);vm.runInContext(source,context);return {render:context.renderRealJobRow,html};
 }
 for(const file of ['rook-dashboard.html','rook-dashboard-v7.html']) {
  const {render}=renderer(file);
  const base={id:'test',title_original:'Specialty Account Manager',location_raw:'Des Moines, IA',subscription_required:true,date_posted:'2026-09-10',freshness_label:'Recently posted',match:{overall_score:100,preference_fit:100,candidate_fit:null,recommendation:'Strong Match'}};
  const locked=render(base);
- assert(locked.includes('Preference fit only'));assert(locked.includes('class="score-ring"'));
+ assert(locked.includes('Preference Match'));assert(locked.includes('class="score-ring"'));
  assert(locked.includes('Strong Match'));assert(!locked.includes('Qualifications —%'));assert(!locked.includes('Posted 2026'));
  assert(locked.includes('not scored yet'));assert(locked.includes('rookGoToCheckout(\'job_card\')'));
  const full=render({...base,subscription_required:false,title_original:cases[0][0],company_name:'Axsome Therapeutics',source_url:'https://example.com/job',match:{overall_score:92,preference_fit:90,candidate_fit:96,recommendation:'Strong Match',categories:{}}});
  assert(full.includes('class="score-ring"'));assert(full.includes('Overall match: 92%'));assert(full.includes('Axsome Therapeutics'));assert(full.includes('Symbravo'));assert(full.includes('https://example.com/job'));assert(full.includes('Posted 2026-09-10'));assert(full.includes('Full category scoring'));
- const zero=render({...base,match:{overall_score:40,preference_fit:80,candidate_fit:0,recommendation:'Skip'}});assert(zero.includes('Overall match: 40%'));
- const unknown=render({...base,match:null});assert(unknown.includes('Not scored yet'));assert(!unknown.includes('NaN'));
+ const zero=render({...base,match:{overall_score:40,preference_fit:80,candidate_fit:0,recommendation:'Skip'}});assert(zero.includes('Match: 40%'));
+ const unknown=render({...base,match:null});assert(unknown.includes('not scored'));assert(!unknown.includes('NaN'));
 }
 console.log('PASS masked title, unknown-brand, specialty, territory, freshness, immutability, both dashboards, partial/complete/zero/missing scores, unlocked source links, and checkout hook tests.');
 module.exports={renderer};

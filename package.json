@@ -41,7 +41,8 @@
     "ad-manager": "node backend/admanager/manager.js",
     "test-ad-manager": "node backend/admanager/test.js",
     "test-industry-location": "node backend/testIndustryLocation.js && node backend/testV7Location.js",
-    "test-job-search": "node --test backend/testJobSearch.js"
+    "test-job-search": "node --test backend/testJobSearch.js",
+    "test-pretrial-security": "node --test backend/testPretrialSecurity.js && node backend/testPretrialRoutes.js && node --test backend/testPublicIndexing.js"
   },
   "engines": {
     "node": ">=18.0.0"
