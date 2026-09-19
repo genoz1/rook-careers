@@ -260,6 +260,9 @@
     .jtag-toggle{display:inline-block;}
     .filters{display:none;}
     .filters.mobile-open{display:block;}
+    /* The always-visible mobile ZIP row is the single location input.
+       Hide the duplicate desktop location field inside expanded filters. */
+    #desktopLocationFilterGroup{display:none;}
     .mobile-filters-toggle{display:flex;}
     .mobile-zip-row{display:flex;}
   }
@@ -334,7 +337,7 @@
       <label>Keyword</label>
       <input type="text" id="filterKeyword" placeholder="Title, company, product...">
     </div>
-    <div class="filter-group">
+    <div class="filter-group" id="desktopLocationFilterGroup">
       <label>Show jobs near</label>
       <div style="display:flex; gap:6px;">
         <input type="text" id="nearLocationInput" placeholder="Tampa, FL or 33602" style="flex:1;">
@@ -942,8 +945,9 @@
       const radiusMiles = Number(document.getElementById('radiusSelect').value);
       if (nearLocationCoords && radiusMiles > 0) {
         if (job.job_lat == null || job.job_lng == null) {
-          const broadLocation = job.remote_status === 'remote' || /\b(remote|national|nationwide|united states)\b/i.test(job.location_raw || '');
-          if (!broadLocation && !RookTerritoryLocation.matchesState(job, nearLocationCoords.stateAbbr)) return false;
+          // A finite-mile search is exact: without point coordinates ROOK
+          // cannot prove a remote, national, or territory job is in range.
+          return false;
         } else {
           const dist = distanceMilesClient(nearLocationCoords.lat, nearLocationCoords.lng, job.job_lat, job.job_lng);
           if (dist > radiusMiles) return false;

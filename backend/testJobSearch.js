@@ -44,3 +44,9 @@ test('Any distance has no hidden geographic cutoff in catalog route', () => {
   assert.match(searchHtml, /nearLocationCoords && radiusMiles > 0/);
 });
 
+test('finite radius is exact and mobile shows only one location control', () => {
+  assert.match(searchHtml, /nearLocationCoords && radiusMiles > 0/);
+  assert.match(searchHtml, /job\.job_lat == null \|\| job\.job_lng == null\)[\s\S]{0,220}return false/);
+  assert.match(searchHtml, /#desktopLocationFilterGroup\{display:none;\}/);
+  assert.match(searchHtml, /id="desktopLocationFilterGroup"/);
+});
