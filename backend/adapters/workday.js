@@ -48,6 +48,29 @@ function parseWorkdayIdentifier(identifier) {
 // packaging) wastes most of the run's time on titles that will just get
 // filtered out afterward anyway.
 const { titleLooksRelevant } = require('../relevanceFilter');
+const zipcodes = require('zipcodes');
+const { resolveUsStateCode } = require('../jobEligibility');
+
+// Workday commonly publishes field roles as "State - Virtual" even when
+// the posting title names the actual territory city. Use that city only
+// when a real US ZIP record proves it belongs to the source-provided state.
+// This keeps location inference deterministic and rejects labels such as
+// "West Region" or ambiguous "City A or City B" territories.
+function validatedVirtualCity(title, location) {
+  const match = String(location || '').trim().match(/^([A-Za-z .]+?)\s*[-–]\s*Virtual$/i);
+  if (!match || /\bor\b|\bregion\b/i.test(title || '')) return null;
+  const state = resolveUsStateCode(match[1]);
+  if (!state) return null;
+  let tail = String(title || '').replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim();
+  tail = tail.replace(new RegExp(`[, ]+${state}$`, 'i'), '').trim();
+  const words = tail.split(/\s+/);
+  for (let size = Math.min(4, words.length); size >= 1; size--) {
+    let city = words.slice(-size).join(' ').replace(/^[,–—-]+|[,–—-]+$/g, '').trim();
+    if (/ City$/i.test(city)) city = city.replace(/ City$/i, '');
+    if (city && zipcodes.lookupByName(city, state).length) return `${city}, ${state}`;
+  }
+  return null;
+}
 
 // Wraps fetch() with a timeout so one stalled request can't hang the
 // entire ingestion run forever — without this, a single unresponsive
@@ -247,6 +270,9 @@ function normalizeWorkdayJob(raw, employer) {
   const additionalLocs = Array.isArray(info.additionalLocations) ? info.additionalLocations : [];
   const realLocations = [info.location, ...additionalLocs].filter(Boolean);
   let location_raw = realLocations.length > 0 ? realLocations.join(" | ") : (raw.locationsText || "");
+  if (realLocations.length === 1) {
+    location_raw = validatedVirtualCity(raw.title, realLocations[0]) || location_raw;
+  }
   // Belt-and-suspenders: Workday's detail payload also carries an
   // explicit ISO country code, a more reliable signal than text-
   // matching alone since it can't be missed by phrasing. Translated to
@@ -301,4 +327,4 @@ function stripHtml(html) {
     .trim();
 }
 
-module.exports = { fetchWorkdayJobs, normalizeWorkdayJob, parseWorkdayIdentifier };
+module.exports = { fetchWorkdayJobs, normalizeWorkdayJob, parseWorkdayIdentifier, validatedVirtualCity };
