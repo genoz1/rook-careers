@@ -20,8 +20,9 @@
     const links=[['My Job Matches',target],['Companies We Search','rook-companies.html'],['Pricing','rook-pricing.html'],['About ROOK','rook-about.html'],['For Employers','rook-employers.html']];
     const sidebar=document.querySelector('.side-nav');
     if(sidebar && originalSidebar===null) originalSidebar=sidebar.innerHTML;
-    if(sidebar) sidebar.innerHTML=links.map(([label,url])=>`<a href="${url}">${label}</a>`).join('')+'<a href="#" onclick="rookStartExistingTrial();return false;">Start 3-Day Free Trial</a>';
+    if(sidebar) sidebar.innerHTML=links.map(([label,url])=>`<a href="${url}">${label}</a>`).join('')+'<a href="#" onclick="rookStartExistingTrial();return false;">Start 3-Day Free Trial</a>'+(!window.rookAccessState?.signedIn?'<a href="rook-login.html">Log In</a>':'');
     document.querySelectorAll('a[href]').forEach(link=>{
+      if(link.getAttribute('href')==='#') return;
       const path=new URL(link.href,location.href).pathname;
       if(/\/(rook-browse|rook-search|rook-dashboard|rook-onboarding(?:-v[2-7])?)\.html$/.test(path) || path==='/jobs') {
         if(!changedLinks.has(link)) changedLinks.set(link,{href:link.href,html:link.innerHTML});
