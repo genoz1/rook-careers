@@ -688,7 +688,7 @@
       const jobs = Array.isArray(jobsData) ? jobsData : (jobsData.jobs || []); // Array.isArray fallback covers any cached/older response shape
 
       allJobs = Array.isArray(jobs) ? jobs : [];
-      if (!keyword && selected.length === 0 && !nearLocationCoords) applyFilterCoverage(jobsData.filter_coverage);
+      if (!keyword && selected.length === 0 && !nearLocationCoords) applyFilterCoverage(jobsData.filter_coverage, jobsData.total_count);
       document.getElementById('jobList').dataset.demo = 'false';
       if (!Array.isArray(jobs) || jobs.length === 0) {
         applyFiltersAndRender();
@@ -732,13 +732,17 @@
     return null;
   }
 
-  function applyFilterCoverage(coverage) {
+  function applyFilterCoverage(coverage, totalCount) {
     if (!coverage) return;
     // Aggregate, non-identifying QA metadata used to verify production filter
     // coverage without exposing any job/employer record details.
-    document.body.dataset.jobSearchCoverage = JSON.stringify(coverage);
-    document.getElementById('compensationFilterGroup').style.display = coverage.compensation > 0 ? '' : 'none';
-    document.getElementById('travelFilterGroup').style.display = coverage.travel > 0 ? '' : 'none';
+    document.body.dataset.jobSearchCoverage = JSON.stringify({ ...coverage, total_count: totalCount });
+    // A numeric filter is misleading when it has only a handful of populated
+    // records. Require at least 5% catalog coverage (and 25 jobs) before it is
+    // offered; otherwise selecting it makes valid jobs appear to vanish.
+    const meaningfulCoverage = (count) => count >= 25 && count / Math.max(1, Number(totalCount) || 0) >= 0.05;
+    document.getElementById('compensationFilterGroup').style.display = meaningfulCoverage(coverage.compensation) ? '' : 'none';
+    document.getElementById('travelFilterGroup').style.display = meaningfulCoverage(coverage.travel) ? '' : 'none';
     for (const row of document.querySelectorAll('[data-industry-option]')) {
       const label = row.dataset.industryOption;
       row.style.display = (coverage.industries?.[label] || 0) > 0 ? '' : 'none';
@@ -1091,6 +1095,7 @@
     document.querySelectorAll('.filter-industry, .filter-travel').forEach((el) => (el.checked = false));
     document.getElementById('filterComp').value = 0;
     document.getElementById('sortSelect').value = 'closest';
+    updateNearLocationStatus();
     window.reloadSearchJobs?.();
   }
 

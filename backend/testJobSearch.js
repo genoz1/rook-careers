@@ -58,3 +58,10 @@ test('nearest is the default Job Search sort', () => {
   assert.match(searchHtml, /<option value="closest" selected>Nearest<\/option>/);
   assert.match(searchHtml, /document\.getElementById\('sortSelect'\)\.value = 'closest'/);
 });
+
+test('sparse compensation and default-zero travel data do not expose misleading filters', () => {
+  assert.match(jobsRoute, /Number\(job\.travel_percentage\) > 0/);
+  assert.match(searchHtml, /count \/ Math\.max\(1, Number\(totalCount\) \|\| 0\) >= 0\.05/);
+  assert.match(searchHtml, /meaningfulCoverage\(coverage\.compensation\)/);
+  assert.match(searchHtml, /meaningfulCoverage\(coverage\.travel\)/);
+});

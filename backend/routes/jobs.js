@@ -322,7 +322,9 @@ router.get("/job-search", requireConfig, requireAuth, async (req, res) => {
 
   const filterCoverage = {
     compensation: results.filter(job => Number.isFinite(Number(job.salary_min)) && Number(job.salary_min) > 0).length,
-    travel: results.filter(job => Number.isFinite(Number(job.travel_percentage)) && Number(job.travel_percentage) >= 0).length,
+    // Zero is the ingestion default for many jobs with no parsed travel data,
+    // so only positive percentages count as usable structured coverage.
+    travel: results.filter(job => Number.isFinite(Number(job.travel_percentage)) && Number(job.travel_percentage) > 0).length,
     remote: results.filter(job => job.remote_status === "remote" || /\bremote\b/i.test(job.location_raw || "")).length,
     recruiter_posted: results.filter(job => job.source_type === "recruiter_posted").length,
     industries: Object.fromEntries(
