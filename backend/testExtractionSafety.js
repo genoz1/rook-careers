@@ -37,3 +37,20 @@ for(const name of ['Workday','Oracle HCM']) {
 for(const mode of ['http','network','malformed'])test(`Phenom later ${mode} page rejects`,async()=>{let count=0;await fake(async url=>{if(String(url).includes('search-results'))return html('"refNum":"X"');if(++count===1)return json({refineSearch:{data:{jobs:Array.from({length:20},(_,i)=>({id:i+1,title:'Sales Manager'}))}}});if(mode==='network')throw Error('network');return mode==='http'?fail:json({});},()=>assert.rejects(phenom.fetchPhenomJobs('test.invalid')));});
 test('Phenom safety limit rejects unfinished snapshot',async()=>fake(async url=>String(url).includes('search-results')?html('"refNum":"X"'):json({refineSearch:{data:{jobs:Array.from({length:20},(_,i)=>({id:i+1,title:'Sales Manager'}))}}}),()=>assert.rejects(phenom.fetchPhenomJobs('test.invalid'),/safety limit/)));
 test('Phenom explicit zero succeeds',async()=>fake(async url=>String(url).includes('search-results')?html('"refNum":"X"'):json({refineSearch:{data:{jobs:[]}}}),async()=>assert.deepEqual(await phenom.fetchPhenomJobs('test.invalid'),[])));
+
+test('Workday validates a title city against a State - Virtual source location', () => {
+  assert.equal(wd.validatedVirtualCity('Account Executive (Cardiac Therapies) Boston', 'Massachusetts - Virtual'), 'Boston, MA');
+  assert.equal(wd.validatedVirtualCity('Account Executive (Vascular) Los Angeles', 'California - Virtual'), 'Los Angeles, CA');
+  assert.equal(wd.validatedVirtualCity('Clinical Specialist Hartford CT', 'Connecticut - Virtual'), 'Hartford, CT');
+});
+
+test('Workday does not invent a city for regions, ambiguous territories, or a city outside the source state', () => {
+  assert.equal(wd.validatedVirtualCity('Regional Vice President South Region', 'Texas - Virtual'), null);
+  assert.equal(wd.validatedVirtualCity('Clinical Manager Kansas City or St. Louis', 'Missouri - Virtual'), null);
+  assert.equal(wd.validatedVirtualCity('Account Executive Boston', 'Texas - Virtual'), null);
+});
+
+test('Workday normalization uses the validated virtual city for geocoding and search', () => {
+  const row = wd.normalizeWorkdayJob({title:'Account Executive (Cardiac Therapies) Boston',externalPath:'/job/1',detail:{jobPostingInfo:{jobReqId:'1',jobDescription:'sales',location:'Massachusetts - Virtual'}}},{id:'e',company_name:'Merit Medical Systems',ats_identifier:'merit|wd503|Merit'});
+  assert.equal(row.location_raw, 'Boston, MA');
+});
