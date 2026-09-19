@@ -719,6 +719,9 @@
 
   function applyFilterCoverage(coverage) {
     if (!coverage) return;
+    // Aggregate, non-identifying QA metadata used to verify production filter
+    // coverage without exposing any job/employer record details.
+    document.body.dataset.jobSearchCoverage = JSON.stringify(coverage);
     document.getElementById('compensationFilterGroup').style.display = coverage.compensation > 0 ? '' : 'none';
     document.getElementById('travelFilterGroup').style.display = coverage.travel > 0 ? '' : 'none';
     for (const row of document.querySelectorAll('[data-industry-option]')) {
