@@ -343,7 +343,7 @@
         <input type="text" id="nearLocationInput" placeholder="Tampa, FL or 33602" style="flex:1;">
         <a href="#" class="btn btn-outline" onclick="searchNearLocation(); return false;" style="padding:9px 14px; font-size:13px; white-space:nowrap;">Go</a>
       </div>
-      <select id="radiusSelect" onchange="applyFiltersAndRender()" style="margin-top:8px; width:100%; border:1px solid var(--border); border-radius:8px; padding:7px 9px; font-size:12.5px; color:var(--navy); background:#fff;">
+      <select id="radiusSelect" onchange="handleRadiusChange()" style="margin-top:8px; width:100%; border:1px solid var(--border); border-radius:8px; padding:7px 9px; font-size:12.5px; color:var(--navy); background:#fff;">
         <option value="0">Any distance</option>
         <option value="10">Within 10 miles</option>
         <option value="25">Within 25 miles</option>
@@ -585,11 +585,11 @@
       document.getElementById('jobList').style.display = '';
 
       const radiusVal = document.getElementById('radiusSelect').value;
-      const radiusNote = radiusVal === '0' ? '' : ` within ${radiusVal} miles`;
-      const nearOrSorted = radiusVal === '0' ? 'sorted by distance from' : 'near';
-      status.innerHTML = `Showing jobs closest to "${escapeHtml(query)}" first${radiusNote}; same-state territory opportunities may also appear${radiusVal === '0' ? ' — no distance limit applied' : ''}. <a href="#" onclick="clearNearLocation(); return false;" style="color:var(--royal); font-weight:600;">Clear</a>`;
+      updateNearLocationStatus();
       applyFiltersAndRender();
-      showBanner(`Showing jobs ${nearOrSorted} "${escapeHtml(query)}"${radiusNote}.`, 'info');
+      showBanner(radiusVal === '0'
+        ? `Showing all jobs for "${escapeHtml(query)}" with no distance cutoff.`
+        : `Showing jobs within ${radiusVal} miles of "${escapeHtml(query)}".`, 'info');
     } catch (err) {
       document.getElementById('jobListLoading').style.display = 'none';
       document.getElementById('jobList').style.display = '';
@@ -605,6 +605,21 @@
     document.getElementById('nearLocationInput').value = '';
     document.getElementById('nearLocationStatus').textContent = '';
     window.reloadSearchJobs?.();
+  }
+
+  function updateNearLocationStatus() {
+    if (!nearLocationCoords) return;
+    const query = document.getElementById('nearLocationInput').value.trim();
+    const radius = Number(document.getElementById('radiusSelect').value);
+    const message = radius > 0
+      ? `Showing jobs within ${radius} miles of "${escapeHtml(query)}". Jobs without exact coordinates are excluded.`
+      : `Using "${escapeHtml(query)}" for distance information — no distance cutoff applied.`;
+    document.getElementById('nearLocationStatus').innerHTML = `${message} <a href="#" onclick="clearNearLocation(); return false;" style="color:var(--royal); font-weight:600;">Clear</a>`;
+  }
+
+  function handleRadiusChange() {
+    updateNearLocationStatus();
+    applyFiltersAndRender();
   }
 
   (async () => {

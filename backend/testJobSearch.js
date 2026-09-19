@@ -49,4 +49,5 @@ test('finite radius is exact and mobile shows only one location control', () => 
   assert.match(searchHtml, /job\.job_lat == null \|\| job\.job_lng == null\)[\s\S]{0,220}return false/);
   assert.match(searchHtml, /#desktopLocationFilterGroup\{display:none;\}/);
   assert.match(searchHtml, /id="desktopLocationFilterGroup"/);
+  assert.match(searchHtml, /Jobs without exact coordinates are excluded/);
 });
