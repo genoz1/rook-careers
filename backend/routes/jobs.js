@@ -258,6 +258,87 @@ router.get("/public-geocode-zip", requireConfig, async (req, res) => {
   res.json(coords);
 });
 
+// GET /api/job-search — unscored, user-directed catalog search.
+// This endpoint is intentionally separate from GET /api/jobs, which powers
+// the personalized Dashboard and may geographically prefilter and score a
+// candidate pool. Job Search always starts from every active, approved job.
+router.get("/job-search", requireConfig, requireAuth, async (req, res) => {
+  const { keyword = "", industries = "all", near_lat, near_lng } = req.query;
+  const selectionInput = String(industries || "all");
+  const selection = normalizeSelection(selectionInput.split(","));
+  const industryPass = job => selectionInput === "all" || matchesIndustry(job, selection);
+
+  const { data: profile, error: profileError } = await supabaseAdmin
+    .from("candidate_profiles")
+    .select("*")
+    .eq("user_id", req.user.id)
+    .maybeSingle();
+  if (profileError) return res.status(500).json({ error: profileError.message });
+  if (!profile) return res.status(404).json({ error: "Complete onboarding first" });
+
+  let query = supabaseAdmin
+    .from("jobs")
+    .select(JOB_LIST_COLUMNS_NO_DESCRIPTION)
+    .eq("status", "active")
+    .eq("moderation_status", "approved");
+
+  const cleanKeyword = String(keyword).trim().replace(/[,%()]/g, " ").replace(/\s+/g, " ");
+  if (cleanKeyword) {
+    // Partial, case-insensitive matching of the canonical company field and
+    // title. Crucially, this is applied before pagination and without any
+    // Dashboard score/location pool (e.g. "Merit" finds Merit Medical Systems).
+    query = query.or(`company_name.ilike.%${cleanKeyword}%,title_original.ilike.%${cleanKeyword}%`);
+  }
+
+  const prefilter = selectionInput === "all" ? "" : industryPrefilter(selection);
+  if (prefilter) query = query.or(prefilter);
+  const { data: jobs, error } = await readJobPool(query);
+  if (error) return res.status(500).json({ error: error.message });
+
+  const searchLat = near_lat != null && near_lat !== "" ? Number(near_lat) : null;
+  const searchLng = near_lng != null && near_lng !== "" ? Number(near_lng) : null;
+  const distanceProfile = Number.isFinite(searchLat) && Number.isFinite(searchLng)
+    ? { home_lat: searchLat, home_lng: searchLng }
+    : null;
+
+  const { data: savedRows } = await supabaseAdmin
+    .from("candidate_job_matches")
+    .select("job_id")
+    .eq("candidate_id", profile.id)
+    .eq("saved", true);
+  const savedJobIds = new Set((savedRows || []).map(row => row.job_id));
+  const { appStatusByJob, noteFor } = await loadEmployerHistory(profile.id);
+
+  const results = (jobs || [])
+    .filter(isUsEligibleJob)
+    .filter(industryPass)
+    .map(job => ({
+      ...(distanceProfile ? attachDistance(job, distanceProfile) : { ...job, distance_miles: null }),
+      saved: savedJobIds.has(job.id),
+      application_status: appStatusByJob.get(job.id) || null,
+      employer_note: noteFor(job),
+    }))
+    .sort((a, b) => new Date(b.date_posted || b.first_seen_at || 0) - new Date(a.date_posted || a.first_seen_at || 0));
+
+  const filterCoverage = {
+    compensation: results.filter(job => Number.isFinite(Number(job.salary_min)) && Number(job.salary_min) > 0).length,
+    travel: results.filter(job => Number.isFinite(Number(job.travel_percentage)) && Number(job.travel_percentage) >= 0).length,
+    remote: results.filter(job => job.remote_status === "remote" || /\bremote\b/i.test(job.location_raw || "")).length,
+    recruiter_posted: results.filter(job => job.source_type === "recruiter_posted").length,
+    industries: Object.fromEntries(
+      ["Diagnostics", "Veterinary", "Medical Device", "Capital Equipment", "Pharmaceutical"]
+        .map(label => [label, results.filter(job => matchesIndustry(job, [label])).length])
+    ),
+  };
+
+  res.json({
+    jobs: (hasFullAccess(profile) ? results : results.map(redactForNonSubscriber)).map(stripUnusedDescriptionFields),
+    total_count: results.length,
+    scored: false,
+    filter_coverage: filterCoverage,
+  });
+});
+
 // GET /api/jobs?industry=Veterinary&state=FL&limit=20
 router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
   const { industry, industries, state, limit = 20, keyword } = req.query;

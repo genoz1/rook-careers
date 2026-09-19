@@ -40,7 +40,8 @@
     "test-ui-copy": "node backend/testUiCopy.js",
     "ad-manager": "node backend/admanager/manager.js",
     "test-ad-manager": "node backend/admanager/test.js",
-    "test-industry-location": "node backend/testIndustryLocation.js && node backend/testV7Location.js"
+    "test-industry-location": "node backend/testIndustryLocation.js && node backend/testV7Location.js",
+    "test-job-search": "node --test backend/testJobSearch.js"
   },
   "engines": {
     "node": ">=18.0.0"

@@ -351,23 +351,18 @@
     </div>
     <div class="filter-group">
       <label>Industry</label>
-      <div class="check-row"><input type="checkbox" class="filter-industry" value="Diagnostics"> Diagnostics</div>
-      <div class="check-row"><input type="checkbox" class="filter-industry" value="Veterinary"> Veterinary / Animal Health</div>
-      <div class="check-row"><input type="checkbox" class="filter-industry" value="Medical Device"> Medical Device</div>
-      <div class="check-row"><input type="checkbox" class="filter-industry" value="Capital Equipment"> Capital Equipment</div>
-      <div class="check-row"><input type="checkbox" class="filter-industry" value="Pharmaceutical"> Pharmaceutical</div>
+      <div class="check-row" data-industry-option="Diagnostics"><input type="checkbox" class="filter-industry" value="Diagnostics"> Diagnostics</div>
+      <div class="check-row" data-industry-option="Veterinary"><input type="checkbox" class="filter-industry" value="Veterinary"> Veterinary / Animal Health</div>
+      <div class="check-row" data-industry-option="Medical Device"><input type="checkbox" class="filter-industry" value="Medical Device"> Medical Device</div>
+      <div class="check-row" data-industry-option="Capital Equipment"><input type="checkbox" class="filter-industry" value="Capital Equipment"> Capital Equipment</div>
+      <div class="check-row" data-industry-option="Pharmaceutical"><input type="checkbox" class="filter-industry" value="Pharmaceutical"> Pharmaceutical</div>
     </div>
-    <div class="filter-group">
-      <label>Match Score</label>
-      <input type="range" id="filterMatchScore" min="0" max="100" value="0">
-      <div class="range-labels"><span>0%</span><span id="filterMatchScoreLabel">Any</span><span>100%</span></div>
-    </div>
-    <div class="filter-group">
+    <div class="filter-group" id="compensationFilterGroup">
       <label>Compensation (minimum base)</label>
       <input type="range" id="filterComp" min="0" max="200" value="0">
       <div class="range-labels"><span>$0</span><span id="filterCompLabel">Any</span><span>$200K</span></div>
     </div>
-    <div class="filter-group">
+    <div class="filter-group" id="travelFilterGroup">
       <label>Travel</label>
       <div class="check-row"><input type="checkbox" class="filter-travel" value="under25"> Under 25%</div>
       <div class="check-row"><input type="checkbox" class="filter-travel" value="25-50"> 25–50%</div>
@@ -385,13 +380,12 @@
 
   <main>
     <div class="results-head">
-      <div class="results-count"><b id="resultsCount">—</b> opportunities match your profile</div>
+      <div class="results-count"><b id="resultsCount">—</b> jobs found</div>
       <div class="sort-row">
         Sort by
         <select id="sortSelect">
-          <option value="match">Best Match</option>
-          <option value="closest">Closest to You</option>
           <option value="newest">Newest</option>
+          <option value="closest">Closest to Search Location</option>
           <option value="comp">Highest Compensation</option>
         </select>
       </div>
@@ -399,7 +393,7 @@
 
     <div id="jobListLoading" style="text-align:center; padding:60px 20px; color:#5B6B85; font-size:14px;">
       <div class="spinner"></div>
-      <div id="jobListLoadingText">Loading matching jobs…</div>
+      <div id="jobListLoadingText">Loading jobs…</div>
     </div>
 
     <div class="job-list" id="jobList" data-demo="true" style="display:none;">
@@ -571,7 +565,14 @@
       // own home.
       status.textContent = 'Searching near "' + query + '"...';
       const selected = Array.from(document.querySelectorAll('.filter-industry:checked'), el => el.value);
-      const jobsRes = await rookApiFetch(`/jobs?limit=300&near_lat=${data.lat}&near_lng=${data.lng}&industries=${encodeURIComponent(selected.length ? selected.join(',') : 'all')}`);
+      const keyword = document.getElementById('filterKeyword').value.trim();
+      const params = new URLSearchParams({
+        near_lat: data.lat,
+        near_lng: data.lng,
+        industries: selected.length ? selected.join(',') : 'all',
+      });
+      if (keyword) params.set('keyword', keyword);
+      const jobsRes = await rookApiFetch('/job-search?' + params.toString());
       const jobsData = await jobsRes.json();
       if (mySeq !== searchRequestSeq) return; // a newer search has since started — drop this one
       const jobs = Array.isArray(jobsData) ? jobsData : (jobsData.jobs || []);
@@ -609,37 +610,11 @@
     rookPopulateSidebar();
 
     const jobList = document.getElementById('jobList');
+    jobList.innerHTML = '';
     const loading = document.getElementById('jobListLoading');
     function revealDemo() {
       loading.style.display = 'none';
       jobList.style.display = '';
-    }
-
-    // Polls GET /scoring-status every few seconds until a brand-new
-    // candidate's first-ever scoring pass finishes in the background,
-    // then reloads the real job list. Same fix as the Dashboard — this
-    // page hits the identical /jobs endpoint, so a candidate landing
-    // here first (before ever visiting the Dashboard) needs the same
-    // non-blocking handling, not just one of the two pages that can
-    // trigger it.
-    async function pollScoringStatus() {
-      showBanner('Building your matches — this runs once for a brand-new profile and usually takes under a minute.', 'info');
-      document.getElementById('jobList').innerHTML = '<div style="text-align:center; padding:60px 20px; color:#5B6B85; font-size:14px;">Building your matches…</div>';
-      revealDemo();
-      const poll = async () => {
-        try {
-          const res = await rookApiFetch('/scoring-status');
-          const data = await res.json();
-          if (data.ready) {
-            loadJobs();
-          } else {
-            setTimeout(poll, 4000);
-          }
-        } catch {
-          setTimeout(poll, 4000);
-        }
-      };
-      setTimeout(poll, 4000);
     }
 
       // Wire up every filter control to re-filter on change.
@@ -659,20 +634,19 @@
       document.getElementById('remoteOnlyFilter').addEventListener('change', applyFiltersAndRender);
       document.querySelectorAll('.filter-industry').forEach((el) => el.addEventListener('change', () => loadJobs(document.getElementById('filterKeyword').value.trim())));
       document.querySelectorAll('.filter-travel').forEach((el) => el.addEventListener('change', applyFiltersAndRender));
-      document.getElementById('filterMatchScore').addEventListener('input', applyFiltersAndRender);
       document.getElementById('filterComp').addEventListener('input', applyFiltersAndRender);
       document.getElementById('sortSelect').addEventListener('change', applyFiltersAndRender);
       document.getElementById('showRecruiterFilter').addEventListener('change', applyFiltersAndRender);
 
     async function loadJobs(keyword) {
     try {
-      const params = new URLSearchParams({ limit: '300' });
+      const params = new URLSearchParams();
       const selected = Array.from(document.querySelectorAll('.filter-industry:checked'), el => el.value);
       params.set('industries', selected.length ? selected.join(',') : 'all');
       if (keyword) params.set('keyword', keyword);
       if (nearLocationCoords) { params.set('near_lat', nearLocationCoords.lat); params.set('near_lng', nearLocationCoords.lng); }
       const [jobsRes, profileRes] = await Promise.all([
-        rookApiFetch('/jobs?' + params.toString()),
+        rookApiFetch('/job-search?' + params.toString()),
         rookApiFetch('/profile').catch(() => null),
         rookLockedJobCtaLabel().then((label) => { lockedJobCtaLabel = label; }),
       ]);
@@ -680,12 +654,8 @@
       const jobsData = await jobsRes.json();
       const jobs = Array.isArray(jobsData) ? jobsData : (jobsData.jobs || []); // Array.isArray fallback covers any cached/older response shape
 
-      if (Array.isArray(jobsData) === false && jobsData.scoring_in_progress) {
-        pollScoringStatus();
-        return;
-      }
-
       allJobs = Array.isArray(jobs) ? jobs : [];
+      if (!keyword && selected.length === 0 && !nearLocationCoords) applyFilterCoverage(jobsData.filter_coverage);
       document.getElementById('jobList').dataset.demo = 'false';
       if (!Array.isArray(jobs) || jobs.length === 0) {
         applyFiltersAndRender();
@@ -697,7 +667,7 @@
       allJobs = jobs;
       document.getElementById('jobList').dataset.demo = 'false';
       applyFiltersAndRender();
-      showBanner(`Showing live jobs, scored against your profile.`, 'info');
+      showBanner(`Searching ROOK's complete active-job catalog.`, 'info');
       revealDemo();
 
       // Prefill "Show jobs near" with the candidate's own saved home zip
@@ -715,7 +685,7 @@
       } catch {}
 
     } catch (err) {
-      showBanner('Could not reach the ROOK API (' + err.message + '). Showing example matches below — see ROOK-Setup-Guide.pdf to get the backend running.');
+      showBanner('Could not load Job Search (' + err.message + '). Please try again.');
       revealDemo();
     }
     }
@@ -725,25 +695,23 @@
   })();
 
   function extractJobSalary(job) {
-    if (job.salary_max) return Number(job.salary_max);
     if (job.salary_min) return Number(job.salary_min);
-    const text = job.compensation_text || '';
-    const matches = [...text.matchAll(/\$?([\d,]+(?:\.\d+)?)\s*(k|K)?/g)];
-    let best = null;
-    for (const m of matches) {
-      let val = parseFloat(m[1].replace(/,/g, ''));
-      if (!val) continue;
-      if (m[2]) val *= 1000;
-      if (val < 1000) continue;
-      if (best === null || val > best) best = val;
+    return null;
+  }
+
+  function applyFilterCoverage(coverage) {
+    if (!coverage) return;
+    document.getElementById('compensationFilterGroup').style.display = coverage.compensation > 0 ? '' : 'none';
+    document.getElementById('travelFilterGroup').style.display = coverage.travel > 0 ? '' : 'none';
+    for (const row of document.querySelectorAll('[data-industry-option]')) {
+      const label = row.dataset.industryOption;
+      row.style.display = (coverage.industries?.[label] || 0) > 0 ? '' : 'none';
     }
-    return best;
   }
 
   function extractJobTravel(job) {
-    const text = `${job.compensation_text || ''} ${job.description_text || ''}`;
-    const match = text.match(/(\d{1,3})\s*%\s*travel/i);
-    return match ? Number(match[1]) : null;
+    const value = Number(job.travel_percentage);
+    return Number.isFinite(value) ? value : null;
   }
 
   let currentPage = 1;
@@ -757,7 +725,6 @@
     if (document.getElementById('remoteOnlyFilter').checked) count++;
     count += document.querySelectorAll('.filter-industry:checked').length;
     count += document.querySelectorAll('.filter-travel:checked').length;
-    if (Number(document.getElementById('filterMatchScore').value) > 0) count++;
     if (Number(document.getElementById('filterComp').value) > 0) count++;
     return count;
   }
@@ -928,11 +895,9 @@
     const remoteOnly = document.getElementById('remoteOnlyFilter').checked;
     const selectedIndustries = Array.from(document.querySelectorAll('.filter-industry:checked')).map((el) => el.value.toLowerCase());
     const selectedTravel = Array.from(document.querySelectorAll('.filter-travel:checked')).map((el) => el.value);
-    const minMatchScore = Number(document.getElementById('filterMatchScore').value);
     const minComp = Number(document.getElementById('filterComp').value) * 1000;
     const sortBy = document.getElementById('sortSelect').value;
 
-    document.getElementById('filterMatchScoreLabel').textContent = minMatchScore > 0 ? minMatchScore + '%+' : 'Any';
     document.getElementById('filterCompLabel').textContent = minComp > 0 ? '$' + (minComp / 1000) + 'K+' : 'Any';
 
     let filtered = allJobs.filter((job) => {
@@ -949,11 +914,6 @@
 
       if (selectedIndustries.length > 0) {
         if (!RookJobClassification.matches(job, selectedIndustries)) return false;
-      }
-
-      if (minMatchScore > 0) {
-        const score = job.match?.overall_score;
-        if (score == null || score < minMatchScore) return false;
       }
 
       if (minComp > 0) {
@@ -982,7 +942,8 @@
       const radiusMiles = Number(document.getElementById('radiusSelect').value);
       if (nearLocationCoords && radiusMiles > 0) {
         if (job.job_lat == null || job.job_lng == null) {
-          if (!RookTerritoryLocation.matchesState(job, nearLocationCoords.stateAbbr)) return false;
+          const broadLocation = job.remote_status === 'remote' || /\b(remote|national|nationwide|united states)\b/i.test(job.location_raw || '');
+          if (!broadLocation && !RookTerritoryLocation.matchesState(job, nearLocationCoords.stateAbbr)) return false;
         } else {
           const dist = distanceMilesClient(nearLocationCoords.lat, nearLocationCoords.lng, job.job_lat, job.job_lng);
           if (dist > radiusMiles) return false;
@@ -1021,33 +982,7 @@
       if (sortBy === 'comp') {
         return (extractJobSalary(b) ?? -1) - (extractJobSalary(a) ?? -1);
       }
-      // Best Match, default.
-      //
-      // Reported directly: a legitimately-scoring far-away job (e.g. 81%
-      // in Dallas, 915 miles out but within a region the candidate said
-      // they're open to) was outranking a closer, only-slightly-lower
-      // job (78% in Orlando) - correct by the old logic (distance was
-      // ONLY a tiebreaker on an exact score tie), but not what a
-      // candidate browsing for local opportunities actually wants: a
-      // small score gap shouldn't override a huge distance gap. Bucket
-      // scores into bands of 8 points for sorting purposes only (this
-      // does not change the displayed score anywhere) - within the same
-      // band, distance decides; a genuinely much better match in a
-      // higher band still wins on merit regardless of distance.
-      const SCORE_BAND_WIDTH = 8;
-      const scoreA = a.match?.overall_score ?? -1;
-      const scoreB = b.match?.overall_score ?? -1;
-      const bandA = Math.floor(scoreA / SCORE_BAND_WIDTH);
-      const bandB = Math.floor(scoreB / SCORE_BAND_WIDTH);
-      if (bandA !== bandB) return bandB - bandA;
-      const isRemoteA = /remote/i.test(a.location_raw || '') || a.remote_status === 'remote';
-      const isRemoteB = /remote/i.test(b.location_raw || '') || b.remote_status === 'remote';
-      const distA = isRemoteA ? null : a.distance_miles;
-      const distB = isRemoteB ? null : b.distance_miles;
-      if (distA == null && distB == null) return 0;
-      if (distA == null) return 1;
-      if (distB == null) return -1;
-      return distA - distB;
+      return new Date(b.last_seen_at || b.date_posted || 0) - new Date(a.last_seen_at || a.date_posted || 0);
     });
 
     lastFilteredJobs = filtered;
@@ -1099,29 +1034,9 @@
     document.getElementById('remoteOnlyFilter').checked = false;
     document.getElementById('radiusSelect').value = '0';
     document.querySelectorAll('.filter-industry, .filter-travel').forEach((el) => (el.checked = false));
-    document.getElementById('filterMatchScore').value = 0;
     document.getElementById('filterComp').value = 0;
-    document.getElementById('sortSelect').value = 'match';
+    document.getElementById('sortSelect').value = 'newest';
     window.reloadSearchJobs?.();
-  }
-
-  // Uses the authoritative engine classification from the backend —
-  // excellent_match flag (backend's strict multi-category determination)
-  // takes precedence over score, then recommendation field.
-  // Matches rook-dashboard.html's identical logic exactly.
-  // Never invents frontend thresholds that could disagree with the engine.
-  function matchLevelInfo(match) {
-    if (!match) return { label: 'Unscored', cls: 'ml-strong' };
-    if (match.excellent_match) return { label: 'Excellent Match', cls: 'ml-excellent' };
-    const rec = match.recommendation;
-    if (rec === 'Strong Match') return { label: 'Strong Match', cls: 'ml-strong' };
-    if (rec === 'Apply')        return { label: 'Apply',        cls: 'ml-possible' };
-    if (rec === 'Stretch Apply') return { label: 'Stretch Apply', cls: 'ml-possible' };
-    if (rec === 'Skip')         return { label: 'Possible Match', cls: 'ml-possible' };
-    // Fallback: unknown recommendation value — use score as a coarse guide
-    const score = match.overall_score;
-    if (score != null && score >= 75) return { label: 'Strong Match', cls: 'ml-strong' };
-    return { label: 'Possible Match', cls: 'ml-possible' };
   }
 
   // Shared definition of "new" so the badge here always agrees with any
@@ -1138,11 +1053,7 @@
 
   function renderRealJobRow(job) {
     const comp = job.compensation_text || (job.salary_min ? `$${job.salary_min}${job.salary_max ? '–$' + job.salary_max : '+'}` : '');
-    const match = job.match;
-    const score = match?.overall_score;
-    const scoreDisplay = score != null ? `${score}%` : '—';
-    const level = matchLevelInfo(match); // pass full match object — uses excellent_match flag + recommendation
-    const reasonList = (match?.reasons || []).slice(0, 3);
+    const reasonList = [];
     // Direct instruction: cards were too tall on mobile scanning through
     // many jobs. Rather than dropping the "why" context entirely (which
     // is the only thing that distinguishes two jobs both scoring, say,
@@ -1199,7 +1110,6 @@
 
     return `
       <div class="job-row" style="${rowStyle}">
-        <div class="score-ring" style="--pct:${score ?? 0};"><span>${scoreDisplay}</span></div>
         <div class="job-info">
           <h4>${escapeHtml(job.title_original || job.title_normalized || 'Untitled role')}${newBadge}${recruiterBadge}</h4>
           <div class="company">${companyLine}</div>
@@ -1208,7 +1118,6 @@
           <div class="job-meta-line">${job.date_posted ? 'Posted ' + escapeHtml(new Date(job.date_posted).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })) : ''} · ${escapeHtml(friendlySourceLabel(job.source_type))}</div>
         </div>
         <div class="job-actions">
-          <span class="match-level ${level.cls}">${level.label}</span>
           <a href="rook-job-analysis.html?job=${escapeHtml(job.id)}" class="btn btn-outline btn-sm">View Analysis</a>
           ${primaryActionBtn}
         </div>
@@ -1269,7 +1178,7 @@ s.parentNode.insertBefore(b, s);})(window.lintrk);
 </noscript>
 <nav class="rm-bottomnav">
   <a href="rook-dashboard.html" class="rm-bn-item "><span>⌂</span>Home</a>
-  <a href="rook-search.html" class="rm-bn-item rm-active"><span>◎</span>Matches</a>
+  <a href="rook-search.html" class="rm-bn-item rm-active"><span>⌕</span>Job Search</a>
   <a href="rook-saved.html" class="rm-bn-item "><span>♡</span>Saved</a>
   <a href="rook-settings.html" class="rm-bn-item "><span>◉</span>Profile</a>
 </nav>
