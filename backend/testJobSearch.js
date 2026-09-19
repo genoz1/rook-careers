@@ -59,6 +59,13 @@ test('nearest is the default Job Search sort', () => {
   assert.match(searchHtml, /document\.getElementById\('sortSelect'\)\.value = 'closest'/);
 });
 
+test('mobile result controls cannot force horizontal overflow', () => {
+  assert.match(searchHtml, /\.mobile-zip-input\{[\s\S]{0,100}min-width:0/);
+  assert.match(searchHtml, /\.results-count\{width:100%;\}/);
+  assert.match(searchHtml, /\.sort-row\{width:100%; min-width:0;/);
+  assert.match(searchHtml, /\.sort-row select\{flex:1; min-width:0; max-width:100%;\}/);
+});
+
 test('sparse compensation and default-zero travel data do not expose misleading filters', () => {
   assert.match(jobsRoute, /Number\(job\.travel_percentage\) > 0/);
   assert.match(searchHtml, /count \/ Math\.max\(1, Number\(totalCount\) \|\| 0\) >= 0\.05/);

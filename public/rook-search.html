@@ -169,6 +169,7 @@
   .mobile-zip-input{
     flex:1;
     min-width:0;
+    min-width:0;
     height:42px;
     border:1.5px solid var(--border, #E3E8F0);
     border-radius:10px;
@@ -264,7 +265,9 @@
     .job-meta-line{overflow-wrap:break-word; word-break:break-word; white-space:normal;}
     .tag-row{flex-wrap:wrap;}
     .results-head{flex-wrap:wrap; gap:8px;}
-    .sort-row{flex-wrap:wrap;}
+    .results-count{width:100%;}
+    .sort-row{width:100%; min-width:0; flex-wrap:nowrap; justify-content:space-between;}
+    .sort-row select{flex:1; min-width:0; max-width:100%;}
     .jtag-extra{display:none;}
     .tag-row.expanded .jtag-extra{display:inline-block;}
     .jtag-toggle{display:inline-block;}
