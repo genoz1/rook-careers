@@ -9,6 +9,8 @@ const searchHtml = fs.readFileSync(path.join(root, 'public/rook-search.html'), '
 const jobsRoute = fs.readFileSync(path.join(root, 'backend/routes/jobs.js'), 'utf8');
 const mobileMenu = fs.readFileSync(path.join(root, 'public/rook-mobile-menu.html'), 'utf8');
 const dashboardHtml = fs.readFileSync(path.join(root, 'public/rook-dashboard.html'), 'utf8');
+const dashboardV7Html = fs.readFileSync(path.join(root, 'public/rook-dashboard-v7.html'), 'utf8');
+const checkoutV7Html = fs.readFileSync(path.join(root, 'public/rook-checkout-v7.html'), 'utf8');
 
 test('Job Search uses its own unscored full-catalog endpoint', () => {
   assert.match(searchHtml, /rookApiFetch\('\/job-search\?'/);
@@ -94,6 +96,12 @@ test('first-sign-in product tour distinguishes Dashboard, Job Search, and Saved 
   assert.match(dashboardHtml, /id="rookTourSkip"/);
   assert.match(dashboardHtml, /id="rookTourBack"/);
   assert.match(dashboardHtml, /id="rookTourNext"/);
+});
+
+test('masked users do not see the tour and successful V7 trials land on the unlocked Dashboard tour', () => {
+  assert.doesNotMatch(dashboardV7Html, /rookProductTour|rook-product-tour\.js/);
+  assert.match(checkoutV7Html, /window\.location\.href = 'rook-dashboard\.html\?trial=started'/);
+  assert.doesNotMatch(checkoutV7Html, /window\.location\.href = 'rook-dashboard-v7\.html\?trial=started'/);
 });
 
 test('sparse compensation and default-zero travel data do not expose misleading filters', () => {
