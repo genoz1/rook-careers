@@ -79,7 +79,10 @@ app.get("/rook-onboarding-v5.html", (req, res) => {
   res.redirect(302, "/rook-onboarding-v4.html" + qs);
 });
 app.get("/rook-onboarding-v4.html", (req, res) => {
-  return res.sendFile(require("path").join(__dirname, "public", "rook-onboarding-v4.html"));
+  const queryStart = req.originalUrl.indexOf("?");
+  const query = queryStart === -1 ? "" : req.originalUrl.slice(queryStart);
+  res.set("Cache-Control", "no-store");
+  return res.redirect(302, "/rook-onboarding-v7.html" + query);
 });
 app.get("/rook-onboarding-v2.html", (req, res) => {
   const ob   = req.query.ob;

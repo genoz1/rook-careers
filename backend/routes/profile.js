@@ -51,25 +51,17 @@ async function requireAuth(req, res, next) {
   next();
 }
 
-// GET /api/profile — the caller's own candidate profile
-// POST /api/profile/prefill
-// Saves questionnaire answers immediately after signUp(), before email
-// verification. The client sends the new user's ID (returned by signUp)
-// and the questionnaire data. No session is required — this endpoint is
-// called before the user has verified their email.
-//
-// Security:
-//   - Rate-limited to 5 requests per minute per IP.
-//   - Only writes questionnaire fields (industry, years, territory, location).
-//   - Never writes subscription_status, resume data, or any privileged field.
-//   - Uses supabaseAdmin to write — the user_id is from the signUp response
-//     which is a real Supabase UUID; a forged UUID would just create an
-//     orphan row that is never accessible.
-//
-// Purpose: solves the iOS cross-browser problem where the verification email
-// opens in Safari but the user signed up in Chrome. localStorage is
-// browser-scoped so the draft is unavailable in Safari. With this endpoint,
-// the questionnaire is already in the DB when the verification link opens.
+// Legacy onboarding writes require an authenticated owner. A user UUID is
+// an identifier, never proof of ownership. V7 anonymous drafts use their
+// separate secret session token and claim flow.
+function requireProfileOwner(req, res, next) {
+  const requested = req.params.user_id || req.body?.user_id;
+  if (!requested || requested !== req.user.id) {
+    return res.status(403).json({ error: "Sign in to your own account to continue." });
+  }
+  res.set("Cache-Control", "private, no-store");
+  next();
+}
 const prefillRate = new Map();
 // POST /api/onboarding/pre-verify-upload
 // Accepts a résumé file BEFORE email verification using the user_id returned
@@ -81,7 +73,7 @@ const prefillRate = new Map();
 // Only writes résumé + profile fields; never writes subscription data.
 const preVerifyRate = new Map();
 const preVerifyUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
-router.post("/onboarding/pre-verify-upload", requireConfig, preVerifyUpload.single("resume"), async (req, res) => {
+router.post("/onboarding/pre-verify-upload", requireConfig, requireAuth, preVerifyUpload.single("resume"), requireProfileOwner, async (req, res) => {
   const ip = (req.headers["x-forwarded-for"] || "").split(",")[0].trim() || req.socket.remoteAddress || "unknown";
   const now = Date.now();
   const e = preVerifyRate.get(ip);
@@ -173,7 +165,7 @@ router.post("/onboarding/pre-verify-upload", requireConfig, preVerifyUpload.sing
 // POST /api/onboarding/pre-verify-status
 // Polls processing status for a pre-verified user. Returns current profile
 // state so the check-email screen can show real progress.
-router.get("/onboarding/pre-verify-status/:user_id", requireConfig, async (req, res) => {
+router.get("/onboarding/pre-verify-status/:user_id", requireConfig, requireAuth, requireProfileOwner, async (req, res) => {
   const { user_id } = req.params;
   if (!user_id || !/^[0-9a-f-]{36}$/.test(user_id)) return res.status(400).json({ ok: false });
   // Rate-limit status polling
@@ -196,7 +188,7 @@ router.get("/onboarding/pre-verify-status/:user_id", requireConfig, async (req, 
   });
 });
 
-router.post("/profile/prefill", requireConfig, async (req, res) => {
+router.post("/profile/prefill", requireConfig, requireAuth, requireProfileOwner, async (req, res) => {
   const ip = (req.headers["x-forwarded-for"] || "").split(",")[0].trim() || req.socket.remoteAddress || "unknown";
   const now = Date.now();
   const e = prefillRate.get(ip);

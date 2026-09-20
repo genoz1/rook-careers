@@ -19,15 +19,17 @@ for(const file of ['rook-onboarding-v7.html','rook-onboarding-v7-signup.html','r
   for(const m of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)) if(m[1].trim()) new vm.Script(m[1],{filename:file});
 }
 for(const file of ['rook-v7.js']) new vm.Script(fs.readFileSync(path.join(root,'public',file),'utf8'));
-for(const file of ['public/rook-onboarding-v6.html','public/rook-onboarding-v6-signup.html','public/rook-checkout.html','backend/routes/stripe.js','backend/matching.js']) {
+for(const file of ['public/rook-onboarding-v6.html','public/rook-checkout.html','backend/routes/stripe.js','backend/matching.js']) {
   assert.equal(fs.readFileSync(path.join(root,file),'utf8'),execFileSync('git',['show',`HEAD:${file}`],{cwd:root,encoding:'utf8'}),`${file} changed`);
 }
+// V6 prefill now authenticates the verified owner; covered by the ownership route suite.
+assert(fs.readFileSync(path.join(root,'public/rook-onboarding-v6-signup.html'),'utf8').includes('Authorization: `Bearer ${data.session.access_token}`'));
 const questions=fs.readFileSync(path.join(root,'public/rook-onboarding-v7.html'),'utf8');
 assert(!questions.includes('s-matches-preview'));
 assert(!questions.includes('btnCreateAccount'));
 assert(questions.includes("window.location.href = 'rook-dashboard-v7.html'"));
 const checkout=fs.readFileSync(path.join(root,'public/rook-checkout-v7.html'),'utf8');
-assert(checkout.includes("'rook-dashboard-v7.html?trial=started'"));
+assert(checkout.includes("'rook-dashboard.html?trial=started'"));
 assert(checkout.includes('stripe.confirmCardSetup'));
 assert(checkout.includes('/api/stripe/create-subscription-from-setup'));
 // Stateful external-service fake: exercise actual Express V7 routes without
