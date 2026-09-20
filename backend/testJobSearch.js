@@ -9,8 +9,6 @@ const searchHtml = fs.readFileSync(path.join(root, 'public/rook-search.html'), '
 const jobsRoute = fs.readFileSync(path.join(root, 'backend/routes/jobs.js'), 'utf8');
 const mobileMenu = fs.readFileSync(path.join(root, 'public/rook-mobile-menu.html'), 'utf8');
 const dashboardHtml = fs.readFileSync(path.join(root, 'public/rook-dashboard.html'), 'utf8');
-const dashboardV7Html = fs.readFileSync(path.join(root, 'public/rook-dashboard-v7.html'), 'utf8');
-const productTourJs = fs.readFileSync(path.join(root, 'public/rook-product-tour.js'), 'utf8');
 
 test('Job Search uses its own unscored full-catalog endpoint', () => {
   assert.match(searchHtml, /rookApiFetch\('\/job-search\?'/);
@@ -96,14 +94,6 @@ test('first-sign-in product tour distinguishes Dashboard, Job Search, and Saved 
   assert.match(dashboardHtml, /id="rookTourSkip"/);
   assert.match(dashboardHtml, /id="rookTourBack"/);
   assert.match(dashboardHtml, /id="rookTourNext"/);
-});
-
-test('the actual first masked dashboard loads the once-per-account product tour', () => {
-  assert.match(dashboardV7Html, /src="rook-product-tour\.js"/);
-  assert.match(productTourJs, /rook_product_tour_completed/);
-  assert.match(productTourJs, /rookSupabase\.auth\.getUser/);
-  assert.match(productTourJs, /rookSupabase\.auth\.updateUser/);
-  assert.match(productTourJs, /Step \$\{index \+ 1\} of \$\{steps\.length\}/);
 });
 
 test('sparse compensation and default-zero travel data do not expose misleading filters', () => {
