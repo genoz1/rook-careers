@@ -55,6 +55,15 @@ async function rookV7Init() {
       if (typeof rookTrackFunnelEvent === 'function') rookTrackFunnelEvent('v7_trial_activated', {}, rookV7Snapshot.profile.user_id || sessionStorage.getItem('rook_v7_token'));
       try { sessionStorage.removeItem('rook_v7_trial_pending'); } catch (_) {}
     }
+    // A saved job is navigation context only. Access is confirmed by the server.
+    if (rookV7Unlocked) {
+      const job = sessionStorage.getItem('rook_v7_return_job');
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(job || '')) {
+        sessionStorage.removeItem('rook_v7_return_job');
+        window.location.replace('/rook-job-analysis.html?job=' + encodeURIComponent(job));
+        return null;
+      }
+    }
     return 'v7-session';
   } catch(e) {
     const list=document.getElementById('jobListLoading');

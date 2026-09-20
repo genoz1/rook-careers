@@ -35,7 +35,7 @@ const app=express();app.use(express.json());app.use('/api',require('./routes/job
   }
   const anonymous=await call('/api/jobs/'+job.id,false);assert.equal(anonymous.status,200);noSecrets(await anonymous.json());
   profile=null;const missing=await call('/api/jobs');assert.equal(missing.status,200);noSecrets(await missing.json());
-  for(const path of ['/jobs','/jobs/'+job.id]){const r=await call(path,false);assert.equal(r.status,200);noSecrets(await r.text());}
+  for(const path of ['/jobs','/jobs/'+job.id]){const r=await call(path,false);assert.equal(r.status,200);const html=await r.text();if(path==='/jobs') noSecrets(html);else {assert(!/HiddenEmployer|BrandXYZ|secret-requisition|secret\.example|Unique Specialty/.test(html));assert(html.includes('Boston, MA'));assert(html.includes('Specialty Manager'));}}
   for(const state of ['trialing','active']){
    profile={id:'candidate',user_id:'user',subscription_status:state,trial_ends_at:'2099-01-01'};
    const r=await call('/api/jobs/'+job.id);assert.equal(r.status,200);const full=await r.json();assert.equal(full.company_name,job.company_name);assert.equal(full.title_original,job.title_original);assert.equal(full.source_url,job.source_url);

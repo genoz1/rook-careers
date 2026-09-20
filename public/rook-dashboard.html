@@ -803,6 +803,15 @@
           gtag('event', 'trial_activated', { event_category: 'conversion' });
           try { sessionStorage.setItem('rook_trial_activated_fired', '1'); } catch (_) {}
         })();
+        // Return social visitors to their selected job after confirmed access.
+        if (rookHasFullAccess(profile)) {
+          const job = sessionStorage.getItem('rook_v7_return_job');
+          if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(job || '')) {
+            sessionStorage.removeItem('rook_v7_return_job');
+            window.location.replace('/rook-job-analysis.html?job=' + encodeURIComponent(job));
+            return;
+          }
+        }
         if (profile?.name) {
           // First name only — matches how the rest of the app addresses
           // the candidate (e.g. application emails), not a full-name

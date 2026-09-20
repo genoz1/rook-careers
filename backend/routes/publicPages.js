@@ -16,7 +16,7 @@ const { getTrialPeriodDays } = require("../routes/stripe");
 const { isUsEligibleJob } = require("../jobEligibility");
 
 const router = express.Router();
-const {project} = require('../pretrialProjection');
+const {project,publicPreview} = require('../pretrialProjection');
 router.use((req,res,next)=>{res.set('Cache-Control','private, no-store');next();});
 
 const isConfigured = Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -102,7 +102,7 @@ function pageShell({ title, description, canonicalUrl, ogImage, bodyHtml, jsonLd
   <script src="/rook-config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script src="/rook-auth.js"></script>
-  <script src="/rook-access.js"></script>
+  ${jobId ? '' : '<script src="/rook-access.js"></script>'}
   ${jobId ? `<script>
   (async () => {
     try {
@@ -137,7 +137,7 @@ router.get("/jobs/:id", async (req, res, next) => {
 
   const { data: job, error } = await supabaseAnon
     .from("jobs")
-    .select("id, source_type, city, title_original, title_normalized, location_raw, location_evidence, compensation_text, salary_min, salary_max, description_text, date_posted, status, company_name, ai_analysis, remote_status, travel_percentage, job_lat, job_lng, state")
+    .select("id, employment_type, recruiter_company, source_type, city, title_original, title_normalized, location_raw, location_evidence, compensation_text, salary_min, salary_max, description_text, date_posted, status, company_name, ai_analysis, remote_status, travel_percentage, job_lat, job_lng, state")
     .eq("id", req.params.id)
     .eq("status", "active")
     .maybeSingle();
@@ -193,19 +193,25 @@ router.get("/jobs/:id", async (req, res, next) => {
 </html>`);
   }
 
-  const safe = project(job);
-  const title = [...safe.industry_classification.labels, safe.role_type].filter(Boolean).join(' · ') || 'Medical and veterinary sales opportunity';
+  const safe = publicPreview(job);
+  const title = safe.title;
   const canonicalUrl = `${APP_BASE_URL}/jobs/${job.id}`;
-  const description = `${title}. View personalized opportunities on ROOK. Job titles and employers are hidden until you unlock access.`;
-  const facts = [safe.territory_type,safe.freshness_label].filter(Boolean).join(' · ');
-  const bodyHtml = `<h1 style="font-size:28px;margin-bottom:20px">${escapeHtml(title)}</h1>
-    <p style="margin-bottom:24px">${escapeHtml(facts)}</p>
+  const description = safe.summary;
+  const query = new URLSearchParams();
+  for (const key of ['utm_source','utm_medium','utm_campaign','utm_content','utm_term','ref','referral','gclid','gbraid','wbraid']) {
+    if (typeof req.query[key] === 'string') query.set(key, req.query[key].slice(0,200));
+  }
+  query.set('job', job.id);
+  const facts = [safe.location, ...safe.industry_classification.labels, safe.employment_type, safe.salary].filter(Boolean);
+  const bodyHtml = `<h1 style="font-size:28px;margin-bottom:20px;overflow-wrap:anywhere">${escapeHtml(title)}</h1>
+    <p style="line-height:1.7;margin-bottom:24px">${facts.map(escapeHtml).join(' · ')}</p>
     <section style="background:white;border:1px solid var(--border);padding:24px;border-radius:14px">
-      <h2 style="font-size:18px;margin-bottom:12px">🔒 Job title and employer hidden</h2>
-      <p style="line-height:1.7;margin-bottom:20px">Start your 3-day free trial to view the full opportunity details and apply directly.</p>
-      <a class="btn btn-primary" href="/rook-onboarding-v7.html">Find My Matches</a>
+      <h2 style="font-size:18px;margin-bottom:12px">Employer: 🔒 Hidden until free trial</h2>
+      <p style="line-height:1.7;margin-bottom:20px">${escapeHtml(safe.summary)}</p>
+      <p style="line-height:1.7;margin-bottom:20px">Want to see the employer, complete job description and application link?</p>
+      <a class="btn btn-primary" href="/rook-onboarding-v7.html?${escapeHtml(query.toString())}">Start My 3-Day Free Trial</a>
       <p style="font-size:13px;margin-top:16px">3 days free, then $19.99/month. Cancel anytime.</p>
-    </section><p style="margin-top:24px"><a href="/jobs">Browse current opportunities</a></p>`;
+    </section><script src="/rook-attribution.js"></script>`;
   res.send(pageShell({title:`${title} — ROOK`,description,canonicalUrl,bodyHtml,jobId:job.id,
     jsonLd:{'@context':'https://schema.org','@type':'WebPage',name:title,description,url:canonicalUrl}}));
 

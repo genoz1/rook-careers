@@ -7,6 +7,13 @@
   <title>Find Medical Sales Jobs — ROOK</title>
   <link rel="icon" href="assets/favicon.ico" sizes="any">
   <script src="rook-attribution.js"></script>
+  <script>
+    // Retain only the internal job UUID; never accept an arbitrary return URL.
+    try {
+      const job = new URLSearchParams(location.search).get('job');
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(job || '')) sessionStorage.setItem('rook_v7_return_job', job);
+    } catch (_) {}
+  </script>
 <script src="rook-tracking.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">

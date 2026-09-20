@@ -35,6 +35,7 @@ function setup(rows, { cap = 1000, failAt = Infinity, configured = true } = {}) 
   };
   const router = { use() {}, get(route, handler) { handlers[route] = handler; } };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, "routes/publicPages.js"), "utf8"), {
+    URLSearchParams,
     require(name) {
       if (name === "../pretrialProjection") return require("./pretrialProjection");
       if (name === "express") return { Router: () => router };
@@ -133,9 +134,16 @@ test("job previews use ordinary WebPage metadata, retain gates, and escape conte
   assert.equal(JSON.parse(json[1]).url, `https://rookcareers.com/jobs/${row.id}`);
   assert.ok(!res.body.includes('"@type":"JobPosting"'));
   assert.ok(!res.body.includes("PRIVATE_") && !res.body.includes("private-application"));
-  assert.ok(res.body.includes("Job title and employer hidden"));
-  assert.ok(res.body.includes("full opportunity details"));
+  assert.ok(res.body.includes("Employer: 🔒 Hidden until free trial"));
+  assert.ok(res.body.includes("complete job description"));
   assert.ok(!res.body.includes("&lt;script&gt;"), "original title is withheld, not escaped into metadata");
-  assert.ok(!res.body.includes("Tampa"));
+  assert.ok(res.body.includes("Tampa, FL"));
   assert.ok(!res.body.includes('<script>alert("x")</script>'));
 });
+
+ test("LinkedIn preview preserves the clicked job and campaign without leaking source fields", async () => {
+  const row = {...jobs(1)[0], id:'9980b1fc-c214-4c65-9f3f-70d46e748be6', title_original:'Clinical Sales Manager (New York) PRIVATE_EMPLOYER BrandXYZ ReqSecret8842',city:'New York City',state:'NY',location_raw:'New York City, NY',employment_type:'Full-time',salary_min:118337,salary_max:177505,ai_analysis:{product_categories:['Diagnostics'],summary:'PRIVATE_FULL_DESCRIPTION BrandXYZ'}};
+  const res = await setup([row])('/jobs/:id',{params:{id:row.id},query:{utm_source:'linkedin',utm_medium:'social',utm_campaign:'organic',ref:'linkedin-post'}});
+  for (const value of ['Clinical Sales Manager (New York)','New York, NY','Full-time','$118,337–$177,505','Diagnostics','Start My 3-Day Free Trial','job='+row.id,'utm_source=linkedin','ref=linkedin-post']) assert.ok(res.body.includes(value),value);
+  for (const value of ['PRIVATE_','BrandXYZ','ReqSecret8842','private-application','Browse current opportunities']) assert.ok(!res.body.includes(value),value);
+ });
