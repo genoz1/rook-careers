@@ -156,7 +156,6 @@ async function run() {
       totalAgencyMatched++;
 
       const job = normalizeAdzunaJob(raw);
-      Object.assign(job, await validateJobLocation(job));
       if (!titleLooksRelevant(job.title_original)) continue;
 
       // Manual check-then-write rather than .upsert()+onConflict: the
@@ -166,12 +165,14 @@ async function run() {
       // clause repeats that exact WHERE condition — which supabase-js's
       // upsert() doesn't support specifying. This avoids that limitation
       // entirely instead of fighting it.
-      const { data: existing } = await supabase
+      const { data: existing, error: lookupError } = await supabase
         .from("jobs")
-        .select("id, ai_analysis, job_embedding, job_lat, location_raw, title_original, description_text")
+        .select("id, ai_analysis, job_embedding, job_lat, job_lng, state, location_evidence, location_raw, title_original, description_text")
         .eq("source_type", "agency_aggregated")
         .eq("source_job_id", job.source_job_id)
         .maybeSingle();
+
+      if (lookupError) throw new Error(`Location history lookup failed: ${lookupError.message}`);
 
       // Reported directly: the same real listing from one staffing
       // agency routinely shows up under several different source_job_ids
@@ -188,13 +189,14 @@ async function run() {
         const recentCutoff = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
         const { data: candidates } = await supabase
           .from("jobs")
-          .select("id, title_original, description_text")
+          .select("id, title_original, description_text, location_raw, job_lat, job_lng, state, location_evidence")
           .eq("source_type", "agency_aggregated")
           .eq("company_name", companyName)
           .gte("first_seen_at", recentCutoff);
         fuzzyDuplicate = (candidates || []).find((c) => normalizeAgencyTitle(c.title_original) === normalizedTitle) || null;
       }
       const matchedRow = existing || fuzzyDuplicate;
+      Object.assign(job, await validateJobLocation(job, undefined, matchedRow));
       if (matchedRow && (matchedRow.title_original !== job.title_original || matchedRow.description_text !== job.description_text)) {
         job.ai_analysis = null;
         job.job_embedding = null;
