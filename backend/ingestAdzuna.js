@@ -187,13 +187,20 @@ async function run() {
       if (!existing) {
         const normalizedTitle = normalizeAgencyTitle(job.title_original);
         const recentCutoff = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
-        const { data: candidates } = await supabase
+        const { data: candidates, error: duplicateLookupError } = await supabase
           .from("jobs")
           .select("id, title_original, description_text, location_raw, job_lat, job_lng, state, location_evidence")
           .eq("source_type", "agency_aggregated")
           .eq("company_name", companyName)
           .gte("first_seen_at", recentCutoff);
-        fuzzyDuplicate = (candidates || []).find((c) => normalizeAgencyTitle(c.title_original) === normalizedTitle) || null;
+        if (duplicateLookupError) throw new Error(`Location duplicate lookup failed: ${duplicateLookupError.message}`);
+        // Same-title listings in different cities are distinct geographic jobs.
+        // Merging them would repeatedly overwrite validated location evidence.
+        const locationKey = value => String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
+        fuzzyDuplicate = (candidates || []).find((c) =>
+          normalizeAgencyTitle(c.title_original) === normalizedTitle &&
+          locationKey(c.location_raw) === locationKey(job.location_raw)
+        ) || null;
       }
       const matchedRow = existing || fuzzyDuplicate;
       Object.assign(job, await validateJobLocation(job, undefined, matchedRow));
