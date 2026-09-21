@@ -49,6 +49,7 @@ async function run() {
   let requests = 0;
   const supabase = {
     from(table) {
+      if (table === "jobs") return { select: () => ({ in: () => ({ eq: () => ({ eq: async () => ({ data: [floridaStatewide], error: null }) }) }) }) };
       assert.equal(table, "candidate_job_matches");
       const query = {
         select() { return query; }, eq() { return query; }, gte() { return query; },
@@ -76,6 +77,4 @@ async function run() {
   console.log("Daily digest location filter: passed");
 }
 
-// routes/jobs installs maintenance timers when imported by dailyDigest;
-// finish this standalone test once its assertions are complete.
-run().then(() => process.exit(0)).catch(err => { console.error(err); process.exit(1); });
+run().catch(err => { console.error(err); process.exitCode = 1; });

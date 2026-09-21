@@ -8,7 +8,7 @@ const { sendEmail } = require("./resend");
 const { hasFullAccess } = require("../matching");
 const { distanceMiles } = require("../geocoding");
 const { isUsEligibleJob, resolveUsStateCode } = require("../jobEligibility");
-const { scrubCompanyNameFromText, redactForNonSubscriber } = require("../routes/jobs");
+const { scrubCompanyNameFromText, redactForNonSubscriber } = require("../redaction");
 
 const MIN_SCORE_TO_INCLUDE = 60;
 const MAX_JOBS_PER_EMAIL = 5;
@@ -148,12 +148,12 @@ async function sendDigestForCandidate(supabase, profile, appBaseUrl) {
   if (matchRows.length < MAX_JOBS_PER_EMAIL) {
     const { data: recentRows, error: recentErr } = await supabase
       .from("candidate_job_matches")
-      .select("*, jobs!inner(*)")
+      .select("overall_score,recommendation,jobs!inner(id,first_seen_at,location_raw,state,job_lat,job_lng,location_evidence)")
       .eq("candidate_id", profile.id)
       .eq("dismissed", false)
       .eq("jobs.status", "active")
       .eq("jobs.moderation_status", "approved")
-      .order("jobs.first_seen_at", { ascending: false })
+      .order("jobs(first_seen_at)", { ascending: false })
       .limit(MATCH_CANDIDATES_TO_FETCH);
 
     if (recentErr) throw new Error(`Could not load recent matches: ${recentErr.message}`);
@@ -165,7 +165,20 @@ async function sendDigestForCandidate(supabase, profile, appBaseUrl) {
         isDigestLocationMatch(r.jobs, profile) &&
         (r.overall_score ?? -1) >= MIN_SCORE_TO_INCLUDE
     );
-    matchRows = [...matchRows, ...recentLocal].slice(0, MAX_JOBS_PER_EMAIL);
+    // Sort/filter the same 200 candidates using only selection evidence. Avoid
+    // materializing complete job documents across the relationship sort.
+    const additions = recentLocal.slice(0, MAX_JOBS_PER_EMAIL - matchRows.length);
+    if (additions.length) {
+      const { data: details, error: detailErr } = await supabase.from("jobs")
+        .select("*").in("id", additions.map(r => r.jobs.id))
+        .eq("status", "active").eq("moderation_status", "approved");
+      if (detailErr) throw new Error(`Could not load recent job details: ${detailErr.message}`);
+      const byId = new Map((details || []).map(job => [job.id, job]));
+      if (additions.some(r => !byId.has(r.jobs.id))) {
+        throw new Error("Recent job details changed during digest selection");
+      }
+      matchRows = [...matchRows, ...additions.map(r => ({ ...r, jobs: byId.get(r.jobs.id) }))];
+    }
   }
 
   if (matchRows.length === 0) return { sent: false, reason: "no_qualifying_matches" };
