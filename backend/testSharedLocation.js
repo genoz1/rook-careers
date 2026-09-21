@@ -14,15 +14,15 @@ const base={title_original:'Veterinary Sales Representative',company_name:'Emplo
   const missing={...base,location_raw:'US Territory Field based',job_lat:null,job_lng:null};
   for (const choice of ['national','remote']) {
     const broad={...profile,territory_size_preferences:[choice]};
-    assert(prepareJob(missing,broad));
+    assert.equal(prepareJob(missing,broad),null);
     const nj=prepareJob({...base,location_raw:'US NJ Remote | US NY Remote',state:'NJ',job_lat:40.1,job_lng:-74.5,remote_status:'remote'},broad);
-    assert(nj);
+    assert.equal(nj,null);
     const statewide=prepareJob({...base,location_raw:'Remote - Florida'},broad);assert(statewide);assert.equal(statewide.job_lat,null);
     assert.equal(prepareJob({...missing,location_raw:'Warsaw, Poland'},broad),null);
   }
   assert.equal(prepareJob(missing,{...profile,territory_size_preferences:['regional']}),null);
   const local=prepareJob(base,profile);assert(local);assert.deepEqual(scoreJob(local,profile),scoreJob(base,profile));
-  const raw="USA - Florida - Springhill | USA - Florida - Eustis | USA - Florida - Land O' Lakes | USA - Florida - The Villages";
+  const raw="USA - Florida - Spring Hill | USA - Florida - Eustis | USA - Florida - Land O' Lakes | USA - Florida - The Villages";
   const point={lat:28.93,lng:-81.97,state:'Florida'};
   let calls=[];
   const evidence=await validateJobLocation({...base,location_raw:raw},async text=>{calls.push(text);return text.startsWith('The Villages')?point:{lat:28.48,lng:-82.53,state:'Florida'};});

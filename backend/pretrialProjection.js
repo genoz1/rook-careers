@@ -20,6 +20,7 @@ function project(job, index=0) {
     id:`locked-${Number.isInteger(index) && index>=0 ? index : 0}`,
     subscription_required:true,
     industry_classification:classify(job),
+    geography_kind:['local','remote_us','national_us','territory'].includes(job.geographic_eligibility?.kind) ? job.geographic_eligibility.kind : null,
     role_type:broadRole(job),
     distance_miles:number(job.distance_miles) == null || job.distance_miles<0 ? null : Math.round(job.distance_miles),
     territory_type:job.remote_status === 'remote' ? territory.remote : territory[String(job.territory || '').toLowerCase()] || null,

@@ -1,0 +1,7 @@
+const assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs');
+const rows=Array.from({length:650},(_,i)=>({id:String(i).padStart(5,'0'),title_original:'Sales representative',value:i===649?99:60}));
+let pages=0;
+const query={select(){return this;},eq(){return this;},or(){return this;},order(){return this;},async range(a,b){pages++;return {data:rows.slice(a,b+1),error:null};}};
+const context={module:{exports:{}},require(name){if(name==='./matching')return {scoreJob:j=>({overall_score:j.value})};if(name==='./v7Location')return {prepareJob:j=>j,allowsBroadLocations:()=>true};if(name==='./geocoding')return {distanceMiles:()=>0};if(name==='../public/rook-job-classification')return {matches:()=>true,normalizeSelection:()=>[]};if(name==='./industryPrefilter')return {industryPrefilter:()=>''};if(name==='./jobPool')return require('./jobPool');throw Error(name);}};
+vm.runInNewContext(fs.readFileSync(require('node:path').join(__dirname,'v7Matching.js'),'utf8'),context);
+(async()=>{const result=await context.module.exports.rank({from:()=>query},{home_lat:42,home_lng:-71,desired_industries:[]});assert.equal(result[0].id,'00649','best eligible job beyond first 400 must be considered');assert.equal(result.length,300,'display limit remains 300');assert.equal(pages,2);console.log('PASS V7 ranking covers all paginated eligible jobs before retaining top 300.');})().catch(e=>{console.error(e);process.exitCode=1;});

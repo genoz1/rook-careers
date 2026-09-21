@@ -2,7 +2,7 @@ const test=require('node:test');const assert=require('node:assert/strict');const
 const {project}=require('./pretrialProjection');const {hasFullAccess}=require('./matching');
 const {preview}=require('./v7Preview');const {redactForNonSubscriber,redactForAnonymous}=require('./redaction');
 const canary={id:'private-job-id',title_original:'Unique Oncology Account Manager BrandXYZ',title_normalized:'Unique Title',company_name:'HiddenEmployer',source_job_id:'ReqSecret8842',source_url:'https://secret.example/source',application_url:'https://secret.example/apply',description_text:'Confidential job description and BrandXYZ',description_html:'<p>HiddenEmployer</p>',location_raw:'DistinctCity, FL',city:'DistinctCity',territory:'Unique District Wording',product_type:'BrandXYZ',employer_note:'HiddenEmployer employment history',new_sensitive_field:'future secret',ai_analysis:{product_categories:['Pharmaceutical'],unrecognized:'secret AI text'},category:'Account Management',distance_miles:48,match:{overall_score:100,preference_fit:100,candidate_fit:null,recommendation:'Strong Match',reasons:['HiddenEmployer'],concerns:['DistinctCity'],categories:{secret:'BrandXYZ'}}};
-const permitted=['id','subscription_required','industry_classification','role_type','distance_miles','territory_type','freshness_label','match'].sort();
+const permitted=['id','subscription_required','industry_classification','role_type','distance_miles','territory_type','freshness_label','geography_kind','match'].sort();
 test('authenticated entitlement takes precedence over a retained anonymous preview',async()=>{
  const vm=require('node:vm');
  for(const full of [true,false]) {
@@ -18,6 +18,8 @@ test('all locked projectors omit arbitrary source fields and nested text without
   assert(!/HiddenEmployer|BrandXYZ|DistinctCity|Unique|ReqSecret|secret\.example|private-job-id|future secret/.test(JSON.stringify(result)));
   assert.equal(result.match.preference_fit,100);assert.equal(result.match.candidate_fit,null);assert.equal(result.role_type,'Account Management');assert.equal(result.territory_type,null);
  }
+ assert.equal(project({...canary,geographic_eligibility:{kind:'secret free-form text'}}).geography_kind,null);
+ assert.equal(project({...canary,geographic_eligibility:{kind:'territory'}}).geography_kind,'territory');
  assert.equal(JSON.stringify(canary),original);assert.equal(redactForAnonymous(canary).match,undefined);
 });
 test('unknown structured attributes never become fabricated industry, role or territory',()=>{

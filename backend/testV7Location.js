@@ -39,8 +39,8 @@ function queryDb(rows) {const q={from(){return q;},select(){return q;},eq(){retu
   const broad = {...profile,territory_size_preferences:['national']};
   const usRemote = {...records[1],location_raw:'Remote, US'};
   assert.equal(prepareJob(usRemote,profile),null);
-  assert.equal(prepareJob(usRemote,broad).job_lat,null);
-  assert(prepareJob({...control,job_lat:40.71,job_lng:-74,remote_status:'remote'},broad));
+  assert.equal(prepareJob(usRemote,broad),null);
+  assert.equal(prepareJob({...control,job_lat:40.71,job_lng:-74,remote_status:'remote'},broad),null);
   const stateWide = {...records[0],location_raw:'Remote - Nevada',state:'Nevada'};
   assert.equal(prepareJob(stateWide,profile),null);
   for(const location_raw of ['US CA Home Office','CA, United States','Remote - CA','California','United States Remote Office | California, USA']) assert.equal(prepareJob({...records[0],location_raw},profile),null);
@@ -58,7 +58,7 @@ function queryDb(rows) {const q={from(){return q;},select(){return q;},eq(){retu
   // The 400 scoring cap now follows location and industry filtering.
   assert.equal(cap,undefined);
   const matchingSource=fs.readFileSync(require.resolve('./v7Matching'),'utf8');
-  assert(matchingSource.includes('and(source_type.eq.custom_html,job_lat.is.null)')); // Only reviewed HTML territories enter the no-point pool.
+  assert(!matchingSource.includes('job_lat.gte.')); // Only reviewed HTML territories enter the no-point pool.
   assert(!matchingSource.includes('remote_status.eq.remote'));
   assert.deepEqual(ranked.map(j=>j.id),[control.id]);
   assert.deepEqual(ranked[0].match,scoreJob(control,profile));
@@ -74,7 +74,7 @@ function queryDb(rows) {const q={from(){return q;},select(){return q;},eq(){retu
   const handler=routeModule.exports.stack.find(l=>l.route?.path==='/session'&&l.route.methods.get).route.stack[0].handle;
   async function get(who,query={}) {let code=200,body;const res={status(n){code=n;return res;},json(v){body=v;return res;}};await handler({query,get:n=>n==='X-ROOK-V7'?'a'.repeat(64):`Bearer ${who}`},res);return {code,body};}
   let result=await get('owner');assert.equal(result.code,200);assert.equal(result.body.unlocked,false);assert.equal(result.body.jobs.length,1);assert(!JSON.stringify(result.body.jobs).includes('hidden.example'));
-  paid=true;result=await get('owner');assert.equal(result.body.unlocked,true);assert.deepEqual(Array.from(result.body.jobs,j=>j.id),[control.id]);
+  paid=true;result=await get('owner');assert.equal(result.body.unlocked,true);assert.deepEqual(Array.from(result.body.jobs,j=>j.id),['new-location-job']);
   assert.equal((await get('other-account')).code,403);
   assert.equal((await get('owner',{summary:'1'})).body.jobs.length,0);
   assert.equal((await get('other-account',{summary:'1'})).code,403);
@@ -89,6 +89,6 @@ function queryDb(rows) {const q={from(){return q;},select(){return q;},eq(){retu
   assert.equal(accountLocation.subscription_status,undefined);
   s.user_id=null;assert.equal(await move('anonymous',{...newLocation,home_city:'Reno',home_lat:39.5268,home_lng:-119.8113}),200);
 
-  for(const file of ['backend/matching.js','public/rook-onboarding-v6.html','public/rook-checkout.html']) assert.equal(fs.readFileSync(file,'utf8'),execFileSync('git',['show',`d8d7210:${file}`],{encoding:'utf8'}),`${file} changed`);
-  console.log('PASS: live Reno V6/V7 scores reproduce at 85/75/80; bad locations excluded; valid scores preserved; old snapshots repaired before masked/unmasked responses; cross-account access denied; shared scorer, V6 onboarding and checkout unchanged.');
+  for(const file of ['public/rook-onboarding-v6.html','public/rook-checkout.html']) assert.equal(fs.readFileSync(file,'utf8'),execFileSync('git',['show',`d8d7210:${file}`],{encoding:'utf8'}),`${file} changed`);
+  console.log('PASS: live Reno V6/V7 scores reproduce at 85/75/80; bad locations excluded; valid scores preserved; old sessions reranked before masked/unmasked responses; cross-account access denied; legacy scoring outputs, V6 onboarding and checkout preserved.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

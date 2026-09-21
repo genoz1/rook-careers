@@ -315,7 +315,7 @@ function recommendationForScore(score) {
  *   hard_disqualifier: boolean
  * }}
  */
-function scoreJob(job, profile) {
+function scoreJob(job, profile, options = {}) {
   const reasons = [];
   const concerns = [];
 
@@ -389,6 +389,13 @@ function scoreJob(job, profile) {
     prefCap = Math.min(prefCap, 60);
     concerns.push(`Location (${job.location_raw}) appears to be outside the United States`);
 
+  } else if (['remote_us','national_us','territory'].includes(options.geography?.kind)) {
+    // V7 has already verified source scope and profile eligibility. Do not
+    // penalize legitimate non-point roles with legacy raw-text guesses.
+    if (options.geography.kind === 'territory') {
+      prefScore -= 5;
+      reasons.push('Territory includes your home state; exact distance is not available');
+    } else reasons.push(options.geography.kind === 'remote_us' ? 'Verified U.S. remote role' : 'Verified national U.S. role');
   } else if (hasRealCoordinates) {
     // Real coordinates — pure mileage tiers
     const miles = distanceMiles(profile.home_lat, profile.home_lng, job.job_lat, job.job_lng);

@@ -433,7 +433,7 @@
         <span class="chip" onclick="setTierFilter('saved', this)">Saved</span>
       </div>
     </div>
-    <div class="full-dashboard-explainer" style="font-size:12.5px; color:#8B96AB; margin:-10px 0 16px;">Local/regional searches use a 300-mile radius across state lines. Large/national or remote/inside selections also include broader U.S. locations. Looking farther out, or considering a different city? Try <a href="rook-search.html" style="color:var(--royal, #1463FF); font-weight:600;">Job Search</a>.</div>
+    <div class="full-dashboard-explainer" style="font-size:12.5px; color:#8B96AB; margin:-10px 0 16px;">City-based jobs use a 300-mile radius across state lines. Matching state territories are included separately. National and remote selections add verified U.S. roles with those scopes. Looking farther out, or considering a different city? Try <a href="rook-search.html" style="color:var(--royal, #1463FF); font-weight:600;">Job Search</a>.</div>
 
     <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:14px;">
       <div class="full-dashboard-recruiters">
@@ -1110,7 +1110,7 @@
   // display — one definition of "remote" used everywhere distance
   // logic touches a job.
   function isRemoteJob(j) {
-    return j.remote_status === 'remote' || /remote/i.test(j.location_raw || '');
+    return (j.geography_kind || j.geographic_eligibility?.kind) === 'remote_us';
   }
 
   // Shared by both the "New" badge on each card and the "New" filter tab
@@ -1139,28 +1139,10 @@
     const sortBy = document.getElementById('sortSelect').value;
     let visible = showRecruiters ? currentJobs : currentJobs.filter((j) => j.source_type !== 'recruiter_posted' && j.source_type !== 'agency_aggregated');
 
-    // Direct instruction: the Dashboard should only ever show jobs
-    // within a real commuting/territory distance of home, not the
-    // full nationwide pool sorted by score - that broader "what's out
-    // there anywhere" browsing is what Job Search is for (see the
-    // earlier location-search work), while the Dashboard is meant to
-    // be the tight, personalized daily view. Remote jobs are exempt,
-    // matching the existing isRemoteJob distance-exemption used
-    // elsewhere on this page. A job with no confirmed distance (never
-    // geocoded) is excluded rather than assumed to qualify, since
-    // "150 miles or closer" is a real claim this view is making, not
-    // just a display convenience.
-    // Direct instruction: a hard cutoff was hiding jobs with no
-    // computed distance at all (never geocoded - common for vague
-    // "Territory/Field based" postings with no single named city),
-    // even when a real match against a nearby territory clearly
-    // existed. Reported directly: "I know there are more than 7 jobs
-    // within the 150 mile radius." A job with unknown distance now
-    // shows rather than being hidden - only a job CONFIRMED far away
-    // (a real computed distance over the cap) gets excluded here.
-    // Radius also widened to 300 per direct instruction.
-    const DASHBOARD_MAX_MILES = 300;
-    visible = visible.filter((j) => isRemoteJob(j) || j.distance_miles == null || j.distance_miles <= DASHBOARD_MAX_MILES);
+    // The server has already classified and scored the complete eligible set.
+    // Unknown distance alone is not permission to bypass location eligibility.
+    visible = visible.filter(j => (j.distance_miles != null && j.distance_miles <= 300) ||
+      ['remote_us','national_us','territory'].includes(j.geography_kind || j.geographic_eligibility?.kind));
 
     if (currentTierFilter === 'excellent') {
       visible = visible.filter((j) => j.match?.excellent_match);

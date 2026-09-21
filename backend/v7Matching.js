@@ -1,7 +1,7 @@
 // V7 uses the shared V6 scorer, with a V7-only location validity boundary
 // before ranking and the dashboard's 300-row display limit.
 const {scoreJob} = require('./matching');
-const {prepareJob,allowsBroadLocations} = require('./v7Location');
+const {prepareJob} = require('./v7Location');
 const {distanceMiles} = require('./geocoding');
 const {matches, normalizeSelection} = require('../public/rook-job-classification');
 const {readJobPool} = require('./jobPool');
@@ -10,61 +10,7 @@ const JOB_LIST_COLUMNS = "id, source_job_id, employer_id, source_type, source_ur
 const JOB_LIST_COLUMNS_NO_DESCRIPTION = JOB_LIST_COLUMNS.split(", ").filter((c) => c !== "description_html" && c !== "description_text").join(", ");
 
 async function rank(db, profile, industrySelection = profile.desired_industries) {
-    // Apply the existing 400-row scoring cap after eligibility and market filtering.
-    const latDelta = 300 / 69;
-    const lngDelta = 300 / (69 * Math.max(0.1, Math.cos((profile.home_lat * Math.PI) / 180)));
-
     const selection = normalizeSelection(industrySelection);
-    // Word-for-word copy of dashboard titleLocSanityPass — plus state-center check
-    const TITLE_LOC_CHECKS = {
-      'south florida': { lat: 25.9, lng: -80.3 },
-      'miami':         { lat: 25.77, lng: -80.19 },
-      'fort lauderdale': { lat: 26.12, lng: -80.14 },
-      'palm beach':    { lat: 26.71, lng: -80.05 },
-      'pensacola':     { lat: 30.42, lng: -87.22 },
-      'tallahassee':   { lat: 30.44, lng: -84.28 },
-      'jacksonville':  { lat: 30.33, lng: -81.66 },
-    };
-    // Approximate geographic center of each US state.
-    // Used to detect jobs whose stored coordinates are in the wrong state.
-    const STATE_CENTERS = {
-      AL:[32.7,-86.7],AK:[64.2,-153.4],AZ:[34.3,-111.1],AR:[34.9,-92.4],
-      CA:[37.2,-119.4],CO:[39.0,-105.5],CT:[41.6,-72.7],DE:[39.1,-75.5],
-      FL:[28.7,-82.5],GA:[32.7,-83.2],HI:[20.3,-156.4],ID:[44.4,-114.6],
-      IL:[40.0,-89.2],IN:[40.3,-86.1],IA:[42.0,-93.5],KS:[38.5,-98.4],
-      KY:[37.5,-85.3],LA:[31.0,-91.8],ME:[44.7,-69.4],MD:[39.1,-76.8],
-      MA:[42.2,-71.5],MI:[44.2,-85.5],MN:[46.4,-93.1],MS:[32.7,-89.7],
-      MO:[38.4,-92.5],MT:[46.9,-110.4],NE:[41.5,-99.9],NV:[39.3,-116.6],
-      NH:[43.7,-71.6],NJ:[40.1,-74.5],NM:[34.3,-106.1],NY:[42.9,-75.6],
-      NC:[35.6,-79.4],ND:[47.5,-100.5],OH:[40.4,-82.8],OK:[35.6,-97.5],
-      OR:[44.6,-120.5],PA:[40.6,-77.2],RI:[41.7,-71.5],SC:[33.9,-80.9],
-      SD:[44.4,-100.3],TN:[35.9,-86.7],TX:[31.1,-100.1],UT:[39.4,-111.1],
-      VT:[44.1,-72.7],VA:[37.5,-78.5],WA:[47.4,-120.5],WV:[38.6,-80.6],
-      WI:[44.3,-89.8],WY:[42.8,-107.6],DC:[38.9,-77.0],
-    };
-    function titleLocSanityPass(job) {
-      if (!job.job_lat || !profile?.home_lat) return true;
-      const title = (job.title_original || '').toLowerCase();
-      const computedDist = distanceMiles(profile.home_lat, profile.home_lng, job.job_lat, job.job_lng);
-      // City-based check (existing)
-      for (const [kw, coords] of Object.entries(TITLE_LOC_CHECKS)) {
-        if (title.includes(kw)) {
-          const actual = distanceMiles(profile.home_lat, profile.home_lng, coords.lat, coords.lng);
-          if (Math.abs(actual - computedDist) > 80) return false;
-        }
-      }
-      // State-based check: if stored coordinates are > 400 miles from the job's
-      // stated state center, the coordinates are wrong (e.g. Denver job stored
-      // near Boston). Catches bad data for any state, not just Florida cities.
-      const jobState = (job.state || '').toUpperCase().trim();
-      if (jobState && STATE_CENTERS[jobState]) {
-        const [sLat, sLng] = STATE_CENTERS[jobState];
-        const distFromState = distanceMiles(job.job_lat, job.job_lng, sLat, sLng);
-        if (distFromState > 400) return false;
-      }
-      return true;
-    }
-
     // Same tiebreaker as dashboard sort — industry match ratio + inside sales penalty
     function _anonProxyScore(job) {
       const ANON_INDUSTRY_TERMS = {
@@ -92,27 +38,23 @@ async function rank(db, profile, industrySelection = profile.desired_industries)
       .select(JOB_LIST_COLUMNS_NO_DESCRIPTION)
       .eq("status", "active")
       .eq("moderation_status", "approved");
-    if (!allowsBroadLocations(profile)) query = query.or(`and(source_type.eq.custom_html,job_lat.is.null),location_raw.ilike.%|%,and(job_lat.gte.${profile.home_lat-latDelta},job_lat.lte.${profile.home_lat+latDelta},job_lng.gte.${profile.home_lng-lngDelta},job_lng.lte.${profile.home_lng+lngDelta})`);
 
     const marketFilter = industryPrefilter(selection);
     if (marketFilter) query = query.or(marketFilter);
-    const {data: jobs,error} = await readJobPool(query, {
-      accept: j => prepareJob(j,profile) && titleLocSanityPass(j) && (!selection.length || matches(j,selection)),
-      maxAccepted: 400,
-    });
+    // Read every active approved industry candidate. Geographic preparation
+    // must see secondary locations and source-backed scopes, including nulls.
+    const {data: jobs,error} = await readJobPool(query);
     if (error) throw new Error(error.message);
 
     const scored = (jobs || [])
       .map(j => prepareJob(j,profile))
       .filter(Boolean)
-      .filter(j => titleLocSanityPass(j))
       .filter(j => !selection.length || matches(j, selection))
-      .slice(0, 400)
       .map(j => {
         const distMi = j.job_lat != null
           ? Math.round(distanceMiles(profile.home_lat, profile.home_lng, j.job_lat, j.job_lng))
           : null;
-        return { job: j, score: scoreJob(j, profile), distMi, proxy: _anonProxyScore(j) };
+        return { job: j, score: scoreJob(j, profile, {geography:j.geographic_eligibility}), distMi, proxy: _anonProxyScore(j) };
       })
       .filter(r => r.score.overall_score >= 50)
       .sort((a, b) => {
@@ -121,7 +63,7 @@ async function rank(db, profile, industrySelection = profile.desired_industries)
         const rc = b.proxy - a.proxy;
         if (Math.abs(rc) > 0.01) return rc;
         const ad = a.distMi ?? 9999, bd = b.distMi ?? 9999;
-        return ad - bd;
+        return ad - bd || String(a.job.id).localeCompare(String(b.job.id));
       })
       .slice(0, 300);
 
