@@ -28,11 +28,12 @@ async function rank(db, profile, industrySelection = profile.desired_industries)
         !(profile.territory_size_preferences || []).includes('remote');
       if (isInsideSales && wantsField) return -0.1;
       const prodCats = (job.ai_analysis?.product_categories || []).map(s => s.toLowerCase());
-      if (!prodCats.length) return 0;
       const desired = scoringProfile.desired_industries || [];
       const terms = desired.flatMap(ind => (ANON_INDUSTRY_TERMS[ind.toLowerCase().trim()] || [ind.toLowerCase()]));
       const matched = prodCats.filter(p => terms.some(t => p.includes(t))).length;
-      return matched / prodCats.length;
+      // Keep established product-ratio ties; Veterinary market/customer-only matches
+      // must not be treated as zero industry evidence.
+      return matched ? matched / prodCats.length : (normalizeSelection(desired).includes("Veterinary") && matches(job, ["Veterinary"]) ? 1 : 0);
     }
 
     let query = db
@@ -56,7 +57,7 @@ async function rank(db, profile, industrySelection = profile.desired_industries)
         const distMi = j.job_lat != null
           ? Math.round(distanceMiles(profile.home_lat, profile.home_lng, j.job_lat, j.job_lng))
           : null;
-        return { job: j, score: scoreJob(j, scoringProfile, {geography:j.geographic_eligibility, smoothLocalDistance:true}), distMi, proxy: _anonProxyScore(j) };
+        return { job: j, score: scoreJob(j, scoringProfile, {geography:j.geographic_eligibility, smoothLocalDistance:true, canonicalVeterinaryEvidence:true}), distMi, proxy: _anonProxyScore(j) };
       })
       .filter(r => r.score.overall_score >= 50)
       .sort((a, b) => {

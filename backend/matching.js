@@ -34,6 +34,7 @@
 // that are actually empty.
 
 const { distanceMiles } = require("./geocoding");
+const { matches: matchesCanonicalIndustry, normalizeSelection } = require("../public/rook-job-classification");
 
 const STATE_ABBR = {
   alabama: "AL", alaska: "AK", arizona: "AZ", arkansas: "AR", california: "CA",
@@ -488,7 +489,13 @@ function scoreJob(job, profile, options = {}) {
   const hasIndustryData = _primaryList.length > 0;
 
   if (Array.isArray(profile.desired_industries) && profile.desired_industries.length > 0) {
-    if (!hasIndustryData) {
+    // V7: canonical Veterinary market/customer evidence is sufficient positive evidence.
+    // Preserve legacy handling where the canonical classifier confirms no match.
+    const canonicalMatch = options.canonicalVeterinaryEvidence &&
+      profile.desired_industries.find(ind => normalizeSelection([ind]).includes("Veterinary") && matchesCanonicalIndustry(job, [ind]));
+    if (canonicalMatch) {
+      reasons.push(`Matches your interest in ${canonicalMatch}`);
+    } else if (!hasIndustryData) {
       // Job has no industry data — unknown is not confirmed wrong, but
       // when a user has specified a preference it should rank below confirmed matches.
       prefScore -= 10;

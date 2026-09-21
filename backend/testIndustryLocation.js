@@ -48,7 +48,7 @@ function db(rows) {return {from(){const q={select(){return q},eq(){return q},gte
     }
   }
   const results=await rank(db(rows),profile);assert.deepEqual(results.map(j=>j.id).sort(),['dual','vet']);
-  for(const result of results) assert.deepEqual(result.match,scoreJob(result,profile));
+  for(const result of results) assert.deepEqual(result.match,scoreJob(result,profile,{geography:result.geographic_eligibility,smoothLocalDistance:true,canonicalVeterinaryEvidence:true}));
   const masked=preview(dual);assert(matches(masked,['Veterinary']));assert(matches(masked,['Diagnostics']));assert(!('location_evidence' in masked));
   // Browser V7 request must refresh the server pool, rather than discard checkbox query parameters.
   let request;const context={Response,URLSearchParams,window:{},location:{search:''},sessionStorage:{getItem:()=>''},fetch:async(path)=>{request=path;return new Response(JSON.stringify({profile,unlocked:false,jobs:[masked]}))}};
@@ -68,5 +68,5 @@ function db(rows) {return {from(){const q={select(){return q},eq(){return q},gte
   assert.equal(body.jobs.length,1);assert(matches(body.jobs[0],['Veterinary']));assert(!('location_evidence' in body.jobs[0]));
   await route({query:{industries:'',limit:'1'}},res);assert.equal(body.jobs.length,0);
 
-  console.log('PASS: foreign-city points excluded; new source locations validated; failed lookups clear stale points; vet customer/product evidence and dual labels; filtering beyond 1,000 rows before caps; scores unchanged; masked V7 filters refresh server results.');
+  console.log('PASS: foreign-city points excluded; new source locations validated; failed lookups clear stale points; vet customer/product evidence and dual labels; filtering beyond 1,000 rows before caps; V7 scoring options consistent; masked V7 filters refresh server results.');
 })().catch(e=>{console.error(e);process.exitCode=1});
