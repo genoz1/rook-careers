@@ -399,7 +399,11 @@ function scoreJob(job, profile, options = {}) {
   } else if (hasRealCoordinates) {
     // Real coordinates — pure mileage tiers
     const miles = distanceMiles(profile.home_lat, profile.home_lng, job.job_lat, job.job_lng);
-    if (miles <= 75) {
+    if (options.smoothLocalDistance && options.geography?.kind === 'local' && miles <= 300) {
+      // V7 only: preserve the 15-point maximum and downstream rounding/blend.
+      prefScore -= 15 * miles / 300;
+      (miles <= 150 ? reasons : concerns).push(`About ${Math.round(miles)} miles ${miles <= 150 ? 'from you' : 'away'}`);
+    } else if (miles <= 75) {
       reasons.push(`About ${Math.round(miles)} miles from you`);
     } else if (miles <= 150) {
       prefScore -= 5;
