@@ -6,6 +6,7 @@
     onboarding_started: ['trackSingleCustom', 'onboarding_started'],
     v7_questions_completed: ['trackSingleCustom', 'v7_questions_completed'],
     v7_masked_dashboard_viewed: ['trackSingle', 'ViewContent'],
+    v7_unlock_clicked: ['trackSingleCustom', 'v7_unlock_clicked'],
     v7_signup_started: ['trackSingleCustom', 'v7_signup_started'],
     v7_account_created: ['trackSingle', 'CompleteRegistration'],
     v7_checkout_started: ['trackSingle', 'InitiateCheckout'],

@@ -295,8 +295,9 @@
 </style>
 <link rel="stylesheet" href="rook-mobile.css">
 <link rel="stylesheet" href="rook-pretrial.css">
+<link rel="stylesheet" href="rook-conversion.css">
 </head>
-<body>
+<body data-v7-conversion="true">
 <div class="profile-gate-overlay" id="profileGateOverlay">
   <div class="profile-gate-card">
     <h2 id="profileGateTitle">Finish setting up your profile</h2>
@@ -372,7 +373,7 @@
          rescores, and reloads the job list. Does NOT affect the Find Jobs page
          (temporary location searches there are independent). -->
     <div id="locationRow" style="display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:16px; padding:10px 14px; background:#f3f8fc; border:1px solid #dce7f0; border-radius:13px;">
-      <span style="font-size:13px; font-weight:700; color:#47637c; white-space:nowrap; flex-shrink:0;">📍 Primary Job-Search Location:</span>
+      <span style="font-size:13px; font-weight:700; color:#47637c; white-space:nowrap; flex-shrink:0;">📍 Search location:</span>
       <span id="locationLabel" style="font-size:13px; font-weight:700; color:#062d55; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">—</span>
       <button id="btnChangeLocation" style="font-size:12px; font-weight:700; color:#0877d1; background:none; border:1.5px solid #c4ddf5; border-radius:8px; padding:5px 11px; cursor:pointer; flex-shrink:0;">Change</button>
     </div>
@@ -702,6 +703,8 @@
           document.getElementById('greetingName').textContent = `${greetingWord()}, ${firstName}`;
         }
         if (!profile) return; // no profile row at all — rookRequireAuth's routing already sends these candidates to onboarding, not here
+        // Show actual masked results before asking for an optional résumé.
+        if (!rookV7Unlocked) return;
         const missingResume = !profile.resume_file_path;
         const missingLocation = !profile.home_lat && !profile.home_zip;
 
@@ -989,6 +992,7 @@
       }
 
       if (requestVersion !== jobsLoadVersion) return;
+      if (typeof rookTrackFunnelEvent === 'function') rookTrackFunnelEvent(rookV7Unlocked ? 'v7_unmasked_dashboard_viewed' : 'v7_masked_dashboard_viewed');
       currentJobs = Array.isArray(jobs) ? jobs : [];
       jobList.dataset.demo = 'false';
       if (!Array.isArray(jobs) || jobs.length === 0) {
@@ -1023,7 +1027,6 @@
       lockedJobCtaLabel = 'Unlock Job';
       applyRecruiterToggle();
       updateStats(jobs);
-      if (typeof rookTrackFunnelEvent === 'function') rookTrackFunnelEvent(rookV7Unlocked ? 'v7_unmasked_dashboard_viewed' : 'v7_masked_dashboard_viewed');
       revealDemo();
     } catch (err) {
       const _mce = document.getElementById('mobileJobCount');
@@ -1207,6 +1210,7 @@
 
   function renderDashboardPage(visible) {
     if (visible) lastVisibleJobs = visible;
+    if (typeof rookUpdateV7MatchCount === 'function') rookUpdateV7MatchCount(lastVisibleJobs.length);
     const totalPages = Math.max(1, Math.ceil(lastVisibleJobs.length / DASHBOARD_PAGE_SIZE));
     dashboardPage = Math.min(dashboardPage, totalPages);
     const pageItems = lastVisibleJobs.slice((dashboardPage - 1) * DASHBOARD_PAGE_SIZE, dashboardPage * DASHBOARD_PAGE_SIZE);

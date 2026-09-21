@@ -68,6 +68,7 @@
 .privacy-trust{background:#EFF8F6;border:1px solid #CDE8E1;border-radius:12px;padding:14px 16px;margin:16px 0;color:#345A57;font-size:13px;line-height:1.55;text-align:left;}
 .privacy-trust strong{display:block;color:#176557;font-size:14px;font-weight:700;margin-bottom:4px;}
 </style>
+<link rel="stylesheet" href="rook-conversion.css">
 </head>
 <!-- Google tag -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=AW-18428232873"></script>
@@ -77,7 +78,7 @@
   gtag('js', new Date());
   gtag('config', 'AW-18428232873');
   gtag('config', 'G-LDG2CL5Z8R');
-  // The welcome CTA records onboarding_started; page_view measures arrivals.
+  // The first location interaction records onboarding_started; page_view measures arrivals.
 </script>
 <body>
 
@@ -95,65 +96,26 @@
 
 <div class="shell">
 
-  <!-- Welcome -->
-  <div class="screen active" id="s-welcome">
-    <h2 style="font-size:26px;line-height:1.2;margin-bottom:8px;">Over 100+ people<br>are clicking Apply<br>on <span style="color:#DC2626;">LinkedIn.</span></h2>
-    <p class="lead">To them, you're just a number.</p>
-    <div style="position:relative;border:1px solid #e0e0e0;border-radius:10px;padding:14px 16px;background:#fff;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,0.07);">
-      <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:8px;">
-        <div style="width:38px;height:38px;background:#e8f0fe;border-radius:6px;flex-shrink:0;"></div>
-        <div style="flex:1;padding-top:2px;font-size:14px;font-weight:700;color:#0A66C2;line-height:1.3;">Strategic Accounts Executive – Physician Office</div>
-      </div>
-      <div style="font-size:11.5px;color:#666;margin-bottom:2px;">Orlando, FL · Reposted 4 days ago</div>
-      <div style="margin-top:5px;position:relative;display:inline-block;">
-        <span style="background:#FFF3CD;border-radius:4px;padding:2px 5px;font-size:11.5px;color:#333;">Over 100 people clicked apply</span>
-        <svg style="position:absolute;top:-8px;left:-8px;overflow:visible;pointer-events:none;" width="210" height="40" viewBox="0 0 210 40">
-          <path d="M 185,5 C 200,1 208,10 206,20 C 204,30 190,37 165,38 C 130,40 70,38 38,35 C 12,33 1,26 2,17 C 3,8 18,3 48,2 C 85,0 155,2 185,5 Z"
-            fill="none" stroke="#DC2626" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </div>
-      <!-- Bold handwritten-style arrow: starts at LinkedIn. word, sweeps right and down to circle -->
-      <svg viewBox="0 0 350 350" style="position:absolute;top:-118px;left:0;width:350px;max-width:100%;height:350px;overflow:visible;pointer-events:none;">
-        <path d="M 171,49 C 280,28 315,110 302,168 C 292,205 258,211 208,212"
-          fill="none" stroke="#DC2626" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M 208,212 L 222,200 M 208,212 L 222,224"
-          fill="none" stroke="#DC2626" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-    </div>
-    <div class="privacy-trust"><strong>🔒 Your job search is 100% private</strong>Employers and recruiters cannot see who you are, your profile, résumé, or activity on ROOK.</div>
-    <div class="offer-block">
-      <div class="offer-line" style="color:var(--blue)">Start free.</div>
-      <div class="offer-line" style="color:var(--navy)">Then less than $5 a week.</div>
-      <div class="offer-sub">3-day free trial · Billed monthly</div>
-    </div>
-    <button class="btn-primary" id="btnWelcomeStart">See my matches</button>
-    <div class="trust">Answer 4 quick questions · See real matches · No email until you're ready</div>
-    <div style="background:#EEF6FF;border:1px solid #BFDBFE;border-radius:10px;padding:12px 14px;margin-top:16px;margin-bottom:20px;display:flex;align-items:center;gap:8px">
-      <span style="font-size:20px;flex-shrink:0">🎯</span>
-      <span style="font-size:13px;color:#1D4ED8;font-weight:600;line-height:1.4">ROOK shows you which jobs you actually match — directly from employer career sites.</span>
-    </div>
-  </div>
-
   <!-- Location -->
-  <div class="screen" id="s-details">
-    <div class="eyebrow">Step 1 of 4</div>
-    <h2>Where do you want<br>to work?</h2>
-    <p class="lead">We'll find medical sales roles near you.</p>
+  <div class="screen active" id="s-details">
+    <h2>Find medical sales jobs that fit you.</h2>
+    <p class="lead">Answer 4 quick questions for personalized matches from employer career sites.</p>
     <div class="field">
-      <label for="locationInput">City, state or ZIP code</label>
+      <label for="locationInput">Where do you want to work?</label>
       <div style="position:relative">
-        <input type="text" id="locationInput" placeholder="e.g. Orlando, FL or 34484" autocomplete="off" style="width:100%;padding:13px 14px;border:1.5px solid var(--line);border-radius:var(--input-radius);font:inherit;font-size:16px;color:var(--ink);background:var(--paper);outline:none;-webkit-appearance:none;transition:border-color .15s">
+        <input type="text" id="locationInput" placeholder="City, state or ZIP code" autocomplete="off" style="width:100%;padding:13px 14px;border:1.5px solid var(--line);border-radius:var(--input-radius);font:inherit;font-size:16px;color:var(--ink);background:var(--paper);outline:none;-webkit-appearance:none;transition:border-color .15s">
         <ul id="locationList" hidden style="position:absolute;top:100%;left:0;right:0;z-index:200;background:#fff;border:1.5px solid var(--blue);border-top:none;border-radius:0 0 12px 12px;margin:0;padding:4px 0;list-style:none;max-height:220px;overflow-y:auto;box-shadow:0 8px 20px rgba(7,44,80,.12)"></ul>
       </div>
       <div id="locationStatus" style="font-size:12px;color:var(--muted);min-height:18px;margin-top:4px"></div>
     </div>
     <div class="err" id="detailsErr"></div>
+    <div class="privacy-trust"><strong>Your job search stays private</strong>Employers and recruiters cannot see your profile, résumé or activity.</div>
     <button class="btn-primary" id="btnDetailsNext" disabled>Continue</button>
+    <p class="trust">Preview your matches without an account, résumé or card.</p>
   </div>
 
   <!-- Industry -->
   <div class="screen" id="s-industry">
-    <div class="eyebrow">Step 2 of 4</div>
     <h2>Where is your strongest experience?</h2>
     <p class="lead">Choose the area that best describes you.</p>
     <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
@@ -169,7 +131,6 @@
 
   <!-- Years -->
   <div class="screen" id="s-years">
-    <div class="eyebrow">Step 3 of 4</div>
     <h2>How many years in sales?</h2>
     <p class="lead">Helps ROOK match you with the right seniority level.</p>
     <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
@@ -184,7 +145,6 @@
 
   <!-- Territory -->
   <div class="screen" id="s-territory">
-    <div class="eyebrow">Step 4 of 4</div>
     <h2>What kind of territory works for you?</h2>
     <p class="lead">Select all that apply.</p>
     <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
@@ -213,22 +173,21 @@
 (async () => {
 
 // ── State ──────────────────────────────────────────────────────────────────
-let currentScreen = 'welcome';
+let currentScreen = 'details';
 let selectedLocation = null;
 
 const BACK_MAP = {
   analyzing: 'territory',
-  details: 'welcome',
   industry: 'details',
   years: 'industry',
   territory: 'years',
 };
 
 const PROGRESS = {
-  welcome: 0, details: 15, industry: 35, years: 55, territory: 75
+  details: 25, industry: 50, years: 75, territory: 100
 };
 const LABELS = {
-  welcome: '', details: 'Step 1 of 4', industry: 'Step 2 of 4',
+  details: 'Step 1 of 4', industry: 'Step 2 of 4',
   years: 'Step 3 of 4', territory: 'Step 4 of 4'
 };
 
@@ -250,16 +209,24 @@ function goBack() {
 }
 window.goBack = goBack;
 
-// ── Welcome ─────────────────────────────────────────────────────────────────
-document.getElementById('btnWelcomeStart').addEventListener('click', () => { if (typeof rookTrackFunnelEvent === 'function') rookTrackFunnelEvent('onboarding_started', {event_category:'onboarding', event_label:'v7'}); show('details'); });
+// Count the first interaction, never a page view, as an onboarding start.
+let onboardingInteracted = false;
+function recordStart() {
+  if (onboardingInteracted) return;
+  onboardingInteracted = true;
+  if (typeof rookTrackFunnelEvent === 'function') rookTrackFunnelEvent('onboarding_started', {event_category:'onboarding', event_label:'v7'});
+}
+show('details');
 
 // ── Location ────────────────────────────────────────────────────────────────
 const _locInput = document.getElementById('locationInput');
+_locInput.addEventListener('input', recordStart, {once:true});
 const _locList  = document.getElementById('locationList');
 if (_locInput && _locList && typeof RookLocationWidget !== 'undefined') {
   RookLocationWidget.init({
     inputEl: _locInput, listEl: _locList,
     onSelect: (s) => {
+      recordStart();
       selectedLocation = s;
       const st = document.getElementById('locationStatus');
       if (st) st.textContent = s.label;
@@ -305,6 +272,10 @@ document.querySelectorAll('input[name="territory"]').forEach(cb =>
 document.getElementById('btnTerritoryNext').addEventListener('click', async () => {
   const territories = [...document.querySelectorAll('input[name="territory"]:checked')].map(c => c.value);
   if (!territories.length) return;
+  if (typeof rookTrackFunnelEvent === 'function') rookTrackFunnelEvent('v7_questions_completed', {event_category:'onboarding'});
+  document.getElementById('matchesHeadline').textContent = 'Finding your matches…';
+  document.getElementById('matchesSub').textContent = 'Ranking opportunities using your location and background.';
+  document.getElementById('btnAnalyzeBack').style.display = 'none';
   show('analyzing');
   if (typeof gtag === 'function') gtag('event','v7_analyzing_started');
   await loadAnonymousMatches(territories);
@@ -322,7 +293,6 @@ async function loadAnonymousMatches(territories) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Unable to load matches. Please try again.');
     sessionStorage.setItem('rook_v7_token', data.token);
-    if (typeof rookTrackFunnelEvent === 'function') rookTrackFunnelEvent('v7_questions_completed', {event_category:'onboarding'});
     window.location.href = 'rook-dashboard-v7.html';
   } catch (err) {
     document.getElementById('matchesHeadline').textContent = 'Unable to load your matches';
@@ -334,5 +304,6 @@ async function loadAnonymousMatches(territories) {
 
 })();
 </script>
+<footer class="conversion-trust" aria-label="ROOK information"><span>ROOK · Medical &amp; veterinary sales careers</span><nav><a href="rook-about.html" target="_blank" rel="noopener">About ROOK</a><a href="mailto:hello@rookcareers.com">Contact</a><a href="rook-privacy.html" target="_blank" rel="noopener">Privacy</a><a href="rook-terms.html" target="_blank" rel="noopener">Terms</a></nav></footer>
 </body>
 </html>

@@ -106,7 +106,8 @@ async function rookV7Upload(fd) {
 }
 // Override only on V7 pages; all V6 users retain the shared checkout behavior.
 async function rookGoToCheckout(source) {
-  if(typeof rookTrackEvent === 'function') rookTrackEvent('v7_unlock_clicked',{source:source==='banner'?'banner':'job'});
+  if(typeof rookTrackFunnelEvent === 'function') rookTrackFunnelEvent('v7_unlock_clicked',{source:source==='banner'?'banner':'job'});
+  else if(typeof rookTrackEvent === 'function') rookTrackEvent('v7_unlock_clicked',{source:source==='banner'?'banner':'job'});
   const {data:{session}}=await rookV7Auth().auth.getSession();
   window.location.href=session ? 'rook-checkout-v7.html' : 'rook-onboarding-v7-signup.html';
 }

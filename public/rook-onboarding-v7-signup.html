@@ -61,6 +61,7 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
 .privacy-trust{background:#EFF8F6;border:1px solid #CDE8E1;border-radius:12px;padding:14px 16px;margin:16px 0;color:#345A57;font-size:13px;line-height:1.55;text-align:left;}
 .privacy-trust strong{display:block;color:#176557;font-size:14px;font-weight:700;margin-bottom:4px;}
 </style>
+<link rel="stylesheet" href="rook-conversion.css">
 </head>
 <!-- Google tag -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=AW-18428232873"></script>
@@ -81,19 +82,9 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
   </div>
 
   <div class="screen">
-    <div class="eyebrow">3-day free trial · Card required</div>
+    <div class="eyebrow">Account → verify email → start trial</div>
     <h2>Unlock your matches.</h2>
-    <p class="lead">Create your account, then enter your card on the next screen to start your 3-day free trial and unlock your matches.</p>
-
-    <div class="trial-box">
-      <div class="trial-price">
-        <span>3-Day Free Trial</span>
-        <div><strong>$0</strong> <small>for 3 days</small></div>
-      </div>
-      <div class="trial-feature"><span class="trial-check">✓</span> Unlock employer names and full job listings</div>
-      <div class="trial-feature"><span class="trial-check">✓</span> Get direct application links for your matches</div>
-      <div class="trial-feature"><span class="trial-check">✓</span> Then $19.99/month. Cancel before your trial ends to avoid being charged.</div>
-    </div>
+    <p class="lead">Save your matches with a verified account. Add your card next to unlock job titles, employers and application links.</p>
 
     <div class="form-section" id="createSection">
       <div class="form-section-label">Create your account</div>
@@ -123,7 +114,7 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
     <div id="createActions">
       <div class="err" id="formErr" role="alert"></div>
       <button class="btn-primary" id="btnCreateAccount">Email my verification code</button>
-      <p class="fine">Card required on the next screen to activate your trial. $0 for 3 days, then $19.99/month unless canceled. Cancel anytime.</p>
+      <p class="fine">3 days free, then $19.99/month. Cancel anytime.<br>Card required at checkout. Cancel before your trial ends to avoid being charged.</p>
     </div>
     <div id="verifySection" style="display:none">
       <div class="form-section">
@@ -132,7 +123,7 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
         <label class="field-label" for="codeInput" style="margin-top:18px">Verification code</label>
         <input class="field-input" id="codeInput" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="10" pattern="[0-9]{6,10}" placeholder="Code from email">
         <div class="err" id="codeErr" role="alert"></div>
-        <button class="btn-primary" id="btnVerifyCode">See my matches</button>
+        <button class="btn-primary" id="btnVerifyCode">Continue to secure checkout</button>
         <div class="verify-actions">
           <button type="button" id="btnResendCode" disabled>Resend code (60s)</button>
           <button type="button" id="btnChangeEmail">Change email</button>
@@ -287,10 +278,11 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
     } catch (err) {
       codeErr.textContent = err.message;
       verifyBtn.disabled = false;
-      verifyBtn.textContent = 'See my matches';
+      verifyBtn.textContent = 'Continue to secure checkout';
     }
   });
 })();
 </script>
+<footer class="conversion-trust" aria-label="ROOK information"><span>ROOK · Medical &amp; veterinary sales careers</span><nav><a href="rook-about.html" target="_blank" rel="noopener">About ROOK</a><a href="mailto:hello@rookcareers.com">Contact</a><a href="rook-privacy.html" target="_blank" rel="noopener">Privacy</a><a href="rook-terms.html" target="_blank" rel="noopener">Terms</a></nav></footer>
 </body>
 </html>
