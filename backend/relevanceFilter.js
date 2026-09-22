@@ -50,15 +50,24 @@ const DOMAIN_WORDS = [
   "territory", "account", "veterinary", "medical", "pharmaceutical", "diagnostic", "clinical",
 ];
 
+// Internal operations and combined sales/service management are not direct
+// selling roles. Keep ordinary regional, territory and inside-sales roles.
+function isInternalSalesRole(title = '') {
+  const t=String(title).toLowerCase();
+  return /\bsales[ -]+ops\b/.test(t) ||
+    (/\b(?:manager|director|head|lead|vp|vice president)\b/.test(t) &&
+     /\bsales\s*(?:and|&)\s*(?:customer\s+)?service\b/.test(t));
+}
+
 function titleHasStrongSalesSignal(title = "") {
   const t = title.toLowerCase();
-  if (EXCLUSION_SIGNALS.some((k) => t.includes(k))) return false;
+  if (isInternalSalesRole(t) || EXCLUSION_SIGNALS.some((k) => t.includes(k))) return false;
   return /\bsales\b|\bsalesperson\b/.test(t) || STRONG_TITLE_SIGNALS.some((k) => t.includes(k));
 }
 
 function titleLooksRelevant(title = "") {
   const t = title.toLowerCase();
-  if (EXCLUSION_SIGNALS.some((k) => t.includes(k))) return false;
+  if (isInternalSalesRole(t) || EXCLUSION_SIGNALS.some((k) => t.includes(k))) return false;
   if (titleHasStrongSalesSignal(title)) return true;
   // Common sales leadership title, but ambiguous without description/context.
   // Retain it for deferred enrichment rather than either rejecting it or
@@ -69,4 +78,4 @@ function titleLooksRelevant(title = "") {
   return hasRoleWord && hasDomainWord;
 }
 
-module.exports = { titleLooksRelevant, titleHasStrongSalesSignal };
+module.exports = { titleLooksRelevant, titleHasStrongSalesSignal, isInternalSalesRole };

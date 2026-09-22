@@ -13,7 +13,7 @@ async function validateJobLocation(job,geocode=geocodeLocation,previous=null) {
   // Every v3 decision records the description hash because a later edit can
   // introduce higher-priority explicit territory evidence even when the ATS
   // location and title did not change.
-  if(same&&old.version===VERSION&&old.source_title===normalized(job.title_original)&&old.source_description_hash===descriptionHash&&old.status==='validated'&&age>=0&&age<30*86400000)return {job_lat:previous.job_lat,job_lng:previous.job_lng,state:previous.state,location_evidence:old};
+  if(same&&old.version===VERSION&&old.source_title===normalized(job.title_original)&&old.source_description_hash===descriptionHash&&old.status==='validated'&&!old.incomplete&&age>=0&&age<30*86400000)return {job_lat:previous.job_lat,job_lng:previous.job_lng,state:previous.state,location_evidence:old};
   // Preserve validated legacy points only against exactly the same source.
   const input=same&&!descriptionBacked?{...job,job_lat:previous.job_lat,job_lng:previous.job_lng,state:previous.state,location_evidence:{...old,version:1,scope:undefined}}:job;
   return resolveLocation(input,geocode);

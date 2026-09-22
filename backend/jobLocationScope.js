@@ -5,10 +5,9 @@ const {hasUnambiguousForeignCountryEvidence,normalizeCountryCode} = require('./l
 const zipcodes = require('zipcodes');
 const countries = require('i18n-iso-countries');
 const crypto = require('crypto');
-// Version 3 adds title/description territory precedence. Bumping the version
-// deliberately invalidates cached v2 choices that may point at an ATS office
-// or headquarters instead of the sales territory.
-const VERSION = 3;
+// Version 4 recognizes city evidence inside titles and remote ATS labels.
+// Revalidate v3 decisions that incorrectly reduced explicit cities to states.
+const VERSION = 4;
 const clean = s => String(s || '').trim().replace(/\s+/g,' ');
 const key = s => clean(s).toLowerCase().replace(/[^a-z0-9]/g,'');
 const cityIndex=new Map(Object.values(zipcodes.codes).map(z=>[key(z.city)+'|'+z.state,z]));
@@ -20,8 +19,10 @@ function stateOnly(raw) {
 // Exact city/state entries only: do not guess a state for a bare city, or
 // geocode a state centroid as though it were an employer's street address.
 function cityQuery(segment) {
-  let s=clean(segment).replace(/\bUnited States(?: of America)?\b|\bUSA\b|\bUS\b/g,'').replace(/\((?:remote|hybrid|on.?site)\)/gi,'').replace(/^Remote\s*[-,]\s*/i,'').replace(/[,\s]+$/,'').trim();
+  let s=clean(segment).replace(/\bUnited States(?: of America)?\b|\bUSA\b|\bUS\b/g,'').replace(/\((?:remote|hybrid|on.?site)\)/gi,'').replace(/^\s*Remote\s*[-,]\s*/i,'').replace(/[,\s]+$/,'').trim();
   s=s.replace(/^[-,\s]+/,'');
+  if (/^(?:NYC|New York City)$/i.test(s)) s='New York, NY';
+  s=s.replace(/^New York City(?=,)/i,'New York');
   const reversed=/^([^,]+),\s*([^,]+)$/.exec(s);
   if(reversed && resolveUsStateCode(reversed[1]) && !resolveUsStateCode(reversed[2])) s=reversed[2]+', '+reversed[1];
   const stateCity=/^([A-Za-z ]+?)\s*-\s*([A-Za-z .'-]+)$/.exec(s);
@@ -46,15 +47,36 @@ function stateCodesInText(text) {
 }
 function cityQueriesInText(text) {
   const source=String(text||''), queries=[];
+  const add=q=>{if(q&&!queries.some(x=>x.city===q.city&&x.state===q.state))queries.push(q);};
+  // Match the longest known city suffix immediately before a state. Role
+  // prefixes and unspaced hyphens must not swallow "Dallas TX" or Pittsburgh.
   const stateToken='(?:[A-Z]{2}|'+Object.keys(zipcodes.states.full).sort((a,b)=>b.length-a.length).map(s=>s.replace(/ /g,'\\s+')).join('|')+')';
-  const pattern=new RegExp("([A-Za-z][A-Za-z .'-]{1,45}?),\\s*("+stateToken+")\\b",'g');
+  const pattern=new RegExp('(?:,\\s*|\\s+)('+stateToken+')\\b','g');
   for(const match of source.matchAll(pattern)) {
-    let city=match[1].replace(/^.*(?:[–—;:(]|\s-\s)/,'').replace(/^(?:and|or|covering|includes?|based in|must reside in)\s+/i,'').trim();
-    const state=resolveUsStateCode(match[2]);
-    if(!state) continue;
-    const place=zipcodes.lookupByName(city,state)[0];
-    if(place&&!queries.some(q=>q.city===place.city&&q.state===state))queries.push({query:`${place.city}, ${state}`,city:place.city,state});
+    const state=resolveUsStateCode(match[1]); if(!state)continue;
+    const before=source.slice(0,match.index).replace(/New York City$/i,'New York');
+    // Shared-state lists (Charlotte/Raleigh, NC) retain every named city.
+    const sharedParts=before.split(/\s*[/,&]\s*|\s+(?:and|or)\s+/i);
+    if(sharedParts.length>1) {
+      for(const part of sharedParts.reverse()) {
+        const words=part.split(/[^A-Za-z.'-]+/).filter(Boolean);
+        let place;
+        for(let n=Math.min(6,words.length);n>0&&!place;n--)
+          place=cityIndex.get(key(words.slice(-n).join(' '))+'|'+state);
+        if(!place)break;
+        add({query:`${place.city}, ${state}`,city:place.city,state});
+      }
+    }
+    const words=before.split(/[^A-Za-z.'-]+/).filter(Boolean);
+    for(let n=Math.min(6,words.length);n>0;n--) {
+      const candidate=words.slice(-n).join(' ').split('-');
+      const candidates=[candidate.join('-'),candidate[candidate.length-1]];
+      const place=candidates.map(c=>cityIndex.get(key(c)+'|'+state)).find(Boolean);
+      if(place){add({query:`${place.city}, ${state}`,city:place.city,state});break;}
+    }
   }
+  // These are explicit city names, unlike the ambiguous bare "New York".
+  if(/\b(?:NYC|New York City)\b/i.test(source))add({query:'New York, NY',city:'New York',state:'NY'});
   return queries;
 }
 function sharedStateCityQueries(clause) {
@@ -143,7 +165,7 @@ async function resolveLocation(job, geocode) {
       let p;try{p=await geocode(q.query,{sourceCountryCode:'US'});}catch{}
       if(validPoint(p)&&resolveUsStateCode(p.state)===q.state)locations.push({...p,state:q.state,location:q.query});
     }
-    if(locations.length===scope.queries.length) return {job_lat:locations[0].lat,job_lng:locations[0].lng,state:locations[0].state,location_evidence:{...evidence,status:'validated',locations,geocoded_location:locations.map(p=>p.location).join(' | ')}};
+    if(locations.length) return {job_lat:locations[0].lat,job_lng:locations[0].lng,state:locations[0].state,location_evidence:{...evidence,status:'validated',locations,incomplete:locations.length<scope.queries.length,geocoded_location:locations.map(p=>p.location).join(' | ')}};
     return {job_lat:null,job_lng:null,state:null,location_evidence:{...evidence,status:'unresolved',scope:{...scope,kind:'unresolved',reason:'geocode_failed',requested_scope:scope}}};
   }
   if(scope.kind==='local')return {job_lat:job.job_lat,job_lng:job.job_lng,state:job.state,location_evidence:evidence};

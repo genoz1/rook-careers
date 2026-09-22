@@ -329,7 +329,7 @@ router.get("/job-search", requireConfig, requireAuth, requireFullAccess, async (
     .filter(isUsEligibleJob)
     .filter(industryPass)
     .map(job => ({
-      ...(distanceProfile ? attachDistance(job, distanceProfile) : { ...job, distance_miles: null }),
+      ...require("../searchDistance").attachSearchDistance(job, distanceProfile),
       saved: savedJobIds.has(job.id),
       application_status: appStatusByJob.get(job.id) || null,
       employer_note: noteFor(job),
