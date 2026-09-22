@@ -13,7 +13,17 @@
   function matchesState(job, stateCode) {
     return !!stateCode && territories(job).some(g => g.states.includes(stateCode));
   }
-  const api = {territories, matchesState};
+  // Match is tied to the queried point so an in-flight location change cannot
+  // reuse a previous search's territory decision.
+  function includesSearchArea(job, point) {
+    return !!point && !!job.territory_match &&
+      job.territory_match.lat === point.lat && job.territory_match.lng === point.lng;
+  }
+  function withinRadius(job, point, radius, distance) {
+    return includesSearchArea(job, point) ||
+      (job.job_lat != null && job.job_lng != null && Number.isFinite(distance) && distance <= radius);
+  }
+  const api = {territories, matchesState, includesSearchArea, withinRadius};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.RookTerritoryLocation = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -175,9 +175,9 @@ test('opt-in territory split produces eight stable distinct listings with the sa
 });
 
 
-test('34484 exact radius excludes a Florida territory without invented city coordinates',()=>{
+test('34484 radius includes verified Florida territory without invented coordinates',()=>{
  const {splitTerritoryOpenings} = require('./adapters/customHtml');
- const {matchesState,territories} = require('../public/rook-territory-location');
+ const {matchesState,territories,withinRadius} = require('../public/rook-territory-location');
  const {redactForNonSubscriber} = require('./redaction');
  const zip = require('zipcodes').lookup('34484');
  const profile = {home_lat:zip.latitude,home_lng:zip.longitude,home_state:'Florida',territory_size_preferences:['local']};
@@ -199,10 +199,11 @@ test('34484 exact radius excludes a Florida territory without invented city coor
  const start = page.indexOf("      const radiusMiles = Number(document.getElementById('radiusSelect').value);");
  const end = page.indexOf('      return true;',start);
  const filter = new Function('job','nearLocationCoords','document','RookTerritoryLocation','distanceMilesClient',page.slice(start,end)+'return true;');
- const run = (job,dist=0)=>filter(job,{lat:zip.latitude,lng:zip.longitude,stateAbbr:'FL'},{getElementById:()=>({value:'100'})},{matchesState},()=>dist);
- // A finite-mile search requires a verified point. A state-level territory
- // remains discoverable without the radius filter, but cannot be promised
- // within 100 miles of this ZIP code.
+ const run = (job,dist=0)=>filter(job,{lat:zip.latitude,lng:zip.longitude,stateAbbr:'FL'},{getElementById:()=>({value:'100'})},{matchesState,withinRadius},()=>dist);
+ // Unverified state overlap alone cannot pass. The API's actual polygon
+ // containment decision can pass without creating any point or mileage.
+ const searched = require('./searchDistance').attachSearchDistance(found[0],profile);
+ assert(run(searched)); assert.equal(searched.job_lat,null); assert.equal(searched.distance_miles,null);
  assert(!run(found[0])); assert(!run(rows[0])); assert(!run({job_lat:null,job_lng:null}));
  assert(run({job_lat:28,job_lng:-82},99)); assert(!run({job_lat:28,job_lng:-82},101));
 });

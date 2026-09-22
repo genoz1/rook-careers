@@ -36,7 +36,7 @@ function cityQuery(segment) {
   return entry ? {query:`${entry.city}, ${state}`,city:entry.city,state} : null;
 }
 function stateCodesInText(text) {
-  const source=String(text||''), found=[];
+  const source=String(text||'').replace(/\bNorth\s*(?:and|&)\s*South\s+(Carolina|Dakota)\b/gi, 'North $1 South $1').replace(/\b(?:the\s+)?Dakotas\b/gi, 'North Dakota South Dakota'), found=[];
   for(const [name,code] of Object.entries(zipcodes.states.full)) {
     if(new RegExp(`\\b${name.replace(/ /g,'\\s+')}\\b`,'i').test(source)) found.push(code);
   }

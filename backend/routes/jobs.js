@@ -294,7 +294,7 @@ router.get("/job-search", requireConfig, requireAuth, requireFullAccess, async (
 
   let query = supabaseAdmin
     .from("jobs")
-    .select(JOB_LIST_COLUMNS_NO_DESCRIPTION)
+    .select(JOB_LIST_COLUMNS_NO_DESCRIPTION + ", description_text")
     .eq("status", "active")
     .eq("moderation_status", "approved");
 

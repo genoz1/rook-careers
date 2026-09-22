@@ -47,14 +47,14 @@ test('Any distance has no hidden geographic cutoff in catalog route', () => {
   assert.match(searchHtml, /nearLocationCoords && radiusMiles > 0/);
 });
 
-test('finite radius is exact and mobile keeps the location and distance controls in the open filter panel', () => {
+test('finite radius supports territory containment and mobile keeps the location and distance controls in the open filter panel', () => {
   assert.match(searchHtml, /nearLocationCoords && radiusMiles > 0/);
-  assert.match(searchHtml, /job\.job_lat == null \|\| job\.job_lng == null\)[\s\S]{0,220}return false/);
+  assert.match(searchHtml, /RookTerritoryLocation\.withinRadius/);
   assert.match(searchHtml, /#desktopLocationFilterGroup\{display:block;\}/);
   assert.match(searchHtml, /id="desktopLocationFilterGroup"/);
   assert.match(searchHtml, /\.filters,\.filters\.mobile-open\{display:block;/);
   assert.match(searchHtml, /\.mobile-filters-toggle,\.mobile-zip-row\{display:none !important;\}/);
-  assert.match(searchHtml, /Jobs without exact coordinates are excluded/);
+  assert.match(searchHtml, /Also includes territories covering your search area/);
 });
 
 test('nearest is the default Job Search sort', () => {

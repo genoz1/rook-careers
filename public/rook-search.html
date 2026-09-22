@@ -629,7 +629,7 @@
     const query = document.getElementById('nearLocationInput').value.trim();
     const radius = Number(document.getElementById('radiusSelect').value);
     const message = radius > 0
-      ? `Showing jobs within ${radius} miles of "${escapeHtml(query)}". Jobs without exact coordinates are excluded.`
+      ? `Showing jobs within ${radius} miles of "${escapeHtml(query)}". Also includes territories covering your search area; their exact distance is unavailable.`
       : `Using "${escapeHtml(query)}" for distance information — no distance cutoff applied.`;
     document.getElementById('nearLocationStatus').innerHTML = `${message} <a href="#" onclick="clearNearLocation(); return false;" style="color:var(--royal); font-weight:600;">Clear</a>`;
   }
@@ -1000,18 +1000,11 @@
         return false;
       }
 
-      // Territory jobs have no point distance. Include same-state possibilities
-      // with an explicit coverage caveat instead of silently dropping them.
+      // Either a real point is in range, or the searched point is in the territory.
       const radiusMiles = Number(document.getElementById('radiusSelect').value);
       if (nearLocationCoords && radiusMiles > 0) {
-        if (job.job_lat == null || job.job_lng == null) {
-          // A finite-mile search is exact: without point coordinates ROOK
-          // cannot prove a remote, national, or territory job is in range.
-          return false;
-        } else {
-          const dist = distanceMilesClient(nearLocationCoords.lat, nearLocationCoords.lng, job.job_lat, job.job_lng);
-          if (dist > radiusMiles) return false;
-        }
+        const dist = distanceMilesClient(nearLocationCoords.lat, nearLocationCoords.lng, job.job_lat, job.job_lng);
+        if (!RookTerritoryLocation.withinRadius(job, nearLocationCoords, radiusMiles, dist)) return false;
       }
 
       return true;
@@ -1144,10 +1137,11 @@
         nearLocationCoords.lat, nearLocationCoords.lng,
         job.job_lat, job.job_lng
       );
-      // distanceMilesClient returns Infinity when job lat/lng are unavailable.
-      // Omit the line entirely rather than rendering "Infinity miles" or NaN.
-      if (!isFinite(dist)) return RookTerritoryLocation.matchesState(job, nearLocationCoords.stateAbbr)
-        ? '<div style="font-size:12px; color:var(--royal); margin-top:4px;">Territory in your search state — confirm coverage; exact distance unavailable</div>' : '';
+      const radius = Number(document.getElementById('radiusSelect').value);
+      if (RookTerritoryLocation.includesSearchArea(job, nearLocationCoords) &&
+          (!isFinite(dist) || (radius > 0 && dist > radius)))
+        return '<div style="font-size:12px; color:var(--royal); margin-top:4px;">Territory includes your search area — exact distance unavailable.</div>';
+      if (!isFinite(dist)) return '';
       return `<div style="font-size:12px; color:var(--royal); font-weight:600; margin-top:4px;">${Math.round(dist)} miles from your search location</div>`;
     })();
 
