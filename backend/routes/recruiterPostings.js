@@ -155,7 +155,7 @@ router.post("/recruiter-postings", requireConfig, requireAuth, loadRecruiterId, 
   // Deterministic title enrichment and best-effort embedding — a
   // failure in any of these doesn't block the submission.
   {
-    const analysis = deterministicJobAnalysis(job_title);
+    const analysis = deterministicJobAnalysis({ title: job_title, description: description_text });
     if (analysis) {
     await supabaseAdmin.from("jobs").update({ ai_analysis: analysis }).eq("id", inserted.id);
     }
@@ -228,7 +228,7 @@ router.put("/recruiter-postings/:id", requireConfig, requireAuth, loadRecruiterI
   // best-effort, same as the original POST route, a failure here
   // doesn't block the edit itself from saving.
   {
-    const analysis = deterministicJobAnalysis(job_title);
+    const analysis = deterministicJobAnalysis({ title: job_title, description: description_text });
     if (analysis) {
     await supabaseAdmin.from("jobs").update({ ai_analysis: analysis }).eq("id", req.params.id);
     }

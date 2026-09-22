@@ -4,11 +4,16 @@ const {resolveUsStateCode,hasQualifiedUsLocation,US_COUNTRY_CODES} = require('./
 const {hasUnambiguousForeignCountryEvidence,normalizeCountryCode} = require('./locationTextRules');
 const zipcodes = require('zipcodes');
 const countries = require('i18n-iso-countries');
-const VERSION = 2;
+const crypto = require('crypto');
+// Version 3 adds title/description territory precedence. Bumping the version
+// deliberately invalidates cached v2 choices that may point at an ATS office
+// or headquarters instead of the sales territory.
+const VERSION = 3;
 const clean = s => String(s || '').trim().replace(/\s+/g,' ');
 const key = s => clean(s).toLowerCase().replace(/[^a-z0-9]/g,'');
 const cityIndex=new Map(Object.values(zipcodes.codes).map(z=>[key(z.city)+'|'+z.state,z]));
 const validPoint = p => p && [p.lat,p.lng].every(Number.isFinite) && Math.abs(p.lat)<=90 && Math.abs(p.lng)<=180 && resolveUsStateCode(p.state);
+const descriptionHash = text => crypto.createHash('md5').update(String(text || '')).digest('hex');
 function stateOnly(raw) {
   return resolveUsStateCode(clean(raw).replace(/\b(united states(?: of america)?|usa|us|remote|office|virtual|home|based|field|work|from|any city|state of|address|loc)\b/gi,'').replace(/[\d_>,:()|–—-]+/g,' ').trim());
 }
@@ -29,13 +34,74 @@ function cityQuery(segment) {
   const entry=cityIndex.get(key(city)+'|'+state);
   return entry ? {query:`${entry.city}, ${state}`,city:entry.city,state} : null;
 }
+function stateCodesInText(text) {
+  const source=String(text||''), found=[];
+  for(const [name,code] of Object.entries(zipcodes.states.full)) {
+    if(new RegExp(`\\b${name.replace(/ /g,'\\s+')}\\b`,'i').test(source)) found.push(code);
+  }
+  for(const match of source.matchAll(/\b([A-Z]{2})\b/g)) {
+    const code=resolveUsStateCode(match[1]); if(code) found.push(code);
+  }
+  return [...new Set(found)];
+}
+function cityQueriesInText(text) {
+  const source=String(text||''), queries=[];
+  const stateToken='(?:[A-Z]{2}|'+Object.keys(zipcodes.states.full).sort((a,b)=>b.length-a.length).map(s=>s.replace(/ /g,'\\s+')).join('|')+')';
+  const pattern=new RegExp("([A-Za-z][A-Za-z .'-]{1,45}?),\\s*("+stateToken+")\\b",'g');
+  for(const match of source.matchAll(pattern)) {
+    let city=match[1].replace(/^.*(?:[–—;:(]|\s-\s)/,'').replace(/^(?:and|or|covering|includes?|based in|must reside in)\s+/i,'').trim();
+    const state=resolveUsStateCode(match[2]);
+    if(!state) continue;
+    const place=zipcodes.lookupByName(city,state)[0];
+    if(place&&!queries.some(q=>q.city===place.city&&q.state===state))queries.push({query:`${place.city}, ${state}`,city:place.city,state});
+  }
+  return queries;
+}
+function sharedStateCityQueries(clause) {
+  const states=stateCodesInText(clause); if(states.length!==1)return [];
+  const state=states[0];
+  const stateName=Object.entries(zipcodes.states.full).find(([,code])=>code===state)?.[0] || state;
+  let body=String(clause).replace(new RegExp(`,?\\s*(?:${state}|${stateName})\\b.*$`,'i'),'');
+  body=body.replace(/^.*?\b(?:territory includes?|assigned territory(?: includes| covers)?|covering|responsible for (?:the )?[^.;:]*?territory(?: includes| covering)?|based in|must reside in)\b\s*[:\-]?/i,'');
+  const parts=body.split(/\s*,\s*|\s+(?:and|or)\s+/i).map(s=>s.replace(/^(?:and|or|the|greater|metro)\s+/i,'').trim()).filter(Boolean);
+  return parts.map(city=>zipcodes.lookupByName(city,state)[0]).filter(Boolean).map(place=>({query:`${place.city}, ${state}`,city:place.city,state}));
+}
+function explicitTitleScope(job) {
+  const title=clean(job.title_original);
+  if(!/sales|territory|account|clinical|specialist|business development/i.test(title))return null;
+  const queries=cityQueriesInText(title);
+  if(queries.length)return {kind:'local',queries,states:[...new Set(queries.map(q=>q.state))],reason:'explicit_title_territory'};
+  const geographicPart=(title.match(/\(([^()]*)\)\s*$/)?.[1] || title.split(/\s+[–—-]\s+/).pop());
+  const states=stateCodesInText(geographicPart);
+  if(states.length)return {kind:'territory',states,reason:'explicit_title_territory'};
+  return null;
+}
+function explicitDescriptionScope(job) {
+  const description=String(job.description_text||'');
+  const clauses=description.split(/(?:\r?\n|(?<=[.!?])\s+)/).map(clean).filter(Boolean);
+  const trigger=/\b(territory includes?|assigned territory|covering|responsible for (?:the )?[^.;]{0,80}\bterritory|based in|must reside in|national (?:u\.?s\.?|united states) territory)\b/i;
+  for(const clause of clauses) {
+    if(!trigger.test(clause))continue;
+    if(/\bnational (?:u\.?s\.?|united states) territory\b/i.test(clause))return {kind:'national_us',reason:'explicit_description_territory'};
+    let queries=cityQueriesInText(clause);
+    const shared=sharedStateCityQueries(clause);
+    for(const q of shared)if(!queries.some(x=>x.city===q.city&&x.state===q.state))queries.push(q);
+    if(queries.length)return {kind:'local',queries,states:[...new Set(queries.map(q=>q.state))],reason:'explicit_description_territory'};
+    const states=stateCodesInText(clause);
+    if(states.length)return {kind:'territory',states,reason:'explicit_description_territory'};
+  }
+  return null;
+}
 function classifyLocation(job) {
   const raw=clean(job.location_raw), country=normalizeCountryCode(job.location_evidence?.source_country_code);
+  const old=job.location_evidence;
+  const currentDescriptionHash=descriptionHash(job.description_text);
+  if(old?.version===VERSION && clean(old.source_location)===raw && old.source_title===clean(job.title_original) && old.scope && (!old.source_description_hash||old.source_description_hash===currentDescriptionHash)) return old.scope;
+  const titleScope=explicitTitleScope(job); if(titleScope)return titleScope;
+  const descriptionScope=explicitDescriptionScope(job); if(descriptionScope)return descriptionScope;
   if(hasUnambiguousForeignCountryEvidence(raw)||(country&&!US_COUNTRY_CODES.has(country))) return {kind:'foreign',reason:'explicit_foreign_evidence'};
   const suffixCountry=/,\s*([a-z]{2})$/.exec(raw);
   if(suffixCountry && raw.split(',').length>=3 && countries.isValid(suffixCountry[1].toUpperCase()) && !US_COUNTRY_CODES.has(suffixCountry[1].toUpperCase())) return {kind:'foreign',reason:'explicit_source_country_suffix'};
-  const old=job.location_evidence;
-  if(old?.version===VERSION && clean(old.source_location)===raw && old.source_title===clean(job.title_original) && old.scope) return old.scope;
   if(!raw) return {kind:'unresolved',reason:'empty_source_location'};
   const us=US_COUNTRY_CODES.has(country)||hasQualifiedUsLocation(raw);
   if(!us) return {kind:'unresolved',reason:'country_or_city_ambiguous'};
@@ -70,7 +136,7 @@ function classifyLocation(job) {
 }
 async function resolveLocation(job, geocode) {
   const scope=classifyLocation(job);
-  const evidence={...job.location_evidence,source_country_code:['local','territory'].includes(scope.kind)?'US':job.location_evidence?.source_country_code,version:VERSION,source_location:clean(job.location_raw),source_title:clean(job.title_original),checked_at:new Date().toISOString(),scope};
+  const evidence={...job.location_evidence,source_country_code:['local','territory','national_us'].includes(scope.kind)?'US':job.location_evidence?.source_country_code,version:VERSION,source_location:clean(job.location_raw),source_title:clean(job.title_original),source_description_hash:descriptionHash(job.description_text),selected_location_source:scope.reason,checked_at:new Date().toISOString(),scope};
   if(scope.kind==='local'&&scope.queries?.length) {
     const locations=[];
     for(const q of scope.queries) {
@@ -83,4 +149,4 @@ async function resolveLocation(job, geocode) {
   if(scope.kind==='local')return {job_lat:job.job_lat,job_lng:job.job_lng,state:job.state,location_evidence:evidence};
   return {job_lat:null,job_lng:null,state:null,location_evidence:{...evidence,status:scope.kind==='foreign'?'foreign':scope.kind==='unresolved'?'unresolved':'validated'}};
 }
-module.exports={VERSION,classifyLocation,resolveLocation,cityQuery,stateOnly,validPoint};
+module.exports={VERSION,classifyLocation,resolveLocation,cityQuery,stateOnly,validPoint,explicitTitleScope,explicitDescriptionScope,stateCodesInText,cityQueriesInText,descriptionHash};

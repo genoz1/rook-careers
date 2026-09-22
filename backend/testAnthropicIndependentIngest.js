@@ -16,7 +16,7 @@ test('obvious legitimate sales titles are retained and enriched without Anthropi
     const analysis = deterministicJobAnalysis(title);
     assert.ok(analysis, title);
     assert.deepEqual(analysis.sales_motion, ['sales']);
-    assert.equal(analysis.analysis_source, 'deterministic_title');
+    assert.equal(analysis.analysis_source, 'deterministic_evidence');
   }
 });
 

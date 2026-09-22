@@ -234,7 +234,11 @@ async function run() {
       console.log(`  Saved: "${job.title_original}" — ${companyName}`);
 
       if (!upsertedRow.ai_analysis) {
-        const analysis = deterministicJobAnalysis(upsertedRow.title_original);
+        const analysis = deterministicJobAnalysis({
+          title: upsertedRow.title_original,
+          description: upsertedRow.description_text,
+          employerIndustry: upsertedRow.industry,
+        });
         if (analysis) {
           await supabase.from("jobs").update({ ai_analysis: analysis }).eq("id", upsertedRow.id);
         }

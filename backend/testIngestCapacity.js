@@ -224,7 +224,7 @@ test("ingestEmployer: unavailable Anthropic cannot crash or discard obvious sale
   try { await ingest.ingestEmployer(tables.employers[0]); } finally { global.fetch = realFetch; }
   assert.equal(tables.jobs.length, 1);
   assert.equal(tables.jobs[0].status, "active");
-  assert.equal(tables.jobs[0].ai_analysis.analysis_source, "deterministic_title");
+  assert.equal(tables.jobs[0].ai_analysis.analysis_source, "deterministic_evidence");
 });
 
 test("ingestEmployer: closes a previously stored job that the current relevance filter excludes", async () => {
@@ -275,7 +275,7 @@ test("ingestEmployer: a job whose location was already validated in a prior run 
         state: "Texas",
         // Only current-version evidence is reusable; version 1 is intentionally
         // revalidated after the source-backed location safety upgrade.
-        location_evidence: { version: 2, status: "validated", source_location: "Dallas, TX", source_title: "Territory Sales Manager 0", source_country_code: "US", checked_at: new Date().toISOString(), geocoded_location: "Dallas, TX", scope: { kind: "local", reason: "explicit_city_state" } },
+        location_evidence: { version: require('./jobLocationScope').VERSION, status: "validated", source_location: "Dallas, TX", source_title: "Territory Sales Manager 0", source_description_hash: require('./jobLocationScope').descriptionHash("Great sales role"), source_country_code: "US", checked_at: new Date().toISOString(), geocoded_location: "Dallas, TX", scope: { kind: "local", reason: "explicit_city_state" } },
         title_original: "Territory Sales Manager 0",
         description_text: "Great sales role",
         status: "active",

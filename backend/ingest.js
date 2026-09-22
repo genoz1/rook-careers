@@ -356,7 +356,11 @@ async function ingestEmployer(employer) {
     // Ambiguous but relevant titles stay saved with analysis deferred; a
     // missing external AI service must never reject or close a source job.
     if (!upsertedRow.ai_analysis) {
-      const analysis = deterministicJobAnalysis(upsertedRow.title_original);
+      const analysis = deterministicJobAnalysis({
+        title: upsertedRow.title_original,
+        description: upsertedRow.description_text,
+        employerIndustry: upsertedRow.industry || employer.industry,
+      });
       if (analysis) {
         // Re-evaluated now that a real category mapping may exist for
         // the first time — without this, a brand-new job would stay
