@@ -35,8 +35,8 @@ const { fetchJazzHRJobs } = require("./adapters/jazzhr");
 const { fetchSuccessFactorsJobs, normalizeSuccessFactorsJob } = require("./adapters/successfactors");
 const { fetchCustomHtmlJobs, normalizeCustomHtmlJob, splitTerritoryOpenings } = require("./adapters/customHtml");
 const reviewedHtmlSources = require("./customHtmlSources.json");
-const { analyzeJob } = require("./ai/jobAnalysis");
 const { generateEmbedding } = require("./ai/embeddings");
+const { deterministicJobAnalysis } = require('./deterministicJobAnalysis');
 const { validateJobLocation } = require('./validateJobLocation');
 const { geocodeLocation } = require('./geocoding');
 
@@ -48,14 +48,6 @@ async function allEmployerRows(queryPage, pageSize = 1000) {
     rows.push(...(data || []));
     if (!data || data.length < pageSize) return rows;
   }
-}
-
-function hasSalesSignals(analysis) {
-  return Boolean(
-    analysis?.product_categories?.length ||
-    analysis?.required_industries?.length ||
-    analysis?.sales_motion?.length
-  );
 }
 
 // Use the SERVICE ROLE key here, never the anon key — ingestion writes
@@ -284,14 +276,6 @@ async function ingestEmployer(employer) {
       await closeExcludedJob(job.source_job_id);
       continue;
     }
-    const priorAnalysis = existingContentBySourceId.get(job.source_job_id);
-    if (priorAnalysis && priorAnalysis.title_original === job.title_original &&
-        priorAnalysis.description_text === job.description_text &&
-        !hasSalesSignals(priorAnalysis.ai_analysis) &&
-        !titleHasStrongSalesSignal(job.title_original)) {
-      await closeExcludedJob(job.source_job_id);
-      continue;
-    }
     // An older version of the filter may have admitted this posting.
     // Only relevant IDs belong in the live snapshot; otherwise the
     // close-missing step below leaves newly excluded jobs active forever.
@@ -368,42 +352,27 @@ async function ingestEmployer(employer) {
 
     if (job.status !== "active") continue;
 
-    if (aiAnalyzedThisRun >= AI_ANALYSIS_CAP_PER_EMPLOYER) {
-      continue; // saved, but AI analysis deferred to a later run
-    }
-
-    // AI job analysis and embedding are reused until the title or
-    // description changes. This keeps API cost bounded while avoiding
-    // stale market evidence after a posting is edited. A failure here doesn't affect the job being saved — it
-    // just means that job scores without the AI-derived factors until a
-    // later run retries it.
+    // Obvious sales titles receive conservative deterministic enrichment.
+    // Ambiguous but relevant titles stay saved with analysis deferred; a
+    // missing external AI service must never reject or close a source job.
     if (!upsertedRow.ai_analysis) {
-      aiAnalyzedThisRun++;
-      if (aiAnalyzedThisRun % 5 === 0 || aiAnalyzedThisRun === 1) {
-        console.log(`    ...AI-analyzing job ${aiAnalyzedThisRun}/${AI_ANALYSIS_CAP_PER_EMPLOYER} this run: "${job.title_original}"`);
-      }
-      try {
-        const analysis = await analyzeJob(upsertedRow.title_original, upsertedRow.description_text);
+      const analysis = deterministicJobAnalysis(upsertedRow.title_original);
+      if (analysis) {
         // Re-evaluated now that a real category mapping may exist for
         // the first time — without this, a brand-new job would stay
         // social_eligible=false until an entire separate re-ingestion
         // run re-upserts it, even though it's fully analyzable right
         // now, this run.
         const nowEligible = safeEvaluateSocialEligibilityForIngestion({ ...upsertedRow, ai_analysis: analysis });
-        // If AI analysis finds no sales signals at all (no product_categories,
-        // no required_industries, no sales_motion), the job is not a sales role
-        // (e.g. admin, finance, clinical, IT). Mark it inactive so it never
-        // appears in candidate results.
-        const salesRole = hasSalesSignals(analysis) || titleHasStrongSalesSignal(upsertedRow.title_original);
-        const statusUpdate = salesRole ? {} : { status: 'closed' };
-        if (!salesRole) {
-          console.log(`  Filtering non-sales job: "${job.title_original}" (no product/industry/sales_motion)`);
-        }
-        await supabase.from("jobs").update({ ai_analysis: analysis, social_eligible: nowEligible, ...statusUpdate }).eq("id", upsertedRow.id);
-      } catch (err) {
-        console.error(`  AI analysis failed for "${job.title_original}": ${err.message}`);
+        await supabase.from("jobs").update({ ai_analysis: analysis, social_eligible: nowEligible }).eq("id", upsertedRow.id);
       }
     }
+
+    // Embeddings still use their existing independent provider. Keep the
+    // per-employer cap for that paid/network operation; deterministic title
+    // enrichment above is local and is applied to every obvious sales job.
+    if (aiAnalyzedThisRun >= AI_ANALYSIS_CAP_PER_EMPLOYER) continue;
+    aiAnalyzedThisRun++;
 
     if (!upsertedRow.job_embedding) {
       try {
@@ -467,7 +436,7 @@ async function ingestEmployer(employer) {
 // veterinary organization (e.g. a front-desk client service rep at a vet
 // clinic) — genuinely distinguishing those from a sales-facing "Veterinary
 // Territory Manager" needs real classification, not keyword matching.
-const { titleLooksRelevant: looksRelevant, titleHasStrongSalesSignal } = require('./relevanceFilter');
+const { titleLooksRelevant: looksRelevant } = require('./relevanceFilter');
 
 // DigitalOcean's App Platform Scheduled Jobs have a hard 30-minute
 // timeout — a run that hits it gets forcibly killed mid-request rather

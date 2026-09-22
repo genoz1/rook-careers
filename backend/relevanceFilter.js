@@ -43,6 +43,7 @@ const EXCLUSION_SIGNALS = [
 const STRONG_TITLE_SIGNALS = [
   "account executive", "account manager", "territory manager",
   "territory sales", "business development", "key account",
+  "territory representative",
 ];
 const ROLE_WORDS = ["representative", "specialist", "manager", "executive", "consultant"];
 const DOMAIN_WORDS = [
@@ -59,6 +60,10 @@ function titleLooksRelevant(title = "") {
   const t = title.toLowerCase();
   if (EXCLUSION_SIGNALS.some((k) => t.includes(k))) return false;
   if (titleHasStrongSalesSignal(title)) return true;
+  // Common sales leadership title, but ambiguous without description/context.
+  // Retain it for deferred enrichment rather than either rejecting it or
+  // declaring it sales from title alone.
+  if (/\bdistrict manager\b/.test(t)) return true;
   const hasRoleWord = ROLE_WORDS.some((k) => t.includes(k));
   const hasDomainWord = DOMAIN_WORDS.some((k) => t.includes(k));
   return hasRoleWord && hasDomainWord;

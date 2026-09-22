@@ -22,8 +22,8 @@
 require("dotenv").config();
 const { createClient } = require("@supabase/supabase-js");
 const { fetchAdzunaJobs, normalizeAdzunaJob } = require("./adapters/adzuna");
-const { analyzeJob } = require("./ai/jobAnalysis");
 const { generateEmbedding } = require("./ai/embeddings");
+const { deterministicJobAnalysis } = require('./deterministicJobAnalysis');
 const { validateJobLocation } = require("./validateJobLocation");
 const { titleLooksRelevant } = require("./relevanceFilter");
 
@@ -233,17 +233,15 @@ async function run() {
       totalSaved++;
       console.log(`  Saved: "${job.title_original}" — ${companyName}`);
 
-      if (aiAnalyzedThisRun < AI_ANALYSIS_CAP_THIS_RUN && !upsertedRow.ai_analysis) {
-        aiAnalyzedThisRun++;
-        try {
-          const analysis = await analyzeJob(upsertedRow.title_original, upsertedRow.description_text);
+      if (!upsertedRow.ai_analysis) {
+        const analysis = deterministicJobAnalysis(upsertedRow.title_original);
+        if (analysis) {
           await supabase.from("jobs").update({ ai_analysis: analysis }).eq("id", upsertedRow.id);
-        } catch (err) {
-          console.error(`  AI analysis failed for "${job.title_original}": ${err.message}`);
         }
       }
 
-      if (!upsertedRow.job_embedding) {
+      if (aiAnalyzedThisRun < AI_ANALYSIS_CAP_THIS_RUN && !upsertedRow.job_embedding) {
+        aiAnalyzedThisRun++;
         try {
           const embeddingText = `${upsertedRow.title_original || ""}\n\n${upsertedRow.description_text || ""}`.trim();
           const embedding = await generateEmbedding(embeddingText);

@@ -216,6 +216,17 @@ test("ingestEmployer: fewer relevant jobs than the geocode cap — every one get
   assert.equal(tables.jobs.filter((j) => j.job_lat != null).length, 12);
 });
 
+test("ingestEmployer: unavailable Anthropic cannot crash or discard obvious sales jobs", async () => {
+  const tables = { jobs: [], employers: [{ ...baseEmployer, id: "employer-no-anthropic" }] };
+  const { ingest } = freshIngest(tables, { analyzeJobImpl: async () => { throw new Error("Anthropic unavailable"); } });
+  const realFetch = global.fetch;
+  global.fetch = greenhouseFetchStub(1);
+  try { await ingest.ingestEmployer(tables.employers[0]); } finally { global.fetch = realFetch; }
+  assert.equal(tables.jobs.length, 1);
+  assert.equal(tables.jobs[0].status, "active");
+  assert.equal(tables.jobs[0].ai_analysis.analysis_source, "deterministic_title");
+});
+
 test("ingestEmployer: closes a previously stored job that the current relevance filter excludes", async () => {
   const employer = { ...baseEmployer, id: 'employer-relevance' };
   const tables = {

@@ -20,7 +20,7 @@
     "test-workable": "node --test backend/testWorkable.js",
     "test-pinpoint": "node --test backend/testPinpoint.js",
     "test-clinchtalent": "node --test backend/testClinchTalent.js",
-    "test-job-source-audit": "node --test backend/testClinchTalent.js backend/testSuccessFactors.js backend/testWorkdayListing.js backend/testRelevanceAudit.js backend/testPublicEmployerCount.js backend/testUsCountryPrefix.js",
+    "test-job-source-audit": "node --test backend/testClinchTalent.js backend/testSuccessFactors.js backend/testWorkdayListing.js backend/testRelevanceAudit.js backend/testPublicEmployerCount.js backend/testUsCountryPrefix.js backend/testAnthropicIndependentIngest.js",
     "test-applicantpro": "node --test backend/testApplicantPro.js",
     "validate-sources": "node backend/validateSources.js",
     "test-source-validator": "node --test backend/testSourceValidator.js",

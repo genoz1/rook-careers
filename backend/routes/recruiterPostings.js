@@ -14,7 +14,7 @@
 
 const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
-const { analyzeJob } = require("../ai/jobAnalysis");
+const { deterministicJobAnalysis } = require('../deterministicJobAnalysis');
 const { generateEmbedding } = require("../ai/embeddings");
 const { validateJobLocation } = require("../validateJobLocation");
 
@@ -152,13 +152,13 @@ router.post("/recruiter-postings", requireConfig, requireAuth, loadRecruiterId, 
   const { data: inserted, error } = await supabaseAdmin.from("jobs").insert(jobRow).select().single();
   if (error) return res.status(500).json({ error: error.message });
 
-  // Best-effort AI analysis, embedding, geocoding — same as before, a
+  // Deterministic title enrichment and best-effort embedding — a
   // failure in any of these doesn't block the submission.
-  try {
-    const analysis = await analyzeJob(job_title, description_text);
+  {
+    const analysis = deterministicJobAnalysis(job_title);
+    if (analysis) {
     await supabaseAdmin.from("jobs").update({ ai_analysis: analysis }).eq("id", inserted.id);
-  } catch (err) {
-    console.error(`Recruiter posting AI analysis failed: ${err.message}`);
+    }
   }
   try {
     const embedding = await generateEmbedding(`${job_title}\n\n${description_text}`);
@@ -224,14 +224,14 @@ router.put("/recruiter-postings/:id", requireConfig, requireAuth, loadRecruiterI
   const { error: updateError } = await supabaseAdmin.from("jobs").update(updateRow).eq("id", req.params.id);
   if (updateError) return res.status(500).json({ error: updateError.message });
 
-  // Re-run AI analysis/embedding/geocoding on the updated content —
+  // Re-run deterministic enrichment and embedding on the updated content —
   // best-effort, same as the original POST route, a failure here
   // doesn't block the edit itself from saving.
-  try {
-    const analysis = await analyzeJob(job_title, description_text);
+  {
+    const analysis = deterministicJobAnalysis(job_title);
+    if (analysis) {
     await supabaseAdmin.from("jobs").update({ ai_analysis: analysis }).eq("id", req.params.id);
-  } catch (err) {
-    console.error(`Recruiter posting edit AI analysis failed: ${err.message}`);
+    }
   }
   try {
     const embedding = await generateEmbedding(`${job_title}\n\n${description_text}`);
