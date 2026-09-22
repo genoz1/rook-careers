@@ -112,6 +112,10 @@ async function fetchWorkdayJobs(identifier) {
   const pageSize = 20;
   let offset = 0;
   let total = Infinity;
+  let malformedCount = 0;
+  let duplicateCount = 0;
+  let incompleteSnapshot = false;
+  const seenPaths = new Set();
 
   while (offset < total) {
     const res = await fetchWithTimeout(`${baseUrl}/jobs`, {
@@ -130,7 +134,15 @@ async function fetchWorkdayJobs(identifier) {
     if (!Array.isArray(data?.jobPostings) || (offset === 0 && (!Number.isInteger(data.total) || data.total < 0))) {
       throw new Error("Workday incomplete extraction: malformed listing response");
     }
-    if (data.jobPostings.some(p => !p || !p.externalPath || typeof p.title !== 'string')) throw new Error("Workday malformed posting");
+    // Some tenants include placeholder entries containing only bulletFields.
+    // They have no job URL or title and cannot be normalized, but must not
+    // prevent every valid job on the board from being refreshed.
+    const validPostings = data.jobPostings.filter(p => p && p.externalPath && typeof p.title === 'string');
+    malformedCount += data.jobPostings.length - validPostings.length;
+    if (malformedCount) incompleteSnapshot = true;
+    if (malformedCount > Math.max(10, Math.ceil((data.total || 0) * 0.05))) {
+      throw new Error('Workday incomplete extraction: too many malformed postings');
+    }
     // Only trust a new total if it's a real positive number — some
     // Workday tenants omit or zero out `total` on paginated (non-first)
     // requests, which was silently truncating results to just the first
@@ -140,16 +152,35 @@ async function fetchWorkdayJobs(identifier) {
       total = total === Infinity ? data.total : Math.max(total, data.total);
     }
     if (offset === 0 && data.total === 0) total = 0;
-    if (data.jobPostings.length === 0 && offset < total) throw new Error("Workday incomplete extraction: premature empty page");
-    allPostings.push(...data.jobPostings);
-    if (new Set(allPostings.map(p => p.externalPath)).size !== allPostings.length) throw new Error("Workday incomplete extraction: duplicate pagination");
+    if (data.jobPostings.length === 0 && offset < total) {
+      if (allPostings.length && total - offset <= Math.max(10, Math.ceil(total * 0.01))) {
+        incompleteSnapshot = true;
+        console.warn(`    ...Workday listing ended ${total - offset} entry(s) short of its reported total`);
+        break;
+      }
+      throw new Error("Workday incomplete extraction: premature empty page");
+    }
+    for (const posting of validPostings) {
+      if (seenPaths.has(posting.externalPath)) {
+        duplicateCount++;
+        incompleteSnapshot = true;
+        continue;
+      }
+      seenPaths.add(posting.externalPath);
+      allPostings.push(posting);
+    }
+    if (duplicateCount > Math.max(10, Math.ceil((data.total || 0) * 0.05))) {
+      throw new Error('Workday incomplete extraction: excessive duplicate pagination');
+    }
     offset += data.jobPostings.length;
     console.log(`    ...listed ${allPostings.length} / ${total} postings`);
 
     // Safety cap so a very large employer (or an unexpected API response)
     // can't loop forever.
-    if (offset > 2000 && offset < total) throw new Error("Workday incomplete extraction: pagination safety limit reached");
+    if (offset > 10000 && offset < total) throw new Error("Workday incomplete extraction: pagination safety limit reached");
   }
+  if (malformedCount) console.warn(`    ...ignored ${malformedCount} malformed Workday listing entries`);
+  if (duplicateCount) console.warn(`    ...deduplicated ${duplicateCount} overlapping Workday listing entries`);
 
   // Only fetch full detail for postings that already look relevant by
   // title — see titleLooksRelevant() above for why. This is the slow part
@@ -160,18 +191,27 @@ async function fetchWorkdayJobs(identifier) {
   const detailed = [];
   for (let i = 0; i < relevantPostings.length; i++) {
     const posting = relevantPostings[i];
-    {
+    try {
       const detailRes = await fetchWithTimeout(`${baseUrl}${posting.externalPath}`);
       if (!detailRes.ok) throw new Error(`Workday detail fetch failed: ${detailRes.status}`);
       const detail = await detailRes.json();
       if (!detail?.jobPostingInfo || typeof detail.jobPostingInfo !== "object") throw new Error("Workday malformed detail response");
       detailed.push({ ...posting, detail });
+    } catch (error) {
+      if (!detailed.length) throw error;
+      incompleteSnapshot = true;
+      console.warn(`    ...stopped detail retrieval at ${i} / ${relevantPostings.length}: ${error.message}`);
+      break;
     }
     if ((i + 1) % 10 === 0 || i === relevantPostings.length - 1) {
       console.log(`    ...fetched details for ${i + 1} / ${relevantPostings.length}`);
     }
   }
 
+  // A page shift or a placeholder may hide a previously known posting.
+  // The ingest layer may add/update these jobs, but must not close absent
+  // jobs on a snapshot that was not completely reliable.
+  detailed.incompleteSnapshot = incompleteSnapshot;
   return detailed;
 }
 

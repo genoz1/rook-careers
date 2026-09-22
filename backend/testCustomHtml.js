@@ -25,7 +25,9 @@ test('Bionote: two isolated sections; current sales versus future regulatory; ei
  assert.deepEqual(row.extraction_evidence.territories[7].states,['FL']);
  const refreshed={...row,...await validateJobLocation(row,()=>{throw Error('must not geocode territory centroid');})};
  assert.equal(refreshed.job_lat,null); assert(isUsEligibleJob(refreshed));
- assert(prepareJob(refreshed,{territory_size_preferences:['national']}));
+ // Eight named regional territories are not a nationwide posting; the
+ // split source rows below retain the correct state-specific matches.
+ assert.equal(prepareJob(refreshed,{territory_size_preferences:['national']}),null);
  assert.equal(prepareJob(refreshed,{territory_size_preferences:['local']}),null);
  assert.equal(normalizeCustomHtmlJob(raw[1],{...employer,careers_url:'https://www.bionote.com/careers'}).status,'closed');
 });
@@ -100,7 +102,7 @@ test('ingestion dispatcher: custom current/future rows, failed fetch safety and 
  const vm=require('node:vm');
  async function run(type,{failure=false,sharedParent=false,env={CUSTOM_HTML_EMPLOYER_IDS:'test'},id='test'}={}){
   const writes=[],calls=[];
-  const db={from(table){const q={table,op:'select',values:null,filters:[],select(){return q;},eq(k,v){q.filters.push([k,v]);return q;},not(){q.analysis=true;return q;},update(v){q.op='update';q.values=v;return q;},upsert(v){q.op='upsert';q.values=v;return q;},in(k,v){q.filters.push([k,v]);return q;},single(){return Promise.resolve({data:{...q.values,id:'new',ai_analysis:{sales_motion:['sales']},job_embedding:[1]},error:null}).then(r=>{writes.push({...q});return r;});},then(resolve,reject){if(q.op!=='select')writes.push({...q});return Promise.resolve({data:sharedParent && q.analysis ? [{source_job_id:'parent',title_original:'Sales Representative',description_text:detail,ai_analysis:{product_categories:['veterinary diagnostics']},job_embedding:[0.5]}] : [],error:null}).then(resolve,reject);}};return q;}};
+  const db={from(table){const q={table,op:'select',values:null,filters:[],select(){return q;},eq(k,v){q.filters.push([k,v]);return q;},not(){q.analysis=true;return q;},order(){return q;},range(){return q;},update(v){q.op='update';q.values=v;return q;},upsert(v){q.op='upsert';q.values=v;return q;},in(k,v){q.filters.push([k,v]);return q;},single(){return Promise.resolve({data:{...q.values,id:'new',ai_analysis:{sales_motion:['sales']},job_embedding:[1]},error:null}).then(r=>{writes.push({...q});return r;});},then(resolve,reject){if(q.op!=='select')writes.push({...q});return Promise.resolve({data:sharedParent && q.analysis ? [{source_job_id:'parent',title_original:'Sales Representative',description_text:detail,ai_analysis:{product_categories:['veterinary diagnostics']},job_embedding:[0.5]}] : [],error:null}).then(resolve,reject);}};return q;}};
   const custom=require('./adapters/customHtml');
   const localRequire=name=>{
    if(name==='dotenv')return {config(){}};
@@ -173,7 +175,7 @@ test('opt-in territory split produces eight stable distinct listings with the sa
 });
 
 
-test('34484 radius search retains the Florida territory without invented city coordinates',()=>{
+test('34484 exact radius excludes a Florida territory without invented city coordinates',()=>{
  const {splitTerritoryOpenings} = require('./adapters/customHtml');
  const {matchesState,territories} = require('../public/rook-territory-location');
  const {redactForNonSubscriber} = require('./redaction');
@@ -187,14 +189,20 @@ test('34484 radius search retains the Florida territory without invented city co
  assert.equal(prepareJob(found[0],profile).job_lat,null); assert.equal(found[0].city,null);
  assert(matchesState(found[0],'FL')); assert(!matchesState(found[0],'CA'));
  const masked = redactForNonSubscriber(found[0]);
- assert(!masked.extraction_evidence); assert(!JSON.stringify(masked.territory_locations).includes('mailto:'));
- assert.deepEqual(territories(masked),territories(found[0]));
+ // Pretrial projection intentionally hides the exact territory and source
+ // contact details; the full subscriber row still supports state matching.
+ assert(!masked.extraction_evidence); assert(!JSON.stringify(masked).includes('mailto:'));
+ assert.deepEqual(territories(masked),[]);
+ assert.deepEqual(territories(found[0]),[{label:'Central/Northern Florida',scope:'state_or_region',states:['FL']}]);
  // Execute the real radius-filter block for the reported 100-mile search.
  const page = fs.readFileSync(path.join(__dirname,'../public/rook-search.html'),'utf8');
  const start = page.indexOf("      const radiusMiles = Number(document.getElementById('radiusSelect').value);");
  const end = page.indexOf('      return true;',start);
  const filter = new Function('job','nearLocationCoords','document','RookTerritoryLocation','distanceMilesClient',page.slice(start,end)+'return true;');
  const run = (job,dist=0)=>filter(job,{lat:zip.latitude,lng:zip.longitude,stateAbbr:'FL'},{getElementById:()=>({value:'100'})},{matchesState},()=>dist);
- assert(run(found[0])); assert(!run(rows[0])); assert(!run({job_lat:null,job_lng:null}));
+ // A finite-mile search requires a verified point. A state-level territory
+ // remains discoverable without the radius filter, but cannot be promised
+ // within 100 miles of this ZIP code.
+ assert(!run(found[0])); assert(!run(rows[0])); assert(!run({job_lat:null,job_lng:null}));
  assert(run({job_lat:28,job_lng:-82},99)); assert(!run({job_lat:28,job_lng:-82},101));
 });

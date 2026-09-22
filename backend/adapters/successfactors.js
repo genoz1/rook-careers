@@ -88,7 +88,13 @@ function locationFromDetailUrl(detailUrl) {
     if (!slugMatch) return null;
     const slug = slugMatch[1];
     const tail = slug.match(/^(.*?)-([A-Za-z]{2})-(\d{5})$/);
-    if (!tail) return null;
+    if (!tail) {
+      // Some tenants put "City, ST" at the start of the URL and omit a
+      // trailing ZIP (for example Boehringer's "Stockton, CA-ILD-...").
+      const leading = slug.match(/^([^,-]{2,50}),\s*-?([A-Za-z]{2})-/);
+      const state = leading && resolveUsStateCode(leading[2]);
+      return state ? `${clean(leading[1])}, ${state}` : null;
+    }
     const stateCode = resolveUsStateCode(tail[2]);
     if (!stateCode) return null;
     const cityGuess = clean(tail[1].split("-")[0]);
@@ -155,7 +161,9 @@ function findNextPageUrl($, currentUrl) {
   const forwards = [];
   for (const el of $('a[rel="next"], a.next, .pagination a, a[href*="startrow"], a[href*="p="]').toArray()) {
     if ($(el).attr('aria-disabled') === 'true' || $(el).hasClass('disabled')) continue;
-    const explicit = $(el).attr('rel') === 'next' || $(el).hasClass('next') || /^(next|»|>)$/i.test(clean($(el).text()));
+    // » is the CSB "Last Page" jump, not the next page. Treating it as
+    // next skipped every middle page and then looped on the last page.
+    const explicit = $(el).attr('rel') === 'next' || $(el).hasClass('next') || /^(next|>)$/i.test(clean($(el).text()));
     const href = $(el).attr('href');
     if (!href) { if (explicit) throw new Error('SuccessFactors incomplete pagination: missing next href'); continue; }
     let next;

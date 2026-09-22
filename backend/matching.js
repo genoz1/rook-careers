@@ -157,6 +157,7 @@ function hasForeignCountryCodePrefix(locationRaw) {
   // adapter can never bring down an entire ingest batch over one job.
   const match = /^([A-Z]{2})\s*-/.exec(String(locationRaw || "").trim());
   if (!match) return false;
+  if (match[1] === 'US') return false;
   return !US_STATE_ABBRS.has(match[1]);
 }
 

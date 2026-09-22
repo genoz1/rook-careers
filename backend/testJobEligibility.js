@@ -695,7 +695,9 @@ async function run() {
     assert.ok(/require\(["']\.\.\/jobEligibility["']\)/.test(src));
     assert.ok(/error \|\| !job \|\| !isUsEligibleJob\(job\)/.test(src), "public job detail must reject ineligible jobs");
     assert.ok(/eligibleData = data\.filter\(isUsEligibleJob\)/.test(src), "public job directory must filter ineligible jobs");
-    assert.ok(/similarRaw \|\| \[\]\)\.filter\(isUsEligibleJob\)/.test(src), "similar jobs must be filtered");
+    // The public page no longer renders a similar-jobs collection. Keep
+    // this guard so an unfiltered collection cannot silently return.
+    assert.ok(!/similarRaw/.test(src), "similar jobs must remain absent until an eligibility-filtered route is restored");
     assert.ok(/jobs\.filter\(isUsEligibleJob\)\.map/.test(src), "sitemap must filter every fetched page");
   });
 

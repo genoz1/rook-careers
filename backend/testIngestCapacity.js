@@ -59,6 +59,7 @@ class Query {
   not(k, _op, v) { this.filters.push((r) => (r[k] ?? null) !== v); return this; }
   in(k, arr) { this.filters.push((r) => arr.includes(r[k])); return this; }
   order() { return this; }
+  range(start, end) { this._range = [start, end]; return this; }
   // Handles the two shapes ingest.js actually builds: the lock's
   // "locked_at.is.null,locked_at.lt.<iso>" and the debug-filter's
   // "company_name.ilike.%x%,company_slug.ilike.%x%". A narrow,
@@ -114,6 +115,7 @@ class Query {
           matches = [row];
         }
         if (this.kind === "update") for (const row of matches) Object.assign(row, this.payload);
+        if (this.kind === 'select' && this._range) matches = matches.slice(this._range[0], this._range[1] + 1);
         return { data: structuredClone(this._wantSingle ? matches[0] || null : matches), error: null };
       })
       .then(resolve, reject);
@@ -134,7 +136,9 @@ function freshIngest(tables, { geocodeImpl, analyzeJobImpl, embeddingImpl } = {}
   let geocodeCallCount = 0;
   geocodingModule.geocodeLocation = async (text, opts) => {
     geocodeCallCount++;
-    return geocodeImpl ? geocodeImpl(text, opts) : { lat: 39.9, lng: -83.0, state: "Ohio" };
+    // The source fixture says Dallas, TX. A point in Ohio is rightly
+    // rejected by the current location validator as a wrong-state match.
+    return geocodeImpl ? geocodeImpl(text, opts) : { lat: 32.78, lng: -96.8, state: "Texas" };
   };
 
   const jobAnalysisPath = require.resolve("./ai/jobAnalysis");
@@ -212,6 +216,42 @@ test("ingestEmployer: fewer relevant jobs than the geocode cap — every one get
   assert.equal(tables.jobs.filter((j) => j.job_lat != null).length, 12);
 });
 
+test("ingestEmployer: closes a previously stored job that the current relevance filter excludes", async () => {
+  const employer = { ...baseEmployer, id: 'employer-relevance' };
+  const tables = {
+    employers: [employer],
+    jobs: [{ id: 'old-job', employer_id: employer.id, source_job_id: '1000', title_original: 'Sales Training Manager', status: 'active' }],
+  };
+  const { ingest } = freshIngest(tables);
+  const realFetch = global.fetch;
+  global.fetch = async () => ({ ok: true, json: async () => ({ jobs: [{
+    id: 1000, title: 'Sales Training Manager', absolute_url: 'https://boards.greenhouse.io/testco/jobs/1000',
+    location: { name: 'Dallas, TX' }, content: '<p>Training role</p>',
+  }] }) });
+  try { await ingest.ingestEmployer(employer); } finally { global.fetch = realFetch; }
+  assert.equal(tables.jobs[0].status, 'closed');
+});
+
+test("ingestEmployer: complete snapshot closes stale jobs beyond the first 1000 stored rows", async () => {
+  const employer = { ...baseEmployer, id: "employer-paginated" };
+  const tables = {
+    employers: [employer],
+    jobs: Array.from({ length: 1005 }, (_, i) => ({
+      id: `old-${i}`,
+      employer_id: employer.id,
+      source_job_id: String(1000 + i),
+      title_original: `Territory Sales Manager ${i}`,
+      status: "active",
+    })),
+  };
+  const { ingest } = freshIngest(tables);
+  const realFetch = global.fetch;
+  global.fetch = greenhouseFetchStub(1);
+  try { await ingest.ingestEmployer(employer); } finally { global.fetch = realFetch; }
+  assert.equal(tables.jobs.filter((job) => job.status === "closed").length, 1004);
+  assert.equal(tables.jobs.find((job) => job.source_job_id === "1000").status, "active");
+});
+
 test("ingestEmployer: a job whose location was already validated in a prior run reuses the cached point and never counts against the cap", async () => {
   const tables = {
     jobs: [
@@ -222,7 +262,9 @@ test("ingestEmployer: a job whose location was already validated in a prior run 
         job_lat: 32.78,
         job_lng: -96.8,
         state: "Texas",
-        location_evidence: { version: 1, status: "validated", source_location: "Dallas, TX", source_country_code: null, checked_at: new Date().toISOString(), geocoded_location: "Dallas, TX" },
+        // Only current-version evidence is reusable; version 1 is intentionally
+        // revalidated after the source-backed location safety upgrade.
+        location_evidence: { version: 2, status: "validated", source_location: "Dallas, TX", source_title: "Territory Sales Manager 0", source_country_code: "US", checked_at: new Date().toISOString(), geocoded_location: "Dallas, TX", scope: { kind: "local", reason: "explicit_city_state" } },
         title_original: "Territory Sales Manager 0",
         description_text: "Great sales role",
         status: "active",

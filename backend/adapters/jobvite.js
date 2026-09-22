@@ -24,20 +24,7 @@
 //   ats_identifier = "neogenomics"
 // (from https://jobs.jobvite.com/neogenomics)
 
-const STRONG_TITLE_SIGNALS = [
-  "sales", "account executive", "territory manager", "business development", "key account",
-];
-const ROLE_WORDS = ["representative", "specialist", "manager", "executive", "consultant", "director"];
-const DOMAIN_WORDS = [
-  "sales", "territory", "account", "veterinary", "medical", "pharmaceutical", "diagnostic", "clinical", "oncology",
-];
-function titleLooksRelevant(title = "") {
-  const t = title.toLowerCase();
-  if (STRONG_TITLE_SIGNALS.some((k) => t.includes(k))) return true;
-  const hasRoleWord = ROLE_WORDS.some((k) => t.includes(k));
-  const hasDomainWord = DOMAIN_WORDS.some((k) => t.includes(k));
-  return hasRoleWord && hasDomainWord;
-}
+const { titleLooksRelevant } = require('../relevanceFilter');
 
 function stripHtml(html) {
   return String(html || "").replace(/<[^>]*>/g, " ")

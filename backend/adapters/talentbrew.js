@@ -22,20 +22,7 @@
 // Same relevance filter used in ingest.js — kept in sync with it. See the
 // comment there for why this is a two-tier check rather than a flat
 // keyword list.
-const STRONG_TITLE_SIGNALS = [
-  "sales", "account executive", "territory manager", "business development", "key account",
-];
-const ROLE_WORDS = ["representative", "specialist", "manager", "executive", "consultant"];
-const DOMAIN_WORDS = [
-  "sales", "territory", "account", "veterinary", "medical", "pharmaceutical", "diagnostic", "clinical",
-];
-function titleLooksRelevant(title = "") {
-  const t = title.toLowerCase();
-  if (STRONG_TITLE_SIGNALS.some((k) => t.includes(k))) return true;
-  const hasRoleWord = ROLE_WORDS.some((k) => t.includes(k));
-  const hasDomainWord = DOMAIN_WORDS.some((k) => t.includes(k));
-  return hasRoleWord && hasDomainWord;
-}
+const { titleLooksRelevant } = require('../relevanceFilter');
 
 function stripHtml(html) {
   return html.replace(/<[^>]*>/g, " ")

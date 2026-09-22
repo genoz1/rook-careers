@@ -226,15 +226,33 @@ router.get("/public-job-count", requireConfig, async (req, res) => {
 // onboarded once but currently has zero live postings shouldn't count
 // toward "employers we're sourcing from right now."
 router.get("/public-employer-count", requireConfig, async (req, res) => {
-  const { data, error } = await supabaseAdmin
-    .from("jobs")
-    .select("employer_id")
-    .eq("status", "active")
-    .eq("moderation_status", "approved")
-    .not("employer_id", "is", null);
-  if (error) return res.status(500).json({ error: error.message });
-  const uniqueEmployers = new Set((data || []).map((row) => row.employer_id));
-  res.json({ total_count: uniqueEmployers.size });
+  try {
+    const { countPublicEmployers } = require("../publicEmployerCount");
+    res.json({ total_count: await countPublicEmployers(supabaseAdmin) });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Keep the public company directory tied to the actual active source list.
+router.get('/public-companies', requireConfig, async (req, res) => {
+  try {
+    const companies = [];
+    const pageSize = 1000;
+    for (let offset = 0; ; offset += pageSize) {
+      const { data, error } = await supabaseAdmin.from('employers')
+        .select('company_name, company_slug')
+        .eq('active', true)
+        .order('company_name')
+        .range(offset, offset + pageSize - 1);
+      if (error) throw error;
+      companies.push(...(data || []));
+      if (!data || data.length < pageSize) break;
+    }
+    res.json({ total_count: companies.length, companies });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // GET /api/public-geocode-zip?zip=32162 — anonymous-safe ZIP-to-

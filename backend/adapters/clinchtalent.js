@@ -21,6 +21,37 @@
 // title+location combination.
 
 const { titleLooksRelevant } = require('../relevanceFilter');
+const cheerio = require('cheerio');
+
+function listingLinks(html, base) {
+  const $ = cheerio.load(html);
+  const jobs = [];
+  $('a[href]').each((_, anchor) => {
+    let url;
+    try { url = new URL($(anchor).attr('href'), base); } catch { return; }
+    if (url.origin !== base || !/^\/jobs\/[a-z0-9-]+\/?$/i.test(url.pathname)) return;
+    if (url.pathname === '/jobs/search') return;
+    const title = $(anchor).text().replace(/\s+/g, ' ').trim();
+    if (!title) return;
+    const row = $(anchor).closest('tr');
+    const location = row.find('[id^="location_"]').first().text().replace(/\s+/g, ' ').trim();
+    jobs.push({ path: url.pathname, slug: url.pathname.split('/').filter(Boolean).pop(), title, location });
+  });
+  return jobs;
+}
+
+function jobPostingData(html) {
+  const $ = cheerio.load(html);
+  for (const script of $('script[type="application/ld+json"]').toArray()) {
+    try {
+      const value = JSON.parse($(script).html());
+      const candidates = Array.isArray(value) ? value : value['@graph'] || [value];
+      const posting = candidates.find(item => item && (item['@type'] === 'JobPosting' || item['@type']?.includes?.('JobPosting')));
+      if (posting) return posting;
+    } catch { /* Invalid optional structured data; use page fallback. */ }
+  }
+  return null;
+}
 
 function stripHtml(html) {
   return html.replace(/<[^>]*>/g, " ")
@@ -82,17 +113,9 @@ async function fetchClinchTalentJobs(hostname) {
     }
     const html = await res.text();
 
-    // ClinchTalent job links observed as: <a href="/jobs/{slug}">{title}</a>
-    const linkPattern = /<a[^>]+href="(\/jobs\/([a-z0-9-]+))"[^>]*>([^<]+)</gi;
-    let match;
-    let foundOnPage = 0;
-    while ((match = linkPattern.exec(html)) !== null) {
-      const [, path, slug, titleRaw] = match;
-      // Skip obvious non-job links that happen to match (e.g. "/jobs/search" itself)
-      if (slug === "search") continue;
-      foundOnPage++;
-      rawJobs.push({ path, slug, title: titleRaw.trim() });
-    }
+    const pageJobs = listingLinks(html, base);
+    const foundOnPage = pageJobs.length;
+    rawJobs.push(...pageJobs);
     console.log(`    ...page ${page}: ${foundOnPage} listing(s) found (${rawJobs.length} total so far)`);
 
     if (foundOnPage === 0) {
@@ -153,10 +176,13 @@ function normalizeClinchTalentJob(raw, employer) {
   // Best-effort description extraction — tries a couple of common
   // ClinchTalent markup patterns; falls back to just the title if none
   // match. See file header re: this being unverified against raw source.
+  const posting = jobPostingData(raw.detailHtml);
   const descMatch =
     raw.detailHtml.match(/<div[^>]*class="[^"]*(?:job-description|jobDescription|content)[^"]*"[^>]*>([\s\S]*?)<\/div>/i) ||
     raw.detailHtml.match(/<section[^>]*class="[^"]*description[^"]*"[^>]*>([\s\S]*?)<\/section>/i);
-  const descriptionHtml = descMatch ? descMatch[1] : "";
+  const descriptionHtml = posting?.description || (descMatch ? descMatch[1] : "");
+  const address = (Array.isArray(posting?.jobLocation) ? posting.jobLocation[0] : posting?.jobLocation)?.address;
+  const location = [address?.addressLocality, address?.addressRegion, address?.addressCountry].filter(Boolean).join(', ') || raw.location || '';
 
   return {
     source_job_id: raw.slug,
@@ -168,8 +194,8 @@ function normalizeClinchTalentJob(raw, employer) {
     company_name: employer.company_name,
     description_html: descriptionHtml || null,
     description_text: stripHtml(descriptionHtml || raw.title),
-    location_raw: "", // not reliably parseable from the list page alone — same limitation as TalentBrew
-    date_posted: null,
+    location_raw: location,
+    date_posted: posting?.datePosted || null,
     status: "active",
     source_verified: true,
   };

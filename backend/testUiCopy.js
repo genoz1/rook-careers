@@ -107,7 +107,8 @@ console.log("\n=== REGRESSION: homepage hero trial CTA ===");
 test("the homepage hero's primary CTA is the exact requested trial wording and opens signup mode directly", () => {
   const src = readPublic("index.html");
   assert.ok(src.includes(">START YOUR 3-DAY FREE TRIAL<"), "must use the exact requested CTA text");
-  assert.ok(src.includes('href="rook-onboarding-v4.html" class="btn btn-primary"'), "the primary CTA must point to rook-onboarding-v4.html (current ad-traffic entry flow, which redirects on to v6 preserving all query params)");
+  // V4 is now a legacy redirect to V7, which is the current onboarding flow.
+  assert.ok(src.includes('href="rook-onboarding-v7.html" class="btn btn-primary"'), "the primary CTA must point to current V7 onboarding");
   assert.ok(src.includes("Medical sales jobs only") && src.includes("Cancel anytime"), "supporting line must be present in the hero");
 });
 test("the old 'Find My Matches' hero CTA text and its plain (login-tab) destination are both gone", () => {
@@ -137,7 +138,7 @@ test("the Create Account panel uses the exact requested headline, description, a
   const src = readPublic("rook-login.html");
   assert.ok(src.includes("<h2>Start your 3-day free trial</h2>"));
   assert.ok(src.includes("Create your profile to see employers, complete job details, and personalized ROOK matches."));
-  assert.ok(src.includes("Opportunities from 237+ employer career sites"));
+  assert.ok(src.includes("Opportunities from hundreds of employer career sites"));
   assert.ok(src.includes("Three days of full ROOK access"));
   assert.ok(src.includes(">CREATE ACCOUNT &amp; START FREE TRIAL<"));
 });
@@ -148,15 +149,12 @@ test("no price, trial duration, or Stripe-related text was introduced into the s
   assert.ok(!signupPanelMatch[0].includes("$29"), "must not introduce pricing into the signup panel");
 });
 
-console.log("\n=== REGRESSION: mobile filters toggle button CSS ordering ===");
-test("the .mobile-filters-toggle base (display:none) rule appears BEFORE its max-width:900px override, not after — the reverse order silently loses the override regardless of viewport", () => {
+console.log("\n=== REGRESSION: mobile search panel remains available ===");
+test("the mobile search panel remains visible in its always-open layout", () => {
   const src = readPublic("rook-search.html");
   const lines = src.split("\n");
-  const baseLineIndex = lines.findIndex((l) => l.includes(".mobile-filters-toggle{") && !l.includes("display:flex"));
-  const overrideLineIndex = lines.findIndex((l) => l.includes(".mobile-filters-toggle{display:flex;}"));
-  assert.ok(baseLineIndex !== -1, "base rule must exist");
-  assert.ok(overrideLineIndex !== -1, "media query override must exist");
-  assert.ok(baseLineIndex < overrideLineIndex, "base display:none rule must come before the media-query display:flex override in source order");
+  assert.ok(lines.some((l) => l.includes(".filters,.filters.mobile-open{display:block")), "mobile search panel must be visible");
+  assert.ok(lines.some((l) => l.includes(".filters-column{display:block")), "mobile filter column must remain available");
 });
 
 console.log(`\n${passCount} passed, ${failCount} failed\n`);

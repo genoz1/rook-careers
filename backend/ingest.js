@@ -40,6 +40,24 @@ const { generateEmbedding } = require("./ai/embeddings");
 const { validateJobLocation } = require('./validateJobLocation');
 const { geocodeLocation } = require('./geocoding');
 
+async function allEmployerRows(queryPage, pageSize = 1000) {
+  const rows = [];
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await queryPage(offset, offset + pageSize - 1);
+    if (error) throw error;
+    rows.push(...(data || []));
+    if (!data || data.length < pageSize) return rows;
+  }
+}
+
+function hasSalesSignals(analysis) {
+  return Boolean(
+    analysis?.product_categories?.length ||
+    analysis?.required_industries?.length ||
+    analysis?.sales_motion?.length
+  );
+}
+
 // Use the SERVICE ROLE key here, never the anon key — ingestion writes
 // to the jobs table and must bypass row-level security intentionally.
 const supabase = createClient(
@@ -160,11 +178,13 @@ async function ingestEmployer(employer) {
   // to know whether a PRIOR run already analyzed this specific job,
   // since the AI analysis step itself only happens after the upsert
   // below (and only for jobs under this run's per-employer cap).
-  const { data: existingAnalysisRows } = await supabase
+  const existingAnalysisRows = await allEmployerRows((start, end) => supabase
     .from("jobs")
     .select(employer.ats_type === "custom_html" ? "source_job_id, ai_analysis, job_embedding, extraction_evidence, title_original, description_text" : "source_job_id, ai_analysis, title_original, description_text")
     .eq("employer_id", employer.id)
-    .not("ai_analysis", "is", null);
+    .not("ai_analysis", "is", null)
+    .order("id")
+    .range(start, end));
   const existingAiAnalysisBySourceId = new Map((existingAnalysisRows || []).map((r) => [r.source_job_id, r.ai_analysis]));
   const sharedAnalysisKey = j => `${j.extraction_evidence?.original_title || j.title_original}\n${j.description_text}`;
   const sharedCustomAnalysis = new Map((existingAnalysisRows || []).map(j => [sharedAnalysisKey(j), j]));
@@ -172,12 +192,20 @@ async function ingestEmployer(employer) {
 
   // All existing source IDs for this employer — used to detect new jobs
   // so first_seen_at is only set on insert, never overwritten on update.
-  const { data: existingSourceRows } = await supabase
+  const existingSourceRows = await allEmployerRows((start, end) => supabase
     .from("jobs")
     .select("source_job_id, location_evidence, job_lat, job_lng, state")
-    .eq("employer_id", employer.id);
+    .eq("employer_id", employer.id)
+    .order("id")
+    .range(start, end));
   const existingLocations = new Map((existingSourceRows || []).map(r => [r.source_job_id,r]));
   const existingSourceIds = new Set((existingSourceRows || []).map((r) => r.source_job_id));
+  const closeExcludedJob = async (sourceId) => {
+    if (!existingSourceIds.has(sourceId)) return;
+    const { error } = await supabase.from('jobs').update({ status: 'closed' })
+      .eq('employer_id', employer.id).eq('source_job_id', sourceId);
+    if (error) console.error(`  Could not close excluded job ${sourceId}: ${error.message}`);
+  };
 
   // Cap how many NEW AI analyses (job analysis + embedding) happen per
   // employer per run. Some employers post hundreds of relevant jobs
@@ -243,7 +271,6 @@ async function ingestEmployer(employer) {
 
   for (const raw of rawJobs) {
     const job = normalize(raw, employer);
-    seenSourceIds.add(job.source_job_id);
 
     // Relevance filter: a very rough first pass. Replace with real
     // classification once the normalization step (Phase 1.5) is built —
@@ -253,7 +280,22 @@ async function ingestEmployer(employer) {
     // sources this check rarely rejects anything further — it's still
     // the primary filter for Greenhouse/Lever/Ashby, which return every
     // raw posting unfiltered.
-    if (!looksRelevant(job.title_original)) continue;
+    if (!looksRelevant(job.title_original)) {
+      await closeExcludedJob(job.source_job_id);
+      continue;
+    }
+    const priorAnalysis = existingContentBySourceId.get(job.source_job_id);
+    if (priorAnalysis && priorAnalysis.title_original === job.title_original &&
+        priorAnalysis.description_text === job.description_text &&
+        !hasSalesSignals(priorAnalysis.ai_analysis) &&
+        !titleHasStrongSalesSignal(job.title_original)) {
+      await closeExcludedJob(job.source_job_id);
+      continue;
+    }
+    // An older version of the filter may have admitted this posting.
+    // Only relevant IDs belong in the live snapshot; otherwise the
+    // close-missing step below leaves newly excluded jobs active forever.
+    seenSourceIds.add(job.source_job_id);
 
     // Hard filter, not just a scoring-time penalty: ROOK is a US-focused
     // platform, and several employers added this session are large
@@ -352,13 +394,9 @@ async function ingestEmployer(employer) {
         // no required_industries, no sales_motion), the job is not a sales role
         // (e.g. admin, finance, clinical, IT). Mark it inactive so it never
         // appears in candidate results.
-        const hasSalesSignals = (
-          (analysis?.product_categories?.length > 0) ||
-          (analysis?.required_industries?.length > 0) ||
-          (analysis?.sales_motion?.length > 0)
-        );
-        const statusUpdate = hasSalesSignals ? {} : { status: 'closed' };
-        if (!hasSalesSignals) {
+        const salesRole = hasSalesSignals(analysis) || titleHasStrongSalesSignal(upsertedRow.title_original);
+        const statusUpdate = salesRole ? {} : { status: 'closed' };
+        if (!salesRole) {
           console.log(`  Filtering non-sales job: "${job.title_original}" (no product/industry/sales_motion)`);
         }
         await supabase.from("jobs").update({ ai_analysis: analysis, social_eligible: nowEligible, ...statusUpdate }).eq("id", upsertedRow.id);
@@ -381,15 +419,21 @@ async function ingestEmployer(employer) {
 
   // Mark jobs that disappeared from the source as closed, rather than
   // deleting them — see architecture spec section 3.
-  const { data: existingJobs } = await supabase
+  const existingJobs = await allEmployerRows((start, end) => supabase
     .from("jobs")
     .select("id, source_job_id")
     .eq("employer_id", employer.id)
-    .eq("status", "active");
+    .eq("status", "active")
+    .order("id")
+    .range(start, end));
 
-  const closedIds = (existingJobs || [])
+  const closedIds = (rawJobs.incompleteSnapshot ? [] : (existingJobs || []))
     .filter((j) => !seenSourceIds.has(j.source_job_id))
     .map((j) => j.id);
+
+  if (rawJobs.incompleteSnapshot) {
+    console.warn(`  Source snapshot was incomplete for ${employer.company_name}; existing jobs were preserved while current postings were refreshed.`);
+  }
 
   if (closedIds.length) {
     await supabase.from("jobs").update({ status: "closed" }).in("id", closedIds);
@@ -398,9 +442,9 @@ async function ingestEmployer(employer) {
   await supabase
     .from("employers")
     .update({
-      sync_status: "ok",
+      sync_status: rawJobs.incompleteSnapshot ? "partial" : "ok",
       last_checked_at: new Date().toISOString(),
-      last_successful_sync_at: new Date().toISOString(),
+      ...(rawJobs.incompleteSnapshot ? {} : { last_successful_sync_at: new Date().toISOString() }),
     })
     .eq("id", employer.id);
 
@@ -423,7 +467,7 @@ async function ingestEmployer(employer) {
 // veterinary organization (e.g. a front-desk client service rep at a vet
 // clinic) — genuinely distinguishing those from a sales-facing "Veterinary
 // Territory Manager" needs real classification, not keyword matching.
-const { titleLooksRelevant: looksRelevant } = require('./relevanceFilter');
+const { titleLooksRelevant: looksRelevant, titleHasStrongSalesSignal } = require('./relevanceFilter');
 
 // DigitalOcean's App Platform Scheduled Jobs have a hard 30-minute
 // timeout — a run that hits it gets forcibly killed mid-request rather

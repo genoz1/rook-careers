@@ -116,3 +116,35 @@ test('ClinchTalent: a later page (page 2+) failing does not invalidate rows alre
     global.fetch = real;
   }
 });
+
+test('ClinchTalent: absolute job links and JobPosting location on Foundation Medicine', async () => {
+  const real = global.fetch;
+  const url = 'https://careers.foundationmedicine.com/jobs/account-executive-ii-north-orlando-fl-orlando-florida-united-states';
+  global.fetch = async (requested) => {
+    const value = String(requested);
+    if (value === 'https://careers.foundationmedicine.com/jobs/search') return {
+      ok: true,
+      text: async () => `<table><tr><td><a aria-label="Title: Account Executive II - North Orlando, FL" href="${url}">\n Account Executive II - North Orlando, FL \n</a></td><td id="location_3_0_6_0">Orlando, Florida, United States</td></tr></table>`,
+    };
+    if (value === 'https://careers.foundationmedicine.com/jobs/search?page=2') return {
+      ok: true, text: async () => '<p>No results found</p>',
+    };
+    if (value === url) return {
+      ok: true,
+      text: async () => '<script type="application/ld+json">{"@type":"JobPosting","description":"<p>Field sales role</p>","datePosted":"2026-09-21","jobLocation":[{"address":{"addressLocality":"Orlando","addressRegion":"Florida","addressCountry":"US"}}]}</script>',
+    };
+    throw new Error(`unexpected fetch: ${value}`);
+  };
+  try {
+    const jobs = await fetchClinchTalentJobs('careers.foundationmedicine.com');
+    assert.equal(jobs.length, 1);
+    const row = normalizeClinchTalentJob(jobs[0], {id:'foundation',company_name:'Foundation Medicine',ats_identifier:'careers.foundationmedicine.com'});
+    assert.equal(row.source_url, url);
+    assert.equal(row.title_original, 'Account Executive II - North Orlando, FL');
+    assert.equal(row.location_raw, 'Orlando, Florida, US');
+    assert.equal(row.date_posted, '2026-09-21');
+    assert.equal(row.description_text, 'Field sales role');
+  } finally {
+    global.fetch = real;
+  }
+});

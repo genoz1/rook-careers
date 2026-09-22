@@ -113,6 +113,7 @@ test('locationFromDetailUrl parses city/state/zip out of the CSB slug format', (
     'Boston, MA'
   );
   assert.equal(locationFromDetailUrl('https://careers.example.com/job/not-a-real-slug/999/'), null);
+  assert.equal(locationFromDetailUrl('https://jobs.boehringer-ingelheim.com/job/Stockton%2C-CA-ILD-Sales-Consultant-Unit/1430585933/'), 'Stockton, CA');
 });
 
 test('locationFromRowText finds "City, ST" once the title is stripped from the row text', () => {
@@ -125,6 +126,12 @@ test('findNextPageUrl recognizes rel=next and startrow links, and ignores unrela
   const $ = cheerio.load('<a href="/about">About</a><a rel="next" href="/search/?q=sales&startrow=25">Next</a>');
   const next = findNextPageUrl($, 'https://careers.example.com/search/?q=sales');
   assert.equal(next, 'https://careers.example.com/search/?q=sales&startrow=25');
+});
+
+test('findNextPageUrl walks sequentially instead of jumping to the CSB last-page link', () => {
+  const cheerio = require('cheerio');
+  const $ = cheerio.load('<ul class="pagination"><li><a href="?q=sales&amp;startrow=25" title="Page 2">2</a></li><li><a class="paginationItemLast" href="?q=sales&amp;startrow=475" title="Last Page"><span>»</span></a></li></ul>');
+  assert.equal(findNextPageUrl($, 'https://careers.example.com/search/?q=sales'), 'https://careers.example.com/search/?q=sales&startrow=25');
 });
 
 test('ingestion dispatcher compatibility: normalize signature matches ingest.js call shape (job, employer, host)', () => {

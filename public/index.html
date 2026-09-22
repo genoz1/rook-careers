@@ -547,8 +547,8 @@
       <div class="stat-label">Current Opportunities</div>
     </div>
     <div class="stat-item">
-      <div class="stat-num" id="statEmployerCount">237</div>
-      <div class="stat-label">Employer Career Sites Searched Directly</div>
+      <div class="stat-num" id="statEmployerCount">323</div>
+      <div class="stat-label">Companies in Directory</div>
     </div>
     <div class="stat-item">
       <div class="stat-num" style="font-size:22px;">Continuously Updated</div>
@@ -602,13 +602,13 @@
 
     <div style="text-align:center; margin-bottom:40px;">
       <div style="display:inline-flex; align-items:baseline; gap:10px; background:var(--gray); border:1px solid var(--border); border-radius:999px; padding:14px 28px;">
-        <span style="font-family:var(--font-display); font-size:30px; font-weight:700; color:var(--navy); line-height:1;">237</span>
-        <span style="font-size:14.5px; font-weight:600; color:var(--muted);">Employer Career Sites and Growing</span>
+        <span id="directoryEmployerCount" style="font-family:var(--font-display); font-size:30px; font-weight:700; color:var(--navy); line-height:1;">323</span>
+        <span style="font-size:14.5px; font-weight:600; color:var(--muted);">Companies in Directory</span>
       </div>
     </div>
 
     <div style="display:flex; flex-wrap:wrap; justify-content:center; gap:12px; max-width:920px; margin:0 auto 40px;">
-      <!-- A curated, recognizable selection from the current 237 —
+      <!-- A curated, recognizable selection from the current directory —
            not the full list (that's what the companies page is for). -->
       <span class="company-chip">Johnson &amp; Johnson</span>
       <span class="company-chip">Pfizer</span>
@@ -637,7 +637,7 @@
     </div>
 
     <div style="text-align:center;">
-      <a href="rook-companies.html" class="btn btn-primary">See All 237 Companies</a>
+      <a href="rook-companies.html" class="btn btn-primary">See All Companies</a>
     </div>
   </div>
 </section>
@@ -886,11 +886,7 @@
 </footer>
 
 <script>
-// Stats row: both numbers start as "—" (set in the markup) and stay
-// there — never a raw "0" or a guessed placeholder number — until each
-// live endpoint responds. If a fetch fails, that one box just keeps
-// showing "—" rather than a stale or fabricated figure; the other box
-// and the static "Continuously Updated" box are unaffected either way.
+// Refresh the current job count from the live database.
 (async () => {
   try {
     const res = await fetch('/api/public-job-count');
@@ -901,6 +897,18 @@
     }
   } catch (err) {
     console.error('Could not load homepage job count:', err);
+  }
+})();
+(async () => {
+  try {
+    const res = await fetch('/api/public-companies');
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!Number.isInteger(data.total_count)) return;
+    document.getElementById('statEmployerCount').textContent = data.total_count.toLocaleString();
+    document.getElementById('directoryEmployerCount').textContent = data.total_count.toLocaleString();
+  } catch (err) {
+    console.error('Could not load homepage company count:', err);
   }
 })();
 </script>

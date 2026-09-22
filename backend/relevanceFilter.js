@@ -24,6 +24,9 @@ const EXCLUSION_SIGNALS = [
   "software engineer", "data analyst", "data scientist", "it support",
   "clinical trial", "pharmacovigilance", "manufacturing", "supply chain",
   "human resources", "finance", "accounting", "legal counsel", "compliance officer",
+  "accounts payable", "accounts receivable", "billing", "medical biller",
+  "medical director", "clinical lab", "clinical data", "coding specialist",
+  "patient support", "revenue cycle", "regulatory & clinical",
   "customer service", "help desk", "warehouse", "logistics", "procurement",
   "biomedical engineer", "lab technician", "research scientist", "r&d",
   // Sales-ADJACENT roles — these all contain "sales" (which would
@@ -38,21 +41,27 @@ const EXCLUSION_SIGNALS = [
 ];
 
 const STRONG_TITLE_SIGNALS = [
-  "sales", "account executive", "account manager", "territory manager",
+  "account executive", "account manager", "territory manager",
   "territory sales", "business development", "key account",
 ];
 const ROLE_WORDS = ["representative", "specialist", "manager", "executive", "consultant"];
 const DOMAIN_WORDS = [
-  "sales", "territory", "account", "veterinary", "medical", "pharmaceutical", "diagnostic", "clinical",
+  "territory", "account", "veterinary", "medical", "pharmaceutical", "diagnostic", "clinical",
 ];
+
+function titleHasStrongSalesSignal(title = "") {
+  const t = title.toLowerCase();
+  if (EXCLUSION_SIGNALS.some((k) => t.includes(k))) return false;
+  return /\bsales\b|\bsalesperson\b/.test(t) || STRONG_TITLE_SIGNALS.some((k) => t.includes(k));
+}
 
 function titleLooksRelevant(title = "") {
   const t = title.toLowerCase();
   if (EXCLUSION_SIGNALS.some((k) => t.includes(k))) return false;
-  if (STRONG_TITLE_SIGNALS.some((k) => t.includes(k))) return true;
+  if (titleHasStrongSalesSignal(title)) return true;
   const hasRoleWord = ROLE_WORDS.some((k) => t.includes(k));
   const hasDomainWord = DOMAIN_WORDS.some((k) => t.includes(k));
   return hasRoleWord && hasDomainWord;
 }
 
-module.exports = { titleLooksRelevant };
+module.exports = { titleLooksRelevant, titleHasStrongSalesSignal };
