@@ -147,6 +147,7 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
 
   const sb = window.supabase.createClient(window.ROOK_CONFIG.SUPABASE_URL, window.ROOK_CONFIG.SUPABASE_ANON_KEY);
 
+  try { document.getElementById('emailInput').value = sessionStorage.getItem('rook_alert_email') || ''; sessionStorage.setItem('rook_alert_trial_clicked','1'); } catch (_) {}
   const existingSession = await sb.auth.getSession();
   if (existingSession.data?.session && sessionStorage.getItem('rook_v7_token')) {
     window.location.href = 'rook-checkout-v7.html';

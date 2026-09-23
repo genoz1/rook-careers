@@ -420,7 +420,7 @@
          per-listing CTAs and route to the same place. -->
     <div id="unlockBanner" style="display:none; background:linear-gradient(135deg,#062d55,#0877d1); border-radius:18px; padding:22px 24px; margin-bottom:18px; color:#fff;">
       <div style="font-size:19px; font-weight:900; line-height:1.25; margin-bottom:8px;">Unlock My Matches</div>
-      <div style="font-size:13.5px; color:#dcedf8; line-height:1.55; margin-bottom:16px; max-width:520px;">Start your 3-day free trial to view employers, open complete job listings, apply, and activate personalized job alerts. Then $19.99/month. Cancel anytime.</div>
+      <div style="font-size:13.5px; color:#dcedf8; line-height:1.55; margin-bottom:16px; max-width:520px;">Start your 3-day free trial to view employers, open complete job listings, and apply. Then $19.99/month. Cancel anytime.</div>
       <button type="button" id="unlockBannerBtn" onclick="rookGoToCheckout('banner')" style="background:#fff; color:#062d55; border:0; border-radius:99px; padding:12px 22px; font:inherit; font-size:14px; font-weight:800; cursor:pointer;">Unlock My Matches</button>
     </div>
 
@@ -522,6 +522,7 @@
 <script src="rook-pretrial.js"></script>
 <script src="rook-job-classification.js"></script>
 <script src="rook-v7.js"></script>
+<script src="rook-pretrial-alerts.js"></script>
 <script src="rook-location-widget.js"></script>
 <script>
   // Every job row currently in the HTML is sample/demo data — clearly
@@ -993,6 +994,7 @@
 
       if (requestVersion !== jobsLoadVersion) return;
       if (typeof rookTrackFunnelEvent === 'function') rookTrackFunnelEvent(rookV7Unlocked ? 'v7_unmasked_dashboard_viewed' : 'v7_masked_dashboard_viewed');
+      window.rookPretrialAlerts?.dashboard();
       currentJobs = Array.isArray(jobs) ? jobs : [];
       jobList.dataset.demo = 'false';
       if (!Array.isArray(jobs) || jobs.length === 0) {

@@ -210,4 +210,4 @@ async function sendDigestForCandidate(supabase, profile, appBaseUrl) {
   return { sent: true, jobCount: scored.length };
 }
 
-module.exports = { sendDigestForCandidate, renderDigestHtml, isDigestLocationMatch };
+module.exports = { escapeHtml, sendDigestForCandidate, renderDigestHtml, isDigestLocationMatch };

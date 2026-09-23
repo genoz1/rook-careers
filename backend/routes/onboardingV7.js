@@ -54,6 +54,40 @@ router.post('/session', wrap(async (req,res) => {
   if (error) throw error;
   res.json({token});
 }));
+// Same private session boundary as the masked dashboard. No account creation.
+const alertCalls = new Map();
+router.post('/alerts', wrap(async (req,res) => {
+  const s = await session(req);
+  if (!s) return res.status(410).json({error:'Your matches expired. You can skip and start again.'});
+  if (s.user_id || await user(req)) return res.json({ok:true});
+  const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+  const source = req.body?.source;
+  if (email.length>254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !['onboarding','exit'].includes(source) || req.body?.consent !== true)
+    return res.status(400).json({error:'Enter a valid email to request job-match alerts.'});
+  if (s.alert_requested) return res.json({ok:true});
+  const now=Date.now();
+  for(const [key,value] of alertCalls) if(value.until<now) alertCalls.delete(key);
+  const rate=alertCalls.get(req.ip) || {count:0,until:now+3600000};
+  if(++rate.count>5 || alertCalls.size>10000) return res.status(429).json({error:'Please try later, or skip to your matches.'});
+  alertCalls.set(req.ip,rate);
+  const result=await db.rpc('capture_pretrial_alert',{p_hash:s.token_hash,p_email:email,p_source:source,p_unsubscribe:crypto.randomBytes(32).toString('hex')});
+  if(result.error) throw result.error;
+  res.json({ok:true});
+}));
+// GET renders a confirmation; POST changes the preference (link scanners cannot).
+router.get('/alerts/unsubscribe', (req,res) => {
+  const token=String(req.query.token || '');
+  if(!/^[a-f0-9]{64}$/.test(token)) return res.status(400).send('Invalid unsubscribe link.');
+  res.set('Referrer-Policy','no-referrer');
+  res.type('html').send(`<!doctype html><meta name="viewport" content="width=device-width"><title>ROOK job alerts</title><main style="font:18px system-ui;max-width:480px;margin:60px auto;padding:20px"><h1>ROOK job alerts</h1><form method="post"><input type="hidden" name="token" value="${token}"><button style="font:inherit;padding:14px">Unsubscribe from job-match emails</button></form></main>`);
+});
+router.post('/alerts/unsubscribe', express.urlencoded({extended:false}), wrap(async(req,res) => {
+  const token=String(req.body?.token || req.query.token || '');
+  if(!/^[a-f0-9]{64}$/.test(token)) return res.status(400).send('Invalid unsubscribe link.');
+  const result=await db.from('pretrial_leads').update({digest_enabled:false,unsubscribed_at:new Date().toISOString()}).eq('unsubscribe_token',token);
+  if(result.error) throw result.error;
+  res.type('text').send('You are unsubscribed from ROOK pre-trial job-match emails.');
+}));
 router.put('/location', wrap(async (req,res) => {
   const s = await session(req);
   if (!s) return res.status(410).json({error:'Your saved matches expired. Please start again.'});
@@ -107,7 +141,7 @@ router.get('/session', wrap(async (req,res) => {
     ? (requested !== 'all' && !normalizeSelection(selection).length ? [] : await rank(db,profile,selection))
     : await rank(db,profile);
   // Even a forged query param or a valid token for another paid user cannot unlock.
-  res.json({profile, unlocked, resume_pending:!!s.resume_path, jobs:unlocked ? jobs.map(j=>({...j,subscription_required:false})) : jobs.map(preview)});
+  res.json({profile, unlocked, alert_requested:!!s.alert_requested, resume_pending:!!s.resume_path, jobs:unlocked ? jobs.map(j=>({...j,subscription_required:false})) : jobs.map(preview)});
 }));
 router.post('/claim', wrap(async (req,res) => {
   let s = await session(req);

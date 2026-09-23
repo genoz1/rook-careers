@@ -15,6 +15,10 @@
     } catch (_) {}
   </script>
 <script src="rook-tracking.js"></script>
+<script src="rook-config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="rook-v7.js"></script>
+<script src="rook-pretrial-alerts.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="rook-mobile.css">
@@ -293,7 +297,8 @@ async function loadAnonymousMatches(territories) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Unable to load matches. Please try again.');
     sessionStorage.setItem('rook_v7_token', data.token);
-    window.location.href = 'rook-dashboard-v7.html';
+    if(window.rookPretrialAlerts) await rookPretrialAlerts.first();
+    else window.location.href = 'rook-dashboard-v7.html';
   } catch (err) {
     document.getElementById('matchesHeadline').textContent = 'Unable to load your matches';
     document.getElementById('matchesSub').textContent = err.message;

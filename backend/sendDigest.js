@@ -52,6 +52,8 @@ async function run() {
     }
   }
 
+  await require("./email/pretrialDigest").sendPretrialDigests(supabase, APP_BASE_URL);
+
   console.log(`\nDigest run complete. Sent ${sentCount}, skipped ${skippedCount}, out of ${profiles.length} candidate(s).`);
 }
 
