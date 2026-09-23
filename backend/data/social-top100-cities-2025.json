@@ -1,0 +1,609 @@
+{
+  "source": "U.S. Census Bureau, Vintage 2025 subcounty population estimates",
+  "sourceUrl": "https://www2.census.gov/programs-surveys/popest/datasets/2020-2025/cities/totals/sub-est2025.csv",
+  "populationDate": "2025-07-01",
+  "retrievedOn": "2026-09-23",
+  "method": "SUMLEV=162, descending POPESTIMATE2025, first 100; includes Urban Honolulu CDP. Consolidated city balance names normalized for matching; city proper, not metro population.",
+  "cities": [
+    {
+      "rank": 1,
+      "city": "New York",
+      "state": "NY",
+      "population": 8584629
+    },
+    {
+      "rank": 2,
+      "city": "Los Angeles",
+      "state": "CA",
+      "population": 3869089
+    },
+    {
+      "rank": 3,
+      "city": "Chicago",
+      "state": "IL",
+      "population": 2731585
+    },
+    {
+      "rank": 4,
+      "city": "Houston",
+      "state": "TX",
+      "population": 2397315
+    },
+    {
+      "rank": 5,
+      "city": "Phoenix",
+      "state": "AZ",
+      "population": 1665481
+    },
+    {
+      "rank": 6,
+      "city": "Philadelphia",
+      "state": "PA",
+      "population": 1574281
+    },
+    {
+      "rank": 7,
+      "city": "San Antonio",
+      "state": "TX",
+      "population": 1548422
+    },
+    {
+      "rank": 8,
+      "city": "San Diego",
+      "state": "CA",
+      "population": 1406106
+    },
+    {
+      "rank": 9,
+      "city": "Dallas",
+      "state": "TX",
+      "population": 1329491
+    },
+    {
+      "rank": 10,
+      "city": "Fort Worth",
+      "state": "TX",
+      "population": 1028117
+    },
+    {
+      "rank": 11,
+      "city": "Jacksonville",
+      "state": "FL",
+      "population": 1017689
+    },
+    {
+      "rank": 12,
+      "city": "Austin",
+      "state": "TX",
+      "population": 1002632
+    },
+    {
+      "rank": 13,
+      "city": "San Jose",
+      "state": "CA",
+      "population": 989814
+    },
+    {
+      "rank": 14,
+      "city": "Charlotte",
+      "state": "NC",
+      "population": 964784
+    },
+    {
+      "rank": 15,
+      "city": "Columbus",
+      "state": "OH",
+      "population": 938396
+    },
+    {
+      "rank": 16,
+      "city": "Indianapolis",
+      "state": "IN",
+      "population": 901116
+    },
+    {
+      "rank": 17,
+      "city": "San Francisco",
+      "state": "CA",
+      "population": 826079
+    },
+    {
+      "rank": 18,
+      "city": "Seattle",
+      "state": "WA",
+      "population": 784777
+    },
+    {
+      "rank": 19,
+      "city": "Denver",
+      "state": "CO",
+      "population": 740613
+    },
+    {
+      "rank": 20,
+      "city": "Nashville",
+      "state": "TN",
+      "population": 721074
+    },
+    {
+      "rank": 21,
+      "city": "Oklahoma City",
+      "state": "OK",
+      "population": 719849
+    },
+    {
+      "rank": 22,
+      "city": "Washington",
+      "state": "DC",
+      "population": 693645
+    },
+    {
+      "rank": 23,
+      "city": "El Paso",
+      "state": "TX",
+      "population": 683012
+    },
+    {
+      "rank": 24,
+      "city": "Las Vegas",
+      "state": "NV",
+      "population": 679817
+    },
+    {
+      "rank": 25,
+      "city": "Boston",
+      "state": "MA",
+      "population": 672973
+    },
+    {
+      "rank": 26,
+      "city": "Detroit",
+      "state": "MI",
+      "population": 649095
+    },
+    {
+      "rank": 27,
+      "city": "Louisville",
+      "state": "KY",
+      "population": 641962
+    },
+    {
+      "rank": 28,
+      "city": "Portland",
+      "state": "OR",
+      "population": 635109
+    },
+    {
+      "rank": 29,
+      "city": "Memphis",
+      "state": "TN",
+      "population": 609647
+    },
+    {
+      "rank": 30,
+      "city": "Baltimore",
+      "state": "MD",
+      "population": 569997
+    },
+    {
+      "rank": 31,
+      "city": "Milwaukee",
+      "state": "WI",
+      "population": 562407
+    },
+    {
+      "rank": 32,
+      "city": "Albuquerque",
+      "state": "NM",
+      "population": 556588
+    },
+    {
+      "rank": 33,
+      "city": "Fresno",
+      "state": "CA",
+      "population": 555549
+    },
+    {
+      "rank": 34,
+      "city": "Tucson",
+      "state": "AZ",
+      "population": 548371
+    },
+    {
+      "rank": 35,
+      "city": "Sacramento",
+      "state": "CA",
+      "population": 536449
+    },
+    {
+      "rank": 36,
+      "city": "Atlanta",
+      "state": "GA",
+      "population": 529110
+    },
+    {
+      "rank": 37,
+      "city": "Kansas City",
+      "state": "MO",
+      "population": 521220
+    },
+    {
+      "rank": 38,
+      "city": "Mesa",
+      "state": "AZ",
+      "population": 513656
+    },
+    {
+      "rank": 39,
+      "city": "Raleigh",
+      "state": "NC",
+      "population": 506306
+    },
+    {
+      "rank": 40,
+      "city": "Colorado Springs",
+      "state": "CO",
+      "population": 494743
+    },
+    {
+      "rank": 41,
+      "city": "Miami",
+      "state": "FL",
+      "population": 489812
+    },
+    {
+      "rank": 42,
+      "city": "Omaha",
+      "state": "NE",
+      "population": 488797
+    },
+    {
+      "rank": 43,
+      "city": "Virginia Beach",
+      "state": "VA",
+      "population": 453737
+    },
+    {
+      "rank": 44,
+      "city": "Long Beach",
+      "state": "CA",
+      "population": 450469
+    },
+    {
+      "rank": 45,
+      "city": "Oakland",
+      "state": "CA",
+      "population": 440838
+    },
+    {
+      "rank": 46,
+      "city": "Minneapolis",
+      "state": "MN",
+      "population": 430324
+    },
+    {
+      "rank": 47,
+      "city": "Bakersfield",
+      "state": "CA",
+      "population": 422165
+    },
+    {
+      "rank": 48,
+      "city": "Tulsa",
+      "state": "OK",
+      "population": 416209
+    },
+    {
+      "rank": 49,
+      "city": "Tampa",
+      "state": "FL",
+      "population": 413554
+    },
+    {
+      "rank": 50,
+      "city": "Aurora",
+      "state": "CO",
+      "population": 410053
+    },
+    {
+      "rank": 51,
+      "city": "Arlington",
+      "state": "TX",
+      "population": 402134
+    },
+    {
+      "rank": 52,
+      "city": "Wichita",
+      "state": "KS",
+      "population": 400987
+    },
+    {
+      "rank": 53,
+      "city": "Cleveland",
+      "state": "OH",
+      "population": 363608
+    },
+    {
+      "rank": 54,
+      "city": "New Orleans",
+      "state": "LA",
+      "population": 362154
+    },
+    {
+      "rank": 55,
+      "city": "Henderson",
+      "state": "NV",
+      "population": 353289
+    },
+    {
+      "rank": 56,
+      "city": "Honolulu",
+      "state": "HI",
+      "population": 341868
+    },
+    {
+      "rank": 57,
+      "city": "Anaheim",
+      "state": "CA",
+      "population": 341008
+    },
+    {
+      "rank": 58,
+      "city": "Orlando",
+      "state": "FL",
+      "population": 333888
+    },
+    {
+      "rank": 59,
+      "city": "Lexington",
+      "state": "KY",
+      "population": 329751
+    },
+    {
+      "rank": 60,
+      "city": "Stockton",
+      "state": "CA",
+      "population": 324597
+    },
+    {
+      "rank": 61,
+      "city": "Newark",
+      "state": "NJ",
+      "population": 323808
+    },
+    {
+      "rank": 62,
+      "city": "Riverside",
+      "state": "CA",
+      "population": 323057
+    },
+    {
+      "rank": 63,
+      "city": "Irvine",
+      "state": "CA",
+      "population": 318764
+    },
+    {
+      "rank": 64,
+      "city": "Corpus Christi",
+      "state": "TX",
+      "population": 317247
+    },
+    {
+      "rank": 65,
+      "city": "Santa Ana",
+      "state": "CA",
+      "population": 315586
+    },
+    {
+      "rank": 66,
+      "city": "Cincinnati",
+      "state": "OH",
+      "population": 314367
+    },
+    {
+      "rank": 67,
+      "city": "Greensboro",
+      "state": "NC",
+      "population": 308667
+    },
+    {
+      "rank": 68,
+      "city": "Pittsburgh",
+      "state": "PA",
+      "population": 307632
+    },
+    {
+      "rank": 69,
+      "city": "St. Paul",
+      "state": "MN",
+      "population": 306684
+    },
+    {
+      "rank": 70,
+      "city": "Durham",
+      "state": "NC",
+      "population": 305561
+    },
+    {
+      "rank": 71,
+      "city": "Jersey City",
+      "state": "NJ",
+      "population": 302013
+    },
+    {
+      "rank": 72,
+      "city": "Lincoln",
+      "state": "NE",
+      "population": 301522
+    },
+    {
+      "rank": 73,
+      "city": "North Las Vegas",
+      "state": "NV",
+      "population": 296653
+    },
+    {
+      "rank": 74,
+      "city": "Plano",
+      "state": "TX",
+      "population": 293028
+    },
+    {
+      "rank": 75,
+      "city": "Gilbert",
+      "state": "AZ",
+      "population": 287285
+    },
+    {
+      "rank": 76,
+      "city": "Anchorage",
+      "state": "AK",
+      "population": 287155
+    },
+    {
+      "rank": 77,
+      "city": "Madison",
+      "state": "WI",
+      "population": 286233
+    },
+    {
+      "rank": 78,
+      "city": "Reno",
+      "state": "NV",
+      "population": 283621
+    },
+    {
+      "rank": 79,
+      "city": "Chandler",
+      "state": "AZ",
+      "population": 278748
+    },
+    {
+      "rank": 80,
+      "city": "St. Louis",
+      "state": "MO",
+      "population": 278144
+    },
+    {
+      "rank": 81,
+      "city": "Chula Vista",
+      "state": "CA",
+      "population": 275533
+    },
+    {
+      "rank": 82,
+      "city": "Fort Wayne",
+      "state": "IN",
+      "population": 275203
+    },
+    {
+      "rank": 83,
+      "city": "Buffalo",
+      "state": "NY",
+      "population": 274613
+    },
+    {
+      "rank": 84,
+      "city": "Lubbock",
+      "state": "TX",
+      "population": 273071
+    },
+    {
+      "rank": 85,
+      "city": "Laredo",
+      "state": "TX",
+      "population": 269515
+    },
+    {
+      "rank": 86,
+      "city": "Port St. Lucie",
+      "state": "FL",
+      "population": 268062
+    },
+    {
+      "rank": 87,
+      "city": "St. Petersburg",
+      "state": "FL",
+      "population": 264033
+    },
+    {
+      "rank": 88,
+      "city": "Toledo",
+      "state": "OH",
+      "population": 263423
+    },
+    {
+      "rank": 89,
+      "city": "Glendale",
+      "state": "AZ",
+      "population": 260572
+    },
+    {
+      "rank": 90,
+      "city": "Winston-Salem",
+      "state": "NC",
+      "population": 257271
+    },
+    {
+      "rank": 91,
+      "city": "Irving",
+      "state": "TX",
+      "population": 257076
+    },
+    {
+      "rank": 92,
+      "city": "Chesapeake",
+      "state": "VA",
+      "population": 255332
+    },
+    {
+      "rank": 93,
+      "city": "Garland",
+      "state": "TX",
+      "population": 249625
+    },
+    {
+      "rank": 94,
+      "city": "Scottsdale",
+      "state": "AZ",
+      "population": 243006
+    },
+    {
+      "rank": 95,
+      "city": "Boise",
+      "state": "ID",
+      "population": 238429
+    },
+    {
+      "rank": 96,
+      "city": "Richmond",
+      "state": "VA",
+      "population": 237257
+    },
+    {
+      "rank": 97,
+      "city": "Frisco",
+      "state": "TX",
+      "population": 236955
+    },
+    {
+      "rank": 98,
+      "city": "Cape Coral",
+      "state": "FL",
+      "population": 236264
+    },
+    {
+      "rank": 99,
+      "city": "McKinney",
+      "state": "TX",
+      "population": 236001
+    },
+    {
+      "rank": 100,
+      "city": "Huntsville",
+      "state": "AL",
+      "population": 233627
+    }
+  ]
+}
