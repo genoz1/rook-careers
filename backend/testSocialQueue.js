@@ -82,7 +82,7 @@ test('failure to persist Buffer receipt prevents a duplicate on retry', async ()
 const channels=[{id:'li',service:'linkedin',name:'ROOK Careers',organizationId:'org'},{id:'fb',service:'facebook',name:'ROOK Careers',organizationId:'org'}];
 const config={automationEnabled:'true',bufferAccessToken:'fake',linkedinChannelId:'li',facebookChannelId:'fb'};
 const copy={linkedin:'Which responsibilities would you prioritize in a possible role? Consider comparing your decisions and responsibilities.',facebook:'What makes a workday satisfying for you? Think about the conversations you enjoy.',reddit:'How would you assess a possible career direction? Reflect on your questions before applying.',fallback:false};
-function deps(extra={}) {return {supabaseAdmin:memoryDb(),now:new Date('2030-06-01T00:00:00Z'),listAllChannels:async()=>channels,readQueue:async()=>({limit:10,posts:[]}),readRecentPosts:async()=>[],generateMarketing:async()=>copy,sendEmail:async()=>{},...extra};}
+function deps(extra={}) {return {supabaseAdmin:memoryDb(),now:new Date('2030-06-01T00:00:00Z'),listAllChannels:async()=>channels,readQueue:async(token,org)=>{assert.equal(org,"org");return {limit:10,posts:[]};},readRecentPosts:async(token,org)=>{assert.equal(org,"org");return [];},generateMarketing:async()=>copy,sendEmail:async()=>{},...extra};}
 function response(value){return {status:'completed',output:[{type:'function_call',name:'write_social_marketing',arguments:JSON.stringify(value)}]};}
 test('six daily slots have four regular posts and two additional job posts',()=>{
  assert.equal(DAILY_SLOTS.length,6);assert.equal(DAILY_SLOTS.filter(x=>x.slot.startsWith('marketing')).length,4);

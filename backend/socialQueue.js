@@ -61,10 +61,11 @@ async function replenish(config, deps = {}) {
     if (claim.error) throw Error('Cannot claim social queue lock');
     if (!claim.data) return { ok: true, stage: 'already_running' };
     locked = true;
-    const identified = identifyRookChannels(await (deps.listAllChannels || listAllChannels)(config.bufferAccessToken), config);
+    const discovered = await (deps.listAllChannels || listAllChannels)(config.bufferAccessToken);
+    const identified = identifyRookChannels(discovered, config);
     if (!identified.ok) throw Error('ROOK channels could not be identified');
-    const channels = [identified.linkedin, identified.facebook];
-    if (channels[0].organizationId !== channels[1].organizationId) throw Error('ROOK channels must share an organization');
+    const channels = [identified.linkedin, identified.facebook].map(c => discovered.find(raw => raw.id === c.id));
+    if (!channels[0].organizationId || channels[0].organizationId !== channels[1].organizationId) throw Error('ROOK channels must share an organization');
     const org = channels[0].organizationId;
     const read = () => (deps.readQueue || readQueue)(config.bufferAccessToken, org);
     let queue = await read(); limit = queue.limit;
