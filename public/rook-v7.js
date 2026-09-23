@@ -32,7 +32,7 @@ async function rookV7PrepareAccount() {
     const fd=new FormData();fd.append('resume',file);
     const {data:{session}}=await rookV7Auth().auth.getSession();
     const processed=await fetch('/api/resume',{method:'POST',headers:{Authorization:`Bearer ${session.access_token}`},body:fd});
-    if(!processed.ok) throw new Error('Unable to finish your résumé upload. Please retry.');
+    if(!processed.ok || (await processed.json()).analysis_status !== 'ok') throw new Error('Unable to analyze your résumé. Please retry with a readable PDF or Word file.');
   }
   const done=await rookV7Request('/resume-complete',{method:'POST'});
   if(!done.ok) throw new Error('Unable to finish saving your résumé. Please retry.');
@@ -102,7 +102,9 @@ async function rookV7Fetch(path,options={}) {
 async function rookV7Upload(fd) {
   const {data:{session}}=await rookV7Auth().auth.getSession();
   if(!rookV7Snapshot?.profile.user_id) return rookV7Request('/resume',{method:'POST',body:fd});
-  return fetch('/api/resume',{method:'POST',headers:{Authorization:`Bearer ${session.access_token}`},body:fd});
+  const response=await fetch('/api/resume',{method:'POST',headers:{Authorization:`Bearer ${session.access_token}`},body:fd});
+  if(response.ok && (await response.clone().json()).analysis_status !== 'ok') throw new Error('Unable to analyze your résumé. Please retry with a readable PDF or Word file.');
+  return response;
 }
 // Override only on V7 pages; all V6 users retain the shared checkout behavior.
 async function rookGoToCheckout(source) {

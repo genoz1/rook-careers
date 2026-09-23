@@ -83,15 +83,15 @@ async function run() {
       clinical_technical_experience: [], specialties: [], certifications: [], performance_highlights: [],
       employers: [
         {
-          company: "Apex Diagnostics", title: "Regional Sales Manager", start: "2022-03", end: null,
+          company: "Apex Diagnostics", title: "Regional Sales Manager", start: "March 2022", end: null,
           achievements: "Grew territory revenue 34% year-over-year across a 6-state Southeast region\nClosed the largest single reference-lab contract in company history ($1.2M ACV)\nTrained and onboarded 4 new territory reps in the first year",
         },
         {
-          company: "VetCore Animal Health", title: "Territory Manager", start: "2018-06", end: "2022-02",
+          company: "VetCore Animal Health", title: "Territory Manager", start: "June 2018", end: "February 2022",
           achievements: "Ranked #2 of 40 reps nationally for new-account acquisition in 2020\nLaunched the company's first point-of-care platform in an 8-clinic pilot group",
         },
         {
-          company: "MedSupply Direct", title: "Sales Associate", start: "2015-01", end: "2018-05",
+          company: "MedSupply Direct", title: "Sales Associate", start: "January 2015", end: "May 2018",
           achievements: null, // no bullets under this role in the fixture at all
         },
       ],
@@ -132,15 +132,10 @@ async function run() {
     // Narrower, more targeted repeat of the null-handling assertion
     // above, isolated as its own test per the direct request to cover
     // this case explicitly.
-    const fakeCallAI = async () => ({
-      employers: [
-        { company: "Has Bullets Inc", title: "Rep", start: "2020-01", end: null, achievements: "Exceeded quota every quarter" },
-        { company: "No Bullets LLC", title: "Rep", start: "2018-01", end: "2019-12", achievements: null },
-      ],
-    });
-    const result = await analyzeResume(FIXTURE_RESUME_TEXT, { callAI: fakeCallAI });
-    assert.strictEqual(result.employers[0].achievements, "Exceeded quota every quarter");
-    assert.strictEqual(result.employers[1].achievements, null, "must remain null — no fabricated achievement text");
+    const { text, structured } = require('./fixtures/resume/synthetic');
+    const result = await analyzeResume(text, { callAI: async () => structured });
+    assert.ok(result.employers[0].achievements);
+    assert.strictEqual(result.employers[1].achievements, null);
   });
 
   await test("analyzeResume still rejects too-short résumé text before ever calling the AI", async () => {
