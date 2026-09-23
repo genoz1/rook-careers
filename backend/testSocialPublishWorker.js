@@ -41,7 +41,7 @@ const TWITTER_UNRELATED = { id: "tw-1", service: "twitter", name: "Some Other Ac
 function baseJob(overrides = {}) {
   return {
     id: "job-1", employer_id: "employer-1", source_job_id: "src-1", source_type: "greenhouse",
-    title_original: "Territory Sales Manager", location_raw: "Atlanta, GA", territory: "Southeast",
+    title_original: "Territory Sales Manager", location_raw: "Atlanta, GA", state: "GA", job_lat: 33.75, job_lng: -84.39, territory: "Southeast",
     ai_analysis: { required_industries: ["Medical Device"], preferred_industries: [], product_categories: [] },
     compensation_text: "$90,000 - $120,000", employment_type: "Full-Time", remote_status: "field", experience_min_years: 3,
     company_name: "Acme Diagnostics", status: "active", moderation_status: "approved",
@@ -54,10 +54,12 @@ function baseJob(overrides = {}) {
 // worker uses — a tiny fake query builder, not a real database.
 function makeMockSupabase({ jobs = [], employers = [], history = [] } = {}) {
   function table(name) {
-    let filters = [];
+    let filters = [], rangeStart = 0, rangeEnd = Infinity;
     const builder = {
       select: () => builder,
       eq: (col, val) => { filters.push((row) => row[col] === val); return builder; },
+      gte: (col, val) => { filters.push((row) => row[col] >= val); return builder; },
+      range: (start, end) => { rangeStart = start; rangeEnd = end; return builder; },
       neq: (col, val) => { filters.push((row) => row[col] !== val); return builder; },
       in: (col, vals) => { filters.push((row) => vals.includes(row[col])); return builder; },
       order: () => builder,
@@ -82,7 +84,7 @@ function makeMockSupabase({ jobs = [], employers = [], history = [] } = {}) {
       },
       then: (resolve) => {
         const rows = (name === "jobs" ? jobs : name === "employers" ? employers : history).filter((r) => filters.every((f) => f(r)));
-        resolve({ data: rows, error: null });
+        resolve({ data: rows.slice(rangeStart, rangeEnd + 1), error: null });
       },
     };
     return builder;
@@ -93,6 +95,7 @@ function makeMockSupabase({ jobs = [], employers = [], history = [] } = {}) {
   // test doesn't explicitly inject its own uploadGraphicToStorage.
   const storageObjects = {};
   const storage = {
+    updateBucket: async () => ({ data: {}, error: null }),
     listBuckets: async () => ({ data: [{ name: "social-creatives" }], error: null }),
     createBucket: async () => ({ data: { name: "social-creatives" }, error: null }),
     from: (bucket) => ({
@@ -421,7 +424,8 @@ async function run() {
     const uploadedObjects = {};
     return {
       storage: {
-        listBuckets: async () => ({ data: bucketAlreadyExists ? [{ name: BUCKET_NAME }] : [], error: null }),
+        updateBucket: async () => ({ data: {}, error: null }),
+    listBuckets: async () => ({ data: bucketAlreadyExists ? [{ name: BUCKET_NAME }] : [], error: null }),
         createBucket: async (name, opts) => {
           if (createBucketError) return { data: null, error: { message: createBucketError } };
           return { data: { name, ...opts }, error: null };
@@ -441,26 +445,26 @@ async function run() {
 
   test("buildObjectPath never includes an employer name — it isn't even given one to work with", () => {
     const path = buildObjectPath({ dateStr: "2026-09-05", slot: "live-test", jobId: "job-123", contentVersion: "abc123" });
-    assert.strictEqual(path, "2026-09-05/live-test-job-123-abc123.png");
+    assert.strictEqual(path, "2026-09-05/live-test-job-123-abc123.jpg");
   });
   test("buildObjectPath rejects unsafe path segments (traversal attempt)", () => {
     assert.throws(() => buildObjectPath({ dateStr: "2026-09-05", slot: "live-test", jobId: "../../etc/passwd", contentVersion: "abc123" }), /Unsafe job_id/);
   });
 
-  await asyncTest("ensureBucketExists is a no-op when the bucket already exists", async () => {
+  await asyncTest("ensureBucketExists does not recreate an existing bucket", async () => {
     const client = makeMockStorageClient({ bucketAlreadyExists: true });
     let createCalled = false;
     client.storage.createBucket = async () => { createCalled = true; return { data: null, error: null }; };
     await ensureBucketExists(client);
     assert.strictEqual(createCalled, false, "must not attempt to create a bucket that's already there");
   });
-  await asyncTest("ensureBucketExists creates the bucket, configured public and PNG-only, when missing", async () => {
+  await asyncTest("ensureBucketExists creates the bucket, configured public for PNG and JPEG, when missing", async () => {
     const client = makeMockStorageClient({ bucketAlreadyExists: false });
     let capturedOpts = null;
     client.storage.createBucket = async (name, opts) => { capturedOpts = opts; return { data: { name }, error: null }; };
     await ensureBucketExists(client);
     assert.strictEqual(capturedOpts.public, true);
-    assert.deepStrictEqual(capturedOpts.allowedMimeTypes, ["image/png"]);
+    assert.deepStrictEqual(capturedOpts.allowedMimeTypes, ["image/png", "image/jpeg"]);
   });
   await asyncTest("ensureBucketExists treats a concurrent 'already exists' creation error as success, not a failure", async () => {
     const client = makeMockStorageClient({ bucketAlreadyExists: false, createBucketError: "Bucket already exists" });
@@ -471,12 +475,12 @@ async function run() {
     await assert.rejects(() => ensureBucketExists(client), /Insufficient permissions/);
   });
 
-  await asyncTest("uploadGraphicToStorage uploads with contentType image/png and returns a real public URL", async () => {
+  await asyncTest("uploadGraphicToStorage uploads with contentType image/jpeg and returns a real public URL", async () => {
     const client = makeMockStorageClient();
     const buffer = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
     const result = await uploadGraphicToStorage(client, { dateStr: "2026-09-05", slot: "live-test", jobId: "job-123", contentVersion: "abc123", buffer });
-    assert.strictEqual(client._uploadedObjects["2026-09-05/live-test-job-123-abc123.png"].opts.contentType, "image/png");
-    assert.strictEqual(result.publicUrl, "https://fake-project.supabase.co/storage/v1/object/public/social-creatives/2026-09-05/live-test-job-123-abc123.png");
+    assert.strictEqual(client._uploadedObjects["2026-09-05/live-test-job-123-abc123.jpg"].opts.contentType, "image/jpeg");
+    assert.strictEqual(result.publicUrl, "https://fake-project.supabase.co/storage/v1/object/public/social-creatives/2026-09-05/live-test-job-123-abc123.jpg");
     assert.ok(!result.publicUrl.includes("localhost") && !result.publicUrl.includes("127.0.0.1"), "must be a real external URL, not a local address");
   });
   await asyncTest("uploadGraphicToStorage throws a clear error on upload failure, rather than silently continuing", async () => {
@@ -576,10 +580,10 @@ async function run() {
     assert.ok(result.reason.includes("empty"));
   });
   await asyncTest("preflightCheckMedia fails on invalid PNG signature bytes (correct content-type, corrupt/wrong body)", async () => {
-    const httpFetch = mockPreflightFetch({ status: 200, headers: { get: () => "image/png" }, arrayBuffer: async () => Buffer.from("not a real png file").buffer });
+    const httpFetch = mockPreflightFetch({ status: 200, headers: { get: () => "image/png" }, arrayBuffer: async () => Uint8Array.from(Buffer.from("not a real image file")).buffer });
     const result = await preflightCheckMedia("https://rookcareers.com/social/featured/x.png", { httpFetch });
     assert.strictEqual(result.ok, false);
-    assert.ok(result.reason.includes("signature"));
+    assert.ok(result.reason.includes("not a valid PNG or JPEG"));
   });
 
   console.log("\n=== The preflight gate blocks BOTH channels entirely on failure, and records a retry-safe history row ===");
