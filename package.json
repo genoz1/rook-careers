@@ -1,7 +1,7 @@
 {
   "name": "rook-careers",
   "version": "0.2.0",
-  "description": "ROOK Careers \u2014 UI prototype plus Phase 1 backend scaffold (Supabase, Stripe, ATS ingestion adapters).",
+  "description": "ROOK Careers — UI prototype plus Phase 1 backend scaffold (Supabase, Stripe, ATS ingestion adapters).",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -27,7 +27,7 @@
     "test-ingest-capacity": "node --test backend/testIngestCapacity.js",
     "test-masked-presentation": "node backend/testMaskedPresentation.js",
     "test-location-sales-repair": "node --test backend/testLocationSalesRepair.js",
-    "test-all": "npm run test-territory-containment && npm run test-location-sales-repair && npm run test-masked-presentation && npm run test-job-source-audit && npm run test-custom-html && npm run test-custom-html-candidates && npm run test-successfactors && npm run test-workable && npm run test-pinpoint && npm run test-clinchtalent && npm run test-applicantpro && npm run test-source-validator && npm run test-ingest-capacity && npm run test-job-eligibility && npm run test-trial-flow && npm run test-ui-copy && npm run test-v6-email-code && npm run test-daily-digest-location",
+    "test-all": "npm run test-territory-containment && npm run test-location-sales-repair && npm run test-masked-presentation && npm run test-job-source-audit && npm run test-custom-html && npm run test-custom-html-candidates && npm run test-successfactors && npm run test-workable && npm run test-pinpoint && npm run test-clinchtalent && npm run test-applicantpro && npm run test-source-validator && npm run test-ingest-capacity && npm run test-job-eligibility && npm run test-trial-flow && npm run test-ui-copy && npm run test-v6-email-code && npm run test-daily-digest-location && npm run test-ingestion-repairs",
     "test-daily-digest-location": "node backend/testDailyDigestLocation.js",
     "test-v6-email-code": "node backend/testV6EmailCode.js",
     "test-resume-achievements": "node backend/testResumeAchievements.js",
@@ -45,7 +45,8 @@
     "test-industry-location": "node backend/testIndustryLocation.js && node backend/testV7Location.js",
     "test-job-search": "node --test backend/testJobSearch.js",
     "test-pretrial-security": "node --test backend/testPretrialSecurity.js && node backend/testPretrialRoutes.js && node --test backend/testPublicIndexing.js",
-    "test-territory-containment": "node --test backend/testTerritoryContainment.js"
+    "test-territory-containment": "node --test backend/testTerritoryContainment.js",
+    "test-ingestion-repairs": "node --test backend/testNewJerseyEvidence.js backend/testIndustryRepair.js backend/testSourceRepairs.js backend/testUkgRepair.js backend/testAdpRepair.js backend/testKulaRepair.js backend/testAdditionalSources.js backend/testDataQualityRepair.js backend/testIngestDeadline.js backend/testIngestionRecovery.js backend/testIngestionAiRecovery.js backend/testIngestionWatchdog.js"
   },
   "engines": {
     "node": ">=18.0.0"

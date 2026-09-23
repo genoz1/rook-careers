@@ -71,13 +71,24 @@ async function fetchJazzHRJobs(employer) {
   const res = await fetchWithTimeout(url);
   if (!res.ok) throw new Error(`JazzHR fetch failed: ${res.status} for ${employer.company_name}`);
 
-  const data = await res.json().catch(() => ({}));
-  // JazzHR returns either an array directly or { jobs: [...] }
-  const jobs = Array.isArray(data) ? data : (data.jobs || data.Jobs || []);
+  const body = await res.text();
+  let data;
+  try { data = JSON.parse(body); } catch {
+    const { fetchListings, detailFields, jobPosting } = require('./htmlSource');
+    const raw = await fetchListings(url, u => u.pathname.match(/^\/apply\/(?:jobs\/details\/)?([^/]+)(?:\/|$)/)?.[1]);
+    const jobs = raw.map(row => {
+      const fields = detailFields(row.detailHtml, '.job_description', '.job-location');
+      const ld = jobPosting(row.detailHtml);
+      return normalizeJazzJob({ id: row.jobId, title: row.title, description: fields.description, location: fields.location, applyUrl: ld?.url || row.url, date: fields.date }, employer);
+    });
+    jobs.incompleteSnapshot = raw.incompleteSnapshot;
+    return jobs;
+  }
+  const jobs = Array.isArray(data) ? data : (data.jobs || data.Jobs);
+  if (!Array.isArray(jobs)) throw new Error('JazzHR response has no recognized jobs array');
+  if (jobs.some(j => !j.id || !(j.title || j.Title))) throw new Error('JazzHR job lacks stable identity or title');
+  return jobs.map(j => normalizeJazzJob(j, employer)).filter(j => titleLooksRelevant(j.title_original));
 
-  return jobs
-    .map(j => normalizeJazzJob(j, employer))
-    .filter(j => titleLooksRelevant(j.title_original));
 }
 
 module.exports = { fetchJazzHRJobs };

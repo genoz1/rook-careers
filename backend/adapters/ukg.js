@@ -1,129 +1,75 @@
-// UKG Pro (formerly UltiPro) public job-board adapter
-//
-// UKG Pro careers pages are hosted at recruiting.ultipro.com or
-// recruiting2.ultipro.com. The public job-listing API is unauthenticated.
-//
-// URL pattern (confirmed against live career pages for ARUP Laboratories,
-// Genova Diagnostics and Ionis Pharmaceuticals — no display-name segment):
-//   https://recruiting[2].ultipro.com/{ORG_CODE}/JobBoard/{board_id}
-//
-// Public JSON API:
-//   POST https://recruiting[2].ultipro.com/{ORG_CODE}/JobBoard/{board_id}/api/apply/jobs/search
-//   Body: { "pageSize": 100, "pageNumber": 1, "openings": true }
-//
-// Store in employers.ats_identifier as: "host|ORG_CODE|board_id"
-//   e.g. "recruiting.ultipro.com|GEN1019|bb822312-e746-def8-5d38-36b1544138df"
-//   or   "recruiting2.ultipro.com|ARU1000ARUP|62cc791d-612e-42e6-909f-0de27efe2038"
-//
-// A previous version of this file inserted the employer's company_slug
-// as a display-name segment before "JobBoard" — that URL 404s. The org
-// code and board ID are the only real identifiers; no display name goes
-// in the URL at all.
-//
-// NOTE: UKG does not officially document this endpoint for third-party
-// use. It's the same endpoint UKG's own careers-page widget calls.
-// Built from observed request/response shapes; treat the first real
-// ingestion run as the real test.
-
+// UKG public JobBoard contract verified from the board's own rendered config
+// and browser bundle. No applicant login or candidate data is used.
 const { titleLooksRelevant } = require('../relevanceFilter');
-
-async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, {
-      ...options,
-      signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-        'User-Agent': 'ROOK-Medical-Sales-Careers/1.0 (job aggregator; contact@rookcareers.com)',
-        ...options.headers,
-      },
-    });
-  } finally {
-    clearTimeout(timer);
+const { getHtml, plain } = require('./htmlSource');
+function detailData(html) {
+  const marker = 'new US.Opportunity.CandidateOpportunityDetail(';
+  const start = html.indexOf(marker);
+  if (start < 0) throw Error('UKG detail schema missing');
+  const tail = html.slice(start + marker.length);
+  let depth = 0, quoted = false, escaped = false;
+  for (let i = 0; i < tail.length; i++) {
+    const c = tail[i];
+    if (quoted) { if (escaped) escaped = false; else if (c === '\\') escaped = true; else if (c === '"') quoted = false; }
+    else if (c === '"') quoted = true;
+    else if (c === '{') depth++;
+    else if (c === '}' && --depth === 0) return JSON.parse(tail.slice(0, i + 1));
   }
+  throw Error('UKG detail JSON incomplete');
 }
-
-const PAGE_SIZE = 100;
-
-function normalizeUkgJob(raw, employer) {
-  const title    = raw.Title || raw.title || '';
-  const city     = raw.City || raw.city || '';
-  const state    = raw.State || raw.state || '';
-  const location = [city, state].filter(Boolean).join(', ');
-  const reqId    = raw.RequisitionId || raw.Id || String(Math.random());
-  const applyUrl = raw.ApplyUrl || employer.source_url;
-  const postDate = raw.PostedDate || raw.DatePosted || null;
-  const desc     = raw.JobDescription || raw.Description || '';
-
-  return {
-    source_job_id:    `ukg-${employer.ats_identifier?.split('|')[2] || employer.company_slug}-${reqId}`,
-    source_type:      'career_site',
-    source_url:       applyUrl || employer.source_url,
-    application_url:  applyUrl || employer.source_url,
-    title_original:   title,
-    company_name:     employer.company_name,
-    employer_id:      employer.id,
-    description_html: desc,
-    description_text: desc.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
-    location_raw:     location || raw.LocationDescription || '',
-    employment_type:  raw.EmploymentType || null,
-    date_posted:      postDate ? new Date(postDate).toISOString().split('T')[0] : null,
-    status:           'active',
-    source_verified:  true,
-  };
+function normalizeUkgJob(raw, employer, url) {
+  const location = (raw.Locations || []).map(l => {
+    const a = l.Address || {};
+    return [a.City, a.State?.Code, a.Country?.Name].filter(Boolean).join(', ');
+  }).filter(Boolean).join(' | ');
+  if (!raw.Id || !raw.Title || !raw.Description) throw Error('UKG detail missing identity, title or description');
+  return { source_job_id: `ukg-${employer.ats_identifier.split('|')[2]}-${raw.Id}`,
+    source_type: 'career_site', source_url: url, application_url: url,
+    title_original: raw.Title, company_name: employer.company_name, employer_id: employer.id,
+    description_html: raw.Description, description_text: plain(raw.Description), location_raw: location,
+    employment_type: raw.FullTime ? 'Full Time' : null,
+    date_posted: raw.PostedDate || null, status: 'active', source_verified: true };
 }
-
 async function fetchUkgJobs(employer) {
-  // Identifier: "host|ORG_CODE|board_id"
-  const parts   = (employer.ats_identifier || '').split('|');
-  const host    = parts[0] || 'recruiting.ultipro.com';
-  const orgCode = parts[1];
-  const boardId = parts[2];
-
-  if (!orgCode || !boardId) {
-    throw new Error(`UKG ats_identifier must be "host|ORG_CODE|board_id" for ${employer.company_name}`);
-  }
-
-  const jobs = [];
-  let page = 1;
-
-  // Diagnosed via a live diagnostic run (Sept 2026): the real, working
-  // career-board URLs for these UKG tenants (confirmed directly against
-  // ARUP Laboratories, Genova Diagnostics and Ionis Pharmaceuticals'
-  // stored careers_url) have NO display-name segment between the org
-  // code and "JobBoard" — e.g. ".../ARU1000ARUP/JobBoard/...", not
-  // ".../ARU1000ARUP/arup-laboratories/JobBoard/...". Inserting
-  // employer.company_slug there (as this previously did) produced a URL
-  // that doesn't exist and 404s. The file header's claim that "the POST
-  // endpoint doesn't need the display name" turns out to mean it must be
-  // OMITTED, not that any value works — so it's dropped here entirely.
-  while (true) {
-    const url = `https://${host}/${orgCode}/JobBoard/${boardId}/api/apply/jobs/search`;
-    const res = await fetchWithTimeout(url, {
-      method:  'POST',
-      body:    JSON.stringify({ pageSize: PAGE_SIZE, pageNumber: page, openings: true }),
-    });
-
-    if (!res.ok) {
-      if (page === 1) throw new Error(`UKG fetch failed: ${res.status} for ${employer.company_name}`);
-      break;
+  const [host, org, board] = String(employer.ats_identifier || '').split('|');
+  if (!/^recruiting\d*\.ultipro\.com$/.test(host) || !/^[a-z0-9]+$/i.test(org) || !/^[a-f0-9-]+$/i.test(board)) throw Error('Invalid verified UKG board configuration');
+  const base = `https://${host}/${org}/JobBoard/${board}`;
+  const html = await getHtml(base);
+  const loadPath = html.match(/loadUrl:\s*"([^"]+)"/)?.[1];
+  const detailPath = html.match(/opportunityLinkUrl:\s*"([^"]+)"/)?.[1];
+  if (!loadPath || !detailPath) throw Error('UKG public board no longer exposes its search/detail contract');
+  const load = new URL(loadPath, base), template = new URL(detailPath, base);
+  if ([load, template].some(u => u.origin !== new URL(base).origin || !u.pathname.startsWith(`/${org}/JobBoard/${board}/`))) throw Error('UKG board identity mismatch');
+  const all = [], ids = new Set(), jobs = []; let total = null;
+  jobs.incompleteSnapshot = false; jobs.snapshotWarnings = [];
+  for (let page = 0; page < 100; page++) {
+    try {
+      const res = await fetch(load.href, { method: 'POST', signal: AbortSignal.timeout(15000), headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ opportunitySearch: { Top: 50, Skip: page * 50, QueryString: '', Filters: [], OrderBy: [{ Value: 'postedDateDesc', PropertyName: 'PostedDate', Ascending: false }] } }) });
+      if (!res.ok) throw Error('UKG listing HTTP ' + res.status);
+      const data = await res.json();
+      if (!Array.isArray(data.opportunities) || !Number.isInteger(data.totalCount)) throw Error('UKG listing schema invalid');
+      total = data.totalCount; let added = 0;
+      for (const row of data.opportunities) {
+        if (!row.Id || !row.Title) throw Error('UKG listing identity missing');
+        if (!ids.has(row.Id)) { ids.add(row.Id); all.push(row); added++; }
+      }
+      if (all.length >= total) break;
+      if (!added || page === 99) throw Error('UKG pagination incomplete');
+    } catch (error) {
+      if (!all.length) throw error;
+      jobs.incompleteSnapshot = true; jobs.snapshotWarnings.push(error.message); break;
     }
-
-    const data = await res.json().catch(() => ({}));
-    const pageJobs = data.jobs || data.Jobs || data.results || data.Results || [];
-    if (pageJobs.length === 0) break;
-    jobs.push(...pageJobs);
-    if (pageJobs.length < PAGE_SIZE) break;
-    page++;
-    await new Promise(r => setTimeout(r, 250));
   }
-
-  return jobs
-    .map(j => normalizeUkgJob(j, employer))
-    .filter(j => titleLooksRelevant(j.title_original));
+  jobs.sourceListingCount = all.length;
+  for (const row of all.filter(j => titleLooksRelevant(j.Title))) {
+    try {
+      const url = new URL(template); url.searchParams.set('opportunityId', row.Id);
+      const detail = detailData(await getHtml(url.href));
+      if (detail.Id !== row.Id) throw Error('UKG detail identity mismatch');
+      jobs.push(normalizeUkgJob(detail, employer, url.href));
+    } catch (error) { jobs.incompleteSnapshot = true; jobs.snapshotWarnings.push('Detail ' + row.Id + ': ' + error.message); }
+  }
+  return jobs;
 }
-
-module.exports = { fetchUkgJobs };
+module.exports = { fetchUkgJobs, normalizeUkgJob, detailData };

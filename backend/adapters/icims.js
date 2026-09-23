@@ -68,51 +68,16 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
 }
 
 async function fetchIcimsJobs(subdomain) {
-  const baseUrl = `https://${subdomain}.icims.com`;
-  const res = await fetchWithTimeout(`${baseUrl}/jobs/search?in_iframe=1`);
-  if (!res.ok) throw new Error(`iCIMS fetch failed for "${subdomain}": ${res.status} ${res.statusText}`);
-  const html = await res.text();
-
-  // Matches iCIMS's own anchor markup: <a class="iCIMS_Anchor ..."
-  // href="/jobs/1234/job-title/login?...">Job Title</a>. Title comes
-  // from the title="" attribute when present (more reliable than the
-  // link text, which can include extra whitespace/icons), falling back
-  // to the visible text.
-  const linkPattern = /<a[^>]*class="[^"]*iCIMS_Anchor[^"]*"[^>]*href="([^"]*\/jobs\/(\d+)\/[^"]*)"[^>]*(?:title="([^"]*)")?[^>]*>([^<]*)<\/a>/g;
-  const rawJobs = [];
-  const seen = new Set();
-  let match;
-  while ((match = linkPattern.exec(html)) !== null) {
-    const [, href, jobId, titleAttr, linkText] = match;
-    if (seen.has(jobId)) continue;
-    seen.add(jobId);
-    const title = (titleAttr || linkText || "").trim();
-    if (!title) continue;
-    const fullUrl = href.startsWith("http") ? href : `${baseUrl}${href}`;
-    rawJobs.push({ jobId, title, url: fullUrl });
+  const host = subdomain.includes('.') ? subdomain.replace(/^https?:\/\//, '').replace(/\/$/, '') : subdomain + '.icims.com';
+  if (!host.endsWith('.icims.com')) {
+    const rows = await require('./jibe').fetchJibeJobs(host);
+    const mapped = rows.map(j => ({ jobId: String(j.req_id), title: j.title, url: j.canonical_url, jibe: j }));
+    mapped.incompleteSnapshot = !!rows.incompleteSnapshot;
+    return mapped;
   }
-  console.log(`    ...listed ${rawJobs.length} posting(s)`);
-
-  const relevant = rawJobs.filter((j) => titleLooksRelevant(j.title));
-  console.log(`    ${relevant.length} / ${rawJobs.length} titles look relevant — fetching their descriptions...`);
-
-  const detailed = [];
-  for (let i = 0; i < relevant.length; i++) {
-    const job = relevant[i];
-    try {
-      const detailRes = await fetchWithTimeout(`${job.url}${job.url.includes("?") ? "&" : "?"}in_iframe=1`);
-      if (!detailRes.ok) continue;
-      const detailHtml = await detailRes.text();
-      detailed.push({ ...job, detailHtml });
-    } catch {
-      continue;
-    }
-    if ((i + 1) % 10 === 0 || i === relevant.length - 1) {
-      console.log(`    ...fetched details for ${i + 1} / ${relevant.length}`);
-    }
-  }
-
-  return detailed;
+  return require('./htmlSource').fetchListings(
+    `https://${host}/jobs/search?in_iframe=1`, url => url.pathname.match(/^\/jobs\/(\d+)\//)?.[1]
+  );
 }
 
 /**
@@ -124,13 +89,9 @@ async function fetchIcimsJobs(subdomain) {
  * need adjustment on the first real run.
  */
 function normalizeIcimsJob(raw, employer) {
-  const descMatch = raw.detailHtml.match(
-    /<div[^>]*class="[^"]*iCIMS_JobContent[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<\/div>/i
-  );
-  const descriptionHtml = descMatch ? descMatch[1] : "";
-
-  const locMatch = raw.detailHtml.match(/<span[^>]*class="[^"]*iCIMS_JobHeaderLocation[^"]*"[^>]*>([^<]+)<\/span>/i);
-  const locationRaw = locMatch ? locMatch[1].trim() : "";
+  const fields = raw.jibe ? { description: [raw.jibe.description, raw.jibe.responsibilities, raw.jibe.qualifications].filter(Boolean).join('\n'), location: [raw.jibe.city, raw.jibe.state, raw.jibe.country].filter(Boolean).join(', '), date: raw.jibe.create_date || null } : require('./htmlSource').detailFields(raw.detailHtml, '.iCIMS_JobContent', '.iCIMS_JobHeaderLocation');
+  const descriptionHtml = fields.description;
+  const locationRaw = fields.location;
 
   return {
     source_job_id: raw.jobId,
@@ -143,7 +104,8 @@ function normalizeIcimsJob(raw, employer) {
     description_html: descriptionHtml || null,
     description_text: stripHtml(descriptionHtml || raw.title),
     location_raw: locationRaw,
-    date_posted: null,
+    ...(raw.jibe ? { location_evidence: { source_country_code: raw.jibe.country_code || null } } : {}),
+    date_posted: fields.date,
     status: "active",
     source_verified: true,
   };

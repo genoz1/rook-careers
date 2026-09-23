@@ -1,35 +1,5 @@
-// ApplicantPro (now rebranded "isolved Talent Acquisition") career-site
-// adapter
-//
-// Like Phenom, ApplicantPro's public-facing careers page is itself
-// powered by a genuinely public, unauthenticated JSON endpoint — it's
-// just a two-step process to reach it, since each employer's numeric
-// "domain_id" isn't guessable from the company name and has to be
-// scraped out of their jobs page first.
-//
-//   Step 1: GET https://{company}.applicantpro.com/jobs/
-//           → scrape the numeric domain_id out of the page
-//   Step 2: GET https://{company}.applicantpro.com/core/jobs/{domain_id}
-//           → returns the actual job list as JSON
-//
-// NOTE: this was built from a third-party reverse-engineering write-up
-// of ApplicantPro's page structure, not verified against a real live
-// response (no network access to arbitrary external domains from this
-// sandbox) — both the domain_id extraction regex and the assumed JSON
-// field names below are best-effort guesses. Treat the first real
-// ingestion run against a live ApplicantPro employer as the actual
-// test, and expect this adapter to need correcting sooner than
-// Greenhouse/Lever/Ashby if the real response shape differs.
-//
-// Also worth knowing: ApplicantPro rebranded to "isolved Talent
-// Acquisition" — some employers may already be migrated to a different
-// domain instead of *.applicantpro.com. If a company's careers page
-// doesn't resolve at that domain, check whether they've moved.
-//
-// You only need the employer's ApplicantPro subdomain, e.g.:
-//   ats_identifier = "castlebiosciences"
-// (from https://castlebiosciences.applicantpro.com/jobs/)
-
+// ApplicantPro public board adapter, verified against current Medgene and Castle
+// boards. The JSON endpoint requires serialized getParams, even when empty.
 const { titleLooksRelevant } = require('../relevanceFilter');
 
 function stripHtml(html) {
@@ -71,42 +41,45 @@ async function fetchDomainId(subdomain) {
 
 async function fetchApplicantProJobs(subdomain) {
   const domainId = await fetchDomainId(subdomain);
-  const res = await fetchWithTimeout(`https://${subdomain}.applicantpro.com/core/jobs/${domainId}`);
-  if (!res.ok) throw new Error(`ApplicantPro fetch failed for "${subdomain}": ${res.status} ${res.statusText}`);
-  const data = await res.json();
-  // REFRESH SAFETY (Round 3 audit, same failure class found in
-  // SuccessFactors/ClinchTalent): `data?.jobs || []` used to treat a
-  // malformed/unexpected JSON shape (e.g. the assumed field name is
-  // wrong, or the endpoint returned an error object instead of a job
-  // list) identically to a genuine "employer currently has zero
-  // openings" response — both silently became []. A real empty jobs
-  // array from this endpoint has an explicit `jobs` key present (even if
-  // empty); its total absence, on an object response, means the shape
-  // assumption itself failed, which must not be read as "no jobs."
-  if (!Array.isArray(data) && (data == null || typeof data !== "object" || !("jobs" in data))) {
-    throw new Error(
-      `ApplicantPro "${subdomain}" returned an unexpected response shape (no "jobs" field) — likely a wrong domain_id or a changed API shape, not a genuine zero-job result`
-    );
+  const res = await fetchWithTimeout(`https://${subdomain}.applicantpro.com/core/jobs/${domainId}?getParams=%7B%7D`, { headers: { Accept: 'application/json' } });
+  if (!res.ok) throw new Error(`ApplicantPro fetch failed: ${res.status}`);
+  const response = await res.json();
+  const data = response?.data;
+  if (response?.success !== true || !Array.isArray(data?.jobs) || !Number.isInteger(data.jobCount)) {
+    throw new Error('ApplicantPro returned an unexpected response shape');
   }
-  const rawJobs = Array.isArray(data) ? data : data.jobs || [];
-  console.log(`    ...listed ${rawJobs.length} posting(s)`);
-
-  const relevant = rawJobs.filter((j) => titleLooksRelevant(j.title || j.job_title || ""));
-  console.log(`    ${relevant.length} / ${rawJobs.length} titles look relevant`);
-  return relevant;
+  const { getHtml, jobPosting } = require('./htmlSource');
+  const jobs = [], seen = new Set();
+  jobs.incompleteSnapshot = data.jobCount !== data.jobs.length;
+  jobs.snapshotWarnings = jobs.incompleteSnapshot ? ['Listing count does not match official total'] : [];
+  jobs.sourceListingCount = data.jobs.length;
+  for (const raw of data.jobs) {
+    if (!raw.id || typeof raw.title !== 'string') throw new Error('ApplicantPro listing missing stable identity or title');
+    if (seen.has(String(raw.id))) { jobs.incompleteSnapshot = true; jobs.snapshotWarnings.push('Duplicate source ID'); continue; }
+    seen.add(String(raw.id));
+    if (!titleLooksRelevant(stripHtml(raw.title))) continue;
+    try {
+      const url = new URL(raw.jobUrl);
+      if (url.origin !== `https://${subdomain}.applicantpro.com`) throw new Error('Unverified cross-origin detail URL');
+      const ld = jobPosting(await getHtml(url.href));
+      if (!ld?.description || !ld.title) throw new Error('Detail is missing a structured job description');
+      jobs.push({ ...raw, title: stripHtml(raw.title), description: ld.description, date_posted: ld.datePosted, url: url.href });
+    } catch (error) {
+      jobs.incompleteSnapshot = true; jobs.snapshotWarnings.push(`Detail ${raw.id}: ${error.message}`);
+    }
+  }
+  return jobs;
 }
 
 /**
  * Convert one raw ApplicantPro job into ROOK's canonical job shape.
  *
- * NOTE: field names (title, id/job_id, city/state, description) are a
- * best-effort guess, not verified against a real response — see file
- * header.
+ * Uses the verified board listing fields plus full JSON-LD description.
  */
 function normalizeApplicantProJob(raw, employer) {
   const jobId = raw.id || raw.job_id || raw.jobId;
   const title = raw.title || raw.job_title || "";
-  const location = [raw.city, raw.state].filter(Boolean).join(", ") || raw.location || "";
+  const location = raw.jobLocation || [raw.city, raw.abbreviation || raw.state, raw.iso3].filter(Boolean).join(", ") || raw.location || "";
   const jobUrl = raw.url || raw.apply_url || `https://${employer.ats_identifier}.applicantpro.com/jobs/`;
 
   return {

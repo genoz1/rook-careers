@@ -361,6 +361,7 @@ test("run(): a single-employer debug invocation (argv filter) bypasses the lock 
     ingestion_run_lock: [{ id: 1, locked_at: new Date().toISOString(), locked_by: "pid:other" }],
     employers: [{ ...baseEmployer, id: "employer-debug-test", company_name: "Debug Target", company_slug: "debug-target" }],
     jobs: [],
+    ingestion_runs: [],
   };
   const { ingest } = freshIngest(tables);
   const realFetch = global.fetch;
@@ -368,7 +369,10 @@ test("run(): a single-employer debug invocation (argv filter) bypasses the lock 
   const realArgv = process.argv;
   process.argv = [...realArgv.slice(0, 2), "Debug Target"];
   try {
-    await ingest.run();
+    await ingest.run({ worker: async employer => {
+      const measured = await require('./ingestRunMetrics').measure(() => ingest.ingestEmployer(employer));
+      return { status: measured.result.status, metrics: measured.metrics, counts_complete: true };
+    } });
   } finally {
     global.fetch = realFetch;
     process.argv = realArgv;

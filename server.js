@@ -129,6 +129,7 @@ app.get("*", (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`ROOK server running on port ${PORT}`);
+  require('./backend/ingestionWatchdog').startIngestionWatchdog();
   // Pre-warm the active-jobs cache 5 s after boot so the first onboarding
   // preview request hits the cache instead of waiting 40+ s for a cold fetch.
   const { fetchActiveJobs } = require("./backend/scoring/precompute");

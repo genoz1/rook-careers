@@ -102,7 +102,7 @@ test('ingestion dispatcher: custom current/future rows, failed fetch safety and 
  const vm=require('node:vm');
  async function run(type,{failure=false,sharedParent=false,env={CUSTOM_HTML_EMPLOYER_IDS:'test'},id='test'}={}){
   const writes=[],calls=[];
-  const db={from(table){const q={table,op:'select',values:null,filters:[],select(){return q;},eq(k,v){q.filters.push([k,v]);return q;},not(){q.analysis=true;return q;},order(){return q;},range(){return q;},update(v){q.op='update';q.values=v;return q;},upsert(v){q.op='upsert';q.values=v;return q;},in(k,v){q.filters.push([k,v]);return q;},single(){return Promise.resolve({data:{...q.values,id:'new',ai_analysis:{sales_motion:['sales']},job_embedding:[1]},error:null}).then(r=>{writes.push({...q});return r;});},then(resolve,reject){if(q.op!=='select')writes.push({...q});return Promise.resolve({data:sharedParent && q.analysis ? [{source_job_id:'parent',title_original:'Sales Representative',description_text:detail,ai_analysis:{product_categories:['veterinary diagnostics']},job_embedding:[0.5]}] : [],error:null}).then(resolve,reject);}};return q;}};
+  const db={from(table){const q={table,op:'select',values:null,filters:[],select(){return q;},eq(k,v){q.filters.push([k,v]);return q;},not(){q.analysis=true;return q;},order(){return q;},range(){return q;},update(v){q.op='update';q.values=v;return q;},insert(v){q.op='insert';q.values=v;return q;},upsert(v){q.op='upsert';q.values=v;return q;},in(k,v){q.filters.push([k,v]);return q;},single(){return Promise.resolve({data:{...q.values,id:'new',ai_analysis:{sales_motion:['sales']},job_embedding:[1]},error:null}).then(r=>{writes.push({...q});return r;});},then(resolve,reject){if(q.op!=='select')writes.push({...q});return Promise.resolve({data:sharedParent && q.analysis ? [{source_job_id:'parent',title_original:'Sales Representative',description_text:detail,ai_analysis:{product_categories:['veterinary diagnostics']},job_embedding:[0.5]}] : [],error:null}).then(resolve,reject);}};return q;}};
   const custom=require('./adapters/customHtml');
   const localRequire=name=>{
    if(name==='dotenv')return {config(){}};
@@ -127,12 +127,12 @@ test('ingestion dispatcher: custom current/future rows, failed fetch safety and 
  assert.deepEqual((await run('custom_html',{env:{}})).calls,[]);
  assert.deepEqual((await run('custom_html',{env:{CUSTOM_HTML_EMPLOYER_IDS:''},id:'83ada8b6-a0a0-4c62-8384-d507015275cb'})).calls,[]);
  const custom=await run('custom_html');assert.deepEqual(custom.calls,['custom']);
- const saved=custom.writes.filter(q=>q.op==='upsert');assert.equal(saved.length,2);assert.equal(saved[0].values.status,'active');assert.equal(saved[1].values.status,'closed');
+ const saved=custom.writes.filter(q=>['insert','upsert'].includes(q.op));assert.equal(saved.length,2);assert.equal(saved[0].values.status,'active');assert.equal(saved[1].values.status,'closed');
  const reused=await run('custom_html',{sharedParent:true});
- assert.deepEqual(reused.writes.find(q=>q.op==='upsert').values.ai_analysis,{product_categories:['veterinary diagnostics']});
- assert.deepEqual(reused.writes.find(q=>q.op==='upsert').values.job_embedding,[0.5]);
+ assert.deepEqual(reused.writes.find(q=>['insert','upsert'].includes(q.op)).values.ai_analysis,{product_categories:['veterinary diagnostics']});
+ assert.deepEqual(reused.writes.find(q=>['insert','upsert'].includes(q.op)).values.job_embedding,[0.5]);
  const failed=await run('custom_html',{failure:true});assert(!failed.writes.some(q=>q.table==='jobs'));assert.equal(failed.writes[0].values.sync_status,'error');
- const ats=await run('greenhouse');assert.deepEqual(ats.calls,['greenhouse']);assert.equal(ats.writes.find(q=>q.op==='upsert').values.source_type,'greenhouse');
+ const ats=await run('greenhouse');assert.deepEqual(ats.calls,['greenhouse']);assert.equal(ats.writes.find(q=>['insert','upsert'].includes(q.op)).values.source_type,'greenhouse');
 });
 test('future-opportunity heading scopes its child role; locations and same-title distinct postings remain separate',async()=>{
  const raw=await fetchHtml(`<h2>Future opportunities</h2><h3>Sales Representative</h3><p>${detail}</p><a href="mailto:hr@example.com">Apply</a><h2>Current roles</h2>${section('Territory Manager','<p>Location: Boston, MA</p><p>Apply now</p>')}${section('Territory Manager','<p>Location: Dallas, TX</p><p>Apply now</p>')}`);

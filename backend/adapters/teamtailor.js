@@ -48,44 +48,9 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
 }
 
 async function fetchTeamtailorJobs(domain) {
-  const url = `https://${domain}/jobs`;
-  const res = await fetchWithTimeout(url);
-  if (!res.ok) throw new Error(`Teamtailor fetch failed for "${domain}": ${res.status} ${res.statusText}`);
-  const html = await res.text();
-
-  // Teamtailor job links: /jobs/{numericid}-{slug}
-  const linkPattern = new RegExp(`<a[^>]+href="(?:https://${domain})?(/jobs/(\\d+)-[a-z0-9-]+)"[^>]*>([^<]+)</a>`, "gi");
-  const rawJobs = [];
-  const seen = new Set();
-  let match;
-  while ((match = linkPattern.exec(html)) !== null) {
-    const [, path, jobId, title] = match;
-    if (seen.has(jobId)) continue;
-    seen.add(jobId);
-    rawJobs.push({ jobId, title: title.trim(), url: `https://${domain}${path}` });
-  }
-  console.log(`    ...listed ${rawJobs.length} posting(s)`);
-
-  const relevant = rawJobs.filter((j) => titleLooksRelevant(j.title));
-  console.log(`    ${relevant.length} / ${rawJobs.length} titles look relevant — fetching their descriptions...`);
-
-  const detailed = [];
-  for (let i = 0; i < relevant.length; i++) {
-    const job = relevant[i];
-    try {
-      const detailRes = await fetchWithTimeout(job.url);
-      if (!detailRes.ok) continue;
-      const detailHtml = await detailRes.text();
-      detailed.push({ ...job, detailHtml });
-    } catch {
-      continue;
-    }
-    if ((i + 1) % 10 === 0 || i === relevant.length - 1) {
-      console.log(`    ...fetched details for ${i + 1} / ${relevant.length}`);
-    }
-  }
-
-  return detailed;
+  return require('./htmlSource').fetchListings(
+    `https://${domain}/jobs`, url => url.pathname.match(/^\/jobs\/(\d+)-/)?.[1]
+  );
 }
 
 /**
@@ -98,11 +63,9 @@ async function fetchTeamtailorJobs(domain) {
  * pages differently even on the same underlying platform.
  */
 function normalizeTeamtailorJob(raw, employer) {
-  const descMatch = raw.detailHtml.match(/<div[^>]*class="[^"]*body[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
-  const descriptionHtml = descMatch ? descMatch[1] : "";
-
-  const locMatch = raw.detailHtml.match(/<span[^>]*class="[^"]*job-location[^"]*"[^>]*>([^<]+)<\/span>/i);
-  const locationRaw = locMatch ? locMatch[1].trim() : "";
+  const fields = require('./htmlSource').detailFields(raw.detailHtml, '.body, [data-controller="job-description"]', '.job-location');
+  const descriptionHtml = fields.description;
+  const locationRaw = fields.location;
 
   return {
     source_job_id: raw.jobId,
@@ -115,7 +78,7 @@ function normalizeTeamtailorJob(raw, employer) {
     description_html: descriptionHtml || null,
     description_text: stripHtml(descriptionHtml || raw.title),
     location_raw: locationRaw,
-    date_posted: null,
+    date_posted: fields.date,
     status: "active",
     source_verified: true,
   };

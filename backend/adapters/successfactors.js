@@ -48,6 +48,7 @@
 // this codebase (icims.js, ukg.js, workday.js when first written).
 
 const cheerio = require("cheerio");
+const { detailFields, plain } = require("./htmlSource");
 const { titleLooksRelevant } = require("../relevanceFilter");
 const { resolveUsStateCode } = require("../jobEligibility");
 
@@ -185,20 +186,12 @@ function findNextPageUrl($, currentUrl) {
 }
 
 async function fetchDetailDescription(detailUrl) {
-  try {
-    const res = await fetchWithTimeout(detailUrl);
-    if (!res.ok) return "";
-    const html = await res.text();
-    const $ = cheerio.load(html);
-    $("script, style, nav, header, footer").remove();
-    // CSB detail pages generally render the description in a main content
-    // area; fall back to the whole body text if no obviously-scoped
-    // container is found, rather than returning nothing.
-    const main = $("main, .jobdescription, #jobdescription, article").first();
-    return clean((main.length ? main : $("body")).text());
-  } catch {
-    return "";
-  }
+  const res = await fetchWithTimeout(detailUrl);
+  if (!res.ok) throw new Error('SuccessFactors detail HTTP ' + res.status);
+  const html = await res.text();
+  const fields = detailFields(html, '.jobdescription, #jobdescription, main, article', '[itemprop="jobLocation"]');
+  if (!plain(fields.description)) throw new Error('SuccessFactors detail missing description');
+  return fields;
 }
 
 /**
@@ -208,8 +201,12 @@ async function fetchDetailDescription(detailUrl) {
  */
 async function fetchSuccessFactorsJobs(identifier, { maxPages = MAX_PAGES } = {}) {
   if (!Number.isInteger(maxPages) || maxPages < 1) throw new Error("Invalid SuccessFactors page limit");
-  const host = identifier.replace(/^https?:\/\//, "").replace(/\/$/, "");
-  let url = `https://${host}/search/?q=sales`;
+  const configured = new URL(/^https?:\/\//.test(identifier) ? identifier : `https://${identifier}`);
+  const host = configured.host;
+  // An officially verified brand-filtered search URL must retain its filters;
+  // changing it to the parent company's search would mix employer identities.
+  let url = /\/search\/?$/.test(configured.pathname) ? configured.href :
+    `${configured.origin}${configured.pathname.replace(/\/$/, '')}/search/?q=sales`;
   const allRows = [];
   const seenUrls = new Set();
 
@@ -225,6 +222,10 @@ async function fetchSuccessFactorsJobs(identifier, { maxPages = MAX_PAGES } = {}
     }
     const html = await res.text();
     const $ = cheerio.load(html);
+    if (page === 0 && /j2w\.searchResultsUnify/.test(html) && /currentLocale:/.test(html)) {
+      const locale = html.match(/currentLocale:\s*['"]([^'"]+)['"]/)?.[1] || 'en_US';
+      return require('./successfactorsUnified').fetchUnifiedJobs(configured.origin, locale);
+    }
     const rows = extractRows($, host).filter((r) => !seenUrls.has(r.detailUrl));
     const nextUrl = findNextPageUrl($, url);
     if (rows.length === 0) {
@@ -253,18 +254,28 @@ async function fetchSuccessFactorsJobs(identifier, { maxPages = MAX_PAGES } = {}
 
   const relevant = allRows.filter((r) => titleLooksRelevant(r.title));
 
+  if (!relevant.length) return [];
   const withDescriptions = [];
+  withDescriptions.incompleteSnapshot = false;
+  withDescriptions.snapshotWarnings = [];
   for (let i = 0; i < relevant.length; i++) {
     const row = relevant[i];
-    const description = i < MAX_DETAIL_FETCHES ? await fetchDetailDescription(row.detailUrl) : "";
-    withDescriptions.push({ ...row, description });
+    try {
+      if (i >= MAX_DETAIL_FETCHES) throw new Error('Detail safety limit reached');
+      const fields = await fetchDetailDescription(row.detailUrl);
+      withDescriptions.push({ ...row, description: plain(fields.description),
+        description_html: fields.description, location: fields.location || row.location, date: fields.date });
+    } catch (error) {
+      withDescriptions.incompleteSnapshot = true;
+      withDescriptions.snapshotWarnings.push(row.detailUrl + ': ' + error.message);
+    }
   }
   return withDescriptions;
 }
 
 function normalizeSuccessFactorsJob(raw, employer, host) {
   const idMatch = raw.detailUrl.match(/\/job\/[^/]+\/(\d+)\/?/);
-  const jobId = idMatch ? idMatch[1] : raw.detailUrl;
+  const jobId = raw.jobId || (idMatch ? idMatch[1] : raw.detailUrl);
 
   return {
     source_job_id: jobId,
@@ -274,10 +285,10 @@ function normalizeSuccessFactorsJob(raw, employer, host) {
     application_url: raw.detailUrl,
     title_original: raw.title,
     company_name: employer.company_name,
-    description_html: "",
+    description_html: raw.description_html || "",
     description_text: raw.description || "",
     location_raw: raw.location || "",
-    date_posted: null,
+    date_posted: raw.date || null,
     status: "active",
     // The detail page itself is fetched and read (not guessed), so this
     // is a real first-party posting even where location parsing missed —

@@ -1,121 +1,68 @@
-// ADP Workforce Now public job-board adapter
-//
-// ADP Workforce Now careers pages are client-side rendered, but the
-// underlying JSON feed they call is public and unauthenticated. Each
-// employer has a unique CID (client ID) that appears in their careers URL:
-//   https://workforcenow.adp.com/mascsr/default/mdf/recruitment/
-//     recruitment.html?ccId=19000101_000001&cid={CID}&lang=en_US
-//
-// The public JSON endpoint is:
-//   GET https://workforcenow.adp.com/mascsr/default/mdf/recruitment/
-//     recruitment.html?ccId=19000101_000001&cid={CID}&lang=en_US
-//     &type=2&v=1&jobPipelineId=&count=25&offset={offset}
-//
-// Store the CID in employers.ats_identifier, e.g.:
-//   "3b6256c1-2a46-4436-9cdb-bc5511fc6ab2"
-//
-// This also handles the legacy ADP Recruiting format:
-//   https://recruiting.adp.com/srccar/public/RTI.home?c={code}&d={domain}
-// For those, store as "recruiting:{code}:{domain}"
-//
-// NOTE: ADP's public career-site API is not officially documented for
-// third-party use. The endpoint is the same one ADP's own widget calls,
-// identifiable via browser devtools on any ADP-hosted careers page.
-// Built from observed request/response shapes; treat the first real
-// ingestion run as the real validation.
-
+// Public Workforce Now request contract verified against ADP's current careers
+// application and official Aegis board. Legacy Recruiting is a separate API.
 const { titleLooksRelevant } = require('../relevanceFilter');
-
-async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, {
-      ...options,
-      signal: controller.signal,
-      headers: {
-        Accept: 'application/json',
-        'User-Agent': 'ROOK-Medical-Sales-Careers/1.0 (job aggregator; contact@rookcareers.com)',
-        ...options.headers,
-      },
-    });
-  } finally {
-    clearTimeout(timer);
-  }
+const { plain } = require('./htmlSource');
+const BASE = 'https://workforcenow.adp.com/mascsr/default/careercenter/public/events/staffing/v1/job-requisitions';
+const BOARD = 'https://workforcenow.adp.com/mascsr/default/mdf/recruitment/recruitment.html';
+async function json(url) {
+  const r = await fetch(url, {signal: AbortSignal.timeout(15000), headers: {Accept:'application/json', 'X-Requested-With':'XMLHttpRequest'}});
+  if (!r.ok) throw Error('ADP source HTTP ' + r.status);
+  return r.json(); // HTML or unknown response must never become a healthy zero.
 }
-
-// ADP Workforce Now public JSON endpoint
-const WFN_BASE = 'https://workforcenow.adp.com/mascsr/default/mdf/recruitment/recruitment.html';
-const PAGE_SIZE = 25;
-
 function normalizeAdpJob(raw, employer) {
-  // ADP WFN job shape (observed from browser devtools on WFN careers pages)
-  const title    = raw.jobTitle || raw.title || '';
-  const location = [raw.jobLocation?.cityName, raw.jobLocation?.stateCode]
-    .filter(Boolean).join(', ');
-  const applyUrl = raw.applyURL || raw.apply_url || employer.source_url;
-  const postDate = raw.postingDate || raw.createDate || null;
-  const jobDesc  = raw.jobDescription?.text || raw.description || '';
-  const reqId    = raw.jobRequisitionId || raw.id || String(Math.random());
-
-  return {
-    source_job_id:    `adp-${employer.ats_identifier}-${reqId}`,
-    source_type:      'career_site',
-    source_url:       applyUrl || employer.source_url,
-    application_url:  applyUrl || employer.source_url,
-    title_original:   title,
-    company_name:     employer.company_name,
-    employer_id:      employer.id,
-    description_html: jobDesc,
-    description_text: jobDesc.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
-    location_raw:     location || raw.jobLocation?.countryCode || '',
-    employment_type:  raw.employmentType || null,
-    date_posted:      postDate ? new Date(postDate).toISOString().split('T')[0] : null,
-    status:           'active',
-    source_verified:  true,
-  };
+  const reqId = raw.itemID;
+  const externalId = raw.customFieldGroup?.stringFields?.find(f => f.nameCode?.codeValue === 'ExternalJobID')?.stringValue;
+  if (!reqId || !externalId || !raw.requisitionTitle || !raw.requisitionDescription) throw Error('ADP detail missing stable ID, public job ID, title or description');
+  const apply = new URL(BOARD);
+  apply.search = new URLSearchParams({cid:employer.ats_identifier,ccId:'19000101_000001',lang:'en_US',jobId:externalId});
+  const location = (raw.requisitionLocations || []).map(l => {
+    const a = l.address || {};
+    return l.nameCode?.shortName?.trim() || [a.cityName,a.countrySubdivisionLevel1?.codeValue,a.countryCode].filter(Boolean).join(', ');
+  }).filter(Boolean).join(' | ');
+  return {source_job_id:`adp-${employer.ats_identifier}-${reqId}`, source_type:'career_site',
+    source_url:apply.href, application_url:apply.href, title_original:raw.requisitionTitle,
+    company_name:employer.company_name, employer_id:employer.id, description_html:raw.requisitionDescription,
+    description_text:plain(raw.requisitionDescription), location_raw:location,
+    employment_type:raw.workLevelCode?.shortName || null, date_posted:raw.postDate?.slice(0,10) || null,
+    status:'active', source_verified:true};
 }
-
 async function fetchAdpJobs(employer) {
-  const identifier = employer.ats_identifier || '';
-
-  // Legacy ADP Recruiting format (recruiting.adp.com)
-  if (identifier.startsWith('recruiting:')) {
-    const [, code, domain] = identifier.split(':');
-    const url = `https://recruiting.adp.com/srccar/public/RTI.home?c=${code}&d=${domain}&type=2&lang=en_US&v=1`;
-    const res = await fetchWithTimeout(url);
-    if (!res.ok) throw new Error(`ADP Recruiting fetch failed: ${res.status} for ${employer.company_name}`);
-    const data = await res.json().catch(() => ({}));
-    const listings = data.jobList || data.jobs || data.items || [];
-    return listings
-      .map(j => normalizeAdpJob(j, employer))
-      .filter(j => titleLooksRelevant(j.title_original));
-  }
-
-  // ADP Workforce Now — paginated
-  const cid = identifier;
-  const jobs = [];
-  let offset = 0;
-
-  while (true) {
-    const url = `${WFN_BASE}?ccId=19000101_000001&cid=${cid}&lang=en_US&type=2&v=1&count=${PAGE_SIZE}&offset=${offset}`;
-    const res = await fetchWithTimeout(url);
-    if (!res.ok) {
-      if (offset === 0) throw new Error(`ADP WFN fetch failed: ${res.status} for ${employer.company_name}`);
-      break; // partial data is better than nothing after the first page
+  const cid = employer.ats_identifier || '';
+  if (cid.startsWith('recruiting:')) throw Error('ADP legacy Recruiting extraction is unsupported; preserving existing jobs');
+  if (!/^[a-f0-9-]{36}$/i.test(cid)) throw Error('Invalid verified ADP Workforce Now CID');
+  const urlFor = suffix => {
+    const u = new URL(BASE + suffix);
+    u.search = new URLSearchParams({cid,ccId:'19000101_000001',lang:'en_US',locale:'en_US'});
+    return u;
+  };
+  const listings = [], seen = new Set(), jobs = [];
+  jobs.incompleteSnapshot = false; jobs.snapshotWarnings = [];
+  for (let page = 0; ; page++) {
+    try {
+      if (page >= 100) throw Error('ADP pagination safety limit');
+      const url = urlFor(''); url.searchParams.set('$skip', String(page*20)); url.searchParams.set('$top','20');
+      const data = await json(url);
+      if (!Array.isArray(data.jobRequisitions) || !Number.isInteger(data.meta?.totalNumber)) throw Error('ADP response missing jobRequisitions or total count');
+      const batch = data.jobRequisitions;
+      for (const row of batch) {
+        if (!row.itemID || !row.requisitionTitle || seen.has(row.itemID)) throw Error('ADP malformed or repeated listing');
+        seen.add(row.itemID); listings.push(row);
+      }
+      if (listings.length >= data.meta.totalNumber) break;
+      if (!batch.length) throw Error('ADP pagination ended before total count');
+    } catch(error) {
+      if (!listings.length) throw error;
+      jobs.incompleteSnapshot = true; jobs.snapshotWarnings.push(error.message); break;
     }
-    const data = await res.json().catch(() => ({}));
-    const page = data.jobList || data.jobs || data.items || data.data || [];
-    if (page.length === 0) break;
-    jobs.push(...page);
-    if (page.length < PAGE_SIZE) break;
-    offset += PAGE_SIZE;
-    await new Promise(r => setTimeout(r, 250));
   }
-
-  return jobs
-    .map(j => normalizeAdpJob(j, employer))
-    .filter(j => titleLooksRelevant(j.title_original));
+  jobs.sourceListingCount = listings.length;
+  for (const row of listings.filter(r => titleLooksRelevant(r.requisitionTitle))) {
+    try {
+      const detail = await json(urlFor('/'+encodeURIComponent(row.itemID)));
+      if (detail.itemID !== row.itemID) throw Error('ADP detail identity mismatch');
+      jobs.push(normalizeAdpJob(detail, employer));
+    } catch(error) { jobs.incompleteSnapshot = true; jobs.snapshotWarnings.push(row.itemID+': '+error.message); }
+  }
+  return jobs;
 }
-
-module.exports = { fetchAdpJobs };
+module.exports = { fetchAdpJobs, normalizeAdpJob };

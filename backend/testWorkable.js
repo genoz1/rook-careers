@@ -70,3 +70,9 @@ test('duplicate location entries in `locations` collapse to one, not repeated', 
   };
   assert.equal(workableLocation(raw), 'Boston, MA');
 });
+
+
+test('observed widget country fields preserve India and country-only US postings', () => {
+  assert.equal(workableLocation({ locations: [{city: 'Noida', region: 'Uttar Pradesh', country: 'India', countryCode: 'IN'}] }), 'Noida, Uttar Pradesh, India');
+  assert.equal(workableLocation({ locations: [{city: '', country: 'United States', countryCode: 'US'}] }), 'United States');
+});

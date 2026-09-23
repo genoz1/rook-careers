@@ -62,7 +62,10 @@ async function fetchWorkableJobs(accountSlug) {
     throw new Error(`Workable fetch failed for "${accountSlug}": ${res.status} ${res.statusText}`);
   }
   const data = await res.json();
-  return data.jobs || [];
+  if (!Array.isArray(data.jobs)) throw new Error('Workable response missing jobs array');
+  if (data.jobs.some(job => !(job.id || job.shortcode) || !job.title || !(job.url || job.shortlink)))
+    throw new Error('Workable response contains malformed job records');
+  return data.jobs;
 }
 
 /**
@@ -71,7 +74,7 @@ async function fetchWorkableJobs(accountSlug) {
 function labelForLocation(loc) {
   if (!loc) return "";
   if (loc.location_str) return loc.location_str;
-  const parts = [loc.city, loc.state_code || loc.region, loc.country_name].filter(Boolean);
+  const parts = [loc.city, loc.state_code || loc.region, loc.country_name || loc.country || loc.countryCode].filter(Boolean);
   if (parts.length) return parts.join(", ");
   if (loc.telecommuting || loc.workplace_type === "remote") return "Remote";
   return "";

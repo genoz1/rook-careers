@@ -28,14 +28,43 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
   }
 }
 
+function parseBoardData(html) {
+  const $ = require('cheerio').load(html);
+  for (const script of $('script').toArray()) {
+    const match = $(script).text().match(/window\.pageData\s*=\s*(\{[\s\S]*\})\s*;/);
+    if (!match) continue;
+    const data = JSON.parse(match[1]);
+    if (!Array.isArray(data.Jobs) || !data.ModuleTitle) throw new Error('Paylocity board schema missing Jobs or employer identity');
+    return data;
+  }
+  throw new Error('Paylocity board data unavailable; not a verified zero');
+}
+
 async function fetchPaylocityJobs(guid) {
-  const url = `https://recruiting.paylocity.com/recruiting/v2/api/feed/jobs/${guid}`;
-  const res = await fetchWithTimeout(url);
-  if (!res.ok) throw new Error(`Paylocity feed fetch failed for guid "${guid}": ${res.status} ${res.statusText}`);
-  const data = await res.json();
-  const rawJobs = data?.jobs || [];
-  console.log(`    ...listed ${rawJobs.length} posting(s)`);
-  return rawJobs;
+  const { getHtml } = require('./htmlSource');
+  const { titleLooksRelevant } = require('../relevanceFilter');
+  const cheerio = require('cheerio');
+  const data = parseBoardData(await getHtml('https://recruiting.paylocity.com/recruiting/jobs/All/' + guid));
+  const jobs = [];
+  jobs.incompleteSnapshot = false;
+  jobs.sourceEmployerName = data.ModuleTitle;
+  for (const item of data.Jobs) {
+    if (!item.JobId || !item.JobTitle) { jobs.incompleteSnapshot = true; continue; }
+    if (!titleLooksRelevant(item.JobTitle) || item.IsInternal) continue;
+    const url = 'https://recruiting.paylocity.com/Recruiting/Jobs/Details/' + item.JobId;
+    try {
+      const $ = cheerio.load(await getHtml(url));
+      const detail = $('.job-preview-details').clone();
+      detail.find('.mobile-apply-btn').remove();
+      const description = detail.html();
+      if (!description || !$('.job-preview-title').text().trim()) throw new Error('Missing Paylocity detail');
+      const loc = item.JobLocation || {};
+      jobs.push({ jobId: item.JobId, title: item.JobTitle, description, displayUrl: url, applyUrl: url,
+        jobLocation: { city: loc.City, state: loc.State, country: loc.Country, locationDisplayName: item.LocationName },
+        publishedDate: item.PublishedDate });
+    } catch { jobs.incompleteSnapshot = true; }
+  }
+  return jobs;
 }
 
 /**
@@ -47,7 +76,10 @@ async function fetchPaylocityJobs(guid) {
 function normalizePaylocityJob(raw, employer) {
   const jobUrl = raw.displayUrl || raw.applyUrl;
   const loc = raw.jobLocation || {};
-  const locationRaw = [loc.city, loc.state].filter(Boolean).join(", ") || loc.locationDisplayName || loc.name || "";
+  const countries = require('i18n-iso-countries');
+  const countryCode = countries.alpha3ToAlpha2(String(loc.country || '').toUpperCase()) || require('../locationTextRules').normalizeCountryCode(loc.country);
+  const countryName = countryCode ? countries.getName(countryCode, 'en') : loc.country;
+  const locationRaw = [loc.city, loc.state, countryName].filter(Boolean).join(", ") || loc.locationDisplayName || loc.name || "";
 
   return {
     source_job_id: String(raw.jobId),
@@ -60,6 +92,7 @@ function normalizePaylocityJob(raw, employer) {
     description_html: raw.description || null,
     description_text: (raw.description || raw.title || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim(),
     location_raw: locationRaw,
+    location_evidence: { source_country_code: countryCode || null },
     compensation_text: raw.salaryDescription || null,
     date_posted: raw.publishedDate || raw.createdUtc || null,
     status: "active",
@@ -67,4 +100,4 @@ function normalizePaylocityJob(raw, employer) {
   };
 }
 
-module.exports = { fetchPaylocityJobs, normalizePaylocityJob };
+module.exports = { fetchPaylocityJobs, normalizePaylocityJob, parseBoardData };

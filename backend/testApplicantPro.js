@@ -4,28 +4,24 @@ const { fetchApplicantProJobs, normalizeApplicantProJob } = require('./adapters/
 
 const employer = { id: 'castle-biosciences', company_name: 'Castle Biosciences', ats_identifier: 'castlebiosciences' };
 
-// Round 2 confirmed www.applicantpro.com/openings/castlebiosciences/jobs
-// redirects to castlebiosciences.applicantpro.com/jobs/ — exactly the
-// two-step flow this adapter already implements. This fixture models
-// that confirmed real structure (step 1: scrape domain_id off the jobs
-// page; step 2: fetch /core/jobs/{domain_id} as JSON), not a byte
-// download — this sandbox can't reach applicantpro.com directly.
+// Fixtures reflect the live September 23 board contract.
 function fetchPage(url) {
   const map = {
     'https://castlebiosciences.applicantpro.com/jobs/': {
       ok: true,
       text: async () => '<html><body><script>var domain_id="482910";</script></body></html>',
     },
-    'https://castlebiosciences.applicantpro.com/core/jobs/482910': {
+    'https://castlebiosciences.applicantpro.com/core/jobs/482910?getParams=%7B%7D': {
       ok: true,
       json: async () => ({
-        jobs: [
-          { id: 1, title: 'Territory Sales Manager, Dermatology', city: 'Dallas', state: 'TX' },
+        success: true, data: { jobCount: 2, jobs: [
+          { id: 1, title: 'Territory Sales Manager, Dermatology', city: 'Dallas', state: 'TX', jobUrl: 'https://castlebiosciences.applicantpro.com/jobs/1' },
           { id: 2, title: 'Lab Technician', city: 'Friendswood', state: 'TX' },
-        ],
+        ] },
       }),
     },
   };
+  if (url === 'https://castlebiosciences.applicantpro.com/jobs/1') return Promise.resolve({ ok: true, headers: new Headers({'content-type':'text/html'}), text: async () => '<script type="application/ld+json">'+JSON.stringify({'@type':'JobPosting',title:'Territory Sales Manager, Dermatology',description:'<p>Sell diagnostic tests to clinicians.</p>'})+'</script>' });
   const entry = map[url];
   if (!entry) throw new Error(`unexpected fetch: ${url}`);
   return Promise.resolve(entry);
@@ -51,7 +47,7 @@ test('ApplicantPro refresh safety: a malformed JSON response (no "jobs" field) t
   global.fetch = async (url) => {
     const u = String(url);
     if (u === 'https://castlebiosciences.applicantpro.com/jobs/') return fetchPage(u);
-    if (u === 'https://castlebiosciences.applicantpro.com/core/jobs/482910') {
+    if (u === 'https://castlebiosciences.applicantpro.com/core/jobs/482910?getParams=%7B%7D') {
       return { ok: true, json: async () => ({ error: 'unexpected shape, no jobs key at all' }) };
     }
     throw new Error(`unexpected: ${u}`);
@@ -68,14 +64,15 @@ test('ApplicantPro: a genuinely empty "jobs" array (the key is present) is accep
   global.fetch = async (url) => {
     const u = String(url);
     if (u === 'https://castlebiosciences.applicantpro.com/jobs/') return fetchPage(u);
-    if (u === 'https://castlebiosciences.applicantpro.com/core/jobs/482910') {
-      return { ok: true, json: async () => ({ jobs: [] }) };
+    if (u === 'https://castlebiosciences.applicantpro.com/core/jobs/482910?getParams=%7B%7D') {
+      return { ok: true, json: async () => ({ success: true, data: { jobCount: 0, jobs: [] } }) };
     }
     throw new Error(`unexpected: ${u}`);
   };
   try {
     const jobs = await fetchApplicantProJobs('castlebiosciences');
-    assert.deepEqual(jobs, []);
+    assert.equal(jobs.length, 0);
+    assert.equal(jobs.incompleteSnapshot, false);
   } finally {
     global.fetch = real;
   }

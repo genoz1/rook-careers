@@ -105,8 +105,19 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
 
 async function fetchWorkdayJobs(identifier) {
   const { tenant, wdNumber, site } = parseWorkdayIdentifier(identifier);
-  const baseUrl = `https://${tenant}.${wdNumber}.myworkdayjobs.com/wday/cxs/${tenant}/${site}`;
+  let apiTenant = tenant;
   const refererUrl = `https://${tenant}.${wdNumber}.myworkdayjobs.com/${site}`;
+
+  if (tenant.includes('-')) {
+    const response = await fetchWithTimeout(refererUrl, { headers: { Accept: 'text/html' } });
+    if (!response.ok) throw new Error('Workday public configuration HTTP ' + response.status);
+    const html = await response.text();
+    const configuredTenant = html.match(/\btenant:\s*["']([a-zA-Z0-9_-]+)["']/)?.[1];
+    const configuredSite = html.match(/\bsiteId:\s*["']([^"']+)["']/)?.[1];
+    if (!configuredTenant || configuredSite !== site) throw new Error('Workday public tenant/site configuration could not be verified');
+    apiTenant = configuredTenant;
+  }
+  const baseUrl = `https://${tenant}.${wdNumber}.myworkdayjobs.com/wday/cxs/${apiTenant}/${site}`;
 
   const allPostings = [];
   const pageSize = 20;

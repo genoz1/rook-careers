@@ -55,53 +55,9 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
 }
 
 async function fetchJobviteJobs(companySlug) {
-  const url = `https://jobs.jobvite.com/${companySlug}/jobs/viewall`;
-  const res = await fetchWithTimeout(url);
-  if (!res.ok) throw new Error(`Jobvite fetch failed for "${companySlug}": ${res.status} ${res.statusText}`);
-  const html = await res.text();
-
-  // Jobvite job links follow: https://jobs.jobvite.com/{company}/job/{jobId}
-  const linkPattern = new RegExp(
-    `<a[^>]+href="https://jobs\\.jobvite\\.com/${companySlug}/job/([^"]+)"[^>]*>([^<]+)</a>`,
-    "g"
+  return require('./htmlSource').fetchListings(
+    `https://jobs.jobvite.com/${companySlug}/jobs/viewall`, url => url.pathname.match(new RegExp('^/' + companySlug + '/job/([^/]+)'))?.[1]
   );
-  const rawJobs = [];
-  let match;
-  while ((match = linkPattern.exec(html)) !== null) {
-    const [, jobId, titleRaw] = match;
-    rawJobs.push({ jobId, title: titleRaw.trim() });
-  }
-  console.log(`    ...listed ${rawJobs.length} posting(s)`);
-
-  // De-dupe (a job can legitimately appear once under "Featured Jobs"
-  // and again under its department section further down the page).
-  const seen = new Set();
-  const deduped = rawJobs.filter((j) => {
-    if (seen.has(j.jobId)) return false;
-    seen.add(j.jobId);
-    return true;
-  });
-
-  const relevant = deduped.filter((j) => titleLooksRelevant(j.title));
-  console.log(`    ${relevant.length} / ${deduped.length} titles look relevant — fetching their descriptions...`);
-
-  const detailed = [];
-  for (let i = 0; i < relevant.length; i++) {
-    const job = relevant[i];
-    try {
-      const detailRes = await fetchWithTimeout(`https://jobs.jobvite.com/${companySlug}/job/${job.jobId}`);
-      if (!detailRes.ok) continue;
-      const detailHtml = await detailRes.text();
-      detailed.push({ ...job, detailHtml });
-    } catch {
-      continue;
-    }
-    if ((i + 1) % 10 === 0 || i === relevant.length - 1) {
-      console.log(`    ...fetched details for ${i + 1} / ${relevant.length}`);
-    }
-  }
-
-  return detailed;
 }
 
 /**
@@ -114,17 +70,9 @@ async function fetchJobviteJobs(companySlug) {
 function normalizeJobviteJob(raw, employer) {
   const jobUrl = `https://jobs.jobvite.com/${employer.ats_identifier}/job/${raw.jobId}`;
 
-  const descMatch = raw.detailHtml.match(
-    /<div[^>]*class="[^"]*(?:jv-job-detail-description|job-description)[^"]*"[^>]*>([\s\S]*?)<\/div>/i
-  );
-  const descriptionHtml = descMatch ? descMatch[1] : "";
-
-  // Best-effort location extraction — Jobvite detail pages typically
-  // show "City, State" near the top; not reliably parseable from a
-  // regex against markdown-rendered content alone (see file header),
-  // so this deliberately falls back to empty rather than guessing wrong.
-  const locMatch = raw.detailHtml.match(/<span[^>]*class="[^"]*jv-job-detail-location[^"]*"[^>]*>([^<]+)<\/span>/i);
-  const locationRaw = locMatch ? locMatch[1].trim() : "";
+  const fields = require('./htmlSource').detailFields(raw.detailHtml, '.jv-job-detail-description, .job-description', '.jv-job-detail-location');
+  const descriptionHtml = fields.description;
+  const locationRaw = fields.location;
 
   return {
     source_job_id: raw.jobId,
@@ -137,7 +85,7 @@ function normalizeJobviteJob(raw, employer) {
     description_html: descriptionHtml || null,
     description_text: stripHtml(descriptionHtml || raw.title),
     location_raw: locationRaw,
-    date_posted: null,
+    date_posted: fields.date,
     status: "active",
     source_verified: true,
   };

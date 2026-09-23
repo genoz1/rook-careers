@@ -17,7 +17,7 @@
 
 const REQUEST_TIMEOUT_MS = 20_000;
 
-async function sendEmail({ to, subject, html, replyTo, fromName = "ROOK" }) {
+async function sendEmail({ to, subject, html, replyTo, fromName = "ROOK", idempotencyKey }) {
   if (!process.env.RESEND_API_KEY) {
     throw new Error("RESEND_API_KEY is not configured");
   }
@@ -43,6 +43,7 @@ async function sendEmail({ to, subject, html, replyTo, fromName = "ROOK" }) {
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${process.env.RESEND_API_KEY}`,
+        ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
       },
       body: JSON.stringify({
         from: fromHeader,

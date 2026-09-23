@@ -141,3 +141,24 @@ test('ingestion dispatcher compatibility: normalize signature matches ingest.js 
   assert.equal(row.source_type, 'successfactors');
   assert.equal(row.application_url, raw.detailUrl);
 });
+
+
+test('structured foreign country survives detail extraction and failed details forbid closures', async () => {
+  const listing = '<a href="/job/Test/123/">Territory Sales Manager</a>';
+  await withFakeFetch({
+    'https://careers.example.com/search/?q=sales': listing,
+    'https://careers.example.com/job/Test/123/': '<script type="application/ld+json">'+JSON.stringify({'@type':'JobPosting',description:'<p>Sell diagnostic products</p>',jobLocation:{address:{addressLocality:'Shanghai',addressCountry:'China'}}})+'</script>'
+  }, async () => {
+    const jobs = await fetchSuccessFactorsJobs('careers.example.com');
+    assert.equal(jobs[0].location, 'Shanghai, China');
+    assert.equal(jobs.incompleteSnapshot, false);
+  });
+  await withFakeFetch({
+    'https://careers.example.com/search/?q=sales': listing,
+    'https://careers.example.com/job/Test/123/': '<html>Sign in</html>'
+  }, async () => {
+    const jobs = await fetchSuccessFactorsJobs('careers.example.com');
+    assert.equal(jobs.length, 0);
+    assert.equal(jobs.incompleteSnapshot, true);
+  });
+});

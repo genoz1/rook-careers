@@ -8,6 +8,7 @@
 // Usage: node backend/ingest.js
 
 require("dotenv").config();
+const { metric } = require('./ingestRunMetrics');
 const { createClient } = require("@supabase/supabase-js");
 const { mentionsNonUsCountry } = require("./matching");
 const { safeEvaluateSocialEligibilityForIngestion } = require("./socialAutomation");
@@ -29,6 +30,8 @@ const { fetchTeamtailorJobs, normalizeTeamtailorJob } = require("./adapters/team
 const { fetchPinpointJobs, normalizePinpointJob } = require("./adapters/pinpoint");
 const { fetchEightfoldJobs, normalizeEightfoldJob } = require("./adapters/eightfold");
 const { fetchPaylocityJobs, normalizePaylocityJob } = require("./adapters/paylocity");
+const { fetchAemCareersJobs, normalizeAemCareersJob } = require("./adapters/aemcareers");
+const { fetchKulaJobs, normalizeKulaJob } = require("./adapters/kula");
 const { fetchAdpJobs }    = require("./adapters/adp");
 const { fetchUkgJobs }    = require("./adapters/ukg");
 const { fetchJazzHRJobs } = require("./adapters/jazzhr");
@@ -54,23 +57,27 @@ async function allEmployerRows(queryPage, pageSize = 1000) {
 // to the jobs table and must bypass row-level security intentionally.
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
+  process.env.SUPABASE_SERVICE_ROLE_KEY,
+  { global: { fetch: (url, options = {}) => fetch(url, { ...options, signal: AbortSignal.any([AbortSignal.timeout(20000), ...(options.signal ? [options.signal] : [])]) }) } }
 );
 
 async function ingestEmployer(employer) {
+  const repairSourceOnly = process.env.ROOK_INGEST_REPAIR_SOURCE_ONLY === '1';
+  const disableClosures = process.env.ROOK_INGEST_REPAIR_NO_CLOSURES === '1';
   console.log(`Syncing ${employer.company_name} (${employer.ats_type})...`);
 
   let rawJobs = [];
   let normalize;
 
   try {
+    if (employer.ingestion_hold_reason) throw new Error("Source verification hold: " + employer.ingestion_hold_reason);
     if (employer.ats_type === "custom_html") {
       // Reviewed sources participate in normal scheduled runs. An explicit env
       // allowlist overrides the registry (an empty value disables every source).
       const enabledIds = (process.env.CUSTOM_HTML_EMPLOYER_IDS ?? Object.keys(reviewedHtmlSources).join(",")).split(",").map(id => id.trim());
       if (!enabledIds.includes(employer.id)) {
         console.log("  Skipping custom_html — employer is not enabled for this run");
-        return;
+        return { status: 'skipped' };
       }
       rawJobs = await fetchCustomHtmlJobs(employer);
       const splitIds = (process.env.CUSTOM_HTML_SPLIT_TERRITORIES_IDS ?? Object.keys(reviewedHtmlSources).filter(id => reviewedHtmlSources[id].splitTerritories).join(",")).split(",").map(id => id.trim());
@@ -144,25 +151,33 @@ async function ingestEmployer(employer) {
       // JazzHR / ApplyToJob — normalize built into adapter
       rawJobs = await fetchJazzHRJobs(employer);
       normalize = (job) => job;
+    } else if (employer.ats_type === "aemcareers") {
+      rawJobs = await fetchAemCareersJobs(employer.ats_identifier);
+      normalize = normalizeAemCareersJob;
+    } else if (employer.ats_type === "kula") {
+      rawJobs = await fetchKulaJobs(employer.ats_identifier);
+      normalize = normalizeKulaJob;
     } else if (employer.ats_type === "successfactors") {
       const host = employer.ats_identifier.replace(/^https?:\/\//, "").replace(/\/$/, "");
       rawJobs = await fetchSuccessFactorsJobs(employer.ats_identifier);
       normalize = (job) => normalizeSuccessFactorsJob(job, employer, host);
     } else {
       console.log(`  Skipping — no adapter for ats_type "${employer.ats_type}"`);
-      return;
+      return { status: 'skipped' };
     }
   } catch (err) {
+    metric('source_failures');
     console.error(`  FAILED: ${err.message}`);
     await supabase
       .from("employers")
       .update({ sync_status: "error", last_checked_at: new Date().toISOString() })
       .eq("id", employer.id);
-    return;
+    return { status: 'failed', failure_stage: 'source', error: err.message };
   }
 
   const seenSourceIds = new Set();
   let savedCount = 0;
+  let writeFailed = false;
   let nonUsSkippedCount = 0;
   let aiAnalyzedThisRun = 0;
 
@@ -193,10 +208,12 @@ async function ingestEmployer(employer) {
   const existingLocations = new Map((existingSourceRows || []).map(r => [r.source_job_id,r]));
   const existingSourceIds = new Set((existingSourceRows || []).map((r) => r.source_job_id));
   const closeExcludedJob = async (sourceId) => {
+    if (disableClosures) return;
     if (!existingSourceIds.has(sourceId)) return;
-    const { error } = await supabase.from('jobs').update({ status: 'closed' })
-      .eq('employer_id', employer.id).eq('source_job_id', sourceId);
-    if (error) console.error(`  Could not close excluded job ${sourceId}: ${error.message}`);
+    const { data: closed, error } = await supabase.from('jobs').update({ status: 'closed' })
+      .eq('employer_id', employer.id).eq('source_job_id', sourceId).eq('status','active').select('id');
+    if (error) { metric('write_failures'); writeFailed = true; console.error(`  Could not close excluded job ${sourceId}: ${error.message}`); }
+    else metric('closed', closed?.length || 0);
   };
 
   // Cap how many NEW AI analyses (job analysis + embedding) happen per
@@ -219,7 +236,7 @@ async function ingestEmployer(employer) {
   // run even if their own AI scoring lags a run or two behind; revisit
   // raising this back up once the backlog of never-synced employers is
   // cleared.
-  const AI_ANALYSIS_CAP_PER_EMPLOYER = 10;
+  const AI_ANALYSIS_CAP_PER_EMPLOYER = repairSourceOnly ? 0 : 10;
 
   // Same shape of problem as the AI-analysis cap above, for a different
   // resource: validateJobLocation() geocodes any job whose location text
@@ -241,7 +258,7 @@ async function ingestEmployer(employer) {
   // budget by itself — see Nightly Ingestion Capacity Review,
   // Sept 2026, for the analysis that identified this as the main driver
   // of employers going un-synced despite the nightly schedule.
-  const GEOCODE_CAP_PER_EMPLOYER = 40;
+  const GEOCODE_CAP_PER_EMPLOYER = repairSourceOnly ? 0 : 40;
   let geocodeCallsThisRun = 0;
   let geocodeDeferredThisRun = 0;
   const cappedGeocode = async (text, opts) => {
@@ -297,9 +314,10 @@ async function ingestEmployer(employer) {
       nonUsSkippedCount++;
       // An old record must not remain active after its source establishes
       // that it is foreign. New foreign jobs are never inserted.
-      if (existingSourceIds.has(job.source_job_id)) {
-        const {error: closeError} = await supabase.from('jobs').update({location_raw: job.location_raw, job_lat: null, job_lng: null, state: null, location_evidence: job.location_evidence, status: 'closed'}).eq('employer_id', employer.id).eq('source_job_id', job.source_job_id);
-        if (closeError) console.error(`  Foreign location refresh failed: ${closeError.message}`);
+      if (!disableClosures && existingSourceIds.has(job.source_job_id)) {
+        const {data: closed, error: closeError} = await supabase.from('jobs').update({location_raw: job.location_raw, job_lat: null, job_lng: null, state: null, location_evidence: job.location_evidence, status: 'closed'}).eq('employer_id', employer.id).eq('source_job_id', job.source_job_id).eq('status','active').select('id');
+        if (closeError) { metric('write_failures'); writeFailed = true; console.error(`  Foreign location refresh failed: ${closeError.message}`); }
+        else metric('closed', closed?.length || 0);
       }
       continue;
     }
@@ -324,31 +342,25 @@ async function ingestEmployer(employer) {
       }
     }
 
-    const { data: upsertedRow, error } = await supabase
-      .from("jobs")
-      .upsert(
-        // social_eligible is re-evaluated on EVERY ingestion pass (not
-        // set once at creation) — a job that becomes incomplete, loses
-        // its category mapping, or switches source_type is correctly
-        // re-assessed every time it's re-seen. See
-        // backend/socialAutomation.js's evaluateSocialEligibilityForIngestion
-        // for the exact, documented rules. Uses whatever ai_analysis
-        // already exists on this row (from a PRIOR run, via
-        // onConflict's merge) — a brand-new job with no analysis yet
-        // correctly comes back false here; see the follow-up update
-        // right after analysis completes below for how it becomes
-        // eligible the same run once that analysis exists.
-        { ...job, last_seen_at: new Date().toISOString(), social_eligible: safeEvaluateSocialEligibilityForIngestion({ ...job, ai_analysis: existingAiAnalysisBySourceId.get(job.source_job_id) || null }), ...(!existingSourceIds.has(job.source_job_id) ? { first_seen_at: new Date().toISOString() } : {}) },
-        { onConflict: "employer_id,source_job_id", ignoreDuplicates: false }
-      )
-      .select()
-      .single();
+    const payload = { ...job, last_seen_at: new Date().toISOString(), social_eligible: safeEvaluateSocialEligibilityForIngestion({ ...job, ai_analysis: existingAiAnalysisBySourceId.get(job.source_job_id) || null }) };
+    const known = existingSourceIds.has(job.source_job_id);
+    let inserted = false;
+    let response;
+    if (!known) {
+      response = await supabase.from('jobs').insert({ ...payload, first_seen_at: new Date().toISOString() }).select().single();
+      inserted = !response.error;
+      if (response.error?.code === '23505') response = await supabase.from('jobs').upsert(payload, { onConflict: 'employer_id,source_job_id', ignoreDuplicates: false }).select().single();
+    } else response = await supabase.from('jobs').upsert(payload, { onConflict: 'employer_id,source_job_id', ignoreDuplicates: false }).select().single();
+    const { data: upsertedRow, error } = response;
 
     if (error) {
+      writeFailed = true; metric('write_failures');
       console.error(`  Upsert error for "${job.title_original}": ${error.message}`);
       continue;
     }
     savedCount++;
+    metric(inserted ? 'inserted' : 'updated');
+    existingSourceIds.add(job.source_job_id);
 
     if (job.status !== "active") continue;
 
@@ -368,7 +380,8 @@ async function ingestEmployer(employer) {
         // run re-upserts it, even though it's fully analyzable right
         // now, this run.
         const nowEligible = safeEvaluateSocialEligibilityForIngestion({ ...upsertedRow, ai_analysis: analysis });
-        await supabase.from("jobs").update({ ai_analysis: analysis, social_eligible: nowEligible }).eq("id", upsertedRow.id);
+        const { error: analysisError } = await supabase.from("jobs").update({ ai_analysis: analysis, social_eligible: nowEligible }).eq("id", upsertedRow.id);
+        if (analysisError) { metric('write_failures'); writeFailed = true; }
       }
     }
 
@@ -382,8 +395,10 @@ async function ingestEmployer(employer) {
       try {
         const embeddingText = `${upsertedRow.title_original || ""}\n\n${upsertedRow.description_text || ""}`.trim();
         const embedding = await generateEmbedding(embeddingText);
-        await supabase.from("jobs").update({ job_embedding: embedding }).eq("id", upsertedRow.id);
+        const { error: embeddingWriteError } = await supabase.from("jobs").update({ job_embedding: embedding }).eq("id", upsertedRow.id);
+        if (embeddingWriteError) { metric('write_failures'); writeFailed = true; throw embeddingWriteError; }
       } catch (err) {
+        metric('embedding_failures');
         console.error(`  Embedding generation failed for "${job.title_original}": ${err.message}`);
       }
     }
@@ -400,19 +415,23 @@ async function ingestEmployer(employer) {
     .order("id")
     .range(start, end));
 
-  const closedIds = (rawJobs.incompleteSnapshot ? [] : (existingJobs || []))
+  if (writeFailed) rawJobs.incompleteSnapshot = true;
+  const closedIds = (rawJobs.incompleteSnapshot || disableClosures ? [] : (existingJobs || []))
     .filter((j) => !seenSourceIds.has(j.source_job_id))
     .map((j) => j.id);
 
   if (rawJobs.incompleteSnapshot) {
+    metric('partial_snapshots');
     console.warn(`  Source snapshot was incomplete for ${employer.company_name}; existing jobs were preserved while current postings were refreshed.`);
   }
 
   if (closedIds.length) {
-    await supabase.from("jobs").update({ status: "closed" }).in("id", closedIds);
+    const { data: actuallyClosed, error: closeError } = await supabase.from("jobs").update({ status: "closed" }).in("id", closedIds).eq("status", "active").select("id");
+    if (closeError) { metric('write_failures'); throw closeError; }
+    metric('closed', actuallyClosed?.length || 0);
   }
 
-  await supabase
+  const { error: employerStatusError } = await supabase
     .from("employers")
     .update({
       sync_status: rawJobs.incompleteSnapshot ? "partial" : "ok",
@@ -421,10 +440,13 @@ async function ingestEmployer(employer) {
     })
     .eq("id", employer.id);
 
+  if (employerStatusError) { metric('write_failures'); throw employerStatusError; }
+
   console.log(
     `  Done — ${savedCount} relevant job(s) saved (${rawJobs.length} total posting(s) examined), ${closedIds.length} closed, ${nonUsSkippedCount} non-US posting(s) skipped` +
       (geocodeDeferredThisRun > 0 ? `, ${geocodeDeferredThisRun} location lookup(s) deferred to a later run (per-employer geocode cap reached).` : `.`)
   );
+  return { status: rawJobs.incompleteSnapshot ? 'partial' : 'completed', warnings: rawJobs.snapshotWarnings || [] };
 }
 
 // Relevance filter — still a placeholder pending real AI classification
@@ -497,7 +519,7 @@ async function releaseIngestLock() {
   }
 }
 
-async function run() {
+async function run(options = {}) {
   const startedAt = Date.now();
 
   // Optional: node backend/ingest.js <employer name or slug> runs the
@@ -523,13 +545,13 @@ async function run() {
   }
 
   try {
-    await runEmployerLoop(startedAt, employerFilter);
+    await runEmployerLoop(startedAt, employerFilter, options);
   } finally {
     if (!employerFilter && !lock.failOpen) await releaseIngestLock();
   }
 }
 
-async function runEmployerLoop(startedAt, employerFilter) {
+async function runEmployerLoop(startedAt, employerFilter, options = {}) {
   // Order by last_checked_at ascending (nulls first) rather than
   // whatever order the table happens to return — this means employers
   // that have never synced, or synced longest ago, get processed first.
@@ -548,12 +570,12 @@ async function runEmployerLoop(startedAt, employerFilter) {
 
   if (error) {
     console.error("Could not load employers:", error.message);
-    process.exit(1);
+    throw new Error(error.message);
   }
 
   if (employerFilter && employers.length === 0) {
     console.error(`No active employer matched "${employerFilter}".`);
-    process.exit(1);
+    throw new Error(`No active employer matched "${employerFilter}".`);
   }
 
   console.log(`Found ${employers.length} active employer(s) to sync.\n`);
@@ -581,24 +603,56 @@ async function runEmployerLoop(startedAt, employerFilter) {
     );
   }
 
-  let processedCount = 0;
-  for (const employer of employers) {
-    const elapsed = Date.now() - startedAt;
-    if (elapsed > TIME_BUDGET_MS) {
-      const remaining = employers.length - processedCount;
-      console.log(
-        `\nTime budget reached (${Math.round(elapsed / 60000)} min) — stopping cleanly. ` +
-          `${remaining} employer(s) not reached this run; they're now oldest-synced, so they'll be ` +
-          `prioritized on the next run.`
-      );
-      break;
+  const { randomUUID } = require('node:crypto');
+  const runId = randomUUID();
+  const entries = employers.map(e => ({ employer_id: e.id, name: e.company_name, status: 'not_reached' }));
+  const summary = { employers: entries, totals: {}, counts_complete: true, manual: !!employerFilter };
+  const started = new Date(startedAt).toISOString();
+  const persist = async (status, ended = null) => {
+    const { error } = await supabase.from('ingestion_runs').upsert({ id: runId, started_at: started, ended_at: ended, status, summary }, { onConflict: 'id' });
+    if (error) throw new Error('Cannot persist ingestion run: ' + error.message);
+  };
+  await persist('running');
+  const worker = options.worker || require('./ingestDeadline').boundedEmployer;
+  let outcome = 'completed';
+  try {
+    for (let index = 0; index < employers.length; index++) {
+      const remaining = TIME_BUDGET_MS - (Date.now() - startedAt);
+      if (remaining < 5000) { outcome = 'budget_exhausted'; break; }
+      const employer = employers[index], entry = entries[index];
+      entry.status = 'running'; entry.started_at = new Date().toISOString();
+      await persist('running');
+      console.log('INGEST_EMPLOYER_START', JSON.stringify({ run_id: runId, employer_id: employer.id }));
+      const result = await require('./ingestionRecovery').recoverEmployer(employer, Math.min(4 * 60 * 1000, remaining - 3000), worker);
+      Object.assign(entry, result, { ended_at: new Date().toISOString() });
+      if (result.counts_complete === false) summary.counts_complete = false;
+      for (const [key, count] of Object.entries(result.metrics || {})) summary.totals[key] = (summary.totals[key] || 0) + count;
+      if (['timeout','failed'].includes(result.status)) {
+        outcome = 'completed_with_errors';
+        const { error } = await supabase.from('employers').update({ sync_status: 'error', last_checked_at: entry.ended_at }).eq('id', employer.id);
+        if (error) entry.status_write_error = error.message;
+      }
+      await persist('running');
+      console.log('INGEST_EMPLOYER_END', JSON.stringify({ run_id: runId, ...entry }));
     }
-    await ingestEmployer(employer);
-    processedCount++;
+  } catch (error) {
+    outcome = 'failed'; summary.error = error.message;
+    throw error;
+  } finally {
+    summary.attempted = entries.filter(e => e.status !== 'not_reached').length;
+    summary.completed = entries.filter(e => ['completed','partial'].includes(e.status)).length;
+    summary.failed = entries.filter(e => ['failed','timeout'].includes(e.status)).length;
+    summary.skipped = entries.filter(e => e.status === 'skipped').length;
+    summary.not_reached = entries.filter(e => e.status === 'not_reached').length;
+    await persist(outcome, new Date().toISOString());
+    console.log('INGEST_RUN_END', JSON.stringify({ run_id: runId, status: outcome, ...summary }));
   }
+  const result = { run_id: runId, status: outcome, summary };
+  // The independent web-service watchdog owns diagnosis and notifications;
+  // those operations cannot extend this scheduled job's execution deadline.
+  return result;
 
-  console.log(`\nIngestion run complete. Processed ${processedCount} / ${employers.length} employer(s).`);
 }
 
-if (require.main === module) run();
+if (require.main === module) run().catch(error => { console.error(error.message); process.exitCode = 1; });
 module.exports = { ingestEmployer, run, runEmployerLoop, tryAcquireIngestLock, releaseIngestLock };

@@ -96,7 +96,12 @@ function hasUnambiguousForeignCountryEvidence(locationRaw) {
   }
 
   for (const name of FOREIGN_COUNTRY_NAMES) {
-    if (textNamesCountry(text, name)) return true;
+    // Remove only the two unambiguous U.S. phrases for the Jersey check.
+    // A separate Jersey or another foreign country must still win.
+    const countryText = name.toLowerCase() === 'jersey'
+      ? text.replace(/\bnew\s+jersey\b|\bjersey\s+city\b/gi, ' ')
+      : text;
+    if (textNamesCountry(countryText, name)) return true;
   }
   return false;
 }
