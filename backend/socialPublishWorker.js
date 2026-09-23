@@ -36,7 +36,9 @@ const { preflightCheckMedia } = require("./socialMediaPreflight");
 const { renderFeaturedJobGraphic } = require("./socialGraphic");
 const { uploadGraphicToStorage } = require("./socialMediaStorage");
 
-const JOB_COLUMNS = "id, employer_id, source_job_id, title_original, location_raw, territory, ai_analysis, compensation_text, salary_min, salary_max, employment_type, remote_status, experience_min_years, company_name, status, moderation_status, social_eligible, expires_at, last_seen_at";
+const { RECENT_SELECTIONS, rankForCityVariety } = require("./socialCityPreference");
+
+const JOB_COLUMNS = "id, city, state, location_evidence, job_lat, job_lng, employer_id, source_job_id, title_original, location_raw, territory, ai_analysis, compensation_text, salary_min, salary_max, employment_type, remote_status, experience_min_years, company_name, status, moderation_status, social_eligible, expires_at, last_seen_at";
 
 function loadConfig(env = process.env) {
   return {
@@ -70,52 +72,57 @@ async function fetchBrandedTerms(supabaseAdmin, config) {
   return buildBrandedTermList((data || []).map((e) => e.company_name), config.brandedTerms);
 }
 
+// Page through the eligible pool: a single ingestion batch must not hide
+// cities/employers beyond Supabase's first page. Fail closed on history errors.
+async function fetchSelectionRows(makeQuery, label) {
+  const rows = [];
+  const pageSize = 500;
+  for (let offset = 0; offset < 100000; offset += pageSize) {
+    const { data, error } = await makeQuery().range(offset, offset + pageSize - 1);
+    if (error) throw new Error(`Could not query ${label}: ${error.message}`);
+    rows.push(...(data || []));
+    if (!data || data.length < pageSize) return rows;
+  }
+  throw new Error(`${label} exceeds the selection safety limit`);
+}
+
 async function selectTopCandidate(supabaseAdmin, config, { excludedJobIds = new Set() } = {}) {
   const brandedTerms = await fetchBrandedTerms(supabaseAdmin, config);
+  const freshSince = new Date(Date.now() - (config.freshnessWindowDays ?? 3) * 86400000).toISOString();
+  const rawJobs = await fetchSelectionRows(() => supabaseAdmin.from("jobs").select(JOB_COLUMNS)
+    .eq("status", "active").eq("moderation_status", "approved").eq("social_eligible", true)
+    .gte("last_seen_at", freshSince).order("last_seen_at", { ascending: false }).order("id"), "candidate jobs");
+  const eligibleJobs = rawJobs.filter(job => !excludedJobIds.has(job.id) && isUsEligibleJob(job))
+    .filter(job => evaluateEligibility(job, { freshnessWindowDays: config.freshnessWindowDays, brandedTerms }).eligible);
+  if (!eligibleJobs.length) throw new Error("No eligible jobs found — nothing available to select for this run");
 
-  const { data: rawJobs, error } = await supabaseAdmin
-    .from("jobs")
-    .select(JOB_COLUMNS)
-    .eq("status", "active")
-    .eq("moderation_status", "approved")
-    .eq("social_eligible", true)
-    .order("last_seen_at", { ascending: false })
-    .limit(1000);
-  if (error) throw new Error(`Could not query candidate jobs: ${error.message}`);
-
-  const eligibleJobs = (rawJobs || [])
-    .filter((job) => !excludedJobIds.has(job.id))
-    .filter((job) => evaluateEligibility(job, { freshnessWindowDays: config.freshnessWindowDays, brandedTerms }).eligible);
-  if (eligibleJobs.length === 0) {
-    throw new Error("No eligible jobs found — nothing available to select for this run");
+  const historyColumns = "run_key, job_id, job_fingerprint, employer_spacing_key, category, scheduled_for";
+  const histories = await Promise.all(["facebook_status", "linkedin_status"].map(status =>
+    fetchSelectionRows(() => supabaseAdmin.from("social_post_history").select(historyColumns)
+      .in(status, ["scheduled", "sent"]).order("scheduled_for", { ascending: false }).order("run_key"), "posting history")));
+  // One selected job published to two channels counts once for variety.
+  const allHistory = [...new Map(histories.flat().map(row => [row.run_key, row])).values()]
+    .sort((a, b) => new Date(b.scheduled_for) - new Date(a.scheduled_for));
+  const fingerprints = new Set(allHistory.map(row => row.job_fingerprint));
+  const postedIds = new Set(allHistory.map(row => row.job_id));
+  const previouslyFeaturedJobIds = new Set(eligibleJobs
+    .filter(job => postedIds.has(job.id) || fingerprints.has(computeJobFingerprintForJob(job, config.spacingSecret))).map(job => job.id));
+  const recentHistory = allHistory.slice(0, RECENT_SELECTIONS);
+  const recentEmployerSpacingKeys = new Set(recentHistory.map(row => row.employer_spacing_key));
+  const recentCategories = recentHistory.slice(0, 4).map(row => row.category).filter(Boolean);
+  const historyIds = [...new Set(recentHistory.map(row => row.job_id).filter(Boolean))];
+  const historyJobs = new Map(rawJobs.map(job => [job.id, job]));
+  const missingIds = historyIds.filter(id => !historyJobs.has(id));
+  if (missingIds.length) {
+    const { data, error } = await supabaseAdmin.from("jobs").select("id, location_raw").in("id", missingIds);
+    if (error) throw new Error(`Could not query recent posting locations: ${error.message}`);
+    for (const job of data || []) historyJobs.set(job.id, job);
   }
-
-  const { data: fbHistory } = await supabaseAdmin
-    .from("social_post_history").select("job_fingerprint, employer_spacing_key, category, scheduled_for")
-    .in("facebook_status", ["scheduled", "sent"]).limit(5000);
-  const { data: liHistory } = await supabaseAdmin
-    .from("social_post_history").select("job_fingerprint, employer_spacing_key, category, scheduled_for")
-    .in("linkedin_status", ["scheduled", "sent"]).limit(5000);
-  const allHistory = [...(fbHistory || []), ...(liHistory || [])];
-
-  const previouslyFeaturedJobIds = new Set(
-    eligibleJobs
-      .filter((job) => allHistory.some((r) => r.job_fingerprint === computeJobFingerprintForJob(job, config.spacingSecret)))
-      .map((job) => job.id)
-  );
-  const recentEmployerSpacingKeys = new Set(allHistory.map((r) => r.employer_spacing_key).filter(Boolean));
-  const recentCategories = allHistory
-    .sort((a, b) => new Date(b.scheduled_for) - new Date(a.scheduled_for))
-    .slice(0, 4).map((r) => r.category).filter(Boolean);
-
-  const ranked = scoreAndSortCandidates(eligibleJobs, {
+  const qualityRanked = scoreAndSortCandidates(eligibleJobs, {
     previouslyFeaturedJobIds, recentEmployerSpacingKeys, recentCategories, spacingSecret: config.spacingSecret,
   });
-
-  // topJob preserved exactly as before for existing callers
-  // (runValidationOnly, runControlledLiveTest); rankedJobs is
-  // additive, used by the scheduled-slot path below to fall through
-  // to the next candidate if the top one fails final validation.
+  const ranked = rankForCityVariety(qualityRanked, { previouslyFeaturedJobIds, recentHistory, historyJobs,
+    employerKey: job => computeEmployerSpacingKey(job.employer_id, config.spacingSecret) });
   return { topJob: ranked[0], rankedJobs: ranked, brandedTerms };
 }
 
