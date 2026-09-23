@@ -22,6 +22,7 @@ async function bufferGraphQLRequest(accessToken, query, variables, { httpFetch =
   }
   const res = await httpFetch(BUFFER_API_ENDPOINT, {
     method: "POST",
+    signal: AbortSignal.timeout(20000),
     headers: {
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
@@ -148,7 +149,8 @@ async function createPost(accessToken, { channelId, text, photoUrl, mode = "shar
     err.isMutationError = true;
     throw err;
   }
-  return result?.post;
+  if (!result?.post?.id) throw new Error("Buffer returned no post receipt; reconcile before retrying");
+  return result.post;
 }
 
 /**
@@ -186,3 +188,35 @@ module.exports = {
   createPost,
   findPostById,
 };
+
+// Schema and scheduledPosts limit verified against the live Buffer API.
+async function readQueue(accessToken, organizationId, opts) {
+  const posts = [];
+  let after = null, limit;
+  for (let page = 0; page < 20; page++) {
+    const data = await bufferGraphQLRequest(accessToken, `query Queue($org:OrganizationId!,$after:String){
+      account{organizations{id limits{scheduledPosts}}}
+      posts(first:100,after:$after,input:{organizationId:$org,filter:{status:[scheduled,sending]}}){
+        edges{node{id text status dueAt channelId}} pageInfo{endCursor hasNextPage}
+      }
+    }`, { org: organizationId, after }, opts);
+    limit = data?.account?.organizations?.find(o => o.id === organizationId)?.limits?.scheduledPosts;
+    if (!Number.isInteger(limit) || limit < 1) throw Error('Buffer did not provide a usable scheduled-post limit');
+    if (!data?.posts?.pageInfo || !Array.isArray(data.posts.edges)) throw Error('Incomplete Buffer queue response');
+    posts.push(...data.posts.edges.map(e => e.node));
+    if (!data.posts.pageInfo.hasNextPage) return { posts, limit };
+    const next = data.posts.pageInfo.endCursor;
+    if (!next || next === after) throw Error('Buffer queue pagination stalled');
+    after = next;
+  }
+  throw Error('Buffer queue exceeded bounded pagination');
+}
+async function readRecentPosts(accessToken, organizationId, opts) {
+  const data = await bufferGraphQLRequest(accessToken, `query Recent($org:OrganizationId!){
+    posts(first:100,input:{organizationId:$org,filter:{status:[sent]}}){edges{node{id text dueAt sentAt channelId}}}
+  }`, { org: organizationId }, opts);
+  if (!Array.isArray(data?.posts?.edges)) throw Error('Cannot read recent Buffer post history');
+  return data.posts.edges.map(e => e.node);
+}
+module.exports.readQueue = readQueue;
+module.exports.readRecentPosts = readRecentPosts;

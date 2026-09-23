@@ -179,6 +179,7 @@ const FACT_ICONS = {
 // unreadable at feed size.
 function buildFactList(candidate) {
   const facts = [];
+  if (candidate.employer_display) facts.push({ icon: "briefcase", main: candidate.employer_display });
   // Direct instruction: location and category are always prioritized
   // first (guaranteed in the grid whenever present, never crowded out
   // by other optional facts), then compensation, then work
@@ -390,7 +391,7 @@ function buildMiddleSectionSvg(candidate) {
 
   <!-- FEATURED JOB pill (fixed) -->
   <rect x="213" y="52" width="166" height="42" rx="12" fill="#dff2ff"/>
-  <text x="296" y="79" text-anchor="middle" class="label">FEATURED JOB</text>
+  <text x="296" y="79" text-anchor="middle" class="label">${candidate.post_kind === "match" ? "ROOK MATCH" : "FEATURED JOB"}</text>
 
   <!-- Title (dynamic, fitted) -->
   <text x="213" class="sans navy" font-size="${titleFontSize}" font-weight="800">${tspans(titleLines, 213, titleBaselineY, titleLineHeight)}</text>
@@ -403,7 +404,7 @@ function buildMiddleSectionSvg(candidate) {
   <rect x="871" y="75" width="44" height="38" rx="6" fill="#073869"/>
   <path d="M880 77v-9a13.5 13.5 0 0 1 27 0v9" fill="none" stroke="#073869" stroke-width="6.5"/>
   <circle cx="893" cy="93" r="4.5" fill="#fff"/>
-  <text x="893" y="142" text-anchor="middle" class="sans navy" font-size="17" font-weight="800">SEE THE EMPLOYER</text>
+  <text x="893" y="142" text-anchor="middle" class="sans navy" font-size="17" font-weight="800">${candidate.employer_display ? "SEE JOB DETAILS" : "SEE THE EMPLOYER"}</text>
   <text x="893" y="166" text-anchor="middle" class="sans navy" font-size="17" font-weight="800">ON ROOK</text>
 
   <line x1="67" y1="${divider1Y}" x2="957" y2="${divider1Y}" stroke="#d7e5f3" stroke-width="2"/>
@@ -414,7 +415,7 @@ function buildMiddleSectionSvg(candidate) {
 
   <!-- Final ROOK details line (fixed, anchored position) -->
   <rect x="68" y="${finalLineY}" width="888" height="35" rx="17.5" fill="#eef7ff"/>
-  <text x="512" y="${finalLineY + 24}" text-anchor="middle" class="sans" font-size="19" font-weight="700" fill="#0758b7">See the employer and complete job details on ROOK</text>
+  <text x="512" y="${finalLineY + 24}" text-anchor="middle" class="sans" font-size="19" font-weight="700" fill="#0758b7">${candidate.employer_display ? "Explore the complete job details on ROOK" : "See the employer and complete job details on ROOK"}</text>
 </svg>`;
 
   return svg;

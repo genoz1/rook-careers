@@ -147,7 +147,7 @@ function safeEvaluateSocialEligibilityForIngestion(job) {
 // validate endpoint is a reliable signal the listing has moved on.
 // =================================================================
 const CONTENT_VERSION_FIELDS = [
-  "title_original", "location_raw", "territory",
+  "title_original", "company_name", "location_raw", "territory",
   "compensation_text", "salary_min", "salary_max",
   "employment_type", "remote_status", "status", "moderation_status",
   "social_eligible", "experience_min_years",
@@ -688,9 +688,9 @@ function computeRunKey(dateStr, slot) {
 }
 
 function computeScheduledForUtc(dateStr, slot) {
-  if (slot === "pm") return nyWallClockToUtc(dateStr, 17, 0);
+  if (slot === "pm") return nyWallClockToUtc(dateStr, 16, 30);
   if (slot === "mid") return nyWallClockToUtc(dateStr, 13, 0);
-  return nyWallClockToUtc(dateStr, 9, 0);
+  return nyWallClockToUtc(dateStr, 8, 30);
 }
 
 function buildHistoryRow({ runKey, slot, jobId, jobFingerprint, contentVersion, employerSpacingKey, category, scheduledFor, facebook, linkedin, creativeUrl, captionVersion, selectedAt, validatedAt, failureReason }) {

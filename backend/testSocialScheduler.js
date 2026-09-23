@@ -22,9 +22,9 @@ test("8:30 AM EDT (summer, UTC-4) is correctly detected as the AM window — sam
   const result = determineActiveSlot(new Date("2026-07-15T12:30:00Z"));
   assert.deepStrictEqual(result, { slot: "am", dateStr: "2026-07-15" });
 });
-test("12:30 PM EDT is the midday slot", () => {
+test("12:30 PM EDT does not dispatch a third slot", () => {
   assert.deepStrictEqual(determineActiveSlot(new Date("2026-07-15T16:30:00Z")),
-    { slot: "mid", dateStr: "2026-07-15" });
+    null);
 });
 test("4:30 PM EST (winter) is correctly detected as the PM window", () => {
   const result = determineActiveSlot(new Date("2026-01-15T21:30:00Z"));
@@ -88,9 +88,9 @@ test("after 8:30am ET but before 4:30pm ET, the next AM run is tomorrow", () => 
   const { nextAm } = computeNextRunTimes(new Date("2026-01-15T15:00:00Z"));
   assert.strictEqual(nextAm.dateStr, "2026-01-16");
 });
-test("before 12:30pm ET, the next midday run is today", () => {
+test("midday has no next run", () => {
   const { nextMid } = computeNextRunTimes(new Date("2026-01-15T16:00:00Z"));
-  assert.strictEqual(nextMid.dateStr, "2026-01-15");
+  assert.strictEqual(nextMid, null);
 });
 test("after 4:30pm ET, the next PM run is tomorrow", () => {
   const { nextPm } = computeNextRunTimes(new Date("2026-01-15T23:00:00Z"));

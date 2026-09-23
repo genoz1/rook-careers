@@ -1,8 +1,6 @@
 #!/usr/bin/env node
-// Buffer publishing worker — channel discovery, validation-only dry
-// runs, and a controlled single-post live test. The recurring
-// twice-daily scheduler is intentionally NOT part of this file; this
-// only ever publishes when explicitly invoked with --confirm-live.
+// Buffer publishing worker: discovery, validation, controlled live tests,
+// and the scheduled-dispatch entry point for seven-day replenishment.
 //
 // Usage (from the DigitalOcean console, or locally with real env vars):
 //   node backend/socialPublishWorker.js discover
@@ -86,7 +84,7 @@ async function fetchSelectionRows(makeQuery, label) {
   throw new Error(`${label} exceeds the selection safety limit`);
 }
 
-async function selectTopCandidate(supabaseAdmin, config, { excludedJobIds = new Set() } = {}) {
+async function selectTopCandidate(supabaseAdmin, config, { excludedJobIds = new Set(), neverFeaturedOnly = false } = {}) {
   const brandedTerms = await fetchBrandedTerms(supabaseAdmin, config);
   const freshSince = new Date(Date.now() - (config.freshnessWindowDays ?? 3) * 86400000).toISOString();
   const rawJobs = await fetchSelectionRows(() => supabaseAdmin.from("jobs").select(JOB_COLUMNS)
@@ -123,7 +121,8 @@ async function selectTopCandidate(supabaseAdmin, config, { excludedJobIds = new 
   });
   const ranked = rankForCityVariety(qualityRanked, { previouslyFeaturedJobIds, recentHistory, historyJobs,
     employerKey: job => computeEmployerSpacingKey(job.employer_id, config.spacingSecret) });
-  return { topJob: ranked[0], rankedJobs: ranked, brandedTerms };
+  const unused = ranked.filter(job => !neverFeaturedOnly || !previouslyFeaturedJobIds.has(job.id));
+  return { topJob: unused[0], rankedJobs: unused, brandedTerms };
 }
 
 async function provePublicUrlValid(supabaseAdmin, jobId) {
@@ -335,7 +334,7 @@ async function runControlledLiveTest(config, { confirmLive } = {}, deps = {}) {
       });
       results.facebook = { status: "sent", bufferPostId: post?.id || null, channelId: channels.facebook.id };
     } catch (err) {
-      results.facebook = { status: "failed", error: err.message, channelId: channels.facebook.id };
+      results.facebook = { status: err.capacity ? "deferred_capacity" : "failed", error: err.capacity ? null : err.message, channelId: channels.facebook.id };
     }
   } else {
     results.facebook = { status: "skipped_duplicate", channelId: channels.facebook.id };
@@ -351,7 +350,7 @@ async function runControlledLiveTest(config, { confirmLive } = {}, deps = {}) {
       });
       results.linkedin = { status: "sent", bufferPostId: post?.id || null, channelId: channels.linkedin.id };
     } catch (err) {
-      results.linkedin = { status: "failed", error: err.message, channelId: channels.linkedin.id };
+      results.linkedin = { status: err.capacity ? "deferred_capacity" : "failed", error: err.capacity ? null : err.message, channelId: channels.linkedin.id };
     }
   } else {
     results.linkedin = { status: "skipped_duplicate", channelId: channels.linkedin.id };
@@ -391,18 +390,9 @@ async function runControlledLiveTest(config, { confirmLive } = {}, deps = {}) {
 }
 
 // =================================================================
-// Recurring three-times-daily automation — the actual scheduled entry
-// point. Everything it relies on (candidate selection, final
-// validation, media preflight, channel identification, Buffer
-// posting, history recording) is the exact same, already-tested
-// machinery runControlledLiveTest uses; this function differs only in
-// the ways the recurring job genuinely needs to: no --confirm-live
-// gate (SOCIAL_AUTOMATION_ENABLED plus every validation step below is
-// the safeguard for an unattended run), Buffer's customScheduled mode
-// for the slot's ~9am/~5pm ET time instead of shareNow, excludes the
-// morning's job from the afternoon run, and falls through to the
-// next-ranked candidate instead of aborting if the top one fails
-// final validation.
+// Two-slot worker used by socialQueue's seven-day replenisher. Existing
+// validation, ranking, graphics and history are reused. The replenisher adds
+// a durable per-channel send ledger and bounded retries around this worker.
 // =================================================================
 
 /**
@@ -419,6 +409,8 @@ async function runScheduledSlot(slot, dateStr, config, deps = {}) {
   if (String(config.automationEnabled).toLowerCase() !== "true") {
     return { ok: false, stage: "disabled", slot, dateStr };
   }
+
+  if (!["am", "pm"].includes(slot)) return { ok: false, stage: "unsupported_slot" };
 
   // Validate config BEFORE createClient(). The Supabase client library
   // throws its own internal "supabaseKey is required" when passed an
@@ -445,12 +437,14 @@ async function runScheduledSlot(slot, dateStr, config, deps = {}) {
   // further. The database's own unique index on run_key is the
   // ultimate backstop regardless; this just avoids redundant work
   // (candidate selection, Buffer calls) in the common case.
-  const { data: existingRunRows } = await supabaseAdmin
-    .from("social_post_history").select("facebook_status, linkedin_status, facebook_buffer_post_id, linkedin_buffer_post_id")
+  const { data: existingRunRows, error: existingRunError } = await supabaseAdmin
+    .from("social_post_history").select("*")
     .eq("run_key", runKey);
+  if (existingRunError) throw new Error("Cannot read social history");
   const existingRun = (existingRunRows || [])[0] || null;
   const isDone = (status) => status === "sent" || status === "scheduled";
   if (existingRun && isDone(existingRun.facebook_status) && isDone(existingRun.linkedin_status)) {
+    if (deps.verifyExistingRun && !deps.verifyExistingRun(existingRun)) return { ok: false, stage: "receipt_reconciliation_required" };
     // Both platforms already succeeded for this exact run_key — a
     // customScheduled post's genuine success state is "scheduled"
     // (Buffer marks it "sent" only later, once actually published at
@@ -469,14 +463,22 @@ async function runScheduledSlot(slot, dateStr, config, deps = {}) {
 
   // Each later slot must differ from jobs already selected today.
   let excludedJobIds = new Set();
-  for (const earlier of slot === "mid" ? ["am"] : slot === "pm" ? ["am", "mid"] : []) {
-    const { data: rows } = await supabaseAdmin.from("social_post_history")
+  for (const earlier of slot === "pm" ? ["am"] : []) {
+    const { data: rows, error: earlierError } = await supabaseAdmin.from("social_post_history")
       .select("job_id").eq("run_key", computeRunKey(dateStr, earlier));
+    if (earlierError) throw new Error("Cannot read earlier slot history");
     const jobId = (rows || [])[0]?.job_id;
     if (jobId) excludedJobIds.add(jobId);
   }
 
-  const { rankedJobs } = await selectTopCandidate(supabaseAdmin, config, { excludedJobIds });
+  // Keep a partial run tied to the same job on both channels.
+  let rankedJobs;
+  if (existingRun?.job_id) {
+    const pinned = await fetchFreshJob(supabaseAdmin, existingRun.job_id);
+    rankedJobs = pinned ? [pinned] : [];
+  } else {
+    ({ rankedJobs } = await selectTopCandidate(supabaseAdmin, config, { excludedJobIds, neverFeaturedOnly: true }));
+  }
   const scheduledForUtc = computeScheduledForUtc(dateStr, slot);
 
   // Direct instruction: if the selected job fails final validation,
@@ -486,11 +488,12 @@ async function runScheduledSlot(slot, dateStr, config, deps = {}) {
   let topJob = null;
   const skippedCandidates = [];
   for (const job of rankedJobs) {
+    if (slot === "am" && !String(job.company_name || "").trim()) continue;
     const attemptCandidate = buildCandidateResponse(job, config.spacingSecret);
     const attemptValidation = await validateJobFresh(supabaseAdmin, supabaseAnon, job.id, config, attemptCandidate.content_version);
-    if (attemptValidation.eligible) {
+    if (attemptValidation.eligible && (!attemptValidation.job.expires_at || new Date(attemptValidation.job.expires_at) > scheduledForUtc)) {
       candidate = attemptCandidate;
-      topJob = job;
+      topJob = attemptValidation.job;
       break;
     }
     skippedCandidates.push({ jobId: job.id, reasonCodes: attemptValidation.reason_codes });
@@ -507,6 +510,12 @@ async function runScheduledSlot(slot, dateStr, config, deps = {}) {
     return { ok: false, stage: "final_pre_publish_check", slot, dateStr, runKey, jobId: topJob.id, reasonCodes: finalValidation.reason_codes, skippedCandidates };
   }
 
+  candidate.post_kind = slot === "am" ? "featured" : "match";
+  if (slot === "am") candidate.employer_display = finalValidation.job.company_name;
+  const marketing = await (deps.generateMarketing || require("./socialMarketingCopy").generateMarketing)({ slot, category: candidate.category });
+  candidate.marketing = marketing.text;
+  candidate.marketingVariants = marketing;
+
   const fingerprint = computeJobFingerprintForJob(topJob, config.spacingSecret);
 
   // Cross-source duplicate protection: has this exact fingerprint
@@ -514,11 +523,12 @@ async function runScheduledSlot(slot, dateStr, config, deps = {}) {
   // run featured the same real opportunity under a different
   // source_job_id)? Belt-and-suspenders on top of ranking already
   // deprioritizing previously-featured fingerprints.
-  const { data: fingerprintHistory } = await supabaseAdmin
+  const { data: fingerprintHistory, error: fingerprintError } = await supabaseAdmin
     .from("social_post_history")
     .select("facebook_status, linkedin_status")
     .eq("job_fingerprint", fingerprint)
     .neq("run_key", runKey);
+  if (fingerprintError) throw new Error("Cannot read duplicate history");
   const alreadyPostedElsewhere = {
     facebook: (fingerprintHistory || []).some((r) => r.facebook_status === "sent" || r.facebook_status === "scheduled"),
     linkedin: (fingerprintHistory || []).some((r) => r.linkedin_status === "sent" || r.linkedin_status === "scheduled"),
@@ -528,7 +538,18 @@ async function runScheduledSlot(slot, dateStr, config, deps = {}) {
     linkedin: existingRun?.linkedin_status === "sent" || existingRun?.linkedin_status === "scheduled",
   };
 
-  const graphicBuffer = await renderFeaturedJobGraphic(candidate);
+  if (alreadyPostedElsewhere.facebook || alreadyPostedElsewhere.linkedin) {
+    return { ok: false, stage: "duplicate_candidate", runKey };
+  }
+  // Persist the chosen job before either channel can accept a post.
+  const { error: selectionError } = await supabaseAdmin.from("social_post_history").upsert({
+    run_key: runKey, slot, job_id: topJob.id, job_fingerprint: fingerprint,
+    scheduled_for: scheduledForUtc, job_content_version: candidate.content_version,
+    employer_spacing_key: computeEmployerSpacingKey(topJob.employer_id, config.spacingSecret),
+    category: candidate.category,
+  }, { onConflict: "run_key" });
+  if (selectionError) throw new Error("Cannot persist social selection");
+  const graphicBuffer = await (deps.renderFeaturedJobGraphic || renderFeaturedJobGraphic)(candidate);
   const uploaded = await (deps.uploadGraphicToStorage || uploadGraphicToStorage)(supabaseAdmin, {
     dateStr, slot, jobId: topJob.id, contentVersion: candidate.content_version, buffer: graphicBuffer,
   });
@@ -539,8 +560,8 @@ async function runScheduledSlot(slot, dateStr, config, deps = {}) {
       runKey, slot, jobId: topJob.id, jobFingerprint: fingerprint, contentVersion: candidate.content_version,
       employerSpacingKey: computeEmployerSpacingKey(topJob.employer_id, config.spacingSecret),
       category: candidate.category, scheduledFor: scheduledForUtc,
-      facebook: { channelId: channels.facebook.id, status: "failed" },
-      linkedin: { channelId: channels.linkedin.id, status: "failed" },
+      facebook: { channelId: channels.facebook.id, status: existingRun?.facebook_status || "failed", bufferPostId: existingRun?.facebook_buffer_post_id },
+      linkedin: { channelId: channels.linkedin.id, status: existingRun?.linkedin_status || "failed", bufferPostId: existingRun?.linkedin_buffer_post_id },
       creativeUrl: uploaded.publicUrl, captionVersion: "v1",
       selectedAt: new Date().toISOString(), validatedAt: new Date().toISOString(),
       failureReason: `Media preflight failed: ${mediaPreflight.reason}`,
@@ -549,6 +570,11 @@ async function runScheduledSlot(slot, dateStr, config, deps = {}) {
     return { ok: false, stage: "media_preflight", slot, dateStr, runKey, jobId: topJob.id, reason: mediaPreflight.reason, historyRecorded: !preflightHistoryError };
   }
 
+  const recheck = await validateJobFresh(supabaseAdmin, supabaseAnon, topJob.id, config, candidate.content_version);
+  if (!recheck.eligible || (slot === "am" && recheck.job.company_name !== candidate.employer_display) ||
+      (recheck.job.expires_at && new Date(recheck.job.expires_at) <= scheduledForUtc)) {
+    return { ok: false, stage: "pre_buffer_validation", runKey };
+  }
   const postCopyLinkedIn = buildPostCopy(candidate, "linkedin");
   const postCopyFacebook = buildPostCopy(candidate, "facebook");
   const postCopy = postCopyLinkedIn; // default
@@ -559,7 +585,9 @@ async function runScheduledSlot(slot, dateStr, config, deps = {}) {
   // this same run_key — never duplicate the successful one. Checked
   // against both this run_key's own prior state and any other
   // successful post of the same real content under a different key.
-  if (!alreadyDoneThisRun.facebook && !alreadyPostedElsewhere.facebook) {
+  if (deps.channelAllowed && !deps.channelAllowed(channels.facebook.id) && !alreadyDoneThisRun.facebook) {
+    results.facebook = { status: "deferred_capacity", channelId: channels.facebook.id };
+  } else if (!alreadyDoneThisRun.facebook && !alreadyPostedElsewhere.facebook) {
     try {
       const post = await createPostFn(config.bufferAccessToken, {
         channelId: channels.facebook.id, text: postCopyFacebook, photoUrl: uploaded.publicUrl,
@@ -569,13 +597,15 @@ async function runScheduledSlot(slot, dateStr, config, deps = {}) {
       results.facebook = { status: "scheduled", bufferPostId: post?.id || null, channelId: channels.facebook.id };
     } catch (err) {
       console.error(`[Buffer] Facebook post failed for run_key=${runKey}: ${err.message}`);
-      results.facebook = { status: "failed", error: err.message, channelId: channels.facebook.id };
+      results.facebook = { status: err.capacity ? "deferred_capacity" : "failed", error: err.capacity ? null : err.message, channelId: channels.facebook.id };
     }
   } else {
     results.facebook = { status: existingRun?.facebook_status || "skipped_duplicate", channelId: channels.facebook.id, bufferPostId: existingRun?.facebook_buffer_post_id || null };
   }
 
-  if (!alreadyDoneThisRun.linkedin && !alreadyPostedElsewhere.linkedin) {
+  if (deps.channelAllowed && !deps.channelAllowed(channels.linkedin.id) && !alreadyDoneThisRun.linkedin) {
+    results.linkedin = { status: "deferred_capacity", channelId: channels.linkedin.id };
+  } else if (!alreadyDoneThisRun.linkedin && !alreadyPostedElsewhere.linkedin) {
     try {
       const post = await createPostFn(config.bufferAccessToken, {
         channelId: channels.linkedin.id, text: postCopyLinkedIn, photoUrl: uploaded.publicUrl,
@@ -584,7 +614,7 @@ async function runScheduledSlot(slot, dateStr, config, deps = {}) {
       results.linkedin = { status: "scheduled", bufferPostId: post?.id || null, channelId: channels.linkedin.id };
     } catch (err) {
       console.error(`[Buffer] LinkedIn post failed for run_key=${runKey}: ${err.message}`);
-      results.linkedin = { status: "failed", error: err.message, channelId: channels.linkedin.id };
+      results.linkedin = { status: err.capacity ? "deferred_capacity" : "failed", error: err.capacity ? null : err.message, channelId: channels.linkedin.id };
     }
   } else {
     results.linkedin = { status: existingRun?.linkedin_status || "skipped_duplicate", channelId: channels.linkedin.id, bufferPostId: existingRun?.linkedin_buffer_post_id || null };
@@ -606,9 +636,11 @@ async function runScheduledSlot(slot, dateStr, config, deps = {}) {
   });
   const { error: historyError } = await supabaseAdmin.from("social_post_history").upsert(historyRow, { onConflict: "run_key" });
 
-  const bothSucceeded = results.facebook.status !== "failed" && results.linkedin.status !== "failed";
+  const bothSucceeded = isDone(results.facebook.status) && isDone(results.linkedin.status);
+  const capacityDeferred = Object.values(results).some(r => r.status === "deferred_capacity") && !Object.values(results).some(r => r.status === "failed");
   return {
-    ok: bothSucceeded,
+    ok: bothSucceeded && !historyError,
+    aiFallback: marketing.fallback, capacityDeferred,
     slot, dateStr, runKey, jobId: topJob.id,
     scheduledForUtc, results, historyRecorded: !historyError, skippedCandidates,
   };
@@ -688,22 +720,9 @@ if (require.main === module) {
         const result = await runControlledLiveTest(config, { confirmLive });
         console.log(JSON.stringify(result, null, 2));
       } else if (command === "scheduled-dispatch") {
-        // The actual DigitalOcean Scheduled Job entry point — invoked
-        // frequently (every 15 minutes, DO's minimum interval); it
-        // decides for itself whether "now" is within a posting
-        // window, so a slightly early/late/duplicate invocation is
-        // harmless. No-op (exit 0) outside both windows, which is the
-        // normal outcome for the vast majority of invocations.
-        const active = determineActiveSlot(new Date());
-        if (!active) {
-          console.log(`Not within a posting window at ${new Date().toISOString()} — no-op.`);
-        } else {
-          const result = await runScheduledSlot(active.slot, active.dateStr, config);
-          console.log(JSON.stringify(result, null, 2));
-          if (!result.ok && result.stage !== "already_completed" && result.stage !== "disabled") {
-            process.exit(1);
-          }
-        }
+        const result = await require("./socialQueue").replenish(config);
+        console.log(JSON.stringify(result));
+        if (!result.ok) process.exitCode = 1;
       } else if (command === "dry-run-dispatch") {
         // Safe out-of-window test — runs the full scheduled-dispatch
         // logic (config check, candidate selection, validation, graphic

@@ -798,7 +798,7 @@ async function run() {
     assert.notStrictEqual(pmResult.jobId, amJobId, "the PM job must be different from the AM job");
   });
 
-  await asyncTest("three daily runs select distinct jobs and queue each only once", async () => {
+  await asyncTest("two daily runs select distinct jobs; midday is disabled", async () => {
     const config = loadConfig({
       SOCIAL_AUTOMATION_ENABLED: "true", SUPABASE_URL: "x", SUPABASE_SERVICE_ROLE_KEY: "x", SUPABASE_ANON_KEY: "x", SOCIAL_SPACING_HMAC_SECRET: SECRET,
       BUFFER_ACCESS_TOKEN: "x", BUFFER_ROOK_LINKEDIN_CHANNEL_ID: "li-page-1", BUFFER_ROOK_FACEBOOK_CHANNEL_ID: "fb-page-1",
@@ -818,17 +818,17 @@ async function run() {
       uploadGraphicToStorage: async () => ({ publicUrl: "https://x/fake.jpg" }),
     };
     const results = [];
-    for (const slot of ["am", "mid", "pm"]) {
+    for (const slot of ["am", "pm"]) {
       results.push(await runScheduledSlot(slot, "2026-09-05", config, deps));
     }
     assert.ok(results.every(result => result.ok));
-    assert.strictEqual(new Set(results.map(result => result.jobId)).size, 3);
-    assert.strictEqual(history.length, 3);
-    assert.deepStrictEqual(history.map(row => row.slot), ["am", "mid", "pm"]);
-    assert.strictEqual(calls, 6, "one Facebook and one LinkedIn post per slot");
+    assert.strictEqual(new Set(results.map(result => result.jobId)).size, 2);
+    assert.strictEqual(history.length, 2);
+    assert.deepStrictEqual(history.map(row => row.slot), ["am", "pm"]);
+    assert.strictEqual(calls, 4, "one Facebook and one LinkedIn post per slot");
     const repeat = await runScheduledSlot("mid", "2026-09-05", config, deps);
-    assert.strictEqual(repeat.stage, "already_completed");
-    assert.strictEqual(calls, 6);
+    assert.strictEqual(repeat.stage, "unsupported_slot");
+    assert.strictEqual(calls, 4);
   });
 
   console.log("\n=== Recurring automation: candidate fallback on final-validation failure ===");
@@ -950,6 +950,46 @@ async function run() {
     assert.strictEqual(facebookAttempts, 2, "Facebook retried exactly once more");
     assert.strictEqual(linkedinAttempts, 1, "LinkedIn must NOT be re-posted — it already succeeded");
     assert.strictEqual(history.length, 1, "still one row, updated in place");
+  });
+
+  await asyncTest("AM and PM preserve facts, reveal employer only for AM, and use exact slots", async () => {
+    const config = loadConfig({ SOCIAL_AUTOMATION_ENABLED: "true", SUPABASE_URL: "x", SUPABASE_SERVICE_ROLE_KEY: "x", SUPABASE_ANON_KEY: "x", SOCIAL_SPACING_HMAC_SECRET: SECRET,
+      BUFFER_ACCESS_TOKEN: "x", BUFFER_ROOK_LINKEDIN_CHANNEL_ID: "li-page-1", BUFFER_ROOK_FACEBOOK_CHANNEL_ID: "fb-page-1" });
+    const jobs = [baseJob(), baseJob({ id: "job-2", employer_id: "employer-2", title_original: "Sales Specialist" })];
+    const history = [], posts = [], graphics = [];
+    const db = makeMockSupabase({ jobs, history });
+    const deps = { supabaseAdmin: db, supabaseAnon: db,
+      listAllChannels: async () => [LINKEDIN_PAGE, FACEBOOK_PAGE],
+      generateMarketing: async () => ({ text: "Explore your next move.", fallback: false }),
+      renderFeaturedJobGraphic: async c => { graphics.push(c); return Buffer.from("fake"); },
+      uploadGraphicToStorage: async () => ({ publicUrl: "https://x/fake.jpg" }),
+      preflightCheckMedia: async () => ({ ok: true }),
+      createPost: async (_, p) => { posts.push(p); return { id: `post-${posts.length}` }; },
+    };
+    assert.equal((await runScheduledSlot("am", "2026-09-25", config, deps)).ok, true);
+    assert.equal((await runScheduledSlot("pm", "2026-09-25", config, deps)).ok, true);
+    assert.match(posts[0].text, /Acme Diagnostics/);
+    assert.doesNotMatch(posts[2].text, /Acme Diagnostics/);
+    assert.equal(graphics[0].employer_display, "Acme Diagnostics");
+    assert.equal(graphics[1].employer_display, undefined);
+    assert.equal(graphics[1].post_kind, "match");
+    assert.equal(posts[0].dueAt.toISOString(), "2026-09-25T12:30:00.000Z");
+    assert.equal(posts[2].dueAt.toISOString(), "2026-09-25T20:30:00.000Z");
+  });
+
+  await asyncTest("job closing while its graphic renders is not sent to Buffer", async () => {
+    const config = loadConfig({ SOCIAL_AUTOMATION_ENABLED: "true", SUPABASE_URL: "x", SUPABASE_SERVICE_ROLE_KEY: "x", SUPABASE_ANON_KEY: "x", SOCIAL_SPACING_HMAC_SECRET: SECRET,
+      BUFFER_ACCESS_TOKEN: "x", BUFFER_ROOK_LINKEDIN_CHANNEL_ID: "li-page-1", BUFFER_ROOK_FACEBOOK_CHANNEL_ID: "fb-page-1" });
+    const job = baseJob(), db = makeMockSupabase({ jobs: [job] });
+    const result = await runScheduledSlot("pm", "2026-09-25", config, {
+      supabaseAdmin: db, supabaseAnon: db, listAllChannels: async () => [LINKEDIN_PAGE, FACEBOOK_PAGE],
+      generateMarketing: async () => ({ text: "Explore.", fallback: false }),
+      renderFeaturedJobGraphic: async () => { job.status = "closed"; return Buffer.from("fake"); },
+      uploadGraphicToStorage: async () => ({ publicUrl: "https://x/fake.jpg" }),
+      preflightCheckMedia: async () => ({ ok: true }),
+      createPost: async () => assert.fail("closed job must not be posted"),
+    });
+    assert.equal(result.stage, "pre_buffer_validation");
   });
 
   console.log("\n=== Recurring automation: scheduler status reporting ===");

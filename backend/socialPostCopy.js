@@ -5,6 +5,10 @@
 
 function buildPostCopy(candidate, platform = "linkedin") {
   const lines = [];
+  if (candidate.post_kind) lines.push(candidate.post_kind === "featured" ? "Featured Job" : "ROOK Match");
+  const marketing = candidate.marketingVariants?.[platform] || candidate.marketing;
+  if (marketing) lines.push(marketing);
+  if (candidate.employer_display) lines.push(candidate.employer_display);
   lines.push(candidate.title);
 
   const locationText = candidate.territory_display || candidate.location_display;
@@ -20,7 +24,7 @@ function buildPostCopy(candidate, platform = "linkedin") {
   }
 
   lines.push("");
-  lines.push("See the employer and complete job details on ROOK.");
+  lines.push(candidate.employer_display ? "Explore the complete job details on ROOK." : "See the employer and complete job details on ROOK.");
   lines.push("Start your 3-day free trial:");
   lines.push(platform === "facebook" ? (candidate.public_url_facebook || candidate.public_url) : (candidate.public_url_linkedin || candidate.public_url));
 

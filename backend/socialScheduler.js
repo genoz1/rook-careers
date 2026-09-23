@@ -1,4 +1,4 @@
-// Pure, timezone-aware scheduling logic for the three daily social
+// Pure, timezone-aware scheduling logic for the two daily social
 // automation runs. Deliberately timezone-name-based (via Intl's
 // America/New_York, the same mechanism nyWallClockToUtc in
 // socialAutomation.js already relies on) rather than any fixed UTC
@@ -49,21 +49,21 @@ function isWithinWindow(nowParts, target, windowMinutes = WINDOW_MINUTES) {
 }
 
 /**
- * Given the current moment, returns which slot ('am' | 'mid' | 'pm') is
- * currently due, or null if no window is active right now. The three
- * windows (8:15-8:45, 12:15-12:45, 16:15-16:45) don't
+ * Given the current moment, returns which slot ('am' | 'pm') is
+ * currently due, or null if no window is active right now. The two
+ * windows (8:15-8:45, 16:15-16:45) don't
  * overlap.
  */
 function determineActiveSlot(now = new Date()) {
   const nowParts = getEasternParts(now);
   if (isWithinWindow(nowParts, AM_TARGET)) return { slot: "am", dateStr: nowParts.dateStr };
-  if (isWithinWindow(nowParts, MID_TARGET)) return { slot: "mid", dateStr: nowParts.dateStr };
+  // Midday is intentionally disabled: only two daily posts.
   if (isWithinWindow(nowParts, PM_TARGET)) return { slot: "pm", dateStr: nowParts.dateStr };
   return null;
 }
 
 /**
- * Computes the next upcoming AM, midday, and PM run times from "now," in both
+ * Computes the next upcoming AM and PM run times from "now," in both
  * Eastern wall-clock and UTC — for the scheduler-status command. Pure
  * date arithmetic in the target timezone; does not depend on any
  * particular current offset, so it's correct across a DST boundary
@@ -90,7 +90,7 @@ function computeNextRunTimes(now = new Date()) {
 
   return {
     nextAm: nextOccurrence(AM_TARGET),
-    nextMid: nextOccurrence(MID_TARGET),
+    nextMid: null,
     nextPm: nextOccurrence(PM_TARGET),
   };
 }

@@ -712,11 +712,11 @@ async function run() {
   test("fall-back transition day (2026-11-01)", () => {
     assert.strictEqual(nyWallClockToUtc("2026-11-01", 9, 0).toISOString(), "2026-11-01T14:00:00.000Z");
   });
-  test("computeScheduledForUtc picks 9am, 1pm, and 5pm Eastern, DST-aware", () => {
-    assert.strictEqual(computeScheduledForUtc("2026-07-15", "am").toISOString(), "2026-07-15T13:00:00.000Z");
+  test("computeScheduledForUtc picks 8:30am and 4:30pm Eastern, DST-aware", () => {
+    assert.strictEqual(computeScheduledForUtc("2026-07-15", "am").toISOString(), "2026-07-15T12:30:00.000Z");
     assert.strictEqual(computeRunKey("2026-07-15", "mid"), "2026-07-15-MID");
     assert.strictEqual(computeScheduledForUtc("2026-07-15", "mid").toISOString(), "2026-07-15T17:00:00.000Z");
-    assert.strictEqual(computeScheduledForUtc("2026-07-15", "pm").toISOString(), "2026-07-15T21:00:00.000Z");
+    assert.strictEqual(computeScheduledForUtc("2026-07-15", "pm").toISOString(), "2026-07-15T20:30:00.000Z");
   });
 
   console.log("\n=== Long-title graphic rendering ===");
