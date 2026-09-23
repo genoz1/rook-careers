@@ -119,10 +119,12 @@ async function selectTopCandidate(supabaseAdmin, config, { excludedJobIds = new 
   return { topJob: ranked[0], rankedJobs: ranked, brandedTerms };
 }
 
-async function provePublicUrlValid(supabaseAnon, jobId) {
+async function provePublicUrlValid(supabaseAdmin, jobId) {
   // Match the public job page's eligibility gate, including source-country
   // evidence for remote jobs. An active record alone is not a usable page.
-  const { data, error } = await supabaseAnon.from("jobs")
+  // Public pages read through the server and expose a masked projection.
+  // Direct anonymous table reads are intentionally denied by RLS.
+  const { data, error } = await supabaseAdmin.from("jobs")
     .select("id, location_raw, location_evidence, job_lat, job_lng, state")
     .eq("id", jobId).eq("status", "active").maybeSingle();
   return !error && Boolean(data) && isUsEligibleJob(data);
@@ -144,7 +146,7 @@ async function validateJobFresh(supabaseAdmin, supabaseAnon, jobId, config, expe
     expectedContentVersion,
     brandedTerms,
   });
-  const provenPublicUrlValid = await provePublicUrlValid(supabaseAnon, job.id);
+  const provenPublicUrlValid = await provePublicUrlValid(supabaseAdmin, job.id);
   if (!provenPublicUrlValid && !result.reason_codes.includes("invalid_public_url")) {
     result.reason_codes.push("invalid_public_url");
   }
@@ -417,10 +419,8 @@ async function runScheduledSlot(slot, dateStr, config, deps = {}) {
   // requireConfigKeys must run first so the DO job log names the exact
   // missing variable (e.g. "Missing required configuration: supabaseAnonKey")
   // rather than surfacing an opaque library-internal error.
-  // Note: supabaseAnonKey (SUPABASE_ANON_KEY) is intentionally required
-  // here — it is used by provePublicUrlValid() to confirm the job is
-  // publicly accessible under the same RLS policy as the real public
-  // page, not bypassed by service-role privileges.
+  // Public-page eligibility uses the same server-side read and country
+  // gate as routes/publicPages.js; anonymous raw-table access stays denied.
   requireConfigKeys(config, [
     "supabaseUrl", "supabaseServiceRoleKey", "supabaseAnonKey", "spacingSecret",
     "bufferAccessToken", "linkedinChannelId", "facebookChannelId",
