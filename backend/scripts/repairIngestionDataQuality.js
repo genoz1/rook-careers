@@ -11,7 +11,10 @@ function analysisPatch(job,employer){
  if(present.some(x=>CANONICAL_INDUSTRIES.includes(x)))return null;
  const evidence=deterministicIndustryEvidence(input);
  if(!evidence.labels.length)return null;
- return {ai_analysis:{...job.ai_analysis,product_categories:evidence.labels,market_industries:evidence.labels,classification_source:'deterministic_evidence_2026_09_23'}};
+ // Preserve useful source-specific product names and existing market labels;
+ // a missing canonical label does not make those existing values disposable.
+ const append=(values)=>[...new Set([...(Array.isArray(values)?values:values?[values]:[]),...evidence.labels])];
+ return {ai_analysis:{...job.ai_analysis,product_categories:append(job.ai_analysis.product_categories),market_industries:append(job.ai_analysis.market_industries),classification_source:'deterministic_evidence_2026_09_23'}};
 }
 async function run(){
  const apply=process.argv.includes('--apply'),embeddings=process.argv.includes('--embeddings');
