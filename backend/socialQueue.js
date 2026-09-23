@@ -134,7 +134,7 @@ async function replenish(config, deps = {}) {
               ...(channel.service==='facebook'?{metadata:{facebook:{type:'post'}}}:{})});
           } catch (error) {
             if(error.capacity){capacityDeferred++;continue;}
-            failures.push({runKey,stage:'marketing_replenishment'}); break;
+            failures.push({runKey,stage:'marketing_replenishment',reason:error.message}); break;
           }
         }
         if(failures.length)break;
