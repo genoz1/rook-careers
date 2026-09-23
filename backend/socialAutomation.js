@@ -10,7 +10,9 @@
 // nothing here talks to Buffer, Facebook, or LinkedIn.
 
 const crypto = require("crypto");
-const { scrubCompanyNameFromText } = require("./routes/jobs");
+// Import the pure helper directly: the HTTP router starts recurring timers
+// that keep this one-shot scheduled worker alive after its work completes.
+const { scrubCompanyNameFromText } = require("./redaction");
 
 // =================================================================
 // CATEGORY NORMALIZATION
