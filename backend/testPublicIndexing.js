@@ -37,6 +37,8 @@ function setup(rows, { cap = 1000, failAt = Infinity, configured = true } = {}) 
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, "routes/publicPages.js"), "utf8"), {
     URLSearchParams,
     require(name) {
+      if (name === "../seoInventory") return require("./seoInventory");
+      if (name === "../seoCollections") return require("./seoCollections");
       if (name === "../pretrialProjection") return require("./pretrialProjection");
       if (name === "express") return { Router: () => router };
       if (name === "@supabase/supabase-js") return { createClient: () => client };

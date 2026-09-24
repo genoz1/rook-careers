@@ -3,6 +3,9 @@ const express = require("express");
 const path = require("path");
 
 const app = express();
+const publicSeo = require("./backend/publicSeo");
+app.use(publicSeo.headers);
+app.get("/index.html", (req,res) => res.redirect(301,"/" + (req.originalUrl.includes("?") ? req.originalUrl.slice(req.originalUrl.indexOf("?")) : "")));
 const PORT = process.env.PORT || 8080;
 
 // Safety net: on Node 18+, an unhandled promise rejection ANYWHERE in the
@@ -114,8 +117,10 @@ app.get("/rook-config.js", (req, res) => {
 };`);
 });
 
+app.use(publicSeo.pages);
 app.use(express.static(path.join(__dirname, "public"), {
   setHeaders(res, filePath) {
+    publicSeo.staticHeaders(res,filePath);
     if (filePath.endsWith(".html")) {
       res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
       res.setHeader("Pragma", "no-cache");
@@ -124,7 +129,7 @@ app.use(express.static(path.join(__dirname, "public"), {
 }));
 
 app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
+  res.status(404).set("X-Robots-Tag","noindex").send('<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Page Not Found | ROOK</title></head><body><main><h1>Page not found</h1><p>This address is not available.</p><a href="/">ROOK home</a> · <a href="/jobs">Browse job previews</a></main></body></html>');
 });
 
 app.listen(PORT, () => {
