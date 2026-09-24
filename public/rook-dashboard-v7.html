@@ -994,7 +994,6 @@
 
       if (requestVersion !== jobsLoadVersion) return;
       if (typeof rookTrackFunnelEvent === 'function') rookTrackFunnelEvent(rookV7Unlocked ? 'v7_unmasked_dashboard_viewed' : 'v7_masked_dashboard_viewed');
-      window.rookPretrialAlerts?.dashboard();
       currentJobs = Array.isArray(jobs) ? jobs : [];
       jobList.dataset.demo = 'false';
       if (!Array.isArray(jobs) || jobs.length === 0) {
@@ -1030,6 +1029,7 @@
       applyRecruiterToggle();
       updateStats(jobs);
       revealDemo();
+      window.rookPretrialAlerts?.dashboard();
     } catch (err) {
       const _mce = document.getElementById('mobileJobCount');
       const _mse = document.getElementById('mobileJobSub');

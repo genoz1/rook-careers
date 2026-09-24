@@ -37,11 +37,23 @@ function browser({email,authenticated=false,mobile=false,skipped=false,snapshot=
  context.window=context;vm.runInNewContext(fs.readFileSync(require.resolve('../public/rook-pretrial-alerts.js'),'utf8'),context);
  return {api:context.rookPretrialAlerts,state,events,nodes,listeners,context,setNow:v=>now=v,request:()=>request};
 }
-test('first prompt skips immediately and successful capture sends explicit consent and prefills later',async()=>{
- let b=browser();await b.api.first();assert.equal(b.nodes.length,1);b.nodes[0].querySelector('[data-skip]').onclick();assert.equal(b.context.location.href,'rook-dashboard-v7.html');assert.equal(b.state.get('rook_alert_skipped'),'1');
- b=browser();await b.api.first();b.nodes[0].querySelector('input').value='Example@Example.invalid';await b.nodes[0].querySelector('form').onsubmit({preventDefault(){}});
- assert.equal(b.request().consent,true);assert.equal(b.request().source,'onboarding');assert.equal(b.api.email(),'example@example.invalid');assert.equal(b.context.location.href,'rook-dashboard-v7.html');
- await b.api.first();assert.equal(b.nodes.length,1);
+test('onboarding navigates immediately; first prompt appears only on dashboard and skip stays there',async()=>{
+ const b=browser();b.api.first();assert.equal(b.nodes.length,0);assert.equal(b.context.location.href,'rook-dashboard-v7.html');
+ await b.api.dashboard();assert.equal(b.nodes.length,1);assert.equal(b.nodes[0].open,true);
+ b.nodes[0].querySelector('[data-skip]').onclick();assert.equal(b.nodes[0].open,false);assert.equal(b.context.location.href,'rook-dashboard-v7.html');assert.equal(b.state.get('rook_alert_skipped'),'1');
+ await b.api.dashboard();assert.equal(b.nodes.length,1);
+});
+test('dashboard capture sends explicit consent and prefills later without navigation',async()=>{
+ const b=browser();await b.api.dashboard();b.nodes[0].querySelector('input').value='Example@Example.invalid';await b.nodes[0].querySelector('form').onsubmit({preventDefault(){}});
+ assert.equal(b.request().consent,true);assert.equal(b.request().source,'onboarding');assert.equal(b.api.email(),'example@example.invalid');assert.equal(b.context.location.href,'');
+ await b.api.dashboard();assert.equal(b.nodes.length,1);
+});
+test('first dashboard prompt is shown once across concurrent refreshes and on mobile',async()=>{
+ for(const options of [{},{mobile:true}]) {const b=browser(options);await Promise.all([b.api.dashboard(),b.api.dashboard()]);assert.equal(b.nodes.length,1);assert.equal(b.listeners.mouseout,undefined);}
+});
+test('dashboard renders matches before requesting email signup',()=>{
+ const html=fs.readFileSync(require.resolve('../public/rook-dashboard-v7.html'),'utf8');
+ assert.match(html,/updateStats\(jobs\);\s*revealDemo\(\);\s*window\.rookPretrialAlerts\?\.dashboard\(\);/);
 });
 test('authenticated and already captured visitors bypass first prompt',async()=>{
  for(const options of [{authenticated:true},{email:'a@example.invalid'}]) {const b=browser(options);await b.api.first();assert.equal(b.nodes.length,0);assert.equal(b.context.location.href,'rook-dashboard-v7.html');}

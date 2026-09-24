@@ -5,6 +5,7 @@
   const track = (name,source) => window.rookTrackFunnelEvent?.(name,{source});
   const captured = () => !!get('email');
   let exitAttached=false;
+  let firstShown=!!get('first_shown') || !!get('skipped');
   async function signedIn() {
     try { return !!(await rookV7Auth().auth.getSession()).data?.session; } catch (_) { return true; }
   }
@@ -36,13 +37,17 @@
     modal.showModal();track(source==='exit'?'pretrial_exit_email_prompt_viewed':'pretrial_email_prompt_viewed',source);
   }
   window.rookPretrialAlerts={
-    async first() {
-      const next=()=>{location.href='rook-dashboard-v7.html';};
-      if(captured() || await signedIn()) return next();
-      try { prompt('onboarding',next); } catch (_) { next(); }
+    first() {
+      location.href='rook-dashboard-v7.html';
     },
     async dashboard() {
       if(new URLSearchParams(location.search).get('from')==='job_alert') track('pretrial_job_email_returned','job_alert');
+      if(captured() || rookV7Snapshot?.alert_requested || rookV7Unlocked || await signedIn()) return;
+      if(!firstShown) {
+        firstShown=true;set('first_shown','1');
+        prompt('onboarding',()=>{window.rookPretrialAlerts.dashboard();});
+        return;
+      }
       if(exitAttached || !get('skipped') || captured() || get('exit_shown') || get('trial_clicked') || rookV7Snapshot?.alert_requested || rookV7Unlocked || await signedIn()) return;
       if(!matchMedia('(hover: hover) and (pointer: fine)').matches || navigator.maxTouchPoints>0) return;
       exitAttached=true;
