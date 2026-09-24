@@ -283,40 +283,33 @@ document.querySelectorAll('input[name="territory"]').forEach(cb =>
     document.getElementById('btnTerritoryNext').disabled = !any;
   })
 );
-document.getElementById('btnTerritoryNext').addEventListener('click', async () => {
+let submittingMatches = false;
+window.addEventListener('pageshow', () => { submittingMatches = false; });
+document.getElementById('btnTerritoryNext').addEventListener('click', () => {
   const territories = [...document.querySelectorAll('input[name="territory"]:checked')].map(c => c.value);
-  if (!territories.length) return;
-  if (typeof rookTrackFunnelEvent === 'function') rookTrackFunnelEvent('v7_questions_completed', {event_category:'onboarding'});
-  document.getElementById('matchesHeadline').textContent = 'Finding your matches…';
-  document.getElementById('matchesSub').textContent = 'Ranking opportunities using your location and background.';
-  document.getElementById('btnAnalyzeBack').style.display = 'none';
-  show('analyzing');
-  if (typeof gtag === 'function') gtag('event','v7_analyzing_started');
-  await loadAnonymousMatches(territories);
-});
-async function loadAnonymousMatches(territories) {
+  if (!territories.length || submittingMatches) return;
+  const answers = {
+    location: selectedLocation,
+    industry: document.querySelector('input[name="industry"]:checked')?.value,
+    years: Number(document.querySelector('input[name="years"]:checked')?.value),
+    territories,
+    preparation: preparation?.industry === document.querySelector('input[name="industry"]:checked')?.value ? preparation.token : null,
+    attribution: typeof rookGetStoredAttribution === 'function' ? rookGetStoredAttribution() : {}
+  };
   try {
-    const answers = {
-      location: selectedLocation,
-      industry: document.querySelector('input[name="industry"]:checked')?.value,
-      years: Number(document.querySelector('input[name="years"]:checked')?.value),
-      territories,
-      preparation: preparation?.industry === document.querySelector('input[name="industry"]:checked')?.value ? preparation.token : null,
-      attribution: typeof rookGetStoredAttribution === 'function' ? rookGetStoredAttribution() : {}
-    };
-    const res = await fetch('/api/v7/session', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(answers) });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Unable to load matches. Please try again.');
-    sessionStorage.setItem('rook_v7_token', data.token);
-    sessionStorage.setItem('rook_v7_initial', data.token);
-    if(window.rookPretrialAlerts) await rookPretrialAlerts.first();
-    else window.location.href = 'rook-dashboard-v7.html';
+    // Transfer answers only. The dashboard sends the same session request once
+    // its actual layout and existing skeleton cards are on screen.
+    sessionStorage.setItem('rook_v7_pending', JSON.stringify(answers));
+    sessionStorage.removeItem('rook_v7_creating');
+    submittingMatches = true;
+    if (typeof rookTrackFunnelEvent === 'function') rookTrackFunnelEvent('v7_questions_completed', {event_category:'onboarding'});
+    if (typeof gtag === 'function') gtag('event','v7_analyzing_started');
+    window.location.href = 'rook-dashboard-v7.html';
   } catch (err) {
-    document.getElementById('matchesHeadline').textContent = 'Unable to load your matches';
-    document.getElementById('matchesSub').textContent = err.message;
-    document.getElementById('btnAnalyzeBack').style.display = 'flex';
+    submittingMatches = false;
+    showErr('territoryErr', 'Unable to open your matches. Please try again.');
   }
-}
+});
 
 
 })();

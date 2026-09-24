@@ -298,6 +298,10 @@
 <link rel="stylesheet" href="rook-conversion.css">
 </head>
 <body data-v7-conversion="true">
+<script>
+// Apply the existing masked layout before its first paint for a new search.
+try { if (sessionStorage.getItem('rook_v7_pending') || sessionStorage.getItem('rook_v7_creating')) document.body.classList.add('rook-pretrial'); } catch (_) {}
+</script>
 <div class="profile-gate-overlay" id="profileGateOverlay">
   <div class="profile-gate-card">
     <h2 id="profileGateTitle">Finish setting up your profile</h2>
@@ -518,10 +522,16 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="rook-config.js"></script>
 <script src="rook-auth.js"></script>
-<script src="rook-access.js"></script>
 <script src="rook-pretrial.js"></script>
 <script src="rook-job-classification.js"></script>
 <script src="rook-v7.js"></script>
+<script>
+if (sessionStorage.getItem('rook_v7_pending') || sessionStorage.getItem('rook_v7_creating')) {
+  rookApplyPretrialPresentation({}, true);
+  rookV7FinishOnboarding().catch(() => {}); // rookV7Init renders any error in the results area.
+}
+</script>
+<script src="rook-access.js"></script>
 <script src="rook-pretrial-alerts.js"></script>
 <script src="rook-location-widget.js"></script>
 <script>

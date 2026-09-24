@@ -12,8 +12,9 @@ const screens = ['details','industry','years','territory','analyzing'].map(x=>no
 const industry = node('industry');industry.value='Diagnostics';
 const years=node('years');years.value='5.5';
 const territory=node('territory');territory.value='local';
+const pageEvents={};
 const events=[],requests=[],store=new Map();let selected, fail=true;
-const ctx={AbortSignal,document:{getElementById:node,querySelectorAll:s=>s==='.screen'?screens:s.includes('industry')?[industry]:s.includes('years')?[years]:s.includes('territory')?[territory]:[],querySelector:s=>s.includes('industry')?industry:s.includes('years')?years:null},window:{scrollTo(){},location:{href:''}},RookLocationWidget:{init:o=>selected=o},sessionStorage:{setItem:(k,v)=>store.set(k,v)},rookTrackFunnelEvent:n=>events.push(n),gtag(){},fetch:async(url,options)=>{requests.push({url,answers:JSON.parse(options.body)});return {ok:!fail,json:async()=>fail?{error:'Try again'}:{token:'safe-test-token'}};}};
+const ctx={AbortSignal,document:{getElementById:node,querySelectorAll:s=>s==='.screen'?screens:s.includes('industry')?[industry]:s.includes('years')?[years]:s.includes('territory')?[territory]:[],querySelector:s=>s.includes('industry')?industry:s.includes('years')?years:null},window:{addEventListener:(name,fn)=>pageEvents[name]=fn,scrollTo(){},location:{href:''}},RookLocationWidget:{init:o=>selected=o},sessionStorage:{setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)},rookTrackFunnelEvent:n=>events.push(n),gtag(){},fetch:async(url,options)=>{requests.push({url,answers:JSON.parse(options.body)});return {ok:!fail,json:async()=>fail?{error:'Try again'}:{token:'safe-test-token'}};}};
 vm.runInNewContext(source,ctx);
 (async()=>{
  assert(node('s-details').classList.contains('active'));
@@ -28,13 +29,12 @@ vm.runInNewContext(source,ctx);
  years.listeners.change();node('btnYearsNext').listeners.click();assert.equal(node('stepLabel').textContent,'Step 4 of 4');
  territory.listeners.change();await node('btnTerritoryNext').listeners.click();
  assert(events.includes('v7_questions_completed'),'completion is recorded even when match retrieval fails');
- assert.equal(node('matchesHeadline').textContent,'Unable to load your matches');
- assert.equal(node('btnAnalyzeBack').style.display,'flex');
- ctx.window.goBack();fail=false;await node('btnTerritoryNext').listeners.click();
- assert.equal(node('btnAnalyzeBack').style.display,'none');
  assert.equal(ctx.window.location.href,'rook-dashboard-v7.html');
- assert.deepEqual(requests.find(r=>r.url==='/api/v7/session').answers,{location,industry:'Diagnostics',years:5.5,territories:['local'],preparation:null,attribution:{}});
- assert.equal(store.get('rook_v7_token'),'safe-test-token');
+ assert(!node('s-analyzing').classList.contains('active'));
+ assert.equal(requests.filter(r=>r.url==='/api/v7/session').length,0);
+ assert.deepEqual(JSON.parse(store.get('rook_v7_pending')),{location,industry:'Diagnostics',years:5.5,territories:['local'],preparation:null,attribution:{}});
+ await node('btnTerritoryNext').listeners.click();assert.equal(events.filter(x=>x==='v7_questions_completed').length,1);
+ pageEvents.pageshow();
  // Revisit every answer: submitted values must come from the current controls.
  ctx.window.goBack();ctx.window.goBack();ctx.window.goBack();ctx.window.goBack();
  const changed={label:'Boston, MA',lat:42.36,lng:-71.06,state:'MA',zip:'02108'};
@@ -42,7 +42,7 @@ vm.runInNewContext(source,ctx);
  industry.value='Veterinary';node('btnIndustryNext').listeners.click();
  years.value='0';node('btnYearsNext').listeners.click();territory.value='remote';
  await node('btnTerritoryNext').listeners.click();
- const last=requests.filter(r=>r.url==='/api/v7/session').at(-1).answers;
+ const last=JSON.parse(store.get('rook_v7_pending'));
  assert.deepEqual(last.location,changed);assert.equal(last.industry,'Veterinary');assert.equal(last.years,0);assert.deepEqual(last.territories,['remote']);
 
  assert(!html.includes('Over 100 people'));assert(!html.includes('id="s-welcome"'));

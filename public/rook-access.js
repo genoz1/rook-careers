@@ -2,6 +2,7 @@
 (function () {
   if(window.rookAccessReady) return;
   let snapshotValid=false;
+  const preparingNewSearch=!!window.rookV7SessionReady;
   let originalSidebar=null;
   const changedLinks=new Map();
   window.rookRestoreFullNavigation=function(){
@@ -12,9 +13,9 @@
     changedLinks.clear();
   };
   const stored=()=>{try{return sessionStorage.getItem('rook_v7_token') || localStorage.getItem('rook_v7_return_token') || '';}catch(_){return '';}};
-  const token=stored();
+  let token=stored();
   if(token){try{sessionStorage.setItem('rook_v7_token',token);}catch(_){}}
-  window.rookMatchesUrl=()=>snapshotValid?'rook-dashboard-v7.html':'rook-dashboard.html';
+  window.rookMatchesUrl=()=>snapshotValid || preparingNewSearch?'rook-dashboard-v7.html':'rook-dashboard.html';
   window.rookApplyLimitedNavigation=function(){
     const target=rookMatchesUrl();
     const links=[['My Job Matches',target],['Companies We Search','rook-companies.html'],['Pricing','rook-pricing.html'],['About ROOK','rook-about.html'],['For Employers','rook-employers.html']];
@@ -51,6 +52,8 @@
   window.rookAccessReady=(async()=>{
     let session=null,profile=null;
     try{
+      // A new onboarding handoff must finish before reading its capability.
+      if(window.rookV7SessionReady) {await window.rookV7SessionReady;token=stored();}
       if(typeof rookSupabase!=='undefined') session=(await rookSupabase.auth.getSession()).data?.session;
       if(session){const r=await fetch('/api/profile',{headers:{Authorization:'Bearer '+session.access_token}});if(r.ok)profile=await r.json();}
       if(token){
@@ -69,4 +72,5 @@
     }
     return state;
   })();
+  if(preparingNewSearch) rookApplyLimitedNavigation();
 })();

@@ -39,8 +39,32 @@ async function rookV7PrepareAccount() {
   if(!done.ok) throw new Error('Unable to finish saving your résumé. Please retry.');
   await rookV7Read();
 }
+// One document owns the pending request. A reload during submission must not
+// replay it or silently fall back to results from an earlier search.
+function rookV7FinishOnboarding() {
+  if (window.rookV7SessionReady) return window.rookV7SessionReady;
+  window.rookV7SessionReady = (async () => {
+    const pending = sessionStorage.getItem('rook_v7_pending');
+    if (!pending) {
+      if (sessionStorage.getItem('rook_v7_creating')) throw new Error('Your search was interrupted. Please start again.');
+      return;
+    }
+    const creation = crypto.randomUUID();
+    sessionStorage.setItem('rook_v7_creating', creation);
+    sessionStorage.removeItem('rook_v7_pending');
+    const res = await fetch('/api/v7/session', {method:'POST', headers:{'Content-Type':'application/json'}, body:pending});
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Unable to load matches. Please try again.');
+    if (sessionStorage.getItem('rook_v7_creating') !== creation) throw new Error('Your search changed. Please start again.');
+    sessionStorage.setItem('rook_v7_token', data.token);
+    sessionStorage.setItem('rook_v7_initial', data.token);
+    sessionStorage.removeItem('rook_v7_creating');
+  })();
+  return window.rookV7SessionReady;
+}
 async function rookV7Init() {
   try {
+    await rookV7FinishOnboarding();
     const initial = sessionStorage.getItem('rook_v7_initial') === sessionStorage.getItem('rook_v7_token') && !!sessionStorage.getItem('rook_v7_token');
     await rookV7Read(initial ? '?initial=1' : '?summary=1');
     if (initial) {sessionStorage.removeItem('rook_v7_initial'); rookV7InitialJobs=true;}
@@ -115,6 +139,7 @@ async function rookV7Upload(fd) {
 }
 // Override only on V7 pages; all V6 users retain the shared checkout behavior.
 async function rookGoToCheckout(source) {
+  if (window.rookV7SessionReady) {try {await window.rookV7SessionReady;} catch (_) {return;}}
   window.rookPretrialAlerts?.trial();
   if(typeof rookTrackFunnelEvent === 'function') rookTrackFunnelEvent('v7_unlock_clicked',{source:source==='banner'?'banner':'job'});
   else if(typeof rookTrackEvent === 'function') rookTrackEvent('v7_unlock_clicked',{source:source==='banner'?'banner':'job'});
