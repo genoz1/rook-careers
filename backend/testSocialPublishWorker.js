@@ -6,7 +6,7 @@
 // Run with: node backend/testSocialPublishWorker.js
 
 const assert = require("assert");
-const { identifyRookChannels } = require("./socialChannels");
+const { identifyRookChannels, identifyOptionalPersonalLinkedin } = require("./socialChannels");
 const { buildPostCopy } = require("./socialPostCopy");
 const { getOrganizations, listChannelsForOrganization, listAllChannels, createPost, findPostById, BUFFER_API_ENDPOINT } = require("./socialBuffer");
 const {
@@ -116,6 +116,20 @@ async function run() {
     assert.strictEqual(result.ok, true);
     assert.strictEqual(result.linkedin.id, "li-page-1");
     assert.strictEqual(result.facebook.id, "fb-page-1");
+  });
+  test("recognizes Gene's explicitly configured personal LinkedIn as a distinct approved destination", () => {
+    const profiles = [LINKEDIN_PAGE, FACEBOOK_PAGE, LINKEDIN_PERSONAL_LOOKING];
+    const result = identifyOptionalPersonalLinkedin(profiles, "li-personal-1", ["li-page-1", "fb-page-1"]);
+    assert.strictEqual(result.ok, true);
+    assert.strictEqual(result.channel.id, "li-personal-1");
+    assert.notStrictEqual(result.channel.id, "li-page-1");
+  });
+  test("a bad optional Gene destination cannot invalidate the company channel result", () => {
+    const profiles = [LINKEDIN_PAGE, FACEBOOK_PAGE];
+    const company = identifyRookChannels(profiles, { linkedinChannelId: "li-page-1", facebookChannelId: "fb-page-1" });
+    const personal = identifyOptionalPersonalLinkedin(profiles, "missing", ["li-page-1", "fb-page-1"]);
+    assert.strictEqual(company.ok, true);
+    assert.strictEqual(personal.ok, false);
   });
   // Direct finding, verified against Buffer's own current GraphQL
   // docs: the Channel type exposes only id/name/service — there is no
@@ -312,10 +326,12 @@ async function run() {
       BUFFER_ACCESS_TOKEN: "secret-token-value",
       BUFFER_ROOK_LINKEDIN_CHANNEL_ID: "li-123",
       BUFFER_ROOK_FACEBOOK_CHANNEL_ID: "fb-456",
+      BUFFER_GENE_LINKEDIN_CHANNEL_ID: "li-gene",
     });
     assert.strictEqual(config.bufferAccessToken, "secret-token-value");
     assert.strictEqual(config.linkedinChannelId, "li-123");
     assert.strictEqual(config.facebookChannelId, "fb-456");
+    assert.strictEqual(config.personalLinkedinChannelId, "li-gene");
   });
 
   console.log("\n=== Channel discovery never exposes the token ===");

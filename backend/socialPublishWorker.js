@@ -27,6 +27,7 @@ const {
   computeScheduledForUtc,
 } = require("./socialAutomation");
 const { determineActiveSlot, computeNextRunTimes, TIMEZONE } = require("./socialScheduler");
+const { PERSONAL_COPY_TOKEN } = require("./socialContentPlan");
 const { listAllChannels, createPost } = require("./socialBuffer");
 const { identifyRookChannels } = require("./socialChannels");
 const { buildPostCopy } = require("./socialPostCopy");
@@ -47,6 +48,7 @@ function loadConfig(env = process.env) {
     bufferAccessToken: env.BUFFER_ACCESS_TOKEN,
     linkedinChannelId: env.BUFFER_ROOK_LINKEDIN_CHANNEL_ID,
     facebookChannelId: env.BUFFER_ROOK_FACEBOOK_CHANNEL_ID,
+    personalLinkedinChannelId: env.BUFFER_GENE_LINKEDIN_CHANNEL_ID,
     brandedTerms: (env.SOCIAL_BRANDED_TERMS || "").split(",").map((s) => s.trim()).filter(Boolean),
     freshnessWindowDays: Number(env.SOCIAL_FRESHNESS_WINDOW_DAYS) || 3,
     publicAppUrl: env.PUBLIC_APP_URL || "https://rookcareers.com",
@@ -576,6 +578,7 @@ async function runScheduledSlot(slot, dateStr, config, deps = {}) {
     return { ok: false, stage: "pre_buffer_validation", runKey };
   }
   const postCopyLinkedIn = buildPostCopy(candidate, "linkedin");
+  const personalTemplate = buildPostCopy({ ...candidate, marketingVariants: { linkedin: PERSONAL_COPY_TOKEN } }, "linkedin");
   const postCopyFacebook = buildPostCopy(candidate, "facebook");
   const postCopy = postCopyLinkedIn; // default
   const results = { facebook: null, linkedin: null };
@@ -609,7 +612,7 @@ async function runScheduledSlot(slot, dateStr, config, deps = {}) {
     try {
       const post = await createPostFn(config.bufferAccessToken, {
         channelId: channels.linkedin.id, text: postCopyLinkedIn, photoUrl: uploaded.publicUrl,
-        mode: "customScheduled", dueAt: scheduledForUtc,
+        mode: "customScheduled", dueAt: scheduledForUtc, personalTemplate,
       });
       results.linkedin = { status: "scheduled", bufferPostId: post?.id || null, channelId: channels.linkedin.id };
     } catch (err) {

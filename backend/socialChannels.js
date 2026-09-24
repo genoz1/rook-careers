@@ -1,7 +1,7 @@
-// Pure logic for safely identifying the two approved ROOK Buffer
+// Pure logic for safely identifying the approved ROOK Buffer
 // channels among whatever profiles the Buffer account has connected.
 // Direct instruction: channels are identified by explicitly configured
-// IDs (BUFFER_ROOK_LINKEDIN_CHANNEL_ID / BUFFER_ROOK_FACEBOOK_CHANNEL_ID),
+// IDs (company LinkedIn/Facebook plus Gene's approved personal LinkedIn),
 // never by guessing from a name match — configuration is the source of
 // truth, this module's job is to validate that configuration against
 // what Buffer actually reports, not to discover channels on its own.
@@ -29,8 +29,8 @@ function describeChannel(channel) {
 }
 
 /**
- * Given the full list of Buffer channels and the two configured
- * channel IDs, returns exactly which two channels to use, or a clear
+ * Given the full list of Buffer channels and the configured
+ * channel IDs, returns exactly which channels to use, or a clear
  * list of errors if configuration is missing, ambiguous, or points at
  * the wrong platform.
  */
@@ -73,4 +73,13 @@ function identifyRookChannels(channels, { linkedinChannelId, facebookChannelId }
   };
 }
 
-module.exports = { identifyRookChannels, describeChannel };
+function identifyOptionalPersonalLinkedin(channels, personalLinkedinChannelId, companyChannelIds = []) {
+  if (!personalLinkedinChannelId) return { ok: false, channel: null, error: "BUFFER_GENE_LINKEDIN_CHANNEL_ID is not configured" };
+  const channel = (channels || []).find(c => String(c.id) === String(personalLinkedinChannelId));
+  if (!channel) return { ok: false, channel: null, error: "Gene LinkedIn Buffer channel was not found" };
+  if (String(channel.service || "").toLowerCase() !== "linkedin") return { ok: false, channel: null, error: "Gene Buffer destination is not a LinkedIn channel" };
+  if (companyChannelIds.map(String).includes(String(channel.id))) return { ok: false, channel: null, error: "Gene LinkedIn channel must be distinct from company channels" };
+  return { ok: true, channel: { ...describeChannel(channel), organizationId: channel.organizationId || null }, error: null };
+}
+
+module.exports = { identifyRookChannels, identifyOptionalPersonalLinkedin, describeChannel };

@@ -10,6 +10,7 @@ const DAILY_SLOTS = [
   { slot: 'marketing-4', hour: 19, minute: 0, kind: 'engagement' },
 ];
 const INDUSTRIES = ['Medical Device', 'Diagnostics/Laboratory', 'Pharmaceutical', 'Veterinary/Animal Health'];
+const PERSONAL_COPY_TOKEN = '__ROOK_PERSONAL_LINKEDIN_COPY__';
 function futureSlots(now = new Date()) {
   const { dateStr } = getEasternParts(now), slots = [];
   // A real rolling 48-hour window, not two UTC dates. Avoid past/near-due posts.
@@ -33,6 +34,19 @@ function availableCapacity(posts, channelId, limit) {
   if (!Number.isInteger(limit) || limit < 1) throw Error('Buffer capacity unavailable; refusing to guess');
   return Math.max(0, limit - posts.filter(p => p.channelId === channelId && ['scheduled', 'sending'].includes(p.status)).length);
 }
+// Gene receives one featured opportunity every day plus three selected
+// second posts per week: two ROOK Match opportunities and one job-search
+// education post. This is exactly ten posts in a complete seven-day week,
+// never a mirror of the six-post company schedule.
+function isPersonalLinkedinSlot(slot) {
+  const weekday = new Date(`${slot.dateStr}T12:00:00Z`).getUTCDay();
+  if (slot.slot === 'am') return true;
+  if (slot.slot === 'pm' && (weekday === 1 || weekday === 4)) return true;
+  return slot.slot === 'marketing-1' && weekday === 6;
+}
+function personalLinkedinSlot(slot) {
+  return { ...slot, dueAt: new Date(slot.dueAt.getTime() + 45 * 60000) };
+}
 function regularPost(slot, platform, copy) {
   const url = new URL('https://rookcareers.com/');
   url.search = new URLSearchParams({ utm_source: platform, utm_medium: 'social', utm_campaign: 'organic', utm_content: slot.kind }).toString();
@@ -41,4 +55,4 @@ function regularPost(slot, platform, copy) {
   }[slot.kind];
   return `${label}\n\n${copy[platform] || copy.text}\n\nExplore ROOK: ${url}`;
 }
-module.exports = { DAILY_SLOTS, futureSlots, representedPost, availableCapacity, regularPost };
+module.exports = { DAILY_SLOTS, PERSONAL_COPY_TOKEN, futureSlots, representedPost, availableCapacity, isPersonalLinkedinSlot, personalLinkedinSlot, regularPost };
