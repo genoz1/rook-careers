@@ -46,17 +46,30 @@ async function analyzeResume(resumeText, { callAI = callOpenAIForJSON } = {}) {
   validateSchema(result, RESUME_SCHEMA);
   // Reject fabricated literal facts before persistence. Controlled matching
   // categories are semantic extractions and remain governed by the prompt.
-  const normalized = value => value.normalize('NFKC').replace(/[•●▪]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+  // PDF line wrapping and typographic apostrophes do not change the facts.
+  // Keep hyphens, numbers and wording intact (never use fuzzy matching).
+  const normalized = value => value.normalize('NFKC').replace(/[•●▪]/g, '').replace(/[‘’]/g, "'").replace(/-[ \t]*\r?\n\s*/g, '-').replace(/\s+/g, ' ').trim().toLowerCase();
   const source = normalized(resumeText);
   const supported = value => !value || source.includes(normalized(value));
+  const supportedProse = value => {
+    if (!value) return true;
+    // The model may add a full stop to a verbatim bullet. Only allow that
+    // terminal punctuation difference, at a boundary, never inside a number.
+    const literal = normalized(value);
+    const occurs = text => {
+      const escaped = text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return new RegExp(`${escaped}(?![\\p{L}\\p{N}]|[.,]\\d)`, 'u').test(source);
+    };
+    return occurs(literal) || (literal.endsWith('.') && occurs(literal.slice(0, -1)));
+  };
   for (const role of result.employers) {
     for (const key of ['company','title','start','end']) {
       if (!supported(role[key])) throw new Error('Résumé contains unsupported employment facts');
     }
-    if (role.achievements && !role.achievements.split('\n').every(supported)) throw new Error('Résumé contains unsupported achievements');
+    if (role.achievements && !role.achievements.split('\n').every(supportedProse)) throw new Error('Résumé contains unsupported achievements');
   }
   for (const value of [...result.certifications, ...result.performance_highlights]) {
-    if (!supported(value)) throw new Error('Résumé contains unsupported factual highlights');
+    if (!supportedProse(value)) throw new Error('Résumé contains unsupported factual highlights');
   }
   if (!result.employers.length && !result.industries_experience.length && !result.certifications.length && !result.clinical_technical_experience.length) {
     throw new Error('No usable résumé facts found; please upload a readable résumé');
