@@ -28,28 +28,28 @@ test('concurrent digest workers cannot send the same job twice',async()=>{
  await Promise.all([sendPretrialDigest(db,lead,'',deps),sendPretrialDigest(db,lead,'',deps)]);assert.equal(sends,1);
 });
 function browser({email,authenticated=false,mobile=false,skipped=false,snapshot={}}={}) {
- const state=new Map(),events=[],nodes=[],listeners={};let now=1000,request;
+ const state=new Map(),events=[],nodes=[],listeners={};let now=1000,request;const frames=[];
  if(email)state.set('rook_alert_email',email);if(skipped)state.set('rook_alert_skipped','1');
- const document={body:{append:n=>nodes.push(n)},querySelector:()=>null,addEventListener:(k,f)=>listeners[k]=f,removeEventListener:k=>delete listeners[k],createElement:()=>{
+ const document={visibilityState:'visible',getElementById:()=>({dataset:{demo:'false'},querySelectorAll:()=>[{getBoundingClientRect:()=>({width:100,height:100,top:10,bottom:110})}]}),body:{append:n=>nodes.push(n)},querySelector:()=>null,addEventListener:(k,f)=>listeners[k]=f,removeEventListener:k=>delete listeners[k],createElement:()=>{
   const elements={};return {style:{},setAttribute(){},querySelector:k=>elements[k] ||= {},addEventListener:(k,f)=>elements[k]=f,showModal(){this.open=true},close(){this.open=false},remove(){}};
  }};
- const context={document,sessionStorage:{getItem:k=>state.get(k),setItem:(k,v)=>state.set(k,v)},location:{search:'',href:''},Date:{now:()=>now},URLSearchParams,AbortSignal,navigator:{maxTouchPoints:mobile?1:0},matchMedia:()=>({matches:!mobile}),rookV7Snapshot:snapshot,rookV7Unlocked:false,rookV7Auth:()=>({auth:{getSession:async()=>({data:{session:authenticated?{}:null}})}}),rookV7Request:async(path,options)=>{request=JSON.parse(options.body);return {ok:true,json:async()=>({ok:true})}},rookTrackFunnelEvent:(...a)=>events.push(a)};
+ const context={document,innerHeight:900,getComputedStyle:()=>({visibility:'visible'}),requestAnimationFrame:f=>frames.push(f),sessionStorage:{getItem:k=>state.get(k),setItem:(k,v)=>state.set(k,v)},location:{search:'',href:''},Date:{now:()=>now},URLSearchParams,AbortSignal,navigator:{maxTouchPoints:mobile?1:0},matchMedia:()=>({matches:!mobile}),rookV7Snapshot:snapshot,rookV7Unlocked:false,rookV7Auth:()=>({auth:{getSession:async()=>({data:{session:authenticated?{}:null}})}}),rookV7Request:async(path,options)=>{request=JSON.parse(options.body);return {ok:true,json:async()=>({ok:true})}},rookTrackFunnelEvent:(...a)=>events.push(a)};
  context.window=context;vm.runInNewContext(fs.readFileSync(require.resolve('../public/rook-pretrial-alerts.js'),'utf8'),context);
- return {api:context.rookPretrialAlerts,state,events,nodes,listeners,context,setNow:v=>now=v,request:()=>request};
+ return {api:context.rookPretrialAlerts,state,events,nodes,listeners,context,setNow:v=>now=v,request:()=>request,async view(){for(const t of [0,16,3015,3016]){const batch=frames.splice(0);batch.forEach(f=>f(t));await new Promise(resolve=>setImmediate(resolve));}}};
 }
 test('onboarding navigates immediately; first prompt appears only on dashboard and skip stays there',async()=>{
  const b=browser();b.api.first();assert.equal(b.nodes.length,0);assert.equal(b.context.location.href,'rook-dashboard-v7.html');
- await b.api.dashboard();assert.equal(b.nodes.length,1);assert.equal(b.nodes[0].open,true);
+ await b.api.dashboard();assert.equal(b.nodes.length,0);await b.view();assert.equal(b.nodes.length,1);assert.equal(b.nodes[0].open,true);
  b.nodes[0].querySelector('[data-skip]').onclick();assert.equal(b.nodes[0].open,false);assert.equal(b.context.location.href,'rook-dashboard-v7.html');assert.equal(b.state.get('rook_alert_skipped'),'1');
  await b.api.dashboard();assert.equal(b.nodes.length,1);
 });
 test('dashboard capture sends explicit consent and prefills later without navigation',async()=>{
- const b=browser();await b.api.dashboard();b.nodes[0].querySelector('input').value='Example@Example.invalid';await b.nodes[0].querySelector('form').onsubmit({preventDefault(){}});
+ const b=browser();await b.api.dashboard();await b.view();b.nodes[0].querySelector('input').value='Example@Example.invalid';await b.nodes[0].querySelector('form').onsubmit({preventDefault(){}});
  assert.equal(b.request().consent,true);assert.equal(b.request().source,'onboarding');assert.equal(b.api.email(),'example@example.invalid');assert.equal(b.context.location.href,'');
  await b.api.dashboard();assert.equal(b.nodes.length,1);
 });
 test('first dashboard prompt is shown once across concurrent refreshes and on mobile',async()=>{
- for(const options of [{},{mobile:true}]) {const b=browser(options);await Promise.all([b.api.dashboard(),b.api.dashboard()]);assert.equal(b.nodes.length,1);assert.equal(b.listeners.mouseout,undefined);}
+ for(const options of [{},{mobile:true}]) {const b=browser(options);await Promise.all([b.api.dashboard(),b.api.dashboard()]);await b.view();assert.equal(b.nodes.length,1);assert.equal(b.listeners.mouseout,undefined);}
 });
 test('dashboard renders matches before requesting email signup',()=>{
  const html=fs.readFileSync(require.resolve('../public/rook-dashboard-v7.html'),'utf8');
@@ -62,4 +62,9 @@ test('desktop exit is optional, once per session, and omitted for mobile/capture
  const b=browser({skipped:true});await b.api.dashboard();b.setNow(20000);await b.listeners.mouseout({relatedTarget:null,clientY:0});assert.equal(b.nodes.length,1);b.nodes[0].querySelector('[data-skip]').onclick();assert.equal(b.nodes[0].open,false);await b.api.dashboard();assert.equal(b.listeners.mouseout,undefined);
  for(const options of [{mobile:true},{authenticated:true},{email:'a@example.invalid'},{snapshot:{alert_requested:true}}]) {const c=browser({skipped:true,...options});await c.api.dashboard();assert.equal(c.listeners.mouseout,undefined);}
  const c=browser({skipped:true});c.api.trial();await c.api.dashboard();assert.equal(c.listeners.mouseout,undefined);
+});
+
+test('empty cards and hidden tabs never spend the initial viewing period',async()=>{
+ const b=browser();b.context.document.getElementById=()=>null;await b.api.dashboard();await b.view();assert.equal(b.nodes.length,0);
+ const c=browser();c.context.document.visibilityState='hidden';await c.api.dashboard();await c.view();assert.equal(c.nodes.length,0);
 });

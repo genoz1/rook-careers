@@ -60,7 +60,8 @@ const db={from:name=>new Query(name),auth:{getUser:async token=>({data:{user:use
 })}};
 process.env.SUPABASE_URL='https://test.invalid';process.env.SUPABASE_SERVICE_ROLE_KEY='fake';
 require.cache[require.resolve('@supabase/supabase-js')]={exports:{createClient:()=>db}};
-require.cache[require.resolve('./v7Matching')]={exports:{rank:async()=>[structuredClone(secretJob),{...structuredClone(secretJob),id:'real-job-2'}]}};
+let rankCalls=0;
+require.cache[require.resolve('./v7Matching')]={exports:{readCandidates:async()=>[],rankPool:()=>[],rank:async()=>{rankCalls++;return [structuredClone(secretJob),{...structuredClone(secretJob),id:'real-job-2'}];}}};
 const express=require('express');const app=express();app.use(express.json());app.use('/api/v7',require('./routes/onboardingV7'));
 (async()=>{
  const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
@@ -71,6 +72,10 @@ const express=require('express');const app=express();app.use(express.json());app
   let r=await call('/session','POST',null,answer);assert.equal(r.status,200);capability=(await r.json()).token;
   r=await call('/session');assert.equal(r.headers.get('cache-control'),'private, no-store');let data=await r.json();assert.equal(data.jobs.length,2);assert.equal(data.unlocked,false);assert(!/SECRET|ACME|real-job|secret.example/i.test(JSON.stringify(data.jobs)));
   assert(Date.parse(tables.onboarding_v7_sessions[0].expires_at)>Date.now()+29*24*60*60*1000,'opened matches remain recoverable beyond 24 hours');
+  tables.onboarding_v7_sessions[0].created_at=new Date().toISOString();
+  const rankedBefore=rankCalls;
+  r=await call('/session?initial=1');data=await r.json();assert.equal(rankCalls,rankedBefore);assert.equal(data.jobs.length,2);assert(!/SECRET|ACME|real-job/.test(JSON.stringify(data.jobs)));
+  tables.onboarding_v7_sessions[0].created_at='2000-01-01';await call('/session?initial=1');assert.equal(rankCalls,rankedBefore+1);
   const renewedExpiry=tables.onboarding_v7_sessions[0].expires_at;
   await call('/session');assert.equal(tables.onboarding_v7_sessions[0].expires_at,renewedExpiry,'reads do not repeatedly write expiry');
   const fd=new FormData();fd.append('resume',new Blob(['private resume bytes'],{type:'application/pdf'}),'resume.pdf');

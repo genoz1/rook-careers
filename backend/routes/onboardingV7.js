@@ -5,7 +5,8 @@ const multer = require('multer');
 const {createClient} = require('@supabase/supabase-js');
 const {hasFullAccess} = require('../matching');
 const {preview, answersToProfile} = require('../v7Preview');
-const {rank} = require('../v7Matching');
+const {rank, readCandidates, rankPool} = require('../v7Matching');
+const preparation = require('../v7Preparation').createPreparation({readCandidates});
 const {normalizeSelection} = require('../../public/rook-job-classification');
 const router = express.Router();
 const db = process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -45,10 +46,19 @@ async function owned(req,res) {
   if (!s || !u || s.user_id !== u.id) { res.status(403).json({error:'Sign in to the account that created these matches.'}); return null; }
   return {s,u};
 }
+// Industry is the first answer that makes the existing database query selective.
+// Location/experience/territory remain authoritative at final submission.
+router.post('/prepare', wrap(async (req,res) => {
+  const industry=req.body?.industry;
+  if (!['Medical Device','Diagnostics','Pharmaceutical','Veterinary','Breaking In'].includes(industry))
+    return res.status(400).json({error:'Select an industry.'});
+  res.json({preparation:preparation.start(db,industry)});
+}));
 router.post('/session', wrap(async (req,res) => {
   let profile;
   try {profile=answersToProfile(req.body);} catch(e) {return res.status(400).json({error:e.message});}
-  const jobs = await rank(db,profile);
+  const pool = await preparation.take(req.body?.preparation,req.body.industry);
+  const jobs = pool ? rankPool(pool,profile) : await rank(db,profile);
   const token = crypto.randomBytes(32).toString('hex');
   const {error} = await db.from(table).insert({token_hash:crypto.createHash('sha256').update(token).digest('hex'), profile, jobs, expires_at:new Date(Date.now()+24*60*60*1000).toISOString()});
   if (error) throw error;
@@ -137,7 +147,11 @@ router.get('/session', wrap(async (req,res) => {
   // Use the saved answers so purchasing never swaps in a different result set.
   const requested = req.query?.industries;
   const selection = requested === 'all' ? [] : String(requested || '').split(',');
-  const jobs = req.query?.summary === '1' ? [] : requested !== undefined
+  // A fresh anonymous handoff reuses the just-created private snapshot. All
+  // later/filter/account reads retain the existing live ranking behavior.
+  const freshHandoff = req.query?.initial === '1' && !s.user_id &&
+    Date.now()-Date.parse(s.created_at) >= 0 && Date.now()-Date.parse(s.created_at) < 60000;
+  const jobs = req.query?.summary === '1' ? [] : freshHandoff && requested === undefined ? s.jobs : requested !== undefined
     ? (requested !== 'all' && !normalizeSelection(selection).length ? [] : await rank(db,profile,selection))
     : await rank(db,profile);
   // Even a forged query param or a valid token for another paid user cannot unlock.

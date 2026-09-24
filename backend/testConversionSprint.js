@@ -13,7 +13,7 @@ const industry = node('industry');industry.value='Diagnostics';
 const years=node('years');years.value='5.5';
 const territory=node('territory');territory.value='local';
 const events=[],requests=[],store=new Map();let selected, fail=true;
-const ctx={document:{getElementById:node,querySelectorAll:s=>s==='.screen'?screens:s.includes('industry')?[industry]:s.includes('years')?[years]:s.includes('territory')?[territory]:[],querySelector:s=>s.includes('industry')?industry:s.includes('years')?years:null},window:{scrollTo(){},location:{href:''}},RookLocationWidget:{init:o=>selected=o},sessionStorage:{setItem:(k,v)=>store.set(k,v)},rookTrackFunnelEvent:n=>events.push(n),gtag(){},fetch:async(url,options)=>{requests.push({url,answers:JSON.parse(options.body)});return {ok:!fail,json:async()=>fail?{error:'Try again'}:{token:'safe-test-token'}};}};
+const ctx={AbortSignal,document:{getElementById:node,querySelectorAll:s=>s==='.screen'?screens:s.includes('industry')?[industry]:s.includes('years')?[years]:s.includes('territory')?[territory]:[],querySelector:s=>s.includes('industry')?industry:s.includes('years')?years:null},window:{scrollTo(){},location:{href:''}},RookLocationWidget:{init:o=>selected=o},sessionStorage:{setItem:(k,v)=>store.set(k,v)},rookTrackFunnelEvent:n=>events.push(n),gtag(){},fetch:async(url,options)=>{requests.push({url,answers:JSON.parse(options.body)});return {ok:!fail,json:async()=>fail?{error:'Try again'}:{token:'safe-test-token'}};}};
 vm.runInNewContext(source,ctx);
 (async()=>{
  assert(node('s-details').classList.contains('active'));
@@ -33,8 +33,18 @@ vm.runInNewContext(source,ctx);
  ctx.window.goBack();fail=false;await node('btnTerritoryNext').listeners.click();
  assert.equal(node('btnAnalyzeBack').style.display,'none');
  assert.equal(ctx.window.location.href,'rook-dashboard-v7.html');
- assert.deepEqual(requests[0].answers,{location,industry:'Diagnostics',years:5.5,territories:['local'],attribution:{}});
+ assert.deepEqual(requests.find(r=>r.url==='/api/v7/session').answers,{location,industry:'Diagnostics',years:5.5,territories:['local'],preparation:null,attribution:{}});
  assert.equal(store.get('rook_v7_token'),'safe-test-token');
+ // Revisit every answer: submitted values must come from the current controls.
+ ctx.window.goBack();ctx.window.goBack();ctx.window.goBack();ctx.window.goBack();
+ const changed={label:'Boston, MA',lat:42.36,lng:-71.06,state:'MA',zip:'02108'};
+ selected.onSelect(changed);node('btnDetailsNext').listeners.click();
+ industry.value='Veterinary';node('btnIndustryNext').listeners.click();
+ years.value='0';node('btnYearsNext').listeners.click();territory.value='remote';
+ await node('btnTerritoryNext').listeners.click();
+ const last=requests.filter(r=>r.url==='/api/v7/session').at(-1).answers;
+ assert.deepEqual(last.location,changed);assert.equal(last.industry,'Veterinary');assert.equal(last.years,0);assert.deepEqual(last.territories,['remote']);
+
  assert(!html.includes('Over 100 people'));assert(!html.includes('id="s-welcome"'));
  // Execute production tracker: retries/double clicks do not duplicate transition events or forward private input.
  const tracked=[],meta=[],saved=new Map();const storage={getItem:k=>saved.get(k),setItem:(k,v)=>saved.set(k,v)};

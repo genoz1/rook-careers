@@ -10,6 +10,28 @@ const JOB_LIST_COLUMNS = "id, source_job_id, employer_id, source_type, source_ur
 const JOB_LIST_COLUMNS_NO_DESCRIPTION = JOB_LIST_COLUMNS.split(", ").filter((c) => c !== "description_html" && c !== "description_text").join(", ");
 
 async function rank(db, profile, industrySelection = profile.desired_industries) {
+    return rankPool(await readCandidates(db, industrySelection), profile, industrySelection);
+}
+
+async function readCandidates(db, industrySelection) {
+    const selection = normalizeSelection(industrySelection);
+    let query = db
+      .from("jobs")
+      .select(JOB_LIST_COLUMNS_NO_DESCRIPTION)
+      .eq("status", "active")
+      .eq("moderation_status", "approved");
+
+    const marketFilter = industryPrefilter(selection);
+    if (marketFilter) query = query.or(marketFilter);
+    // Read every active approved industry candidate. Geographic preparation
+    // must see secondary locations and source-backed scopes, including nulls.
+    const {data: jobs,error} = await readJobPool(query);
+    if (error) throw new Error(error.message);
+
+    return jobs || [];
+}
+
+function rankPool(jobs, profile, industrySelection = profile.desired_industries) {
     const selection = normalizeSelection(industrySelection);
     // Search categories affect scoring only; geographic eligibility and saved answers stay intact.
     const scoringProfile = selection.length ? {...profile, desired_industries:selection} : profile;
@@ -36,18 +58,6 @@ async function rank(db, profile, industrySelection = profile.desired_industries)
       return matched ? matched / prodCats.length : (normalizeSelection(desired).includes("Veterinary") && matches(job, ["Veterinary"]) ? 1 : 0);
     }
 
-    let query = db
-      .from("jobs")
-      .select(JOB_LIST_COLUMNS_NO_DESCRIPTION)
-      .eq("status", "active")
-      .eq("moderation_status", "approved");
-
-    const marketFilter = industryPrefilter(selection);
-    if (marketFilter) query = query.or(marketFilter);
-    // Read every active approved industry candidate. Geographic preparation
-    // must see secondary locations and source-backed scopes, including nulls.
-    const {data: jobs,error} = await readJobPool(query);
-    if (error) throw new Error(error.message);
 
     const scored = (jobs || [])
       .map(j => prepareJob(j,profile))
@@ -72,4 +82,4 @@ async function rank(db, profile, industrySelection = profile.desired_industries)
 
 return scored.map(({job,score,distMi}) => ({...job, match:score, distance_miles:distMi}));
 }
-module.exports = {rank};
+module.exports = {rank, readCandidates, rankPool};

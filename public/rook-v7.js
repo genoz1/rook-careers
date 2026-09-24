@@ -3,6 +3,7 @@
 let rookV7Snapshot = null;
 let rookV7Unlocked = false;
 let rookV7Client;
+let rookV7InitialJobs = false;
 function rookV7Auth() {
   if (typeof rookSupabase !== 'undefined') return rookSupabase;
   return rookV7Client ||= window.supabase.createClient(window.ROOK_CONFIG.SUPABASE_URL,window.ROOK_CONFIG.SUPABASE_ANON_KEY);
@@ -40,7 +41,9 @@ async function rookV7PrepareAccount() {
 }
 async function rookV7Init() {
   try {
-    await rookV7Read('?summary=1');
+    const initial = sessionStorage.getItem('rook_v7_initial') === sessionStorage.getItem('rook_v7_token') && !!sessionStorage.getItem('rook_v7_token');
+    await rookV7Read(initial ? '?initial=1' : '?summary=1');
+    if (initial) {sessionStorage.removeItem('rook_v7_initial'); rookV7InitialJobs=true;}
     if(new URLSearchParams(location.search).get('trial') === 'started') {
       try { sessionStorage.setItem('rook_v7_trial_pending', '1'); } catch (_) {}
       // Stripe activation can precede the webhook. Access stays masked until
@@ -83,6 +86,10 @@ async function rookV7Fetch(path,options={}) {
   if(path.startsWith('/jobs?')) {
     const params = new URLSearchParams(path.split('?')[1]);
     if (params.has('industries')) {
+      const wanted = params.get('industries') === 'all' ? 'all' : RookJobClassification.normalizeSelection(params.get('industries').split(',')).join(',');
+      const saved = RookJobClassification.normalizeSelection(data.profile.desired_industries).join(',') || 'all';
+      if (rookV7InitialJobs && wanted === saved) {rookV7InitialJobs=false; return reply({jobs:data.jobs});}
+      rookV7InitialJobs=false;
       const res = await rookV7Request('/session?industries=' + encodeURIComponent(params.get('industries')));
       if (!res.ok) return res;
       const refreshed = await res.json();
