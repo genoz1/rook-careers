@@ -30,3 +30,8 @@ test('bounded API/network retries and permanent errors; no Anthropic fallback',a
  calls=0;global.fetch=async()=>{calls++;throw TypeError('offline')};await assert.rejects(suggestRoles(structured),/offline/);assert.equal(calls,2);
  }finally{global.fetch=originalFetch;}
 });
+
+test('rejects unsupported adjacent industries and leadership rather than persisting them',async()=>{
+ for(const role of ['Sales Consultant - Medical Devices','Pharmaceutical Sales Representative','Veterinary Sales Representative','Laboratory Sales Representative','Regional Manager','Sales Manager']) await assert.rejects(suggestRoles(structured,{callAI:async()=>({suggested_roles:[role]})}),/unsupported/i);
+ assert.deepEqual(await suggestRoles({...structured,industries_experience:[{industry:'Medical Device'}]},{callAI:async()=>({suggested_roles:['Medical Device Sales Representative']})}),['Medical Device Sales Representative']);
+});
