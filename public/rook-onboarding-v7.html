@@ -74,6 +74,7 @@
 </style>
 <link rel="stylesheet" href="rook-conversion.css">
 <link rel="stylesheet" href="rook-v7-desktop.css">
+<link rel="stylesheet" href="rook-v7-mobile-design.css">
 </head>
 <!-- Google tag -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=AW-18428232873"></script>
@@ -94,6 +95,7 @@
   </div>
 </div>
 
+<div class="v7-onboarding-card">
 <div class="progress-wrap">
   <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
   <div class="step-label" id="stepLabel"></div>
@@ -103,8 +105,8 @@
 
   <!-- Location -->
   <div class="screen active" id="s-details">
-    <h2>Find medical sales jobs that fit you.</h2>
-    <p class="lead">Answer 4 quick questions for personalized matches from employer career sites.</p>
+    <h2><span class="v7-desktop-copy">Find medical sales jobs that fit you.</span><span class="v7-mobile-copy">Where are you looking for opportunities?</span></h2>
+    <p class="lead"><span class="v7-desktop-copy">Answer 4 quick questions for personalized matches from employer career sites.</span><span class="v7-mobile-copy">Enter a city, state or ZIP code to get personalized matches.</span></p>
     <div class="field">
       <label for="locationInput">Where do you want to work?</label>
       <div style="position:relative">
@@ -114,7 +116,7 @@
       <div id="locationStatus" style="font-size:12px;color:var(--muted);min-height:18px;margin-top:4px"></div>
     </div>
     <div class="err" id="detailsErr"></div>
-    <div class="privacy-trust"><strong>Your job search stays private</strong>Employers and recruiters cannot see your profile, résumé or activity.</div>
+    <div class="privacy-trust"><strong><span class="v7-desktop-copy">Your job search stays private</span><span class="v7-mobile-copy">Your search stays private</span></strong>Employers and recruiters cannot see your profile, résumé or activity.</div>
     <button class="btn-primary" id="btnDetailsNext" disabled>Continue</button>
     <p class="trust">Preview your matches without an account, résumé or card.</p>
   </div>
@@ -173,6 +175,7 @@
   </div>
 </div>
 
+</div>
 <script src="rook-location-widget.js"></script>
 <script>
 (async () => {
@@ -315,6 +318,7 @@ document.getElementById('btnTerritoryNext').addEventListener('click', () => {
 
 })();
 </script>
+<div class="v7-mobile-bottom" aria-hidden="true"></div>
 <footer class="conversion-trust" aria-label="ROOK information"><span>ROOK · Medical &amp; veterinary sales careers</span><nav><a href="rook-about.html" target="_blank" rel="noopener">About ROOK</a><a href="mailto:hello@rookcareers.com">Contact</a><a href="rook-privacy.html" target="_blank" rel="noopener">Privacy</a><a href="rook-terms.html" target="_blank" rel="noopener">Terms</a></nav></footer>
 </body>
 </html>
