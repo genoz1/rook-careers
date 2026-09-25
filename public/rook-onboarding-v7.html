@@ -73,6 +73,7 @@
 .privacy-trust strong{display:block;color:#176557;font-size:14px;font-weight:700;margin-bottom:4px;}
 </style>
 <link rel="stylesheet" href="rook-conversion.css">
+<link rel="stylesheet" href="rook-v7-desktop.css">
 </head>
 <!-- Google tag -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=AW-18428232873"></script>
@@ -123,11 +124,11 @@
     <h2>Where is your strongest experience?</h2>
     <p class="lead">Choose the area that best describes you.</p>
     <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
-      <label class="choice"><input type="radio" name="industry" value="Medical Device"><div><div class="choice-label">⚕ Medical device</div><div class="choice-sub">Capital equipment, surgical, DME</div></div></label>
-      <label class="choice"><input type="radio" name="industry" value="Diagnostics"><div><div class="choice-label">⌁ Diagnostics &amp; laboratory</div><div class="choice-sub">Clinical, molecular, pathology</div></div></label>
-      <label class="choice"><input type="radio" name="industry" value="Pharmaceutical"><div><div class="choice-label">✚ Pharmaceuticals</div><div class="choice-sub">Specialty, hospital, primary care</div></div></label>
-      <label class="choice"><input type="radio" name="industry" value="Veterinary"><div><div class="choice-label">♧ Animal health</div><div class="choice-sub">Veterinary, diagnostics, distribution</div></div></label>
-      <label class="choice"><input type="radio" name="industry" value="Breaking In"><div><div class="choice-label">↗ Breaking into medical sales</div><div class="choice-sub">Transferable sales experience</div></div></label>
+      <label class="choice"><input type="radio" name="industry" value="Medical Device"><div><div class="choice-label"><span class="legacy-choice-icon">⚕ </span>Medical device</div><div class="choice-sub">Capital equipment, surgical, DME</div></div></label>
+      <label class="choice"><input type="radio" name="industry" value="Diagnostics"><div><div class="choice-label"><span class="legacy-choice-icon">⌁ </span>Diagnostics &amp; laboratory</div><div class="choice-sub">Clinical, molecular, pathology</div></div></label>
+      <label class="choice"><input type="radio" name="industry" value="Pharmaceutical"><div><div class="choice-label"><span class="legacy-choice-icon">✚ </span>Pharmaceuticals</div><div class="choice-sub">Specialty, hospital, primary care</div></div></label>
+      <label class="choice"><input type="radio" name="industry" value="Veterinary"><div><div class="choice-label"><span class="legacy-choice-icon">♧ </span>Animal health</div><div class="choice-sub">Veterinary, diagnostics, distribution</div></div></label>
+      <label class="choice"><input type="radio" name="industry" value="Breaking In"><div><div class="choice-label"><span class="legacy-choice-icon">↗ </span>Breaking into medical sales</div><div class="choice-sub">Transferable sales experience</div></div></label>
     </div>
     <button class="btn-primary" id="btnIndustryNext" style="margin-top:20px" disabled>Continue</button>
     <button class="btn-back" onclick="goBack()">← Back</button>
@@ -152,10 +153,10 @@
     <h2>What kind of territory works for you?</h2>
     <p class="lead">Select all that apply.</p>
     <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
-      <label class="choice"><input type="checkbox" name="territory" value="local"><div><div class="choice-label">🏠 Local territory</div><div class="choice-sub">Home most nights</div></div></label>
-      <label class="choice"><input type="checkbox" name="territory" value="regional"><div><div class="choice-label">◎ Regional territory</div><div class="choice-sub">Some overnight travel</div></div></label>
-      <label class="choice"><input type="checkbox" name="territory" value="national"><div><div class="choice-label">✈ Large or national territory</div><div class="choice-sub">Frequent travel is fine</div></div></label>
-      <label class="choice"><input type="checkbox" name="territory" value="remote"><div><div class="choice-label">☁ Remote or inside sales</div></div></label>
+      <label class="choice"><input type="checkbox" name="territory" value="local"><div><div class="choice-label"><span class="legacy-choice-icon">🏠 </span>Local territory</div><div class="choice-sub">Home most nights</div></div></label>
+      <label class="choice"><input type="checkbox" name="territory" value="regional"><div><div class="choice-label"><span class="legacy-choice-icon">◎ </span>Regional territory</div><div class="choice-sub">Some overnight travel</div></div></label>
+      <label class="choice"><input type="checkbox" name="territory" value="national"><div><div class="choice-label"><span class="legacy-choice-icon">✈ </span>Large or national territory</div><div class="choice-sub">Frequent travel is fine</div></div></label>
+      <label class="choice"><input type="checkbox" name="territory" value="remote"><div><div class="choice-label"><span class="legacy-choice-icon">☁ </span>Remote or inside sales</div></div></label>
     </div>
     <div class="err" id="territoryErr"></div>
     <button class="btn-primary" id="btnTerritoryNext" style="margin-top:20px" disabled>Find My Matches</button>
