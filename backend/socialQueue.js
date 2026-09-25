@@ -5,6 +5,7 @@ const { getEasternParts } = require('./socialScheduler');
 const { createPost, listAllChannels, readQueue, readRecentPosts } = require('./socialBuffer');
 const { identifyRookChannels, identifyOptionalPersonalLinkedin } = require('./socialChannels');
 const { PERSONAL_COPY_TOKEN, futureSlots, representedPost, availableCapacity, isPersonalLinkedinSlot, personalLinkedinSlot, regularPost } = require('./socialContentPlan');
+const { prepareMarketingGraphic } = require('./socialBrandedCard');
 const { sendEmail } = require('./email/resend');
 async function durableCreate(db, runKey, token, payload, send = createPost) {
   const table = () => db.from('social_queue_sends');
@@ -21,6 +22,7 @@ async function durableCreate(db, runKey, token, payload, send = createPost) {
           new Date(prior.payload.dueAt).getTime() !== new Date(payload.dueAt).getTime()) {
         throw Error('Accepted Buffer content changed; reconcile saved receipt');
       }
+      if (payload.requireMedia && !prior.post.assets?.some(a => /^image\//.test(a.mimeType || '') && a.source)) throw Error('Saved Buffer receipt has unverified media; reconcile without resending');
       return prior.post;
     }
     if (prior.state !== 'rejected') throw Error('Buffer outcome uncertain; reconcile saved intent before retry');
@@ -44,6 +46,11 @@ async function durableCreate(db, runKey, token, payload, send = createPost) {
     }
     const { error: receiptError } = await key(table().update({ state: 'scheduled', post }));
     if (receiptError) throw Error('Buffer accepted post but receipt could not be saved; reconcile intent');
+    // Persist the accepted ID before checking media: missing/uncertain assets
+    // must never trigger a duplicate createPost mutation.
+    if (payload.requireMedia && !post.assets?.some(a => /^image\//.test(a.mimeType || '') && a.source)) {
+      throw Error(`Buffer accepted ${post.id} but image attachment is unverified; reconcile saved receipt`);
+    }
     return post;
   }
 }
@@ -86,6 +93,7 @@ async function replenish(config, deps = {}) {
       const matches = queue.posts.filter(p => p.channelId === intent.channel_id && String(p.text).replace(/https?:\/\/\S+/g, "[link]").trim() === String(intent.payload.text).replace(/https?:\/\/\S+/g, "[link]").trim() &&
         new Date(p.dueAt).getTime() === new Date(intent.payload.dueAt).getTime());
       if (matches.length !== 1) throw Error('Uncertain Buffer send requires reconciliation');
+      if(intent.payload.requireMedia && !matches[0].assets?.some(a => /^image\//.test(a.mimeType || '') && a.source)) throw Error('Reconciled Buffer post has no verified image; inspect saved intent');
       const { error } = await db.from('social_queue_sends').update({state:'scheduled',post:matches[0]}).eq('run_key',intent.run_key).eq('channel_id',intent.channel_id);
       if (error) throw Error('Cannot reconcile accepted Buffer receipt');
     }
@@ -122,7 +130,8 @@ async function replenish(config, deps = {}) {
         if (existing) return existing;
         if (!availableCapacity(current.posts,payload.channelId,current.limit)) throw Object.assign(Error('Buffer capacity is full'),{capacity:true});
         if (new Date(payload.dueAt) <= new Date()) throw Error('Slot became due before enqueueing');
-        const post = await durableCreate(db,runKey,token,payload,deps.createPost || createPost);
+        if (!payload.photoUrl) throw Error('Graphic required; refusing a text-only company post');
+        const post = await durableCreate(db,runKey,token,{...payload,requireMedia:true},deps.createPost || createPost);
         created++; return post;
       };
       if (['am','pm'].includes(slot.slot)) {
@@ -138,22 +147,39 @@ async function replenish(config, deps = {}) {
           } catch (error) { result={ok:false,stage:error.message}; }
           if (result.ok || result.capacityDeferred) break;
         }
-        if (!result.ok && !result.capacityDeferred) { failures.push({runKey,stage:result.stage || 'job_replenishment'}); break; }
+        if (!result.ok && !result.capacityDeferred) { failures.push({runKey,stage:result.stage || 'job_replenishment',reason:result.reason}); continue; }
         if (result.capacityDeferred) capacityDeferred++;
       } else {
-        const copy = await makeCopy({theme:slot.kind,industry:slot.industry});
+        let copy, media;
+        try {
+          const {data: saved, error: savedError} = await db.from('social_queue_sends').select('*').eq('run_key',runKey);
+          if(savedError) throw Error('Cannot read saved editorial recipe');
+          const recipe = saved?.find(row => row.payload?.mediaEvidence?.editorial)?.payload.mediaEvidence;
+          if(recipe) {
+            copy = recipe.editorial; media = recipe;
+            const check = await (deps.preflightCheckMedia || require('./socialMediaPreflight').preflightCheckMedia)(media.photoUrl);
+            if(!check.ok) throw Error(`Saved media preflight: ${check.reason}`);
+          } else {
+            copy = await makeCopy({theme:slot.kind,industry:slot.industry,dateStr:slot.dateStr});
+            media = {...await (deps.prepareMarketingGraphic || prepareMarketingGraphic)(db,slot,copy,deps),editorial:copy};
+          }
+        } catch (error) {
+          const failure = {runKey,stage:'marketing_media',reason:error.message};
+          failures.push(failure); console.error(`[social-media-failure] ${JSON.stringify(failure)}`);
+          continue; // No send intent yet: a later refill can safely retry this slot.
+        }
         for (const channel of missing) {
           if (!allowed.has(channel.id)) {capacityDeferred++;continue;}
           try {
-            await send(config.bufferAccessToken,{channelId:channel.id,text:regularPost(slot,channel.service,copy),mode:'customScheduled',dueAt:slot.dueAt,
-              ...(channel.id===channels[0].id?{personalTemplate:regularPost(slot,'linkedin',{linkedin:PERSONAL_COPY_TOKEN})}:{}),
+            await send(config.bufferAccessToken,{channelId:channel.id,text:regularPost(slot,channel.service,copy),photoUrl:media.photoUrl,mediaEvidence:media,mode:'customScheduled',dueAt:slot.dueAt,
+              ...(channel.id===channels[0].id?{personalTemplate:regularPost(slot,'linkedin',{...copy,linkedin:PERSONAL_COPY_TOKEN})}:{}),
               ...(channel.service==='facebook'?{metadata:{facebook:{type:'post'}}}:{})});
           } catch (error) {
             if(error.capacity){capacityDeferred++;continue;}
             failures.push({runKey,stage:'marketing_replenishment',reason:error.message}); break;
           }
         }
-        if(failures.length)break;
+        // Independent slots continue after a recoverable media failure.
       }
       outcomes.push({slot:slot.slot,date:slot.dateStr,state:'processed'});
     }

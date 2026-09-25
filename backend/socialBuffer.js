@@ -120,6 +120,7 @@ async function createPost(accessToken, { channelId, text, photoUrl, mode = "shar
             text
             status
             dueAt
+            assets { mimeType source }
           }
         }
         ... on MutationError {
@@ -170,6 +171,7 @@ async function findPostById(accessToken, organizationId, postId, opts) {
             text
             status
             dueAt
+            assets { mimeType source }
             channelId
           }
         }
@@ -197,7 +199,7 @@ async function readQueue(accessToken, organizationId, opts) {
     const data = await bufferGraphQLRequest(accessToken, `query Queue($org:OrganizationId!,$after:String){
       account{organizations{id limits{scheduledPosts}}}
       posts(first:100,after:$after,input:{organizationId:$org,filter:{status:[scheduled,sending]}}){
-        edges{node{id text status dueAt channelId}} pageInfo{endCursor hasNextPage}
+        edges{node{id text status dueAt channelId assets{mimeType source}}} pageInfo{endCursor hasNextPage}
       }
     }`, { org: organizationId, after }, opts);
     limit = data?.account?.organizations?.find(o => o.id === organizationId)?.limits?.scheduledPosts;

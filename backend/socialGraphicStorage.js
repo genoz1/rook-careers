@@ -90,8 +90,8 @@ async function validateGraphicBuffer(buffer) {
   if (metadata.format !== "jpeg") {
     throw new Error(`Expected a PNG, got: ${metadata.format}`);
   }
-  if (metadata.width !== EXPECTED_WIDTH || metadata.height !== EXPECTED_HEIGHT) {
-    throw new Error(`Expected ${EXPECTED_WIDTH}x${EXPECTED_HEIGHT}, got ${metadata.width}x${metadata.height}`);
+  if (metadata.width !== EXPECTED_WIDTH || ![EXPECTED_HEIGHT, 1024].includes(metadata.height)) {
+    throw new Error(`Expected 1024x1024 or ${EXPECTED_WIDTH}x${EXPECTED_HEIGHT}, got ${metadata.width}x${metadata.height}`);
   }
   return metadata;
 }

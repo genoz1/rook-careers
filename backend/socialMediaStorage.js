@@ -34,10 +34,11 @@ async function ensureBucketExists(supabaseAdmin) {
     // Bucket exists — update allowed MIME types to reflect current config.
     // This handles the case where the bucket was created with a narrower
     // set (e.g. image/png only) before a format change (e.g. to JPEG).
-    await supabaseAdmin.storage.updateBucket(BUCKET_NAME, {
+    const {error: updateError} = await supabaseAdmin.storage.updateBucket(BUCKET_NAME, {
       public: true,
       allowedMimeTypes: ALLOWED_MIME_TYPES,
     });
+    if (updateError) throw Error(`Cannot configure social media bucket: ${updateError.message}`);
     return;
   }
 

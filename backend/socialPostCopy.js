@@ -25,7 +25,6 @@ function buildPostCopy(candidate, platform = "linkedin") {
 
   lines.push("");
   lines.push(candidate.employer_display ? "Explore the complete job details on ROOK." : "See the employer and complete job details on ROOK.");
-  lines.push("Start your 3-day free trial:");
   lines.push(platform === "facebook" ? (candidate.public_url_facebook || candidate.public_url) : (candidate.public_url_linkedin || candidate.public_url));
 
   return lines.join("\n");

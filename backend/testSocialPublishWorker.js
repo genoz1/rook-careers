@@ -307,10 +307,10 @@ async function run() {
   });
 
 
-  test("post copy never includes the employer name and always includes the trial line + link", () => {
+  test("post copy never includes the employer name and always includes the natural CTA + link", () => {
     const candidate = { title: "Territory Sales Manager", location_display: "Atlanta, GA", category: "Medical Device", compensation_display: "$90,000 - $120,000", public_url: "https://rookcareers.com/jobs/job-1" };
     const copy = buildPostCopy(candidate);
-    assert.ok(copy.includes("Start your 3-day free trial"));
+    assert.ok(copy.includes("complete job details on ROOK."));
     assert.ok(copy.includes("https://rookcareers.com/jobs/job-1"));
     assert.ok(!copy.toLowerCase().includes("acme"));
     assert.ok(!/\$\d+\/month/.test(copy), "must never include a price");
@@ -560,7 +560,7 @@ async function run() {
     return async () => response;
   }
   await asyncTest("preflightCheckMedia passes for a genuinely valid PNG response", async () => {
-    const pngBytes = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from("restofpngdata")]);
+    const pngBytes = await require("sharp")({create:{width:10,height:10,channels:3,background:"white"}}).png().toBuffer();
     const httpFetch = mockPreflightFetch({ status: 200, headers: { get: () => "image/png" }, arrayBuffer: async () => pngBytes.buffer.slice(pngBytes.byteOffset, pngBytes.byteOffset + pngBytes.byteLength) });
     const result = await preflightCheckMedia("https://rookcareers.com/social/featured/x.png", { httpFetch });
     assert.strictEqual(result.ok, true);
@@ -569,7 +569,7 @@ async function run() {
     const httpFetch = async () => { throw new Error("getaddrinfo ENOTFOUND"); };
     const result = await preflightCheckMedia("https://rookcareers.com/social/featured/x.png", { httpFetch });
     assert.strictEqual(result.ok, false);
-    assert.ok(result.reason.includes("Could not reach"));
+    assert.ok(result.reason.includes("Media validation failed"));
   });
   await asyncTest("preflightCheckMedia fails on a non-200 status", async () => {
     const httpFetch = mockPreflightFetch({ status: 404, headers: { get: () => null } });
@@ -581,7 +581,7 @@ async function run() {
     const httpFetch = mockPreflightFetch({ status: 302, headers: { get: () => null } });
     const result = await preflightCheckMedia("https://rookcareers.com/social/featured/x.png", { httpFetch });
     assert.strictEqual(result.ok, false);
-    assert.ok(result.reason.includes("redirected"));
+    assert.ok(result.reason.includes("redirect"));
   });
   await asyncTest("preflightCheckMedia fails on the wrong Content-Type — this is exactly the 'Image could not be read' failure mode", async () => {
     const httpFetch = mockPreflightFetch({ status: 200, headers: { get: () => "text/html" }, arrayBuffer: async () => Buffer.from("<html>404</html>").buffer });
@@ -593,13 +593,13 @@ async function run() {
     const httpFetch = mockPreflightFetch({ status: 200, headers: { get: () => "image/png" }, arrayBuffer: async () => new ArrayBuffer(0) });
     const result = await preflightCheckMedia("https://rookcareers.com/social/featured/x.png", { httpFetch });
     assert.strictEqual(result.ok, false);
-    assert.ok(result.reason.includes("empty"));
+    assert.ok(/empty/i.test(result.reason));
   });
   await asyncTest("preflightCheckMedia fails on invalid PNG signature bytes (correct content-type, corrupt/wrong body)", async () => {
     const httpFetch = mockPreflightFetch({ status: 200, headers: { get: () => "image/png" }, arrayBuffer: async () => Uint8Array.from(Buffer.from("not a real image file")).buffer });
     const result = await preflightCheckMedia("https://rookcareers.com/social/featured/x.png", { httpFetch });
     assert.strictEqual(result.ok, false);
-    assert.ok(result.reason.includes("not a valid PNG or JPEG"));
+    assert.ok(result.reason.includes("Media validation failed"));
   });
 
   console.log("\n=== The preflight gate blocks BOTH channels entirely on failure, and records a retry-safe history row ===");

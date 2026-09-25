@@ -198,7 +198,7 @@ async function runValidationOnly(config, deps = {}) {
   // the graphic is uploaded to Supabase Storage, external to any
   // single app replica, rather than written to local disk at all.
   const uploaded = await (deps.uploadGraphicToStorage || uploadGraphicToStorage)(supabaseAdmin, {
-    dateStr, slot: "validate", jobId: topJob.id, contentVersion: candidate.content_version, buffer: graphicBuffer,
+    dateStr, slot: "validate", jobId: topJob.id, contentVersion: `${candidate.content_version}-${require("crypto").createHash("sha256").update(graphicBuffer).digest("hex").slice(0,12)}`, buffer: graphicBuffer,
   });
 
   // Informational here (this mode never contacts Buffer regardless) —
@@ -279,7 +279,7 @@ async function runControlledLiveTest(config, { confirmLive } = {}, deps = {}) {
   // the graphic is uploaded to Supabase Storage, external to any
   // single app replica, rather than written to local disk at all.
   const uploaded = await (deps.uploadGraphicToStorage || uploadGraphicToStorage)(supabaseAdmin, {
-    dateStr, slot: "live-test", jobId: topJob.id, contentVersion: candidate.content_version, buffer: graphicBuffer,
+    dateStr, slot: "live-test", jobId: topJob.id, contentVersion: `${candidate.content_version}-${require("crypto").createHash("sha256").update(graphicBuffer).digest("hex").slice(0,12)}`, buffer: graphicBuffer,
   });
 
   // Direct instruction: a real preflight fetch of the exact public URL
@@ -551,10 +551,19 @@ async function runScheduledSlot(slot, dateStr, config, deps = {}) {
     category: candidate.category,
   }, { onConflict: "run_key" });
   if (selectionError) throw new Error("Cannot persist social selection");
-  const graphicBuffer = await (deps.renderFeaturedJobGraphic || renderFeaturedJobGraphic)(candidate);
-  const uploaded = await (deps.uploadGraphicToStorage || uploadGraphicToStorage)(supabaseAdmin, {
-    dateStr, slot, jobId: topJob.id, contentVersion: candidate.content_version, buffer: graphicBuffer,
+  let uploaded;
+  try {
+    const graphicBuffer = await (deps.renderFeaturedJobGraphic || renderFeaturedJobGraphic)(candidate);
+    uploaded = await (deps.uploadGraphicToStorage || uploadGraphicToStorage)(supabaseAdmin, {
+    dateStr, slot, jobId: topJob.id, contentVersion: `${candidate.content_version}-${require("crypto").createHash("sha256").update(graphicBuffer).digest("hex").slice(0,12)}`, buffer: graphicBuffer,
   });
+
+  } catch(error) {
+    const reason = `Graphic preparation failed: ${error.message}`;
+    const {error: historyError} = await supabaseAdmin.from('social_post_history').upsert({run_key:runKey,failure_reason:reason},{onConflict:'run_key'});
+    console.error(`[social-media-failure] ${JSON.stringify({runKey,reason,historyRecorded:!historyError})}`);
+    return {ok:false,stage:'media_preparation',runKey,reason,historyRecorded:!historyError};
+  }
 
   const mediaPreflight = await (deps.preflightCheckMedia || preflightCheckMedia)(uploaded.publicUrl);
   if (!mediaPreflight.ok) {

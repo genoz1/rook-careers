@@ -50,9 +50,10 @@ function personalLinkedinSlot(slot) {
 function regularPost(slot, platform, copy) {
   const url = new URL('https://rookcareers.com/');
   url.search = new URLSearchParams({ utm_source: platform, utm_medium: 'social', utm_campaign: 'organic', utm_content: slot.kind }).toString();
-  const label = slot.kind === 'industry' ? `${slot.industry} career reflection` : {
-    education: 'Your medical sales job search', value: 'Explore medical and veterinary sales roles on ROOK', engagement: 'A question for the medical sales community',
-  }[slot.kind];
-  return `${label}\n\n${copy[platform] || copy.text}\n\nExplore ROOK: ${url}`;
+  const headline = copy.headline || 'Medical & veterinary sales careers';
+  const body = copy[platform] || copy.text;
+  // Advice stands on its own. Product posts retain the existing attribution.
+  const cta = slot.kind === 'value' ? `\n\nExplore matching opportunities on ROOK: ${url}` : `\n\n${url}`;
+  return `${headline}\n\n${body}${cta}`;
 }
 module.exports = { DAILY_SLOTS, PERSONAL_COPY_TOKEN, futureSlots, representedPost, availableCapacity, isPersonalLinkedinSlot, personalLinkedinSlot, regularPost };

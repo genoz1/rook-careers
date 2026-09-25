@@ -2,7 +2,7 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const {futureSlots,durableCreate,replenish}=require('./socialQueue');
 const {DAILY_SLOTS,PERSONAL_COPY_TOKEN,availableCapacity,representedPost,isPersonalLinkedinSlot,personalLinkedinSlot,regularPost}=require('./socialContentPlan');
-const {generateMarketing,generatePersonalLinkedin,parseMarketing,validateText,validatePersonalText,similarity}=require('./socialMarketingCopy');
+const {generateMarketing,generatePersonalLinkedin,validatePersonalText,similarity}=require('./socialMarketingCopy');
 const {readQueue}=require('./socialBuffer');
 function memoryDb() {
   const rows = [];
@@ -83,7 +83,7 @@ const channels=[{id:'li',service:'linkedin',name:'ROOK Careers',organizationId:'
 const config={automationEnabled:'true',bufferAccessToken:'fake',linkedinChannelId:'li',facebookChannelId:'fb',personalLinkedinChannelId:'gene'};
 const copy={linkedin:'Which responsibilities would you prioritize in a possible role? Consider comparing your decisions and responsibilities.',facebook:'What makes a workday satisfying for you? Think about the conversations you enjoy.',reddit:'How would you assess a possible career direction? Reflect on your questions before applying.',fallback:false};
 const personalCopy='I think a careful career search starts with a clear story about your strengths. Which examples would you choose to share?';
-function deps(extra={}) {return {supabaseAdmin:memoryDb(),now:new Date('2030-06-01T00:00:00Z'),listAllChannels:async()=>channels,readQueue:async(token,org)=>{assert.equal(org,"org");return {limit:10,posts:[]};},readRecentPosts:async(token,org)=>{assert.equal(org,"org");return [];},generateMarketing:async()=>copy,generatePersonalLinkedin:async()=>({text:personalCopy}),sendEmail:async()=>{},...extra};}
+function deps(extra={}) {return {supabaseAdmin:memoryDb(),now:new Date('2030-06-01T00:00:00Z'),listAllChannels:async()=>channels,readQueue:async(token,org)=>{assert.equal(org,"org");return {limit:10,posts:[]};},readRecentPosts:async(token,org)=>{assert.equal(org,"org");return [];},prepareMarketingGraphic:async()=>({photoUrl:"https://example.com/card.jpg"}),preflightCheckMedia:async()=>({ok:true}),generateMarketing:async()=>copy,generatePersonalLinkedin:async()=>({text:personalCopy}),sendEmail:async()=>{},...extra};}
 function response(value){return {status:'completed',output:[{type:'function_call',name:'write_social_marketing',arguments:JSON.stringify(value)}]};}
 function personalResponse(text){return {status:'completed',output:[{type:'function_call',name:'write_personal_linkedin',arguments:JSON.stringify({text})}]};}
 test('six daily slots have four regular posts and two additional job posts',()=>{
@@ -118,19 +118,19 @@ test('existing scheduled slot counts even when created outside this worker',()=>
  const slot=futureSlots(new Date('2030-06-01T00:00:00Z'))[0];const p={id:'old',channelId:'li',status:'scheduled',dueAt:slot.dueAt};
  assert.equal(representedPost([p],'li',slot).id,'old');assert.equal(representedPost([p],'fb',slot),undefined);
 });
-test('fresh copy accepts original channel variants and rejects claims/names/statistics',()=>{
- const {fallback,...variants}=copy;assert.deepEqual(parseMarketing(response(variants)),variants);
+test('personal copy retains validation against unsupported claims',()=>{
  validatePersonalText(personalCopy);
- for(const text of ['What about Acme hiring 100 reps?','Consider the guaranteed salary.','ROOK offers automatic applications.','Which salary is best?'])assert.throws(()=>validateText(text));
+ assert.throws(()=>validatePersonalText('I guarantee a salary of $100000. What would you earn?'));
 });
 test('recent-post protection catches overlap beyond exact strings',()=>{
  assert.ok(similarity('Compare responsibilities and decisions in possible roles.','Consider comparing the decisions and responsibilities involved in a role.')>=0.65);
- const {fallback,...variants}=copy;assert.throws(()=>parseMarketing(response(variants),[copy.linkedin]),/repetitive/);
+ assert.ok(similarity(personalCopy,personalCopy)>=0.65);
 });
-test('OpenAI generates new strings, receives recent history and uses the existing key',async()=>{
- const {fallback,...variants}=copy;let input;
- const result=await generateMarketing({theme:'industry',industry:'Medical Device',recent:['Earlier unrelated reflection.']},{env:{OPENAI_API_KEY:'fake'},fetchImpl:async(_,opts)=>{input=JSON.parse(opts.body);return {ok:true,json:async()=>response(variants)};}});
- assert.equal(result.fallback,false);assert.equal(input.store,false);assert.match(input.input,/Earlier unrelated/);assert.equal(result.linkedin,copy.linkedin);
+test('company copy is specific, rotates with history, and makes no paid API calls',async()=>{
+ const first=await generateMarketing({theme:'education',dateStr:'2026-09-24'},{fetchImpl:async()=>assert.fail('no paid call')});
+ const next=await generateMarketing({theme:'education',dateStr:'2026-09-24',recent:[first.linkedin]});
+ assert.notEqual(first.topicId,next.topicId);assert.equal(first.model,null);
+ assert.doesNotMatch(first.linkedin,/aspirations|ideal role|career reflection/);
 });
 test('personal copy uses ROOK OpenAI only when requested and checks recent history',async()=>{
  let input,calls=0;
@@ -138,9 +138,8 @@ test('personal copy uses ROOK OpenAI only when requested and checks recent histo
  assert.equal(calls,1);assert.equal(result.text,personalCopy);assert.equal(input.store,false);assert.match(input.input,/Earlier Gene post/);
  await assert.rejects(generatePersonalLinkedin({theme:'featured',recent:[personalCopy]},{env:{OPENAI_API_KEY:'fake'},fetchImpl:async()=>({ok:true,json:async()=>personalResponse(personalCopy)})}),/bounded retries/);
 });
-test('OpenAI failure retries three times then retains deterministic fallback',async()=>{
- let calls=0;const result=await generateMarketing({theme:'education'},{env:{OPENAI_API_KEY:'fake'},fetchImpl:async()=>{calls++;throw Error('offline');}});
- assert.equal(calls,3);assert.equal(result.fallback,true);assert.ok(result.facebook);
+test('job copy uses validated facts without a generated reflection',async()=>{
+ const result=await generateMarketing({slot:'am'});assert.equal(result.linkedin,'');assert.equal(result.fallback,false);
 });
 test('validation-only fallback is logged but does not send an urgent alert',async()=>{
  const slots=futureSlots(new Date('2030-06-01T00:00:00Z'));
@@ -149,7 +148,7 @@ test('validation-only fallback is logged but does not send an urgent alert',asyn
  let emails=0;
  const r=await replenish(config,deps({
   readQueue:async()=>({posts,limit:10}),
-  createPost:async(_token,payload)=>{const post={id:`new-${posts.length}`,status:'scheduled',...payload};posts.push(post);return post;},
+  createPost:async(_token,payload)=>{const post={id:`new-${posts.length}`,status:'scheduled',assets:[{mimeType:'image/jpeg',source:payload.photoUrl}],...payload};posts.push(post);return post;},
   generateMarketing:async()=>({...copy,fallback:true,reason:'Substantially repetitive marketing',unavailable:false,model:'gpt-4o-mini'}),
   sendEmail:async()=>{emails++;},
  }));
@@ -174,7 +173,7 @@ test('regular posts fill only missing slots, keep existing content and respect c
  for(const s of slots.filter(s=>['am','pm'].includes(s.slot)))for(const c of channels.slice(0,2))posts.push({id:`job-${posts.length}`,channelId:c.id,status:'scheduled',dueAt:s.dueAt,text:'Existing job'});
  const existing=slots.find(s=>s.slot==='marketing-1');posts.push({id:'manual',channelId:'li',status:'scheduled',dueAt:existing.dueAt,text:'Keep this legitimate existing content'});
  let calls=0;
- const r=await replenish(config,deps({readQueue:async()=>({posts:[...posts],limit:10}),createPost:async(_,p)=>{const post={...p,id:`new-${++calls}`,status:'scheduled'};posts.push(post);return post;},runScheduledSlot:async()=>assert.fail('jobs already represented'),sendEmail:async()=>assert.fail('successful operation is silent')}));
+ const r=await replenish(config,deps({readQueue:async()=>({posts:[...posts],limit:10}),createPost:async(_,p)=>{const post={...p,id:`new-${++calls}`,status:'scheduled',assets:[{mimeType:'image/jpeg',source:p.photoUrl}]};posts.push(post);return post;},runScheduledSlot:async()=>assert.fail('jobs already represented'),sendEmail:async()=>assert.fail('successful operation is silent')}));
  assert.equal(r.ok,true);assert.equal(posts.find(p=>p.id==='manual').text,'Keep this legitimate existing content');
  for(const c of channels.slice(0,2))assert.equal(posts.filter(p=>p.channelId===c.id).length,10);
  assert.ok(posts.filter(p=>p.channelId==='gene').length<=1);
@@ -225,4 +224,41 @@ test('a matched ambiguous receipt is recovered without a duplicate mutation',asy
  db.rows.push({run_key:'old',channel_id:'li',state:'sending',payload:{text:'known',dueAt:post.dueAt}});
  const posts=[post,...channels.flatMap(c=>Array.from({length:10},(_,i)=>({id:c.id+i,channelId:c.id,status:'scheduled',dueAt:'2031-01-01'})))];
  await replenish(config,deps({supabaseAdmin:db,readQueue:async()=>({posts,limit:10})}));assert.equal(db.rows[0].state,'scheduled');assert.equal(db.rows[0].post.id,'accepted');
+});
+
+test('missing Buffer media is reported after receipt persistence and never creates a duplicate',async()=>{
+ const db=memoryDb();let sends=0;
+ const withMedia={...payload,photoUrl:'https://example.test/card.jpg',requireMedia:true};
+ const send=async()=>{sends++;return {id:'accepted-without-media',assets:[]};};
+ await assert.rejects(durableCreate(db,'missing-media','fake',withMedia,send),/unverified/);
+ assert.equal(db.rows[0].state,'scheduled');
+ await assert.rejects(durableCreate(db,'missing-media','fake',withMedia,send),/unverified/);
+ assert.equal(sends,1);
+});
+test('one failed image leaves its slot retryable while other marketing slots continue',async()=>{
+ const db=memoryDb(),slots=futureSlots(new Date('2030-06-01T00:00:00Z'));
+ const posts=channels.slice(0,2).flatMap(c=>slots.filter(s=>['am','pm'].includes(s.slot)).map((s,i)=>({id:c.id+i,channelId:c.id,status:'scheduled',dueAt:s.dueAt,text:'Existing job'})));
+ const broken=slots.find(s=>s.slot==='marketing-1');let brokenOnce=true;
+ const extra=deps({supabaseAdmin:db,readQueue:async()=>({posts,limit:20}),prepareMarketingGraphic:async(_db,slot)=>{if(brokenOnce&&slot.dateStr===broken.dateStr&&slot.slot===broken.slot)throw Error('test storage outage');return {photoUrl:'https://example.test/card.jpg'};},createPost:async(_,p)=>{const post={...p,id:'created-'+posts.length,status:'scheduled',assets:[{source:p.photoUrl,mimeType:'image/jpeg'}]};posts.push(post);return post;}});
+ const first=await replenish(config,extra);assert.equal(first.ok,false);assert.ok(first.created>0);
+ assert.ok(first.failures.some(f=>f.reason==='test storage outage'));
+ assert.equal(representedPost(posts,'li',broken),undefined);
+ const oldIds=posts.map(p=>p.id);brokenOnce=false;
+ const again=await replenish(config,extra);assert.equal(again.ok,true);assert.ok(representedPost(posts,'li',broken));
+ assert.equal(posts.filter(p=>oldIds.includes(p.id)).length,oldIds.length);
+});
+
+test('partial-channel recovery reuses the saved editorial copy and media',async()=>{
+ const db=memoryDb(),slots=futureSlots(new Date('2030-06-01T00:00:00Z')),target=slots.find(s=>s.slot==='marketing-1');
+ const posts=channels.slice(0,2).flatMap(c=>slots.filter(s=>s!==target).map((s,i)=>({id:c.id+i,channelId:c.id,status:'scheduled',dueAt:s.dueAt,text:'Existing'})));
+ let fail=true,copies=0,images=0;
+ const injected=deps({supabaseAdmin:db,readQueue:async()=>({posts,limit:20}),generateMarketing:async()=>{copies++;return {...copy,headline:'Specific reviewed topic'};},prepareMarketingGraphic:async()=>{images++;return {photoUrl:'https://example.test/stable.jpg'};},createPost:async(_,p)=>{
+  if(p.channelId==='fb'&&fail)throw Object.assign(Error('temporary rejection'),{isMutationError:true});
+  const post={...p,id:`created-${posts.length}`,status:'scheduled',assets:[{mimeType:'image/jpeg',source:p.photoUrl}]};posts.push(post);return post;
+ }});
+ assert.equal((await replenish(config,injected)).ok,false);fail=false;
+ assert.equal((await replenish(config,injected)).ok,true);
+ assert.equal(copies,1);assert.equal(images,1);
+ const li=representedPost(posts,'li',target),fb=representedPost(posts,'fb',target);
+ assert.equal(li.photoUrl,fb.photoUrl);assert.match(fb.text,/Specific reviewed topic/);
 });
