@@ -89,26 +89,23 @@
 .privacy-trust strong{display:block;color:#176557;font-size:14px;font-weight:700;margin-bottom:4px;}
 </style>
 <link rel="stylesheet" href="rook-mobile.css">
+<link rel="stylesheet" href="rook-login-design.css">
 </head>
 <body>
 
-<div class="logo">
-  <img src="assets/rook-logo.png" alt="ROOK" style="height:46px; width:auto; display:block;">
-  <span style="font-family:var(--font-display); font-weight:700; font-size:36px; letter-spacing:-0.02em; color:var(--navy); line-height:1;">ROOK</span>
-</div>
-<a href="index.html" style="display:block; text-align:center; font-size:13px; font-weight:600; color:var(--muted, #5B6B85); margin-top:-16px; margin-bottom:24px;">← Back to Home</a>
-
+<header class="login-header"><a href="index.html" class="login-brand" aria-label="ROOK home"><img src="assets/login-design/rook.webp" alt=""><span><b>ROOK</b><small>Medical &amp; Veterinary Sales Jobs</small></span></a><span class="login-private">Your information is private</span></header>
 <div class="card">
+<a class="card-brand" href="index.html" aria-label="ROOK home"><img src="assets/login-design/rook.webp" alt=""><span><b>ROOK</b><small>Medical &amp; Veterinary Sales Jobs</small></span></a>
   <div class="tabs">
-    <div class="tab active" id="tabSignin" onclick="switchTab('signin')">Log In</div>
-    <div class="tab" id="tabSignup" onclick="switchTab('signup')">Create Account</div>
+    <button type="button" class="tab active" id="tabSignin" onclick="switchTab('signin')">Log In</button>
+    <button type="button" class="tab" id="tabSignup" onclick="switchTab('signup')">Create Account</button>
   </div>
 
   <div id="panelSignin">
-    <h2>Welcome back</h2>
-    <div class="sub">Log in to see your matches.</div>
-    <div class="field"><label>Email</label><input type="email" id="signinEmail" autocomplete="email" required></div>
-    <div class="field"><label>Password</label>
+    <h2>Welcome back.</h2>
+    <div class="sub">Log in to see your personalized matches.</div>
+    <div class="field"><label for="signinEmail">Email</label><input type="email" id="signinEmail" autocomplete="email" required></div>
+    <div class="field"><label for="signinPassword">Password</label>
       <div class="pw-wrap">
         <input type="password" id="signinPassword" autocomplete="current-password" required>
         <button type="button" class="pw-toggle" onclick="togglePasswordVisibility('signinPassword', this)" aria-label="Show password">👁</button>
@@ -121,7 +118,7 @@
   <div id="panelForgot" style="display:none;">
     <h2>Reset your password</h2>
     <div class="sub">Enter your email and we'll send you a link to set a new password.</div>
-    <div class="field"><label>Email</label><input type="email" id="forgotEmail" autocomplete="email" required></div>
+    <div class="field"><label for="forgotEmail">Email</label><input type="email" id="forgotEmail" autocomplete="email" required></div>
     <button class="btn" id="forgotBtn" onclick="handleForgotPassword()">Send Reset Link</button>
     <div style="text-align:center; margin-top:14px;"><a href="#" onclick="switchTab('signin'); return false;" style="font-size:13px;">← Back to log in</a></div>
   </div>
@@ -136,14 +133,14 @@
       <li>Cancel anytime</li>
     </ul>
     <div class="privacy-trust"><strong>🔒 Private &amp; confidential</strong>Creating an account does not make you visible to employers or recruiters.</div>
-    <div class="field"><label>Email</label><input type="email" id="signupEmail" autocomplete="email" required></div>
-    <div class="field"><label>Password</label>
+    <div class="field"><label for="signupEmail">Email</label><input type="email" id="signupEmail" autocomplete="email" required></div>
+    <div class="field"><label for="signupPassword">Password</label>
       <div class="pw-wrap">
         <input type="password" id="signupPassword" autocomplete="new-password" required minlength="8">
         <button type="button" class="pw-toggle" onclick="togglePasswordVisibility('signupPassword', this)" aria-label="Show password">👁</button>
       </div>
     </div>
-    <div class="field"><label>Confirm Password</label>
+    <div class="field"><label for="signupPasswordConfirm">Confirm Password</label>
       <div class="pw-wrap">
         <input type="password" id="signupPasswordConfirm" autocomplete="new-password" required minlength="8">
         <button type="button" class="pw-toggle" onclick="togglePasswordVisibility('signupPasswordConfirm', this)" aria-label="Show password">👁</button>
@@ -425,5 +422,6 @@ s.parentNode.insertBefore(b, s);})(window.lintrk);
 <noscript>
 <img height="1" width="1" style="display:none;" alt="" src="https://px.ads.linkedin.com/collect/?pid=9629410&fmt=gif" />
 </noscript>
+<div class="login-bottom" aria-hidden="true"></div><footer class="login-footer"><span>ROOK · Medical &amp; veterinary sales careers</span><nav><a href="rook-about.html">About ROOK</a><a href="mailto:hello@rookcareers.com">Contact</a><a href="rook-privacy.html">Privacy</a><a href="rook-terms.html">Terms</a></nav></footer>
 </body>
 </html>
