@@ -101,3 +101,50 @@
  body:has(#createSection)::before{top:calc(var(--mobile-header) - 2.44vw);height:43vw}
 }
 @media(max-width:359px){body:has(main) .nav-name::after{display:none}}
+/* Keep the longer mobile forms within the available phone height. */
+@media(max-width:767px){
+ body:has(#s-industry.active),body:has(#s-territory.active),body:has(#createSection){--compact-hero:clamp(0px,calc(100svh - 650px),150px);padding-bottom:0}
+ body:has(#s-industry.active) .v7-onboarding-card,body:has(#s-territory.active) .v7-onboarding-card{width:92%;margin-top:var(--compact-hero)}
+ body:has(#s-industry.active) .shell,body:has(#s-territory.active) .shell{padding:12px 5% 8px!important}
+ body:has(#s-industry.active) .progress-wrap,body:has(#s-territory.active) .progress-wrap{padding-top:10px}
+ #s-industry h2,#s-territory h2{font-size:22px!important;margin-bottom:6px}
+ #s-industry .lead,#s-territory .lead{font-size:13px!important;margin-bottom:9px;line-height:1.3!important}
+ #s-industry .choice,#s-territory .choice{padding:7px 9px;min-height:46px;gap:9px}
+ #s-industry .choice-label,#s-territory .choice-label{font-size:13px}
+ #s-industry .choice-sub,#s-territory .choice-sub,#s-territory .choice:last-child>div::after{font-size:11px;margin-top:2px}
+ #s-industry .btn-back,#s-territory .btn-back{padding:8px 0 2px}
+ body:has(#createSection) .shell{width:92%;margin-top:calc(var(--mobile-header) + var(--compact-hero))}
+ body:has(#createSection) .screen{padding:10px 5% 8px}
+ body:has(#createSection) .eyebrow{margin-bottom:7px;padding-top:13px}
+ body:has(#createSection) h2{font-size:23px!important;margin-bottom:6px}
+ body:has(#createSection) .lead{font-size:12px!important;margin-bottom:8px}
+ body:has(#createSection) .privacy-trust{font-size:11px;line-height:1.25;padding-top:8px;padding-bottom:8px;margin-bottom:8px}
+ body:has(#createSection) .privacy-trust strong{font-size:12px;margin-bottom:2px}
+ body:has(#createSection) .field-group{gap:7px}
+ body:has(#createSection) .field-input{padding:8px 10px;min-height:44px}
+ body:has(#createSection) .btn-primary{margin-top:8px;padding:10px 8px}
+ body:has(#createSection) .fine{font-size:10px;line-height:1.3;margin-top:6px}
+ body:has(#s-industry.active) .v7-mobile-bottom,body:has(#s-territory.active) .v7-mobile-bottom,body:has(#createSection) .v7-mobile-bottom{height:clamp(0px,calc(100svh - 780px),65px)}
+ body:has(#s-industry.active)::before,body:has(#s-territory.active)::before,body:has(#createSection)::before{top:var(--mobile-header);height:var(--compact-hero);background-size:auto max(100%,110px);background-position:center}
+}
+@media(max-width:767px){
+ body:has(#s-industry.active)::after,body:has(#s-territory.active)::after,body:has(#createSection)::after{top:calc(var(--mobile-header) + var(--compact-hero))}
+ #s-industry>div:has(>.choice),#s-territory>div:has(>.choice){gap:6px!important}
+}
+@media(max-width:359px){
+ #s-industry h2,#s-territory h2{font-size:20px!important}
+ #s-industry .choice,#s-territory .choice{padding:6px 8px}
+ body:has(#createSection) .screen{padding-left:4%;padding-right:4%}
+ body:has(#createSection) h2{font-size:21px!important}
+ body:has(#createSection) .lead{font-size:11px!important}
+ body:has(#createSection) .privacy-trust{font-size:10px}
+}
+@media(max-width:359px) and (max-height:620px){
+ body:has(#createSection) .eyebrow{font-size:9px;margin-bottom:5px;padding-top:10px}
+ body:has(#createSection) h2{font-size:20px!important}
+ body:has(#createSection) .field-group{gap:4px}
+ body:has(#createSection) .field-label{margin-bottom:2px}
+ body:has(#createSection) .field-input{min-height:40px;padding:6px 9px}
+ body:has(#createSection) .privacy-trust{margin-bottom:5px;padding-top:6px;padding-bottom:6px}
+ body:has(#createSection) .fine{font-size:9.5px;margin-top:4px}
+}
