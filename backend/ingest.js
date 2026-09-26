@@ -15,7 +15,7 @@ const { safeEvaluateSocialEligibilityForIngestion } = require("./socialAutomatio
 const { fetchGreenhouseJobs, normalizeGreenhouseJob } = require("./adapters/greenhouse");
 const { fetchLeverJobs, normalizeLeverJob } = require("./adapters/lever");
 const { fetchAshbyJobs, normalizeAshbyJob } = require("./adapters/ashby");
-const { fetchWorkdayJobs, normalizeWorkdayJob } = require("./adapters/workday");
+const { fetchWorkdayJobs, normalizeWorkdayJob, isLabcorpWorkdayCommercialTitle } = require("./adapters/workday");
 const { fetchTalentBrewJobs, normalizeTalentBrewJob } = require("./adapters/talentbrew");
 const { fetchWorkableJobs, normalizeWorkableJob } = require("./adapters/workable");
 const { fetchSmartRecruitersJobs, normalizeSmartRecruitersJob } = require("./adapters/smartrecruiters");
@@ -289,7 +289,10 @@ async function ingestEmployer(employer) {
     // sources this check rarely rejects anything further — it's still
     // the primary filter for Greenhouse/Lever/Ashby, which return every
     // raw posting unfiltered.
-    if (!looksRelevant(job.title_original)) {
+    const sourceSpecificRelevant = employer.ats_type === 'workday'
+      && String(employer.ats_identifier || '').split('|')[0].toLowerCase() === 'labcorp'
+      && isLabcorpWorkdayCommercialTitle(job.title_original);
+    if (!looksRelevant(job.title_original) && !sourceSpecificRelevant) {
       await closeExcludedJob(job.source_job_id);
       continue;
     }

@@ -51,6 +51,24 @@ const { titleLooksRelevant } = require('../relevanceFilter');
 const zipcodes = require('zipcodes');
 const { resolveUsStateCode } = require('../jobEligibility');
 
+// Labcorp's live Workday board marks these specialty development roles as
+// direct sales, but their titles do not contain the generic sales keywords
+// used by ROOK's shared relevance filter. Keep the exception limited to this
+// verified Workday tenant and these commercial title patterns.
+const LABCORP_COMMERCIAL_TITLE_PATTERNS = [
+  /\bspecialty development executive\b/i,
+  /\boncology development specialty\b/i,
+];
+
+function isLabcorpWorkdayCommercialTitle(title = '') {
+  return LABCORP_COMMERCIAL_TITLE_PATTERNS.some(pattern => pattern.test(String(title || '')));
+}
+
+function workdayTitleLooksRelevant(title, identifier) {
+  const { tenant } = parseWorkdayIdentifier(identifier);
+  return titleLooksRelevant(title) || (tenant.toLowerCase() === 'labcorp' && isLabcorpWorkdayCommercialTitle(title));
+}
+
 // Workday commonly publishes field roles as "State - Virtual" even when
 // the posting title names the actual territory city. Use that city only
 // when a real US ZIP record proves it belongs to the source-provided state.
@@ -196,7 +214,7 @@ async function fetchWorkdayJobs(identifier) {
   // Only fetch full detail for postings that already look relevant by
   // title — see titleLooksRelevant() above for why. This is the slow part
   // (one request per job, sequential), so it logs progress every 10 jobs.
-  const relevantPostings = allPostings.filter((p) => titleLooksRelevant(p.title));
+  const relevantPostings = allPostings.filter((p) => workdayTitleLooksRelevant(p.title, identifier));
   console.log(`    ${relevantPostings.length} / ${allPostings.length} titles look relevant — fetching their descriptions...`);
 
   const detailed = [];
@@ -378,4 +396,4 @@ function stripHtml(html) {
     .trim();
 }
 
-module.exports = { fetchWorkdayJobs, normalizeWorkdayJob, parseWorkdayIdentifier, validatedVirtualCity };
+module.exports = { fetchWorkdayJobs, normalizeWorkdayJob, parseWorkdayIdentifier, validatedVirtualCity, isLabcorpWorkdayCommercialTitle, workdayTitleLooksRelevant };
