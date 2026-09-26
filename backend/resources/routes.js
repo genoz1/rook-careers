@@ -40,7 +40,10 @@ function createRouter(deps={}){
   if(!/^[a-z0-9-]{1,110}$/.test(req.params.slug))return res.status(404).send('Article not found');
   const a=await result(client().from('resource_articles').select('*').eq('slug',req.params.slug).maybeSingle());
   if(!a)return res.status(404).send('Article not found');
-  const related=(await listing({category:a.category,limit:5},client())).items.filter(r=>r.slug!==a.slug).slice(0,4);
+  const related=await result(client().from('resource_articles')
+   .select('slug,title,resource_topics!inner(status)').eq('category',a.category)
+   .eq('resource_topics.status','published').neq('slug',a.slug)
+   .lte('published_at',new Date().toISOString()).order('published_at',{ascending:false}).order('slug').limit(3));
   let jobs=[];
   try{const inventory=await (deps.jobs||(loadJobs ||= require('../seoInventory').createInventoryLoader(client())))();jobs=inventory['/jobs/category/'+category(a.category).jobs]?.entries?.slice(0,3)||[];}catch{/* Job availability must not block a public article. */}
   res.type('html').send(views.article(a,related,jobs));
