@@ -1,15 +1,15 @@
 const {test}=require('node:test'),assert=require('node:assert/strict');
 const {pdf,structured}=require('./fixtures/resume/realisticPdf');
 const {analyzeResume}=require('./ai/resumeAnalysis');
-const parse=require('pdf-parse');
+const {extractResumeText}=require('./resumeParser');
 test('real PDF typography and terminal periods preserve literal facts',async()=>{
- const {text}=await parse(pdf());
+ const text=await extractResumeText(pdf(),'application/pdf');
  assert(text.includes('company’s'));assert(/long-\s*\nterm/.test(text));
  const result=await analyzeResume(text,{callAI:async()=>structured});
  assert.deepEqual(result,structured);
 });
 test('grounding still rejects altered figures, negation, invented claims and decimal prefixes',async()=>{
- const {text}=await parse(pdf());
+ const text=await extractResumeText(pdf(),'application/pdf');
  for(const achievement of [
   structured.employers[0].achievements.replace('103.7%','130.7%'),
   structured.employers[0].achievements.replace('Renewed','Did not renew'),

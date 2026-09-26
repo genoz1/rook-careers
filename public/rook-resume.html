@@ -8,7 +8,7 @@
 <header><a class="brand" href="rook-dashboard.html"><img src="assets/rook-logo.png" alt="">ROOK</a><a href="rook-mobile-menu.html">Menu</a></header>
 <main><h1>My Résumé</h1><p>View the résumé currently on your account, or upload a replacement.</p><a href="rook-dashboard.html">← Back to My Job Matches</a>
 <section class="card" aria-labelledby="currentTitle"><h2 id="currentTitle">Current résumé</h2><p id="loading" role="status">Loading your résumé…</p><div id="current" hidden><div class="file-name" id="filename"></div><small id="uploadedAt"></small><div class="actions"><a id="openResume" class="button" target="_blank" rel="noopener noreferrer">Open / download résumé</a></div><p>Open your uploaded file to view the full document.</p></div><p id="empty" hidden>No résumé has been uploaded yet.</p></section>
-<section class="card" aria-labelledby="replaceTitle"><h2 id="replaceTitle">Upload a résumé</h2><form id="uploadForm"><label for="resumeFile">Choose a PDF or Word document</label><input id="resumeFile" name="resume" type="file" accept=".pdf,.doc,.docx" required><small>Up to 10 MB. Uploading replaces the résumé used for your matches. Your résumé stays private.</small><div class="actions"><button class="primary" id="uploadButton" type="submit" disabled>Upload résumé</button></div></form><p id="status" role="status" aria-live="polite"></p></section></main>
+<section class="card" aria-labelledby="replaceTitle"><h2 id="replaceTitle">Upload a résumé</h2><form id="uploadForm"><label for="resumeFile">Choose a PDF or Word document</label><input id="resumeFile" name="resume" type="file" accept=".pdf,.doc,.docx" required><small>Up to 10 MB. Uploading replaces the résumé used for your matches. Your résumé stays private.</small><div class="actions"><button class="primary" id="uploadButton" type="submit" disabled>Upload résumé</button></div></form><p id="status" role="status" aria-live="polite"></p><a id="viewUpdatedMatches" class="button" href="rook-dashboard.html" hidden>View Updated Matches</a></section></main>
 <script src="rook-config.js"></script><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="rook-auth.js"></script>
 <script>
 const byId=id=>document.getElementById(id);let uploading=false;
@@ -33,9 +33,29 @@ byId('uploadForm').addEventListener('submit',async event=>{
   try{
     const body=new FormData();body.append('resume',file);const response=await rookApiFetch('/resume',{method:'POST',body});const result=await response.json().catch(()=>({}));
     if(!response.ok || !result.ok)throw new Error('The upload did not complete. Please try again.');
-    byId('resumeFile').value='';
-    showStatus(result.analysis_status==='ok'?'Your résumé was replaced. Your matches will refresh shortly.':'Your résumé was uploaded, but its analysis did not finish. You can view the new file below or try uploading a PDF.');
+    byId('resumeFile').value='';byId('viewUpdatedMatches').hidden=true;
     try{await loadResume();}catch(_){showStatus('Your résumé was uploaded. Refresh this page to view the new file.');}
+    if(result.analysis_status!=='ok'){
+      showStatus('Your new résumé file was saved, but its contents could not be analyzed. Your match refresh was not confirmed. Please try a readable PDF or Word document.');
+      return;
+    }
+    showStatus('Your résumé was analyzed. Refreshing your job matches…');
+    const deadline=Date.now()+180000;
+    while(Date.now()<deadline){
+      try{
+        const statusResponse=await rookApiFetch('/resume-status');
+        if(statusResponse.ok){
+          const status=await statusResponse.json();
+          if(status.status==='complete'){
+            showStatus('✓ Your résumé was updated and your job matches have been refreshed.');
+            byId('viewUpdatedMatches').hidden=false;
+            return;
+          }
+        }
+      }catch(_){}
+      await new Promise(resolve=>setTimeout(resolve,2000));
+    }
+    showStatus('Your résumé was saved and analyzed, but ROOK has not yet confirmed that the match refresh finished. You can check My Job Matches now and return here shortly.');
   }catch(error){showStatus(error.message,true);}finally{uploading=false;byId('uploadButton').disabled=false;byId('resumeFile').disabled=false;}
 });
 window.addEventListener('beforeunload',event=>{if(uploading){event.preventDefault();event.returnValue='';}});
