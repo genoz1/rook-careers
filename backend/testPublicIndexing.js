@@ -6,14 +6,15 @@ const fs = require("node:fs");
 const vm = require("node:vm");
 const path = require("node:path");
 
-function setup(rows, { cap = 1000, failAt = Infinity, configured = true } = {}) {
+function setup(rows, { cap = 1000, failAt = Infinity, configured = true, resources = [] } = {}) {
   const handlers = {};
   const client = {
-    from() {
+    from(table) {
       let filters = [], columns = "", offset = 0, end = cap - 1, limit = Infinity, order;
       const query = {
         select(value) { columns = value; return this; },
         eq(key, value) { filters.push(row => row[key] === value); return this; },
+        lte(key, value) { filters.push(row => row[key] != null && row[key] <= value); return this; },
         neq(key, value) { filters.push(row => row[key] !== value); return this; },
         ilike() { return this; },
         order(key) { order = key; return this; },
@@ -24,7 +25,7 @@ function setup(rows, { cap = 1000, failAt = Infinity, configured = true } = {}) 
       };
       function result(single) {
         if (offset >= failAt) return { data: null, error: { message: "Database unavailable" } };
-        let selected = rows.filter(row => filters.every(filter => filter(row)));
+        let selected = (table === "resource_articles" ? resources : rows).filter(row => filters.every(filter => filter(row)));
         if (order) selected.sort((a, b) => String(a[order]).localeCompare(String(b[order])));
         selected = selected.slice(offset, offset + Math.min(end - offset + 1, cap, limit));
         const data = selected.map(row => Object.fromEntries(columns.split(",").map(key => [key.trim(), row[key.trim()]])));
@@ -149,3 +150,18 @@ test("job previews use ordinary WebPage metadata, retain gates, and escape conte
   for (const value of ['Clinical Sales Manager (New York)','New York, NY','Full-time','$118,337–$177,505','Diagnostics','Start My 3-Day Free Trial','job='+row.id,'utm_source=linkedin','ref=linkedin-post']) assert.ok(res.body.includes(value),value);
   for (const value of ['PRIVATE_','BrandXYZ','ReqSecret8842','private-application','Browse current opportunities']) assert.ok(!res.body.includes(value),value);
  });
+
+test("main sitemap includes only published Resources and picks up new articles automatically", async () => {
+  const resources = Array.from({length: 7}, (_, i) => ({slug: 'guide-'+i, published_at:'2020-01-01T00:00:00Z', 'resource_topics.status':'published'}));
+  resources.push({slug:'rejected',published_at:'2020-01-01T00:00:00Z','resource_topics.status':'rejected'},
+    {slug:'draft',published_at:null,'resource_topics.status':'queued'},
+    {slug:'future',published_at:'2999-01-01T00:00:00Z','resource_topics.status':'published'});
+  const invoke=setup(jobs(3),{cap:2,resources});
+  const first=await invoke('/sitemap.xml');assert.equal(first.statusCode,200);
+  assert.ok(first.body.includes('<loc>https://rookcareers.com/resources/</loc>'));
+  for(let i=0;i<7;i++)assert.ok(first.body.includes('/resources/guide-'+i+'/'));
+  for(const slug of ['draft','rejected','future'])assert.ok(!first.body.includes('/resources/'+slug+'/'));
+  assert.ok(first.body.includes('/jobs/job-00002'));
+  resources.push({slug:'newly-published',published_at:'2020-01-01T00:00:00Z','resource_topics.status':'published'});
+  assert.ok((await invoke('/sitemap.xml')).body.includes('/resources/newly-published/'));
+});

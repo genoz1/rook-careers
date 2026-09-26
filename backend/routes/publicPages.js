@@ -380,6 +380,7 @@ router.get("/sitemap.xml", async (req, res) => {
   const staticUrls = [
     `${APP_BASE_URL}/`,
     `${APP_BASE_URL}/jobs`,
+    `${APP_BASE_URL}/resources/`,
     `${APP_BASE_URL}/rook-browse.html`,
     `${APP_BASE_URL}/rook-about.html`,
     `${APP_BASE_URL}/rook-pricing.html`,
@@ -404,6 +405,20 @@ router.get("/sitemap.xml", async (req, res) => {
       jobUrls.push(...jobs.filter(isUsEligibleJob).map(j => `${APP_BASE_URL}/jobs/${j.id}`));
       if (jobUrls.length + staticUrls.length > 50000) throw new Error("Sitemap requires splitting");
       offset += jobs.length;
+    }
+    // Only committed, published Resources articles; topics still in the queue
+    // (or rejected) never become sitemap entries. Read every page on each request.
+    offset = 0;
+    const now = new Date().toISOString();
+    while (true) {
+      const { data: articles, error } = await supabaseAnon.from("resource_articles")
+        .select("slug, resource_topics!inner(status)").eq("resource_topics.status", "published")
+        .lte("published_at", now).order("slug", { ascending: true }).range(offset, offset + 499);
+      if (error || !Array.isArray(articles)) throw new Error("Resources sitemap query failed");
+      if (!articles.length) break;
+      staticUrls.push(...articles.map(a => `${APP_BASE_URL}/resources/${a.slug}/`));
+      if (jobUrls.length + staticUrls.length > 50000) throw new Error("Sitemap requires splitting");
+      offset += articles.length;
     }
   } catch (_) {
     // Never publish a successful but empty/partial sitemap during an outage.
