@@ -14,7 +14,39 @@
 // once per candidate+job, not once per page visit, unless the caller
 // explicitly passes ?regenerate=true.
 
-const { callClaudeForJSON } = require("./client");
+const { callOpenAIForJSON } = require("./openaiJson");
+
+// The existing OpenAI client requires a strict schema. This mirrors the
+// original prompt's output contract without adding or changing fields.
+const string = { type: "string" };
+const strings = { type: "array", items: string };
+const APPLICATION_PACKAGE_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["tailored_summary", "work_history", "core_skills", "education", "ats_keywords", "cover_letter", "recruiter_message", "interview_prep_notes"],
+  properties: {
+    tailored_summary: string,
+    work_history: { type: "array", items: {
+      type: "object", additionalProperties: false,
+      required: ["employer", "title", "dates", "bullets"],
+      properties: { employer: string, title: string, dates: string, bullets: strings },
+    } },
+    core_skills: strings,
+    education: { type: "array", items: {
+      type: "object", additionalProperties: false,
+      required: ["degree", "institution", "date"],
+      properties: { degree: string, institution: string, date: string },
+    } },
+    ats_keywords: strings,
+    cover_letter: string,
+    recruiter_message: string,
+    interview_prep_notes: { type: "array", items: {
+      type: "object", additionalProperties: false,
+      required: ["question", "how_to_answer"],
+      properties: { question: string, how_to_answer: string },
+    } },
+  },
+};
 
 const SYSTEM_PROMPT = `You are helping a candidate prepare a job application package for a specific medical/veterinary sales job posting, based ONLY on their actual résumé text. This is for a real job application that may be sent to a real employer — accuracy is critical.
 
@@ -64,7 +96,9 @@ async function generateApplicationPackage(resumeText, jobTitle, companyName, job
   // and this is the single largest JSON output requested anywhere in
   // the app. Sized generously rather than nudging up again the next
   // time someone with a longer career history hits the same wall.
-  const pkg = await callClaudeForJSON(SYSTEM_PROMPT, userPrompt, 8000, 90_000);
+  const pkg = await callOpenAIForJSON(SYSTEM_PROMPT, userPrompt, 8000, {
+    schema: APPLICATION_PACKAGE_SCHEMA, name: "application_package", timeoutMs: 90_000,
+  });
 
   // Real bug this catches: the model can return technically-valid JSON
   // where work_history exists but every entry is hollow (empty
