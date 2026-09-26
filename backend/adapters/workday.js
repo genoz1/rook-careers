@@ -47,7 +47,7 @@ function parseWorkdayIdentifier(identifier) {
 // full descriptions for obviously-irrelevant jobs (warehouse, lab tech,
 // packaging) wastes most of the run's time on titles that will just get
 // filtered out afterward anyway.
-const { titleLooksRelevant } = require('../relevanceFilter');
+const { titleLooksRelevantWithDiagnostics } = require('../titleFilterDiagnostics');
 const zipcodes = require('zipcodes');
 const { resolveUsStateCode } = require('../jobEligibility');
 
@@ -64,9 +64,10 @@ function isLabcorpWorkdayCommercialTitle(title = '') {
   return LABCORP_COMMERCIAL_TITLE_PATTERNS.some(pattern => pattern.test(String(title || '')));
 }
 
-function workdayTitleLooksRelevant(title, identifier) {
+function workdayTitleLooksRelevant(title, identifier, posting) {
   const { tenant } = parseWorkdayIdentifier(identifier);
-  return titleLooksRelevant(title) || (tenant.toLowerCase() === 'labcorp' && isLabcorpWorkdayCommercialTitle(title));
+  if (tenant.toLowerCase() === 'labcorp' && isLabcorpWorkdayCommercialTitle(title)) return true;
+  return titleLooksRelevantWithDiagnostics(title, posting);
 }
 
 // Workday commonly publishes field roles as "State - Virtual" even when
@@ -214,7 +215,7 @@ async function fetchWorkdayJobs(identifier) {
   // Only fetch full detail for postings that already look relevant by
   // title — see titleLooksRelevant() above for why. This is the slow part
   // (one request per job, sequential), so it logs progress every 10 jobs.
-  const relevantPostings = allPostings.filter((p) => workdayTitleLooksRelevant(p.title, identifier));
+  const relevantPostings = allPostings.filter((p) => workdayTitleLooksRelevant(p.title, identifier, p));
   console.log(`    ${relevantPostings.length} / ${allPostings.length} titles look relevant — fetching their descriptions...`);
 
   const detailed = [];

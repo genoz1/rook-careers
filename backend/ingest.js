@@ -9,6 +9,7 @@
 
 require("dotenv").config();
 const { metric } = require('./ingestRunMetrics');
+const { pruneTitleFilterRejections, titleLooksRelevantWithDiagnostics } = require('./titleFilterDiagnostics');
 const { createClient } = require("@supabase/supabase-js");
 const { mentionsNonUsCountry } = require("./matching");
 const { safeEvaluateSocialEligibilityForIngestion } = require("./socialAutomation");
@@ -292,7 +293,7 @@ async function ingestEmployer(employer) {
     const sourceSpecificRelevant = employer.ats_type === 'workday'
       && String(employer.ats_identifier || '').split('|')[0].toLowerCase() === 'labcorp'
       && isLabcorpWorkdayCommercialTitle(job.title_original);
-    if (!looksRelevant(job.title_original) && !sourceSpecificRelevant) {
+    if (!sourceSpecificRelevant && !titleLooksRelevantWithDiagnostics(job.title_original, job)) {
       await closeExcludedJob(job.source_job_id);
       continue;
     }
@@ -465,8 +466,6 @@ async function ingestEmployer(employer) {
 // veterinary organization (e.g. a front-desk client service rep at a vet
 // clinic) — genuinely distinguishing those from a sales-facing "Veterinary
 // Territory Manager" needs real classification, not keyword matching.
-const { titleLooksRelevant: looksRelevant } = require('./relevanceFilter');
-
 // DigitalOcean's App Platform Scheduled Jobs have a hard 30-minute
 // timeout — a run that hits it gets forcibly killed mid-request rather
 // than exiting cleanly. With employers this large (Illumina, Roche,
@@ -555,6 +554,13 @@ async function run(options = {}) {
 }
 
 async function runEmployerLoop(startedAt, employerFilter, options = {}) {
+  try {
+    await pruneTitleFilterRejections(supabase);
+  } catch (error) {
+    // Missing/unavailable diagnostics storage must not block normal ingestion.
+    console.error('INGEST_TITLE_FILTER_DIAGNOSTICS_PRUNE_FAILED', error.message);
+  }
+
   // Order by last_checked_at ascending (nulls first) rather than
   // whatever order the table happens to return — this means employers
   // that have never synced, or synced longest ago, get processed first.

@@ -23,7 +23,7 @@
 
 const BASE_URL = "https://api.smartrecruiters.com/v1/companies";
 
-const { titleLooksRelevant } = require('../relevanceFilter');
+const { titleLooksRelevantWithDiagnostics: titleLooksRelevant } = require('../titleFilterDiagnostics');
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
   const controller = new AbortController();
@@ -57,7 +57,7 @@ async function fetchSmartRecruitersJobs(companyIdentifier) {
     if (!data.content || data.content.length === 0) break;
   }
 
-  const relevantPostings = allPostings.filter((p) => titleLooksRelevant(p.name || ""));
+  const relevantPostings = allPostings.filter((p) => titleLooksRelevant(p.name || "", p));
   console.log(`    ${relevantPostings.length} / ${allPostings.length} titles look relevant — fetching their descriptions...`);
 
   const detailed = [];

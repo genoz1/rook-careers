@@ -25,7 +25,13 @@ const { fetchAdzunaJobs, normalizeAdzunaJob } = require("./adapters/adzuna");
 const { generateEmbedding } = require("./ai/embeddings");
 const { deterministicJobAnalysis } = require('./deterministicJobAnalysis');
 const { validateJobLocation } = require("./validateJobLocation");
-const { titleLooksRelevant } = require("./relevanceFilter");
+const {
+  withTitleFilterDiagnostics,
+  getTitleFilterRejections,
+  titleLooksRelevantWithDiagnostics: titleLooksRelevant,
+  persistTitleFilterRejections,
+  pruneTitleFilterRejections,
+} = require("./titleFilterDiagnostics");
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -127,7 +133,7 @@ function looksLikeAgency(companyName, descriptionText) {
   return false;
 }
 
-async function run() {
+async function runCore() {
   let totalFetched = 0;
   let totalAgencyMatched = 0;
   let totalSaved = 0;
@@ -156,7 +162,7 @@ async function run() {
       totalAgencyMatched++;
 
       const job = normalizeAdzunaJob(raw);
-      if (!titleLooksRelevant(job.title_original)) continue;
+      if (!titleLooksRelevant(job.title_original, job)) continue;
 
       // Manual check-then-write rather than .upsert()+onConflict: the
       // dedup index on source_job_id is a PARTIAL index (only applies
@@ -299,6 +305,29 @@ async function run() {
   } else {
     console.log("No stale agency listings to close.");
   }
+}
+
+async function run() {
+  try {
+    await pruneTitleFilterRejections(supabase);
+  } catch (error) {
+    console.error('INGEST_TITLE_FILTER_DIAGNOSTICS_PRUNE_FAILED', error.message);
+  }
+  return withTitleFilterDiagnostics({ company_name: 'Adzuna agency listings', ats_type: 'adzuna' }, async () => {
+    try {
+      return await runCore();
+    } finally {
+      const rejections = getTitleFilterRejections();
+      if (rejections.length) {
+        try {
+          const count = await persistTitleFilterRejections(supabase, rejections);
+          console.log('INGEST_TITLE_FILTER_REJECTIONS_SAVED', JSON.stringify({ source_adapter: 'adzuna', count }));
+        } catch (error) {
+          console.error('INGEST_TITLE_FILTER_DIAGNOSTICS_SAVE_FAILED', JSON.stringify({ source_adapter: 'adzuna', count: rejections.length, error: error.message }));
+        }
+      }
+    }
+  });
 }
 
 run();

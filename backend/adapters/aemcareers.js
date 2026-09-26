@@ -1,7 +1,7 @@
 // Public AEM careersearch contract used by the verified Novo Nordisk site.
 const cheerio=require('cheerio');
 const {getHtml,plain}=require('./htmlSource');
-const {titleLooksRelevant}=require('../relevanceFilter');
+const {titleLooksRelevantWithDiagnostics: titleLooksRelevant}=require('../titleFilterDiagnostics');
 async function fetchAemCareersJobs(identifier){
  const source=new URL(identifier),html=await getHtml(source.href),$=cheerio.load(html);
  const locale=$('html').attr('lang')||'en-US';
@@ -16,7 +16,7 @@ async function fetchAemCareersJobs(identifier){
  if(!Array.isArray(data?.jobs)||data.totalMatches!==data.jobs.length)throw Error('AEM incomplete or unrecognized job listing');
  const seen=new Set();for(const j of data.jobs){if(!j.jobId||!j.jobTitle||seen.has(j.jobId))throw Error('AEM malformed/repeated job');seen.add(j.jobId);}
  const jobs=[];jobs.incompleteSnapshot=false;jobs.snapshotWarnings=[];jobs.sourceListingCount=data.jobs.length;
- for(const row of data.jobs.filter(j=>titleLooksRelevant(j.jobTitle))){
+ for(const row of data.jobs.filter(j=>titleLooksRelevant(j.jobTitle,j))){
   try{const url=new URL(adPath+'.'+encodeURIComponent(row.jobId)+'.html',source).href,detail=cheerio.load(await getHtml(url));
    if(plain(detail('#careerjobdisplay h1').text())!==plain(row.jobTitle))throw Error('AEM detail title mismatch');
    const description=detail('.job-display-details').html();if(!description||plain(description).length<80)throw Error('AEM missing full description');

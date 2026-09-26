@@ -1,6 +1,6 @@
 // UKG public JobBoard contract verified from the board's own rendered config
 // and browser bundle. No applicant login or candidate data is used.
-const { titleLooksRelevant } = require('../relevanceFilter');
+const { titleLooksRelevantWithDiagnostics: titleLooksRelevant } = require('../titleFilterDiagnostics');
 const { getHtml, plain } = require('./htmlSource');
 function detailData(html) {
   const marker = 'new US.Opportunity.CandidateOpportunityDetail(';
@@ -62,7 +62,7 @@ async function fetchUkgJobs(employer) {
     }
   }
   jobs.sourceListingCount = all.length;
-  for (const row of all.filter(j => titleLooksRelevant(j.Title))) {
+  for (const row of all.filter(j => titleLooksRelevant(j.Title, j))) {
     try {
       const url = new URL(template); url.searchParams.set('opportunityId', row.Id);
       const detail = detailData(await getHtml(url.href));

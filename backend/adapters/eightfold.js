@@ -30,7 +30,7 @@
 //   ats_identifier = "bayer.eightfold.ai|bayer.com"
 //   ats_identifier = "jobs.siemens-healthineers.com|siemens.com"
 
-const { titleLooksRelevant } = require('../relevanceFilter');
+const { titleLooksRelevantWithDiagnostics: titleLooksRelevant } = require('../titleFilterDiagnostics');
 
 function stripHtml(html) {
   return String(html || "").replace(/<[^>]*>/g, " ")
@@ -95,7 +95,7 @@ async function fetchEightfoldJobs(identifier) {
     start += pageSize;
   }
 
-  const relevant = rawJobs.filter((j) => titleLooksRelevant(j.name || j.title || ""));
+  const relevant = rawJobs.filter((j) => titleLooksRelevant(j.name || j.title || "", j));
   console.log(`    ${relevant.length} / ${rawJobs.length} titles look relevant`);
   return relevant;
 }

@@ -52,7 +52,7 @@
 
 const crypto = require("crypto");
 
-const { titleLooksRelevant } = require('../relevanceFilter');
+const { titleLooksRelevantWithDiagnostics: titleLooksRelevant } = require('../titleFilterDiagnostics');
 
 function parseOracleIdentifier(identifier) {
   const [domain, siteNumber] = (identifier || "").split("|");
@@ -124,7 +124,7 @@ async function fetchOracleHcmJobs(identifier) {
     if (offset > 3000) throw new Error("Oracle HCM incomplete extraction: pagination safety limit reached");
   }
 
-  const relevantJobs = allJobs.filter((j) => titleLooksRelevant(j.Title));
+  const relevantJobs = allJobs.filter((j) => titleLooksRelevant(j.Title, j));
   console.log(`    ${relevantJobs.length} / ${allJobs.length} titles look relevant — fetching their descriptions...`);
 
   const detailsPath = "/hcmRestApi/resources/latest/recruitingCEJobRequisitionDetails";

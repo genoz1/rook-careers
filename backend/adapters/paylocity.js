@@ -42,7 +42,7 @@ function parseBoardData(html) {
 
 async function fetchPaylocityJobs(guid) {
   const { getHtml } = require('./htmlSource');
-  const { titleLooksRelevant } = require('../relevanceFilter');
+  const { titleLooksRelevantWithDiagnostics: titleLooksRelevant } = require('../titleFilterDiagnostics');
   const cheerio = require('cheerio');
   const data = parseBoardData(await getHtml('https://recruiting.paylocity.com/recruiting/jobs/All/' + guid));
   const jobs = [];
@@ -50,7 +50,7 @@ async function fetchPaylocityJobs(guid) {
   jobs.sourceEmployerName = data.ModuleTitle;
   for (const item of data.Jobs) {
     if (!item.JobId || !item.JobTitle) { jobs.incompleteSnapshot = true; continue; }
-    if (!titleLooksRelevant(item.JobTitle) || item.IsInternal) continue;
+    if (!titleLooksRelevant(item.JobTitle, item) || item.IsInternal) continue;
     const url = 'https://recruiting.paylocity.com/Recruiting/Jobs/Details/' + item.JobId;
     try {
       const $ = cheerio.load(await getHtml(url));

@@ -14,7 +14,7 @@
 // request/response shapes; treat the first real ingestion run as the
 // real validation.
 
-const { titleLooksRelevant } = require('../relevanceFilter');
+const { titleLooksRelevantWithDiagnostics: titleLooksRelevant } = require('../titleFilterDiagnostics');
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
   const controller = new AbortController();
@@ -87,7 +87,7 @@ async function fetchJazzHRJobs(employer) {
   const jobs = Array.isArray(data) ? data : (data.jobs || data.Jobs);
   if (!Array.isArray(jobs)) throw new Error('JazzHR response has no recognized jobs array');
   if (jobs.some(j => !j.id || !(j.title || j.Title))) throw new Error('JazzHR job lacks stable identity or title');
-  return jobs.map(j => normalizeJazzJob(j, employer)).filter(j => titleLooksRelevant(j.title_original));
+  return jobs.map(j => normalizeJazzJob(j, employer)).filter(j => titleLooksRelevant(j.title_original, j));
 
 }
 

@@ -1,5 +1,5 @@
 const cheerio=require('cheerio');
-const {titleLooksRelevant}=require('../relevanceFilter');
+const {titleLooksRelevantWithDiagnostics:titleLooksRelevant}=require('../titleFilterDiagnostics');
 const {getHtml,detailFields,plain,jobPosting}=require('./htmlSource');
 async function fetchUnifiedJobs(origin,locale='en_US') {
   const rows=[],seen=new Set();let received=0,complete=true;const warnings=[];
@@ -16,7 +16,7 @@ async function fetchUnifiedJobs(origin,locale='en_US') {
     }catch(e){if(!rows.length)throw e;complete=false;warnings.push(e.message);break;}
   }
   const jobs=[];jobs.incompleteSnapshot=!complete;jobs.snapshotWarnings=warnings;jobs.sourceListingCount=rows.length;
-  for(const row of rows.filter(j=>titleLooksRelevant(j.unifiedStandardTitle))){
+  for(const row of rows.filter(j=>titleLooksRelevant(j.unifiedStandardTitle,j))){
     const url=origin+'/job/'+encodeURIComponent(row.unifiedStandardTitle)+'/'+row.id+'-'+locale;
     try{const html=await getHtml(url),ld=jobPosting(html),f=detailFields(html,'.jobdescription, #jobdescription, main','[itemprop="jobLocation"]'),$=cheerio.load(html);
       if(!f.description)f.description=$('[itemprop="description"]').toArray().map(e=>$(e).html()).join(' ');

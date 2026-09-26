@@ -20,7 +20,7 @@
 // — the slug itself is used as source_job_id since it's unique per
 // title+location combination.
 
-const { titleLooksRelevant } = require('../relevanceFilter');
+const { titleLooksRelevantWithDiagnostics: titleLooksRelevant } = require('../titleFilterDiagnostics');
 const cheerio = require('cheerio');
 
 function listingLinks(html, base) {
@@ -144,7 +144,7 @@ async function fetchClinchTalentJobs(hostname) {
     return true;
   });
 
-  const relevant = deduped.filter((j) => titleLooksRelevant(j.title));
+  const relevant = deduped.filter((j) => titleLooksRelevant(j.title, j));
   console.log(`    ${relevant.length} / ${deduped.length} titles look relevant — fetching their descriptions...`);
 
   const detailed = [];

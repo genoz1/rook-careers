@@ -1,6 +1,6 @@
 // Public Workforce Now request contract verified against ADP's current careers
 // application and official Aegis board. Legacy Recruiting is a separate API.
-const { titleLooksRelevant } = require('../relevanceFilter');
+const { titleLooksRelevantWithDiagnostics: titleLooksRelevant } = require('../titleFilterDiagnostics');
 const { plain } = require('./htmlSource');
 const BASE = 'https://workforcenow.adp.com/mascsr/default/careercenter/public/events/staffing/v1/job-requisitions';
 const BOARD = 'https://workforcenow.adp.com/mascsr/default/mdf/recruitment/recruitment.html';
@@ -56,7 +56,7 @@ async function fetchAdpJobs(employer) {
     }
   }
   jobs.sourceListingCount = listings.length;
-  for (const row of listings.filter(r => titleLooksRelevant(r.requisitionTitle))) {
+  for (const row of listings.filter(r => titleLooksRelevant(r.requisitionTitle, r))) {
     try {
       const detail = await json(urlFor('/'+encodeURIComponent(row.itemID)));
       if (detail.itemID !== row.itemID) throw Error('ADP detail identity mismatch');

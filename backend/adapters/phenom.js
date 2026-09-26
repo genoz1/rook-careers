@@ -44,7 +44,7 @@
 // Devices, and more — on this one shared Phenom-powered domain, so the
 // same identifier covers all of them; only the search keywords differ.)
 
-const { titleLooksRelevant } = require('../relevanceFilter');
+const { titleLooksRelevantWithDiagnostics: titleLooksRelevant } = require('../titleFilterDiagnostics');
 
 function stripHtml(html) {
   return String(html || "").replace(/<[^>]*>/g, " ")
@@ -138,7 +138,7 @@ async function fetchPhenomJobs(domain) {
     from += size;
   }
 
-  const relevant = rawJobs.filter((j) => titleLooksRelevant(j.title || j.job_title || ""));
+  const relevant = rawJobs.filter((j) => titleLooksRelevant(j.title || j.job_title || "", j));
   console.log(`    ${relevant.length} / ${rawJobs.length} titles look relevant`);
   return relevant;
 }

@@ -1,5 +1,5 @@
 const cheerio = require('cheerio');
-const { titleLooksRelevant } = require('../relevanceFilter');
+const { titleLooksRelevantWithDiagnostics: titleLooksRelevant } = require('../titleFilterDiagnostics');
 
 function jobPosting(html) {
   const $ = cheerio.load(html);
@@ -99,8 +99,9 @@ async function fetchListings(start, identify, { maxPages = 100, explicitEmpty = 
   detailed.incompleteSnapshot = incomplete;
   detailed.snapshotWarnings = warnings;
   detailed.sourceListingCount = all.length;
-  detailed.sourceRelevantCount = all.filter(j => titleLooksRelevant(j.title)).length;
-  for (const job of all.filter(j => titleLooksRelevant(j.title))) {
+  const relevantJobs = all.filter(j => titleLooksRelevant(j.title, j));
+  detailed.sourceRelevantCount = relevantJobs.length;
+  for (const job of relevantJobs) {
     try {
       const detailHtml = await getHtml(job.url);
       detailed.push({ ...job, detailHtml });

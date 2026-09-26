@@ -1,6 +1,6 @@
 const cheerio = require('cheerio');
 const { getHtml, jobPosting, detailFields, plain } = require('./htmlSource');
-const { titleLooksRelevant } = require('../relevanceFilter');
+const { titleLooksRelevantWithDiagnostics: titleLooksRelevant } = require('../titleFilterDiagnostics');
 // Read JSON data from the public Next server response; never execute scripts.
 function listingData(html) {
   const $ = cheerio.load(html); let stream = '';
@@ -28,7 +28,7 @@ async function fetchKulaJobs(slug) {
   const ids=new Set();
   for(const row of listed){if(!row.id || !row.title || ids.has(row.id))throw Error('Kula malformed or repeated job');ids.add(row.id);}
   const jobs=[];jobs.sourceListingCount=listed.length;jobs.incompleteSnapshot=false;jobs.snapshotWarnings=[];
-  for(const row of listed.filter(j=>j.listed===true && !j.is_confidential && titleLooksRelevant(j.title))) {
+  for(const row of listed.filter(j=>j.listed===true && !j.is_confidential && titleLooksRelevant(j.title,j))) {
     try {
       const url=base+'/'+row.id, html=await getHtml(url), ld=jobPosting(html);
       if(!ld || !ld.description || plain(ld.title)!==plain(row.title))throw Error('Kula detail identity or description unavailable');

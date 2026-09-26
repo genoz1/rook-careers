@@ -1,6 +1,6 @@
 // ApplicantPro public board adapter, verified against current Medgene and Castle
 // boards. The JSON endpoint requires serialized getParams, even when empty.
-const { titleLooksRelevant } = require('../relevanceFilter');
+const { titleLooksRelevantWithDiagnostics: titleLooksRelevant } = require('../titleFilterDiagnostics');
 
 function stripHtml(html) {
   return String(html || "").replace(/<[^>]*>/g, " ")
@@ -57,7 +57,7 @@ async function fetchApplicantProJobs(subdomain) {
     if (!raw.id || typeof raw.title !== 'string') throw new Error('ApplicantPro listing missing stable identity or title');
     if (seen.has(String(raw.id))) { jobs.incompleteSnapshot = true; jobs.snapshotWarnings.push('Duplicate source ID'); continue; }
     seen.add(String(raw.id));
-    if (!titleLooksRelevant(stripHtml(raw.title))) continue;
+    if (!titleLooksRelevant(stripHtml(raw.title), raw)) continue;
     try {
       const url = new URL(raw.jobUrl);
       if (url.origin !== `https://${subdomain}.applicantpro.com`) throw new Error('Unverified cross-origin detail URL');

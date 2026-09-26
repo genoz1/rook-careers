@@ -49,7 +49,7 @@
 
 const cheerio = require("cheerio");
 const { detailFields, plain } = require("./htmlSource");
-const { titleLooksRelevant } = require("../relevanceFilter");
+const { titleLooksRelevantWithDiagnostics: titleLooksRelevant } = require("../titleFilterDiagnostics");
 const { resolveUsStateCode } = require("../jobEligibility");
 
 const MAX_PAGES = 1000; // Defensive ceiling: unfinished pagination must fail, never truncate.
@@ -252,7 +252,7 @@ async function fetchSuccessFactorsJobs(identifier, { maxPages = MAX_PAGES } = {}
     url = nextUrl;
   }
 
-  const relevant = allRows.filter((r) => titleLooksRelevant(r.title));
+  const relevant = allRows.filter((r) => titleLooksRelevant(r.title, r));
 
   if (!relevant.length) return [];
   const withDescriptions = [];
