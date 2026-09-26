@@ -56,7 +56,7 @@ function startIngestionWatchdog() {
   const db = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY,
     { global: { fetch: (url, options = {}) => fetch(url, { ...options, signal: AbortSignal.timeout(20000) }) } });
   const monitorStarted = Date.now();
-  let busy = false, regression = null, tested = false, lastEmergency = null;
+  let busy = false, regression = null, tested = false, lastEmergency = null, lastTitleRejectionEmailDate = null;
   async function check() {
     if (busy) return;
     busy = true;
@@ -79,6 +79,9 @@ function startIngestionWatchdog() {
       for (const run of (runs || []).filter(r => r.ended_at && !r.summary?.manual).slice(0, 2).reverse()) {
         await require('./ingestionHealth').checkIngestionHealth(db, { run_id: run.id, started_at: run.started_at, summary: run.summary }, { to, sendEmail, repair });
       }
+      const titleSummary = await require('./titleFilterRejectionEmail').sendDailyTitleFilterRejections(db,
+        { to, sendEmail, lastSentDate: lastTitleRejectionEmailDate });
+      lastTitleRejectionEmailDate = titleSummary.date;
       lastEmergency = null;
     } catch (error) {
       console.error('[ingestion-watchdog]', error.message);
