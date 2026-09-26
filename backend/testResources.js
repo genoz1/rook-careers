@@ -77,3 +77,16 @@ test('single Meta token resolves only ROOK and verifies both publishing permissi
  }});
  assert.equal(report.facebook,'PASS');assert.equal(report.instagram,'PASS');assert.deepEqual(methods,['GET','GET']);assert.ok(!JSON.stringify(report).includes('test-page'));
 });
+
+test('explicit Meta Page bypasses discovery and enforces linked Instagram ID',async()=>{
+ const scopes=['pages_show_list','pages_read_engagement','pages_manage_posts','instagram_basic','instagram_content_publish'];
+ const paths=[];
+ const deps={config:{version:'v24.0',page:'123',ig:'789',token:'test-user'},fetch:async(url,opts)=>{
+  const path=new URL(url).pathname;paths.push(path);assert.equal(opts.method,'GET');
+  if(path.endsWith('/123'))return Response.json({id:'123',name:'ROOK Medical Sales Careers',access_token:'test-page-secret',instagram_business_account:{id:'789',username:'rook_careers'}});
+  assert.ok(path.endsWith('/me/permissions'));return Response.json({data:scopes.map(permission=>({permission,status:'granted'}))});
+ }};
+ const report=await check(deps);assert.equal(report.facebook,'PASS');assert.equal(report.instagram,'PASS');
+ assert.deepEqual(paths,['/v24.0/123','/v24.0/me/permissions']);assert.ok(!JSON.stringify(report).includes('test-page-secret'));
+ assert.equal((await check({...deps,config:{...deps.config,ig:'different'}})).instagram,'FAIL');
+});

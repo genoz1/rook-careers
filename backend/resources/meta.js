@@ -20,10 +20,17 @@ async function graph(path,params={},method='GET',deps={}){
 }
 async function resolve(deps={}){
  const c=deps.config||config();
- const accounts=await graph('me/accounts',{fields:'id,name,access_token,instagram_business_account{id,username}',limit:'100'},'GET',{...deps,config:c});
- const matches=(accounts.data||[]).filter(p=>c.page?String(p.id)===String(c.page):/\brook\b/i.test(p.name||''));
- if(matches.length!==1||!/\brook\b/i.test(matches[0].name||''))throw Error('Token identity does not match one unambiguous ROOK Page');
- const page=matches[0];
+ const fields='id,name,access_token,instagram_business_account{id,username}';
+ let page;
+ if(c.page){
+  page=await graph(c.page,{fields},'GET',{...deps,config:c});
+  if(String(page.id)!==String(c.page)||!/\brook\b/i.test(page.name||''))throw Error('Token identity does not match the configured ROOK Page');
+ }else{
+  const accounts=await graph('me/accounts',{fields,limit:'100'},'GET',{...deps,config:c});
+  const matches=(accounts.data||[]).filter(p=>/\brook\b/i.test(p.name||''));
+  if(matches.length!==1)throw Error('Token identity does not match one unambiguous ROOK Page');
+  page=matches[0];
+ }
  const permissions=await graph('me/permissions',{},'GET',{...deps,config:c});
  const granted=new Set((permissions.data||[]).filter(p=>p.status==='granted').map(p=>p.permission));
  const facebook=!!page.access_token&&['pages_show_list','pages_manage_posts','pages_read_engagement'].every(p=>granted.has(p));
