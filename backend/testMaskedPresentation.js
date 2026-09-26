@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const {maskedTitle,freshness} = require('./maskedPresentation');
+const {maskedTitle,generalizedRole,safeSpecialty,freshness} = require('./maskedPresentation');
 const {preview} = require('./v7Preview');
 const {redactForNonSubscriber} = require('./redaction');
 const cases = [
@@ -24,9 +24,38 @@ for (const [title,company,expected,location] of cases) {
  assert.equal(redactForNonSubscriber(job).title_original,undefined);
  assert.equal(JSON.stringify(job),original,'source job must remain unchanged');
 }
+const generalizedCases = [
+ ['Specialty Account Manager, Symbravo (Des Moines, IA)','Specialty Account Manager'],
+ ['Executive Oncology Sales Representative – Head & Neck (Denver-Omaha) – Johnson & Johnson Innovative Medicine','Executive Oncology Sales Representative'],
+ ['Immunology Sales Specialist, Dermatology (Boise, ID) – Johnson & Johnson Innovative Medicine','Immunology Sales Specialist'],
+ ['Area Sales Director, Molecular Diagnostics, QIAstat (East Region)','Area Sales Director'],
+ ['Territory Manager, CardioMEMS – Western Region','Territory Manager'],
+ ['Veterinary Regional Sales Manager – Charlotte/Raleigh, NC (Royal Canin)','Veterinary Regional Sales Manager'],
+ ['Oncology Sales Representative','Oncology Sales Representative'],
+ ['Clinical Account Executive – Portland, OR','Clinical Account Executive'],
+ ['Account Executive II – North Orlando – [Hidden Health]','Account Executive II'],
+ ['Veterinary District Sales Manager – Florida West – [Royal Canin]','Veterinary District Sales Manager'],
+ ['Clinical Sales Specialist, Surgical Pain – Cleveland, OH','Clinical Sales Specialist'],
+ ['Territory Manager – BrandX Pump – Orlando','Territory Manager'],
+ ['Oncology Account Executive – [Hidden Pharma] – Central Florida','Oncology Account Executive'],
+ ['Area Sales Director, Molecular Diagnostics, QIAstat (East Region)','Area Sales Director'],
+ ['Acme Oncology Corp – Account Executive – Tampa','Account Executive'],
+ ['Req 882401 | Territory Manager – Orlando','Territory Manager'],
+ ['BrandZ HyperPulse Advisor – Eastern Florida','Medical Device Sales Role'],
+];
+for(const [title,expected] of generalizedCases) {
+ const result=generalizedRole({title_original:title,ai_analysis:{product_categories:['Medical Device']}});
+ assert.equal(result,expected,title);
+ assert(!/Hidden Health|Royal Canin|Cleveland|Orlando|Tampa|Florida|QIAstat|BrandX|BrandZ|882401|Acme|Pulse|East Region/i.test(result),title);
+}
+assert.equal(safeSpecialty({ai_analysis:{product_categories:['Surgical','BrandX Pump']}}),'Surgical');
+assert.equal(safeSpecialty({ai_analysis:{product_categories:['BrandX Pump']}}),null);
+assert.equal(freshness({date_posted:'2026-09-19'},Date.parse('2026-09-19T16:00:00Z'),true),'Posted today');
+assert.equal(freshness({date_posted:'2026-09-18'},Date.parse('2026-09-19T16:00:00Z'),true),'Posted yesterday');
+assert.equal(freshness({date_posted:'2026-09-16'},Date.parse('2026-09-19T16:00:00Z'),true),'Posted 3 days ago');
+assert.equal(freshness({date_posted:null,first_seen_at:'2026-09-18'},Date.parse('2026-09-19T16:00:00Z'),true),'Added yesterday');
+assert.equal(freshness({date_posted:null},Date.parse('2026-09-19'),true),null);
 assert.equal(freshness({date_posted:'2026-09-16'},Date.parse('2026-09-19')),'Recently posted');
-assert.equal(freshness({date_posted:null},Date.parse('2026-09-19')),'Current opportunity');
-assert.equal(freshness({date_posted:'2025-09-16'},Date.parse('2026-09-19')),'Current opportunity');
 function renderer(file) {
  const html=fs.readFileSync(require('node:path').join(__dirname,'../public',file),'utf8');
  for(const m of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)) if(m[1].trim()) new vm.Script(m[1]);
@@ -34,13 +63,28 @@ function renderer(file) {
  const end=html.indexOf('\n  async function',start);
  const next=html.indexOf('\n  function ',start+15);
  const source=html.slice(start,Math.min(...[end,next].filter(x=>x>start)));
- const context={Number,Date,Math,escapeHtml:s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'),isRemoteJob:()=>false,isNewJob:()=>false,renderCategoryRows:()=>'<div>Full category scoring</div>',lockedJobCtaLabel:'Unlock this job'};
+ const context={Number,Date,Math,document:{body:{dataset:{v7Conversion:file==='rook-dashboard-v7.html'?'true':'false'}}},escapeHtml:s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'),isRemoteJob:()=>false,isNewJob:()=>false,renderCategoryRows:()=>'<div>Full category scoring</div>',lockedJobCtaLabel:'Unlock this job'};
  context.window=context;vm.createContext(context);vm.runInContext(fs.readFileSync(require('node:path').join(__dirname,'../public/rook-pretrial.js'),'utf8'),context);vm.runInContext(source,context);return {render:context.renderRealJobRow,html};
 }
 for(const file of ['rook-dashboard.html','rook-dashboard-v7.html']) {
  const {render}=renderer(file);
- const base={id:'test',title_original:'Specialty Account Manager',location_raw:'Des Moines, IA',subscription_required:true,date_posted:'2026-09-10',freshness_label:'Recently posted',match:{overall_score:100,preference_fit:100,candidate_fit:null,recommendation:'Strong Match'}};
+ const base={id:'test',role_type:'Oncology Account Executive',title_original:'PRIVATE ORIGINAL TITLE',company_name:'PRIVATE EMPLOYER',description_text:'PRIVATE DESCRIPTION',source_url:'https://private.example/job',application_url:'https://private.example/apply',distance_miles:48,industry_classification:{labels:['Medical Device']},specialty_label:'Surgical',masked_lines:[[5,8,3,6],[7,4,8,3,5]],subscription_required:true,date_posted:'2026-09-10',freshness_label:'Posted 9 days ago',match:{overall_score:100,preference_fit:100,candidate_fit:null,recommendation:'Strong Match'}};
  const locked=render(base);
+ if(file==='rook-dashboard-v7.html') {
+  assert(locked.includes('<strong class="masked-role">Oncology Account Executive</strong>'));
+  assert(locked.includes('class="masked-redaction" aria-hidden="true"'));
+  assert.equal((locked.match(/class="masked-redaction-line"/g)||[]).length,2);
+  assert(locked.includes('style="--mask-width:8"'));
+  assert(locked.includes('Medical Device · Surgical'));
+  assert(locked.includes('Company &amp; full job details hidden'));
+ } else {assert(locked.includes('Job title and employer hidden'));assert(!locked.includes('masked-redaction'));}
+ assert(locked.includes('48 miles away'));assert(locked.includes('Posted 9 days ago'));
+ for(const secret of ['PRIVATE ORIGINAL TITLE','PRIVATE EMPLOYER','PRIVATE DESCRIPTION','private.example']) assert(!locked.includes(secret));
+ if(file==='rook-dashboard-v7.html') {
+  const other=render({...base,distance_miles:72,freshness_label:'Posted today',match:{...base.match,overall_score:93,preference_fit:93}});
+  assert(other.includes('72 miles away'));assert(other.includes('93%'));assert(other.includes('Posted today'));
+  assert(!other.includes('48 miles away')&&!other.includes('100%'));
+ }
  assert(locked.includes('Preference Match'));assert(locked.includes('class="score-ring"'));
  assert(locked.includes('Strong Match'));assert(!locked.includes('Qualifications —%'));assert(!locked.includes('Posted 2026'));
  assert(locked.includes('not scored yet'));assert(locked.includes('rookGoToCheckout(\'job_card\')'));

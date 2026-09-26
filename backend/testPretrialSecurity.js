@@ -3,6 +3,7 @@ const {project}=require('./pretrialProjection');const {hasFullAccess}=require('.
 const {preview}=require('./v7Preview');const {redactForNonSubscriber,redactForAnonymous}=require('./redaction');
 const canary={id:'private-job-id',title_original:'Unique Oncology Account Manager BrandXYZ',title_normalized:'Unique Title',company_name:'HiddenEmployer',source_job_id:'ReqSecret8842',source_url:'https://secret.example/source',application_url:'https://secret.example/apply',description_text:'Confidential job description and BrandXYZ',description_html:'<p>HiddenEmployer</p>',location_raw:'DistinctCity, FL',city:'DistinctCity',territory:'Unique District Wording',product_type:'BrandXYZ',employer_note:'HiddenEmployer employment history',new_sensitive_field:'future secret',ai_analysis:{product_categories:['Pharmaceutical'],unrecognized:'secret AI text'},category:'Account Management',distance_miles:48,match:{overall_score:100,preference_fit:100,candidate_fit:null,recommendation:'Strong Match',reasons:['HiddenEmployer'],concerns:['DistinctCity'],categories:{secret:'BrandXYZ'}}};
 const permitted=['id','subscription_required','industry_classification','role_type','distance_miles','territory_type','freshness_label','geography_kind','match'].sort();
+const permittedDashboard=[...permitted,'specialty_label','masked_lines'].sort();
 test('authenticated entitlement takes precedence over a retained anonymous preview',async()=>{
  const vm=require('node:vm');
  for(const full of [true,false]) {
@@ -13,11 +14,15 @@ test('authenticated entitlement takes precedence over a retained anonymous previ
 });
 test('all locked projectors omit arbitrary source fields and nested text without mutating source',()=>{
  const original=JSON.stringify(canary);
- for(const fn of [project,preview,redactForNonSubscriber]){
+ for(const fn of [project,redactForNonSubscriber]){
   const result=fn(canary,2);assert.deepEqual(Object.keys(result).sort(),permitted);assert.equal(result.id,'locked-2');
   assert(!/HiddenEmployer|BrandXYZ|DistinctCity|Unique|ReqSecret|secret\.example|private-job-id|future secret/.test(JSON.stringify(result)));
   assert.equal(result.match.preference_fit,100);assert.equal(result.match.candidate_fit,null);assert.equal(result.role_type,'Account Management');assert.equal(result.territory_type,null);
  }
+ const dashboard=preview(canary,2);assert.deepEqual(Object.keys(dashboard).sort(),permittedDashboard);assert.equal(dashboard.role_type,'Pharmaceutical Sales Role');
+ assert.equal(dashboard.masked_lines.length,2);assert(dashboard.masked_lines.every(row=>row.length>=4&&row.length<=6&&row.every(width=>Number.isInteger(width)&&width>=3&&width<=8)));
+ assert(!/HiddenEmployer|BrandXYZ|DistinctCity|Unique|ReqSecret|secret\.example|private-job-id|future secret/.test(JSON.stringify(dashboard)));
+ assert(!JSON.stringify(project(canary)).includes('masked_lines'),'non-dashboard projection must not receive visual masks');
  assert.equal(project({...canary,geographic_eligibility:{kind:'secret free-form text'}}).geography_kind,null);
  assert.equal(project({...canary,geographic_eligibility:{kind:'territory'}}).geography_kind,'territory');
  assert.equal(JSON.stringify(canary),original);assert.equal(redactForAnonymous(canary).match,undefined);
@@ -25,6 +30,8 @@ test('all locked projectors omit arbitrary source fields and nested text without
 test('unknown structured attributes never become fabricated industry, role or territory',()=>{
  const r=project({category:'random unknown words',territory:'Headquarters in New York',industry:'made up industry',distance_miles:NaN,match:{preference_fit:Infinity}});
  assert.deepEqual(r.industry_classification.labels,[]);assert.equal(r.role_type,null);assert.equal(r.territory_type,null);assert.equal(r.distance_miles,null);assert.equal(r.match.preference_fit,null);
+ const dashboard=preview({category:'random unknown words',territory:'Headquarters in New York',industry:'made up industry',distance_miles:NaN,match:{preference_fit:Infinity}});
+ assert.equal(dashboard.role_type,'Sales Opportunity');assert.equal(dashboard.specialty_label,null);
 });
 test('all required access states retain the same originals only for valid entitlements',()=>{
  for(const [name,profile,full] of [['anonymous',null,false],['pretrial',{},false],['returning',{},false],['abandoned',{subscription_status:'incomplete'},false],['trialing',{subscription_status:'trialing',trial_ends_at:'2099-01-01'},true],['active',{subscription_status:'active'},true],['canceled',{subscription_status:'cancelled'},false],['expired',{subscription_status:'trialing',trial_ends_at:'2020-01-01'},false]]){

@@ -14,6 +14,9 @@ assert.throws(()=>answersToProfile({...answer,territories:['forged']}));
 const masked=preview(secretJob,0);
 assert(!/SECRET|ACME|real-job|hidden-source|hidden-employer/i.test(JSON.stringify(masked)));
 assert.equal(masked.match.overall_score,84);
+assert.equal(masked.role_type,'Sales Manager');
+assert.equal(masked.distance_miles,4);
+assert.equal(masked.specialty_label,null);
 for(const file of ['rook-onboarding-v7.html','rook-onboarding-v7-signup.html','rook-dashboard-v7.html','rook-checkout-v7.html']) {
   const html=fs.readFileSync(path.join(root,'public',file),'utf8');
   for(const m of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)) if(m[1].trim()) new vm.Script(m[1],{filename:file});
@@ -70,7 +73,12 @@ const express=require('express');const app=express();app.use(express.json());app
  async function call(url,method='GET',who,body){return fetch(base+'/api/v7'+url,{method,headers:{...(capability?{'X-ROOK-V7':capability}:{}),...(who?{Authorization:`Bearer ${who}`} : {}),...(body && !(body instanceof FormData)?{'Content-Type':'application/json'}:{})},...(body?{body:body instanceof FormData?body:JSON.stringify(body)}:{})});}
  try {
   let r=await call('/session','POST',null,answer);assert.equal(r.status,200);capability=(await r.json()).token;
-  r=await call('/session');assert.equal(r.headers.get('cache-control'),'private, no-store');let data=await r.json();assert.equal(data.jobs.length,2);assert.equal(data.unlocked,false);assert(!/SECRET|ACME|real-job|secret.example/i.test(JSON.stringify(data.jobs)));
+  r=await call('/session');assert.equal(r.headers.get('cache-control'),'private, no-store');let data=await r.json();assert.equal(data.jobs.length,2);assert.equal(data.unlocked,false);
+  const lockedKeys=['id','subscription_required','industry_classification','geography_kind','role_type','specialty_label','masked_lines','distance_miles','territory_type','freshness_label','match'].sort();
+  assert.deepEqual(Object.keys(data.jobs[0]).sort(),lockedKeys);
+  assert(data.jobs.every(job=>job.masked_lines.length===2&&job.masked_lines.every(row=>row.length>=4&&row.length<=6&&row.every(width=>Number.isInteger(width)&&width>=3&&width<=8))));
+  assert(!/SECRET|ACME|real-job|hidden-source|hidden-employer|secret.example|SECRET HTML|SECRET text/i.test(JSON.stringify(data.jobs)));
+  assert.equal(data.jobs[0].role_type,'Sales Manager');assert.equal(data.jobs[0].distance_miles,4);assert.equal(data.jobs[0].match.overall_score,84);
   assert(Date.parse(tables.onboarding_v7_sessions[0].expires_at)>Date.now()+29*24*60*60*1000,'opened matches remain recoverable beyond 24 hours');
   tables.onboarding_v7_sessions[0].created_at=new Date().toISOString();
   const rankedBefore=rankCalls;

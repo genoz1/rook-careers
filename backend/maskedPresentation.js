@@ -119,9 +119,83 @@ function maskedTitle(job, value = job.title_original || job.title_normalized) {
   title = clean(title.replace(/\b(?:in|for|and|or|of|with|at)\s*(?=[,;:–—)\-]|$)/g,'').replace(/(?:\s*&\s*)+(?=[,)–—]|$)/g,''));
   return title && /\b(sales|account|manager|specialist|director|representative|consultant|executive|associate|engineer|scientist|nurse|lead|officer|analyst|coordinator|support|intern|educator|president|vp|dir|leader|developer|architect|owner|technician|ambassador|specialists|associates|accountmanager|supervisor|bdr)\b/i.test(title) ? title : 'Sales opportunity';
 }
-function freshness(job, now = Date.now()) {
-  const date = Date.parse(job.date_posted || job.first_seen_at || '');
-  const age = now - date;
-  return Number.isFinite(date) && age >= 0 && age < 14 * 86400000 ? 'Recently posted' : 'Current opportunity';
+const SAFE_ROLE_PREFIXES = new Set(`
+clinical veterinary oncology diagnostics diagnostic pharmaceutical pharma immunology
+dermatology cardiology cardiovascular neurology neuroscience orthopedic orthopaedic
+surgical molecular laboratory dental animal health women's health womens health
+specialty executive regional district
+senior sr junior jr
+`.trim().toLowerCase().split(/\s+/));
+const ROLE_PATTERNS = [
+  /(?:key |strategic |national |clinical |territory |district |regional |area )?account executive(?:\s+(?:i{1,3}|iv|v|[1-5]))?/i,
+  /(?:key |strategic |national )?account manager(?:\s+(?:i{1,3}|iv|v|[1-5]))?/i,
+  /(?:veterinary |clinical |territory |district |regional |area |national )?sales manager(?:\s+(?:i{1,3}|iv|v|[1-5]))?/i,
+  /(?:area |regional |national )?sales director(?:\s+(?:i{1,3}|iv|v|[1-5]))?/i,
+  /(?:clinical |territory |district |regional |area |national )?sales representative(?:\s+(?:i{1,3}|iv|v|[1-5]))?/i,
+  /(?:clinical |territory |district |regional |area )?sales (?:specialist|consultant|associate)(?:\s+(?:i{1,3}|iv|v|[1-5]))?/i,
+  /(?:territory |district |regional |area )?manager(?:\s+(?:i{1,3}|iv|v|[1-5]))?/i,
+  /(?:business development|practice development) (?:manager|representative|director)(?:\s+(?:i{1,3}|iv|v|[1-5]))?/i,
+  /clinical specialist(?:\s+(?:i{1,3}|iv|v|[1-5]))?/i,
+];
+function generalizedRole(job) {
+  const raw = String(job.title_original || job.title_normalized || '')
+    .replace(/<[^>]*>/g, ' ').replace(/&(?:amp|#38);/gi, '&')
+    .replace(/\[[^\]]*\]/g, ' ').replace(/\([^)]*\)/g, ' ')
+    .replace(/[–—|;]+/g, '|').replace(/\s+-\s+/g, '|')
+    .replace(/\s+/g, ' ').trim();
+  // Retain a recognized role and vetted broad specialty words immediately
+  // before it. Unknown wording triggers category fallback rather than leaking.
+  for (const segment of raw.split('|')) {
+    const text = segment.trim().replace(/[,:]+/g, ' ').replace(/\s+/g, ' ');
+    for (const pattern of ROLE_PATTERNS) {
+      const match = pattern.exec(text);
+      if (!match) continue;
+      const before = text.slice(0, match.index).trim();
+      const prefix = before ? before.split(/\s+/) : [];
+      if (prefix.length > 3 || prefix.some(word => !SAFE_ROLE_PREFIXES.has(word.toLowerCase().replace(/[^a-z']/g, '')))) continue;
+      const phrase = [...prefix, ...match[0].trim().split(/\s+/)];
+      return phrase.map(word => /^(?:i{1,3}|iv|v|[1-5])$/i.test(word) ? word.toUpperCase() :
+        word[0].toUpperCase()+word.slice(1).toLowerCase()).join(' ');
+    }
+  }
+  const labels = require('../public/rook-job-classification').classify(job).labels;
+  const fallbacks = [
+    ['Veterinary', 'Veterinary Sales Role'],
+    ['Diagnostics', 'Diagnostics Sales Role'],
+    ['Pharmaceutical', 'Pharmaceutical Sales Role'],
+    ['Biotech/Life Sciences', 'Pharmaceutical Sales Role'],
+    ['Medical Device', 'Medical Device Sales Role'],
+  ];
+  return fallbacks.find(([label]) => labels.includes(label))?.[1] || 'Sales Opportunity';
 }
-module.exports = {maskedTitle, freshness};
+function safeSpecialty(job) {
+  const allowed = new Map([
+    ['capital equipment','Capital Equipment'], ['surgical','Surgical'], ['oncology','Oncology'],
+    ['molecular diagnostics','Molecular Diagnostics'], ['laboratory diagnostics','Laboratory Diagnostics'],
+    ['point-of-care','Point-of-Care'], ['animal health','Animal Health'], ['dental','Dental'],
+    ['imaging','Imaging'], ['vaccines','Vaccines'], ['immunology','Immunology'],
+    ['cardiology','Cardiology'], ['dermatology','Dermatology'], ['orthopedics','Orthopedics'],
+  ]);
+  const categories = Array.isArray(job.ai_analysis?.product_categories) ? job.ai_analysis.product_categories : [];
+  for (const value of categories) {
+    if (typeof value !== 'string') continue;
+    const label = allowed.get(value.trim().toLowerCase());
+    if (label) return label;
+  }
+  return null;
+}
+function freshness(job, now = Date.now(), detailed = false) {
+  const posted = job.date_posted;
+  const added = job.first_seen_at;
+  const date = Date.parse((posted || added) || '');
+  if (!Number.isFinite(date)) return detailed ? null : 'Current opportunity';
+  const current = new Date(now), source = new Date(date);
+  const currentDay = Date.UTC(current.getUTCFullYear(), current.getUTCMonth(), current.getUTCDate());
+  const sourceDay = Date.UTC(source.getUTCFullYear(), source.getUTCMonth(), source.getUTCDate());
+  const days = Math.floor((currentDay-sourceDay)/86400000);
+  if (!detailed) return days >= 0 && (now-date) < 14*86400000 ? 'Recently posted' : 'Current opportunity';
+  if (days < 0) return null;
+  const age = days === 0 ? 'today' : days === 1 ? 'yesterday' : `${days} days ago`;
+  return `${posted ? 'Posted' : 'Added'} ${age}`;
+}
+module.exports = {maskedTitle, generalizedRole, safeSpecialty, freshness};

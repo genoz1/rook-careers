@@ -2,21 +2,26 @@
 (function () {
   const isV7 = () => typeof document !== 'undefined' && document.body?.dataset?.v7Conversion === 'true';
   const esc = value => String(value ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const maskedLines = lines => {
+    if(!Array.isArray(lines) || lines.length!==2 || lines.some(row=>!Array.isArray(row) || row.length<4 || row.length>6 || row.some(width=>!Number.isInteger(width) || width<3 || width>8))) return '';
+    return `<div class="masked-redaction" aria-hidden="true">${lines.map(row=>`<span class="masked-redaction-line">${row.map(width=>`<i style="--mask-width:${width}"></i>`).join('')}</span>`).join('')}</div>`;
+  };
   window.rookRenderMaskedJob = function (job) {
     const m=job.match || {};
     const qualified=Number.isFinite(m.candidate_fit);
     const score=qualified ? m.overall_score : m.preference_fit;
     const value=Number.isFinite(score) ? Math.max(0,Math.min(100,Math.round(score))) : null;
     const labels=(job.industry_classification?.labels || []).map(x=>x==='Veterinary'?'Veterinary / Animal Health':x);
-    const facts=[job.role_type,...labels].filter(Boolean);
+    const facts=(isV7()?[...labels,job.specialty_label]:[job.role_type,...labels]).filter((value,index,all)=>value && all.indexOf(value)===index);
+    const role=isV7()?job.role_type || '':'';
     const badge=m.excellent_match ? 'Excellent Match' : m.recommendation;
     const geography=job.territory_type || (Number.isFinite(job.distance_miles) ? `${job.distance_miles} miles away` : '');
     return `<article class="job-row masked-job" aria-label="Locked personalized opportunity">
-      <div class="masked-facts"><div class="masked-placeholder" aria-hidden="true"><i></i><i></i></div>
+      <div class="masked-facts">${role?`<strong class="masked-role">${esc(role)}</strong>${maskedLines(job.masked_lines)}`:'<div class="masked-placeholder" aria-hidden="true"><i></i><i></i></div>'}
         <div class="masked-tags">${badge?`<span class="rec-badge">${esc(badge)}</span>`:''}${facts.length?`<span>${facts.map(esc).join(' · ')}</span>`:''}</div>
         ${geography?`<p class="masked-distance">${esc(geography)}</p>`:''}
         <p class="masked-freshness">${esc(job.freshness_label || '')}</p>
-        <div class="masked-lock"><span aria-hidden="true">🔒</span><div><strong>Job title and employer hidden</strong><p>Start your 3-day free trial to view the full opportunity details and apply directly.</p></div></div>
+        <div class="masked-lock"><span aria-hidden="true">🔒</span><div><strong>${isV7()?'Company &amp; full job details hidden':'Job title and employer hidden'}</strong><p>Start your 3-day free trial to view the full opportunity details and apply directly.</p></div></div>
       </div>
       <div class="masked-actions"><div class="masked-score"><div class="score-ring" style="--pct:${value ?? 0}" aria-label="${qualified?'Match':'Preference Match'}: ${value==null?'not scored':value+'%'}"><span>${value==null?'—':value+'%'}</span></div><div><strong>${qualified?'Match Score':'Preference Match'}</strong><small>${qualified?'Qualifications and preferences scored':'Qualifications not scored yet'}</small></div></div>
       <button type="button" class="btn btn-primary" onclick="rookGoToCheckout('job_card')"><span aria-hidden="true">🔒</span> ${isV7()?'Unlock my matches — 3 days free':'Unlock Job'}</button></div>

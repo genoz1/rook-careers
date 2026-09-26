@@ -1,5 +1,6 @@
 // Shared allowlisted dashboard projection; onboarding answers and flow are unchanged.
-const preview = require('./pretrialProjection').project;
+const project = require('./pretrialProjection').project;
+const preview = (job,index=0) => project(job,index,{dashboard:true});
 function answersToProfile(a) {
   const l = a?.location;
   if (!l || typeof l.lat !== 'number' || typeof l.lng !== 'number' || !Number.isFinite(l.lat) || !Number.isFinite(l.lng) || Math.abs(l.lat)>90 || Math.abs(l.lng)>180) throw new Error('Select a valid location.');
