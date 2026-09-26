@@ -64,6 +64,7 @@ app.get("/medical-sales/:page", (req, res, next) => {
 // Server-rendered public pages (real per-job SEO meta tags + sitemap) —
 // registered before the static file server and the SPA catch-all below,
 // since /jobs/:id and /sitemap.xml aren't real files in /public.
+app.use(require("./backend/resources/routes").createRouter());
 app.use("/", require("./backend/routes/publicPages"));
 
 // Static frontend (the UI prototype pages).
@@ -135,6 +136,7 @@ app.get("*", (req, res) => {
 app.listen(PORT, () => {
   console.log(`ROOK server running on port ${PORT}`);
   require('./backend/ingestionWatchdog').startIngestionWatchdog();
+  require('./backend/resources/worker').start();
   // Pre-warm the active-jobs cache 5 s after boot so the first onboarding
   // preview request hits the cache instead of waiting 40+ s for a cold fetch.
   const { fetchActiveJobs } = require("./backend/scoring/precompute");

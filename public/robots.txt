@@ -5,3 +5,5 @@ Allow: /api/jobs
 Allow: /api/public-job-count
 
 Sitemap: https://rookcareers.com/sitemap.xml
+
+Sitemap: https://rookcareers.com/resources/sitemap.xml

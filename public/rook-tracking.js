@@ -52,6 +52,11 @@
         if (typeof value === 'string' && !/@|https?:\/\//i.test(value)) safe['first_touch_' + field] = value.slice(0, 100);
       });
       if (typeof window.gtag === 'function') window.gtag('event', name, safe);
+      var resourceSlug = sessionStorage.getItem('rook_resource_origin');
+      if (resourceSlug && /^[a-z0-9-]{1,110}$/.test(resourceSlug) && typeof window.gtag === 'function') {
+        if (name === 'v7_signup_started') window.gtag('event','resource_signup_start',{resource_slug:resourceSlug});
+        if (name === 'v7_trial_activated') window.gtag('event','resource_trial_start',{resource_slug:resourceSlug});
+      }
       // Never forward account IDs, UTMs, form values or other event parameters to Meta.
       if (mapping) window.fbq(mapping[0], pixel, mapping[1]);
     } catch (_) { /* Tracking must never interrupt the funnel. */ }

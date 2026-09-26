@@ -46,7 +46,11 @@
     "test-job-search": "node --test backend/testJobSearch.js",
     "test-pretrial-security": "node --test backend/testPretrialSecurity.js && node backend/testPretrialRoutes.js && node --test backend/testPublicIndexing.js",
     "test-territory-containment": "node --test backend/testTerritoryContainment.js",
-    "test-ingestion-repairs": "node --test backend/testNewJerseyEvidence.js backend/testIndustryRepair.js backend/testSourceRepairs.js backend/testUkgRepair.js backend/testAdpRepair.js backend/testKulaRepair.js backend/testAdditionalSources.js backend/testDataQualityRepair.js backend/testIngestDeadline.js backend/testIngestionRecovery.js backend/testIngestionAiRecovery.js backend/testIngestionWatchdog.js"
+    "test-ingestion-repairs": "node --test backend/testNewJerseyEvidence.js backend/testIndustryRepair.js backend/testSourceRepairs.js backend/testUkgRepair.js backend/testAdpRepair.js backend/testKulaRepair.js backend/testAdditionalSources.js backend/testDataQualityRepair.js backend/testIngestDeadline.js backend/testIngestionRecovery.js backend/testIngestionAiRecovery.js backend/testIngestionWatchdog.js",
+    "test-resources": "node --test backend/testResources.js",
+    "resources:seed": "node backend/resources/worker.js seed",
+    "resources:status": "node backend/resources/worker.js status",
+    "resources:meta-check": "node backend/resources/meta.js check"
   },
   "engines": {
     "node": ">=18.0.0"
@@ -65,6 +69,7 @@
     "zipcodes": "^8.0.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@turf/boolean-point-in-polygon": "^7.4.0",
     "topojson-client": "^3.1.0",
     "us-atlas": "^3.0.1"

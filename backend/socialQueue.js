@@ -83,7 +83,9 @@ async function replenish(config, deps = {}) {
     recentPosts = await (deps.readRecentPosts || readRecentPosts)(config.bufferAccessToken, org);
     const recent = [...queue.posts, ...recentPosts].filter(p => channels.some(c => c.id === p.channelId))
       .sort((a,b) => new Date(b.dueAt || b.sentAt) - new Date(a.dueAt || a.sentAt)).slice(0,24).map(p => p.text);
-    const optional = identifyOptionalPersonalLinkedin(discovered, config.personalLinkedinChannelId, channels.map(c => c.id));
+    const geneMatches = discovered.filter(c => c.service==='linkedin' && c.name==='gene-zentko');
+    const personalId = config.personalLinkedinChannelId || (process.env.RESOURCES_BUFFER_ENABLED==='true' && geneMatches.length===1 ? geneMatches[0].id : null);
+    const optional = identifyOptionalPersonalLinkedin(discovered, personalId, channels.map(c => c.id));
     if (optional.ok && optional.channel.organizationId === org) personalChannel = discovered.find(c => c.id === optional.channel.id);
     else personalFailures.push({ stage: 'channel_identification', reason: optional.ok ? 'Gene LinkedIn must share the Buffer organization' : optional.error });
     const { data: intents, error: intentError } = await db.from('social_queue_sends').select('*').eq('state','sending');
@@ -160,20 +162,27 @@ async function replenish(config, deps = {}) {
             const check = await (deps.preflightCheckMedia || require('./socialMediaPreflight').preflightCheckMedia)(media.photoUrl);
             if(!check.ok) throw Error(`Saved media preflight: ${check.reason}`);
           } else {
-            copy = await makeCopy({theme:slot.kind,industry:slot.industry,dateStr:slot.dateStr});
-            media = {...await (deps.prepareMarketingGraphic || prepareMarketingGraphic)(db,slot,copy,deps),editorial:copy};
+            const resource = await require('./resources/bufferInventory').choose(db,slot);
+            if (resource) { copy=resource.copy; media=resource.media; }
+            else {
+              copy = await makeCopy({theme:slot.kind,industry:slot.industry,dateStr:slot.dateStr});
+              media = {...await (deps.prepareMarketingGraphic || prepareMarketingGraphic)(db,slot,copy,deps),editorial:copy};
+            }
           }
         } catch (error) {
           const failure = {runKey,stage:'marketing_media',reason:error.message};
           failures.push(failure); console.error(`[social-media-failure] ${JSON.stringify(failure)}`);
           continue; // No send intent yet: a later refill can safely retry this slot.
         }
+        const directResourceFacebook=media.resourceSlug && await require('./resources/bufferInventory').directMetaReady(db,media.resourceSlug);
         for (const channel of missing) {
+          if (directResourceFacebook && channel.service==='facebook') continue;
           if (!allowed.has(channel.id)) {capacityDeferred++;continue;}
           try {
-            await send(config.bufferAccessToken,{channelId:channel.id,text:regularPost(slot,channel.service,copy),photoUrl:media.photoUrl,mediaEvidence:media,mode:'customScheduled',dueAt:slot.dueAt,
+            const resourcePost = await send(config.bufferAccessToken,{channelId:channel.id,text:regularPost(slot,channel.service,copy),photoUrl:media.photoUrl,mediaEvidence:media,mode:'customScheduled',dueAt:slot.dueAt,
               ...(channel.id===channels[0].id?{personalTemplate:regularPost(slot,'linkedin',{...copy,linkedin:PERSONAL_COPY_TOKEN})}:{}),
               ...(channel.service==='facebook'?{metadata:{facebook:{type:'post'}}}:{})});
+            await require('./resources/bufferInventory').record(db,media.resourceSlug,channel.service,resourcePost);
           } catch (error) {
             if(error.capacity){capacityDeferred++;continue;}
             failures.push({runKey,stage:'marketing_replenishment',reason:error.message}); break;
@@ -199,7 +208,7 @@ async function replenish(config, deps = {}) {
         const personalRecent = [...queue.posts, ...recentPosts].filter(p => p.channelId === personalChannel.id)
           .sort((a,b) => new Date(b.dueAt || b.sentAt) - new Date(a.dueAt || a.sentAt)).slice(0,36).map(p => p.text);
         const generatePersonal = deps.generatePersonalLinkedin || require('./socialMarketingCopy').generatePersonalLinkedin;
-        for (const slot of futureSlots(now).filter(isPersonalLinkedinSlot)) {
+        for (const slot of futureSlots(now).filter(slot => isPersonalLinkedinSlot(slot) || (process.env.RESOURCES_BUFFER_ENABLED==='true' && ['marketing-1','marketing-2'].includes(slot.slot)))) {
           const renewal = await db.rpc('claim_social_queue', { lock_owner: owner });
           if (renewal.error || !renewal.data) throw Error('Lost social queue lock during Gene phase');
           const target = personalLinkedinSlot(slot), runKey = computeRunKey(slot.dateStr,slot.slot);
@@ -212,13 +221,16 @@ async function replenish(config, deps = {}) {
           if (!source?.payload?.personalTemplate || !source.payload.personalTemplate.includes(PERSONAL_COPY_TOKEN)) {
             personalDeferred++; personalOutcomes.push({slot:slot.slot,date:slot.dateStr,state:'source_pending'}); continue;
           }
-          const generated = await generatePersonal({theme:slot.kind,slot:slot.slot,industry:slot.industry,recent:[source.payload.text,...personalRecent]});
+          const resourceSlug=source.payload.mediaEvidence?.resourceSlug;
+          if (!isPersonalLinkedinSlot(slot) && !resourceSlug) continue;
+          const generated = resourceSlug ? {text:source.payload.mediaEvidence.editorial.personal} : await generatePersonal({theme:slot.kind,slot:slot.slot,industry:slot.industry,recent:[source.payload.text,...personalRecent]});
           const text = source.payload.personalTemplate.replace(PERSONAL_COPY_TOKEN,generated.text);
           const current = await read();
           if (representedPost(current.posts,personalChannel.id,target)) continue;
           if (!availableCapacity(current.posts,personalChannel.id,current.limit)) { personalDeferred++; continue; }
           if (target.dueAt <= new Date()) { personalDeferred++; continue; }
-          await durableCreate(db,runKey,config.bufferAccessToken,{channelId:personalChannel.id,text,photoUrl:source.payload.photoUrl,mode:'customScheduled',dueAt:target.dueAt},deps.createPost || createPost);
+          const personalPost=await durableCreate(db,runKey,config.bufferAccessToken,{channelId:personalChannel.id,text,photoUrl:source.payload.photoUrl,mode:'customScheduled',dueAt:target.dueAt},deps.createPost || createPost);
+          await require('./resources/bufferInventory').record(db,resourceSlug,'personal',personalPost);
           personalCreated++; personalRecent.unshift(text); personalRecent.splice(36);
           personalOutcomes.push({slot:slot.slot,date:slot.dateStr,state:'scheduled'});
         }
