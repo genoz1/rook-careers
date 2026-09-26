@@ -38,6 +38,10 @@ async function resolve(deps={}){
  return {config:{...c,page:page.id,ig:page.instagram_business_account?.id,token:page.access_token},report:{page:{id:page.id,name:page.name},instagramAccount:page.instagram_business_account||null,facebook:facebook?'PASS':'FAIL',instagram:instagram?'PASS':'FAIL'}};
 }
 async function check(deps={}){return (await resolve(deps)).report;}
+function captionFor(a,channel){
+ if(channel==='instagram')return a.social_copy.instagram.replace(/https?:\/\/\S+|www\.\S+/gi,'').replace(/(?:read the full guide\s*[—–-]?\s*)?link in bio[.!]?/gi,'').trim()+'\n\nRead the full guide — link in bio.';
+ return a.social_copy[channel]+'\n\n'+urlFor(a.slug);
+}
 async function sendArticle(a,channel,deps={}){
  const client=deps.db||db();
  const resolved=await resolve(deps),c=resolved.config;
@@ -49,10 +53,11 @@ async function sendArticle(a,channel,deps={}){
  if(!claimed?.length)return {state:'already_claimed'};
  try{
   let post;
-  const caption=a.social_copy[channel]+'\n\n'+urlFor(a.slug);
-  if(channel==='facebook')post=await graph(c.page+'/photos',{url:origin()+a.image_path,caption},'POST',sendDeps);
+  const caption=captionFor(a,channel);
+  const imageUrl=urlFor(a.slug)+'social.jpg';
+  if(channel==='facebook')post=await graph(c.page+'/photos',{url:imageUrl,caption},'POST',sendDeps);
   else{
-   const container=await graph(c.ig+'/media',{image_url:origin()+a.image_path,caption},'POST',sendDeps);
+   const container=await graph(c.ig+'/media',{image_url:imageUrl,caption},'POST',sendDeps);
    if(!container.id)throw Error('No container receipt');
    await result(client.from('resource_distribution').update({receipt:{container_id:container.id}}).eq('article_slug',a.slug).eq('channel',channel));
    let ready=false;
@@ -89,4 +94,4 @@ if(require.main===module)(async()=>{
  }
  throw Error('Use check | test facebook|instagram SLUG --confirm-post');
 })().catch(e=>{console.error(e.message);process.exitCode=1;});
-module.exports={check,graph,sendArticle,dispatch};
+module.exports={check,graph,sendArticle,dispatch,captionFor};

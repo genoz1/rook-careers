@@ -29,6 +29,13 @@ function createRouter(deps={}){
    if(!rows.length)break;urls.push(...rows.map(a=>({path:'/resources/'+a.slug+'/',date:a.updated_at})));offset+=rows.length;if(offset>49000)throw Error('Sitemap split required');}
   res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls.map(u=>`<url><loc>${views.esc(origin()+u.path)}</loc>${u.date?`<lastmod>${views.esc(u.date)}</lastmod>`:''}</url>`).join('')}</urlset>`);
  }));
+ router.get('/resources/:slug/social.jpg',guard(async(req,res)=>{
+  if(!/^[a-z0-9-]{1,110}$/.test(req.params.slug))return res.status(404).send('Article not found');
+  const a=await result(client().from('resource_articles').select('title,category').eq('slug',req.params.slug).maybeSingle());
+  if(!a)return res.status(404).send('Article not found');
+  const buffer=await require('./socialGraphic').renderResourceGraphic(a);
+  res.set('Cache-Control','public, max-age=86400').type('image/jpeg').send(buffer);
+ }));
  router.get('/resources/:slug',guard(async(req,res)=>{
   if(!/^[a-z0-9-]{1,110}$/.test(req.params.slug))return res.status(404).send('Article not found');
   const a=await result(client().from('resource_articles').select('*').eq('slug',req.params.slug).maybeSingle());
