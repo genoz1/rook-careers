@@ -32,3 +32,32 @@ h2{font-family:Inter,system-ui,sans-serif;font-size:36px;font-weight:800;letter-
 @media(max-width:767px){.login-brand b,.login-brand small{display:block}.login-footer{margin:8px 0 0!important}.login-footer a{color:#062b72!important}.login-bottom{height:clamp(0px,calc(100svh - 730px),23vw)}}
 .pw-toggle{font-size:0}.pw-toggle::before{content:'';width:21px;height:21px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7078' stroke-width='2'%3E%3Cpath d='M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3C/svg%3E") center/contain no-repeat}.pw-toggle[aria-label='Hide password']::before{opacity:.55}
 @media(max-width:767px){body{--hero:clamp(12px,calc(100svh - 540px),43vw)}}
+
+/* Keep the artwork layout, but size desktop controls in CSS pixels rather
+   than the enlarged proportions of the reference artwork. */
+@media(min-width:1024px){
+ body{padding-top:88px}
+ body::before,body::after{top:72px}
+ .login-header{height:72px}
+ .login-brand img{width:48px;height:48px}
+ .login-brand b{font-size:30px}
+ .login-brand small{font-size:16px}
+ .login-private{font-size:14px}
+ .card{padding:24px 30px}
+ .card-brand{gap:12px;margin-bottom:20px}
+ .card-brand img{width:48px;height:48px}
+ .card-brand b{font-size:32px}
+ .card-brand small{font-size:12px}
+ .tabs{margin-bottom:20px;padding:4px}
+ .tab{font-size:14px;padding:11px 5px}
+ h2{font-size:26px;letter-spacing:-.5px}
+ .sub{font-size:16px;margin-bottom:16px}
+ .field{margin-bottom:14px}
+ .field label{font-size:14px}
+ .field input{font-size:16px;min-height:44px;padding:10px 13px}
+ .btn{font-size:16px;min-height:44px;padding:12px}
+ #panelSignin>div:last-child a{font-size:14px!important}
+ .login-footer{font-size:13px;margin-top:20px}
+ .login-footer nav{margin-top:8px}
+ .login-footer a{font-size:12px}
+}
