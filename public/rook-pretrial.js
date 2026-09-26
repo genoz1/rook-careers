@@ -1,10 +1,10 @@
-// The API supplies only safe structured attributes. Placeholders contain no text.
+// The API supplies only safe structured attributes and server-generated masks.
 (function () {
   const isV7 = () => typeof document !== 'undefined' && document.body?.dataset?.v7Conversion === 'true';
   const esc = value => String(value ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const maskedLines = lines => {
-    if(!Array.isArray(lines) || lines.length!==2 || lines.some(row=>!Array.isArray(row) || row.length<4 || row.length>6 || row.some(width=>!Number.isInteger(width) || width<3 || width>8))) return '';
-    return `<div class="masked-redaction" aria-hidden="true">${lines.map(row=>`<span class="masked-redaction-line">${row.map(width=>`<i style="--mask-width:${width}"></i>`).join('')}</span>`).join('')}</div>`;
+  const maskedWords = (words,className) => {
+    if(!Array.isArray(words) || words.length<2 || words.length>3 || words.some(word=>typeof word!=='string' || !/^[a-z]{4,9}$/.test(word))) return '';
+    return `<span class="${className}" aria-hidden="true">${words.map(esc).join(' ')}</span>`;
   };
   window.rookRenderMaskedJob = function (job) {
     const m=job.match || {};
@@ -16,6 +16,20 @@
     const role=isV7()?job.role_type || '':'';
     const badge=m.excellent_match ? 'Excellent Match' : m.recommendation;
     const geography=job.territory_type || (Number.isFinite(job.distance_miles) ? `${job.distance_miles} miles away` : '');
+    if(isV7()) {
+      const safeLabels=(job.industry_classification?.labels || []).filter((value,index,all)=>value && all.indexOf(value)===index);
+      const cardFacts=[...safeLabels,job.specialty_label].filter((value,index,all)=>value && all.indexOf(value)===index);
+      const freshness=job.freshness_label || '';
+      const separator=geography&&freshness?'<span class="masked-meta-divider" aria-hidden="true"></span>':'';
+      return `<article class="job-row masked-job masked-job-v7" aria-label="Locked personalized opportunity">
+        <div class="masked-v7-primary">
+          <div class="masked-v7-copy">${badge?`<span class="rec-badge">${esc(badge)}</span>`:''}<strong class="masked-role">${esc(role || 'Sales Opportunity')}</strong>${maskedWords(job.masked_lines?.title,'masked-title-fragment')}${cardFacts.length?`<div class="masked-v7-industries">${cardFacts.map(esc).join(' · ')}</div>`:''}</div>
+          <div class="masked-v7-score"><div class="score-ring" style="--pct:${value ?? 0}" aria-label="Preference Match: ${value==null?'not scored':value+'%'}"><span>${value==null?'—':value+'%'}</span></div><strong>Preference Match</strong></div>
+        </div>
+        <div class="masked-v7-meta">${geography?`<span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>${esc(geography)}</span>`:''}${separator}${freshness?`<span><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4m8-4v4M4 10h16m-11 4h2m3 0h2m-7 4h2"/></svg>${esc(freshness)}</span>`:''}</div>
+        <div class="masked-v7-bottom"><div class="masked-v7-employer"><span class="masked-v7-lock" aria-hidden="true">🔒</span><strong>Employer:</strong>${maskedWords(job.masked_lines?.employer,'masked-employer-fragment')}</div><button type="button" class="btn btn-primary masked-v7-cta" onclick="rookGoToCheckout('job_card')"><span aria-hidden="true">🔒</span> Unlock full details — 3 days free</button></div>
+      </article>`;
+    }
     return `<article class="job-row masked-job" aria-label="Locked personalized opportunity">
       <div class="masked-facts">${role?`<strong class="masked-role">${esc(role)}</strong>${maskedLines(job.masked_lines)}`:'<div class="masked-placeholder" aria-hidden="true"><i></i><i></i></div>'}
         <div class="masked-tags">${badge?`<span class="rec-badge">${esc(badge)}</span>`:''}${facts.length?`<span>${facts.map(esc).join(' · ')}</span>`:''}</div>

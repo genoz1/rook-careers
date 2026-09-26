@@ -19,8 +19,11 @@ test('all locked projectors omit arbitrary source fields and nested text without
   assert(!/HiddenEmployer|BrandXYZ|DistinctCity|Unique|ReqSecret|secret\.example|private-job-id|future secret/.test(JSON.stringify(result)));
   assert.equal(result.match.preference_fit,100);assert.equal(result.match.candidate_fit,null);assert.equal(result.role_type,'Account Management');assert.equal(result.territory_type,null);
  }
- const dashboard=preview(canary,2);assert.deepEqual(Object.keys(dashboard).sort(),permittedDashboard);assert.equal(dashboard.role_type,'Pharmaceutical Sales Role');
- assert.equal(dashboard.masked_lines.length,2);assert(dashboard.masked_lines.every(row=>row.length>=4&&row.length<=6&&row.every(width=>Number.isInteger(width)&&width>=3&&width<=8)));
+ const dashboard=preview(canary,2);assert.deepEqual(Object.keys(dashboard).sort(),permittedDashboard);assert.equal(dashboard.role_type,'Oncology Account Manager');
+ assert.deepEqual(Object.keys(dashboard.masked_lines).sort(),['employer','title']);
+ for(const words of Object.values(dashboard.masked_lines))assert(words.length>=2&&words.length<=3&&words.every(word=>/^[a-z]{4,9}$/.test(word)));
+ const generated=new Set(Array.from({length:8},()=>JSON.stringify(preview(canary,2).masked_lines)));
+ assert(generated.size>1,'synthetic masks should vary across responses');
  assert(!/HiddenEmployer|BrandXYZ|DistinctCity|Unique|ReqSecret|secret\.example|private-job-id|future secret/.test(JSON.stringify(dashboard)));
  assert(!JSON.stringify(project(canary)).includes('masked_lines'),'non-dashboard projection must not receive visual masks');
  assert.equal(project({...canary,geographic_eligibility:{kind:'secret free-form text'}}).geography_kind,null);

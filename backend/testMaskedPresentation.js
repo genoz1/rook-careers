@@ -42,6 +42,9 @@ const generalizedCases = [
  ['Acme Oncology Corp – Account Executive – Tampa','Account Executive'],
  ['Req 882401 | Territory Manager – Orlando','Territory Manager'],
  ['BrandZ HyperPulse Advisor – Eastern Florida','Medical Device Sales Role'],
+ ['BrandX CardioFlow Account Manager – Orlando','Account Manager'],
+ ['Acme Lumina Regional Account Manager – Tampa','Regional Account Manager'],
+ ['Medical Device Sales Specialist – North Orlando','Sales Specialist'],
 ];
 for(const [title,expected] of generalizedCases) {
  const result=generalizedRole({title_original:title,ai_analysis:{product_categories:['Medical Device']}});
@@ -68,15 +71,26 @@ function renderer(file) {
 }
 for(const file of ['rook-dashboard.html','rook-dashboard-v7.html']) {
  const {render}=renderer(file);
- const base={id:'test',role_type:'Oncology Account Executive',title_original:'PRIVATE ORIGINAL TITLE',company_name:'PRIVATE EMPLOYER',description_text:'PRIVATE DESCRIPTION',source_url:'https://private.example/job',application_url:'https://private.example/apply',distance_miles:48,industry_classification:{labels:['Medical Device']},specialty_label:'Surgical',masked_lines:[[5,8,3,6],[7,4,8,3,5]],subscription_required:true,date_posted:'2026-09-10',freshness_label:'Posted 9 days ago',match:{overall_score:100,preference_fit:100,candidate_fit:null,recommendation:'Strong Match'}};
+ const base={id:'test',role_type:'Oncology Account Executive',title_original:'PRIVATE ORIGINAL TITLE',company_name:'PRIVATE EMPLOYER',description_text:'PRIVATE DESCRIPTION',source_url:'https://private.example/job',application_url:'https://private.example/apply',distance_miles:48,industry_classification:{labels:['Medical Device']},specialty_label:'Surgical',masked_lines:{title:['navori','beluna'],employer:['raveni','dofanu']},subscription_required:true,date_posted:'2026-09-10',freshness_label:'Posted 9 days ago',match:{overall_score:100,preference_fit:100,candidate_fit:null,recommendation:'Strong Match'}};
  const locked=render(base);
  if(file==='rook-dashboard-v7.html') {
   assert(locked.includes('<strong class="masked-role">Oncology Account Executive</strong>'));
-  assert(locked.includes('class="masked-redaction" aria-hidden="true"'));
-  assert.equal((locked.match(/class="masked-redaction-line"/g)||[]).length,2);
-  assert(locked.includes('style="--mask-width:8"'));
+  assert(locked.includes('<strong class="masked-role">Oncology Account Executive</strong>'));
+  assert(locked.includes('class="masked-title-fragment" aria-hidden="true">navori beluna</span>'));
+  assert(locked.includes('class="masked-employer-fragment" aria-hidden="true">raveni dofanu</span>'));
+  assert(locked.indexOf('Strong Match')<locked.indexOf('masked-role'));
+  assert(locked.indexOf('Preference Match')<locked.indexOf('48 miles away'));
+  assert(locked.includes('Unlock full details — 3 days free'));
+  assert(locked.includes('Employer:'));
+  const css=fs.readFileSync(require('node:path').join(__dirname,'../public/rook-pretrial.css'),'utf8');
+  assert(css.includes('.masked-job-v7 .masked-role{')&&css.includes('filter:blur(1.7px)'));
+  assert(css.includes('.masked-title-fragment{')&&css.includes('filter:blur(2.6px)'));
+  assert(css.includes('.masked-employer-fragment{')&&css.includes('filter:blur(3px)'));
+  assert(css.includes('.masked-v7-bottom{display:grid;'));
+  const malformed=render({...base,masked_lines:{title:['PRIVATE EMPLOYER','x'],employer:['PRIVATE EMPLOYER','x']}});
+  assert(!malformed.includes('PRIVATE EMPLOYER')&&!malformed.includes('masked-employer-fragment'));
   assert(locked.includes('Medical Device · Surgical'));
-  assert(locked.includes('Company &amp; full job details hidden'));
+  assert(locked.includes('Employer:'));
  } else {assert(locked.includes('Job title and employer hidden'));assert(!locked.includes('masked-redaction'));}
  assert(locked.includes('48 miles away'));assert(locked.includes('Posted 9 days ago'));
  for(const secret of ['PRIVATE ORIGINAL TITLE','PRIVATE EMPLOYER','PRIVATE DESCRIPTION','private.example']) assert(!locked.includes(secret));
@@ -87,7 +101,8 @@ for(const file of ['rook-dashboard.html','rook-dashboard-v7.html']) {
  }
  assert(locked.includes('Preference Match'));assert(locked.includes('class="score-ring"'));
  assert(locked.includes('Strong Match'));assert(!locked.includes('Qualifications —%'));assert(!locked.includes('Posted 2026'));
- assert(locked.includes('not scored yet'));assert(locked.includes('rookGoToCheckout(\'job_card\')'));
+ if(file==='rook-dashboard.html') assert(locked.includes('not scored yet'));
+ assert(locked.includes('rookGoToCheckout(\'job_card\')'));
  const full=render({...base,subscription_required:false,title_original:cases[0][0],company_name:'Axsome Therapeutics',source_url:'https://example.com/job',match:{overall_score:92,preference_fit:90,candidate_fit:96,recommendation:'Strong Match',categories:{}}});
  assert(full.includes('class="score-ring"'));assert(full.includes('Overall match: 92%'));assert(full.includes('Axsome Therapeutics'));assert(full.includes('Symbravo'));assert(full.includes('https://example.com/job'));assert(full.includes('Posted 2026-09-10'));assert(full.includes('Full category scoring'));
  const zero=render({...base,match:{overall_score:40,preference_fit:80,candidate_fit:0,recommendation:'Skip'}});assert(zero.includes('Match: 40%'));

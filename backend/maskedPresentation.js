@@ -152,8 +152,10 @@ function generalizedRole(job) {
       if (!match) continue;
       const before = text.slice(0, match.index).trim();
       const prefix = before ? before.split(/\s+/) : [];
-      if (prefix.length > 3 || prefix.some(word => !SAFE_ROLE_PREFIXES.has(word.toLowerCase().replace(/[^a-z']/g, '')))) continue;
-      const phrase = [...prefix, ...match[0].trim().split(/\s+/)];
+      // Unknown lead-in words may be a product, brand or company. Keep only
+      // vetted role modifiers and the recognized functional role itself.
+      const safePrefix = prefix.filter(word => SAFE_ROLE_PREFIXES.has(word.toLowerCase().replace(/[^a-z']/g, ''))).slice(-2);
+      const phrase = [...safePrefix, ...match[0].trim().split(/\s+/)];
       return phrase.map(word => /^(?:i{1,3}|iv|v|[1-5])$/i.test(word) ? word.toUpperCase() :
         word[0].toUpperCase()+word.slice(1).toLowerCase()).join(' ');
     }
@@ -172,6 +174,7 @@ function safeSpecialty(job) {
   const allowed = new Map([
     ['capital equipment','Capital Equipment'], ['surgical','Surgical'], ['oncology','Oncology'],
     ['molecular diagnostics','Molecular Diagnostics'], ['laboratory diagnostics','Laboratory Diagnostics'],
+    ['laboratory sales','Laboratory Sales'], ['companion animal','Companion Animal'],
     ['point-of-care','Point-of-Care'], ['animal health','Animal Health'], ['dental','Dental'],
     ['imaging','Imaging'], ['vaccines','Vaccines'], ['immunology','Immunology'],
     ['cardiology','Cardiology'], ['dermatology','Dermatology'], ['orthopedics','Orthopedics'],

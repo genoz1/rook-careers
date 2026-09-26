@@ -5,11 +5,19 @@ const {freshness, generalizedRole, safeSpecialty} = require('./maskedPresentatio
 const {randomInt} = require('node:crypto');
 const number = value => typeof value === 'number' && Number.isFinite(value) ? value : null;
 const score = value => number(value) == null ? null : Math.max(0, Math.min(100, value));
-// Draw abstract blurred-word widths independently of all source job fields.
-// Only small width buckets cross the locked boundary; no protected text or
-// source-derived length, identifier, or hash is sent to the browser.
+// Draw synthetic typography independently of all source job fields. These
+// pronounceable, meaningless letter groups reveal no source text or lengths.
+function maskWords(minWords,maxWords) {
+  const consonants='bcdfghjklmnprstvwyz',vowels='aeiou';
+  const word=()=>{
+    const length=randomInt(4,10);let value='';
+    for(let i=0;i<length;i++) value+=i%2===0?consonants[randomInt(0,consonants.length)]:vowels[randomInt(0,vowels.length)];
+    return value;
+  };
+  return Array.from({length:randomInt(minWords,maxWords+1)},word);
+}
 function maskedLines() {
-  return Array.from({length:2},()=>Array.from({length:randomInt(4,7)},()=>randomInt(3,9)));
+  return {title:maskWords(2,3),employer:maskWords(2,3)};
 }
 function broadRole(job) {
   const roles = {account_management:'Account Management', 'account management':'Account Management',

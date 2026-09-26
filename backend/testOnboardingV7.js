@@ -76,7 +76,7 @@ const express=require('express');const app=express();app.use(express.json());app
   r=await call('/session');assert.equal(r.headers.get('cache-control'),'private, no-store');let data=await r.json();assert.equal(data.jobs.length,2);assert.equal(data.unlocked,false);
   const lockedKeys=['id','subscription_required','industry_classification','geography_kind','role_type','specialty_label','masked_lines','distance_miles','territory_type','freshness_label','match'].sort();
   assert.deepEqual(Object.keys(data.jobs[0]).sort(),lockedKeys);
-  assert(data.jobs.every(job=>job.masked_lines.length===2&&job.masked_lines.every(row=>row.length>=4&&row.length<=6&&row.every(width=>Number.isInteger(width)&&width>=3&&width<=8))));
+  assert(data.jobs.every(job=>Object.keys(job.masked_lines).sort().join(',')==='employer,title'&&Object.values(job.masked_lines).every(words=>words.length>=2&&words.length<=3&&words.every(word=>/^[a-z]{4,9}$/.test(word)))));
   assert(!/SECRET|ACME|real-job|hidden-source|hidden-employer|secret.example|SECRET HTML|SECRET text/i.test(JSON.stringify(data.jobs)));
   assert.equal(data.jobs[0].role_type,'Sales Manager');assert.equal(data.jobs[0].distance_miles,4);assert.equal(data.jobs[0].match.overall_score,84);
   assert(Date.parse(tables.onboarding_v7_sessions[0].expires_at)>Date.now()+29*24*60*60*1000,'opened matches remain recoverable beyond 24 hours');
