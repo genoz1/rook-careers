@@ -1,11 +1,13 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),express=require('express');
 const {structured,pdf}=require('./fixtures/resume/realisticPdf');
+const routeResumeText="Sam Example\nExample Diagnostics\nAccount Executive | January 2020–December 2025\nManaged the company's regional territory and achieved 103.7% of quota.\nRenewed a long-term purchasing agreement with a healthcare practice.\nGenerated $125,000+ in new business.\nExample Supply\nSales Associate";
+require.cache[require.resolve('./resumeParser')]={exports:{extractResumeText:async(_buffer,mimetype)=>mimetype==='application/msword'?null:routeResumeText}};
 process.env.SUPABASE_URL='https://example.invalid';process.env.SUPABASE_ANON_KEY='test';process.env.SUPABASE_SERVICE_ROLE_KEY='test';process.env.OPENAI_API_KEY='test';delete process.env.ANTHROPIC_API_KEY;
 let profile={id:'candidate-test',user_id:'test-user',home_lat:28.9,home_lng:-82,home_state:'FL',desired_industries:['Diagnostics'],territory_size_preferences:['local']},scored,mode='ok';
-const db={auth:{getUser:async()=>({data:{user:{id:'test-user'}}})},storage:{from:()=>({upload:async()=>({})})},from:()=>({upsert(value){Object.assign(profile,value);return this},select(){return this},single:async()=>({data:{...profile}})})};
+const db={auth:{getUser:async()=>({data:{user:{id:'test-user'}}})},storage:{from:()=>({upload:async()=>({})})},from:()=>({upsert(value){Object.assign(profile,value);return this},select(){return this},eq(){return this},single:async()=>({data:{...profile}}),maybeSingle:async()=>({data:{...profile}})})};
 require.cache[require.resolve('@supabase/supabase-js')]={exports:{createClient:()=>db}};
 require.cache[require.resolve('./ai/embeddings')]={exports:{generateEmbedding:async()=>[1,0]}};
-require.cache[require.resolve('./scoring/precompute')]={exports:{scoreAndStoreForCandidate:async(_,p)=>{scored=p;return {scoredCount:1}}}};
+require.cache[require.resolve('./scoring/precompute')]={exports:{scoreAndStoreForCandidate:async(_,p)=>{scored=p;profile.last_scored_at=p.updated_at;return {scoredCount:1}}}};
 const nativeFetch=global.fetch;
 global.fetch=async(url,options)=>{
  if(String(url).startsWith('http://127.0.0.1:')) return nativeFetch(url,options);
@@ -20,6 +22,11 @@ test('multipart upload → extraction → actual OpenAI client → persistence �
  const form=new FormData();form.append('resume',new Blob([buffer||pdf()],{type}),'synthetic.pdf');const r=await fetch(`http://127.0.0.1:${server.address().port}/api/resume`,{method:'POST',headers:{Authorization:'Bearer test'},body:form});assert.equal(r.status,200);return r.json();};
  try {
   const result=await upload();assert.equal(result.analysis_status,'ok');assert.deepEqual(profile.resume_structured,structured);assert(profile.resume_text.includes('Example Diagnostics'));assert.deepEqual(scored.resume_structured,structured);
+  const statusUrl=`http://127.0.0.1:${server.address().port}/api/resume-status`;
+  profile.last_scored_at='2000-01-01T00:00:00.000Z';
+  let statusResponse=await fetch(statusUrl,{headers:{Authorization:'Bearer test'}});assert.equal(statusResponse.status,200);assert.deepEqual(await statusResponse.json(),{status:'processing'});
+  profile.last_scored_at=profile.updated_at;
+  statusResponse=await fetch(statusUrl,{headers:{Authorization:'Bearer test'}});assert.equal(statusResponse.status,200);assert.deepEqual(await statusResponse.json(),{status:'complete'});
   const job={id:'job-test',title_original:'Physician Account Executive',company_name:'Synthetic Employer',location_raw:'Oxford, FL',state:'FL',job_lat:28.9,job_lng:-82,status:'active',moderation_status:'approved',industry:'Diagnostics',ai_analysis:{preferred_industries:['Diagnostics'],product_categories:['Diagnostics'],required_customer_types:['Physicians'],sales_motion:['Hunter'],seniority_level:'Account Executive',required_years_experience:5}};
   const q={select(){return this},eq(){return this},or(){return this},order(){return this},range:async()=>({data:[job]})};
   const matches=await require('./v7Matching').rank({from:()=>q},profile);assert.equal(matches.length,1);assert(matches[0].match.candidate_fit>0);assert(matches[0].match.reasons.some(r=>r.includes('Diagnostics')));

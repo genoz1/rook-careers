@@ -459,6 +459,28 @@ router.post("/resume", requireConfig, requireAuth, upload.single("resume"), asyn
     });
 });
 
+// GET /api/resume-status — confirms that the rescore triggered by the
+// latest résumé/profile update has finished persisting. Matching runs in
+// the background so a large active-job pool does not hold the upload
+// request open. Both timestamps already exist on candidate_profiles;
+// no additional status table or scoring call is needed.
+router.get("/resume-status", requireConfig, requireAuth, async (req, res) => {
+  res.set("Cache-Control", "private, no-store");
+  const { data: profile, error } = await supabaseAdmin
+    .from("candidate_profiles")
+    .select("resume_file_path, updated_at, last_scored_at")
+    .eq("user_id", req.user.id)
+    .maybeSingle();
+
+  if (error) return res.status(500).json({ error: "Could not check résumé match status." });
+  if (!profile?.resume_file_path) return res.json({ status: "no_resume" });
+
+  const updatedAt = Date.parse(profile.updated_at || "");
+  const scoredAt = Date.parse(profile.last_scored_at || "");
+  const complete = Number.isFinite(updatedAt) && Number.isFinite(scoredAt) && scoredAt >= updatedAt;
+  return res.json({ status: complete ? "complete" : "processing" });
+});
+
 // GET /api/resume-url — a signed download link plus display info (real
 // filename, upload date) for the caller's current résumé. "My Résumés"
 // in the sidebar used to link straight into onboarding's upload step

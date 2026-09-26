@@ -18,7 +18,10 @@ const mammoth = require("mammoth");
 async function extractResumeText(buffer, mimetype) {
   try {
     if (mimetype === "application/pdf") {
-      const data = await pdfParse(buffer);
+      // pdf-parse 1.x / its bundled pdf.js can misread Node's Buffer
+      // backing-store offsets on current Node releases. Give it a plain
+      // Uint8Array copy of the uploaded bytes so offsets are zero-based.
+      const data = await pdfParse(new Uint8Array(buffer));
       return data.text.trim() || null;
     }
     if (mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
