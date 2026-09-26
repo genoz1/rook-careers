@@ -31,7 +31,7 @@
     "test-daily-digest-location": "node backend/testDailyDigestLocation.js",
     "test-v6-email-code": "node backend/testV6EmailCode.js",
     "test-resume-achievements": "node backend/testResumeAchievements.js",
-    "test-resume-flow": "node --test backend/testResumeRouteOpenAI.js backend/testResumeManager.js backend/testResumeOpenAI.js backend/testResumePdfGrounding.js backend/testResumeRescore.js backend/testResumeAchievements.js",
+    "test-resume-flow": "node --test backend/testResumeRouteOpenAI.js backend/testResumeManager.js backend/testResumeOpenAI.js backend/testResumePdfGrounding.js backend/testResumeRescore.js backend/testResumeAchievements.js backend/testDashboardResumePopupRefresh.js",
     "test-social-automation": "node backend/testSocialAutomation.js",
     "social:discover-channels": "node backend/socialPublishWorker.js discover",
     "social:validate-only": "node backend/socialPublishWorker.js validate",
