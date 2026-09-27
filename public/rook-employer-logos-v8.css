@@ -1,0 +1,4 @@
+/* Only loaded by V8 preview and member pages. The initial remains if a local asset fails. */
+.v8-employer-logo{position:relative;display:inline-flex;align-items:center;justify-content:center;width:48px;height:48px;flex:0 0 48px;background:#fff;border:1px solid #d7e0eb;border-radius:8px;color:#244e82;font-size:23px;font-weight:800;line-height:1;overflow:hidden}
+.v8-employer-logo img{position:absolute;inset:0;margin:auto;display:block;max-width:40px;max-height:40px;width:auto;height:auto;object-fit:contain;background:white}
+@media(max-width:700px){.v8-employer-logo{width:44px;height:44px;flex-basis:44px}.v8-employer-logo img{max-width:36px;max-height:36px}}

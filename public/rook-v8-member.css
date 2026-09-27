@@ -110,6 +110,8 @@ body{background:#f3f8ff}.main{max-width:1900px;width:100%;margin:0 auto}.v8-offi
 .job-list .job-row .job-info{width:100%;min-width:0;overflow-wrap:anywhere}
 .job-list .job-info h4{color:#0b2858;font-size:16px;line-height:1.22;margin:0}
 .v8-employer{margin-top:5px;font-size:12.5px;font-weight:700;color:#344d73}
+.v8-employer-identity{display:flex;align-items:flex-start;gap:9px;min-width:0}
+.v8-identity-copy{min-width:0;flex:1}
 .v8-place,.v8-comp{margin-top:3px;font-size:11.5px;color:#60738f}
 .v8-badges{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin:8px 0 3px}
 .v8-badges .rec-badge,.v8-industry-tag{display:inline-flex;align-items:center;border-radius:99px;padding:3px 7px;font-size:9.5px;line-height:1.25}

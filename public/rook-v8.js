@@ -29,7 +29,7 @@
     const distance=Number.isFinite(job.distance_miles)?' · '+job.distance_miles+' mi':'';
     const employer=revealed?job.company_name||'Employer not listed':job.masked_lines?.employer?.join(' ')||'Company information';
     const title=revealed?job.title_original||'Sales opportunity':job.role_type||'Sales opportunity';
-    const logo=revealed?`<span class="employer-logo" aria-hidden="true">${esc((employer.match(/[A-Za-z0-9]/)||['R'])[0].toUpperCase())}</span>`:'';
+    const logo=revealed?RookV8EmployerLogo.render(employer):'';
     const url=revealed?safeUrl(job.application_url)||safeUrl(job.source_url):null;
     return `<article class="job-card ${revealed?'revealed':'masked'}" ${revealed?'':'data-locked="true" tabindex="0" role="button" aria-label="Unlock this opportunity"'}>
       <div class="card-top"><span class="badge ${badge==='GOOD MATCH'?'good':''}">${badge}</span><span class="posted">${esc(age(job)||job.freshness_label||'')}</span></div>

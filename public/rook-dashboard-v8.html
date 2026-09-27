@@ -310,6 +310,7 @@
   @media(max-width:900px){.rook-tour-card{left:16px!important;right:16px!important;bottom:98px!important;top:auto!important;width:auto}.rook-tour-highlight{z-index:1004!important}}
 </style>
 <link rel="stylesheet" href="rook-v8-member.css?v=6">
+<link rel="stylesheet" href="rook-employer-logos-v8.css?v=1">
 </head>
 <body>
 <div class="profile-gate-overlay" id="profileGateOverlay">
@@ -630,6 +631,7 @@
 <script src="rook-pretrial.js"></script>
 <script src="rook-job-classification.js"></script>
 <script src="rook-location-widget.js"></script>
+<script src="rook-employer-logos-v8.js?v=1"></script>
 <script>
   // Every job row currently in the HTML is sample/demo data — clearly
   // marked as such per the "no fake functionality" principle in the
@@ -1617,12 +1619,17 @@
           <div class="v8-card-head-right">${justPostedBadge}<span class="v8-posted">${job.date_posted ? 'Posted ' + escapeHtml(job.date_posted) : escapeHtml(job.freshness_label || '')}</span></div>
         </div>
         <div class="job-info">
-          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-            <h4 style="margin:0;">${escapeHtml(job.title_original || job.title_normalized || 'Untitled role')}</h4>
-            ${newBadge}
+          <div class="v8-employer-identity">
+            ${job.subscription_required ? '' : RookV8EmployerLogo.render(companyName)}
+            <div class="v8-identity-copy">
+              <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                <h4 style="margin:0;">${escapeHtml(job.title_original || job.title_normalized || 'Untitled role')}</h4>
+                ${newBadge}
+              </div>
+              <div class="v8-employer">${escapeHtml(companyName)}</div>
+              <div class="v8-place">${escapeHtml(job.location_raw || '')}${(!isRemoteJob(job) && job.distance_miles != null) ? ' · ' + Math.round(job.distance_miles) + ' mi away' : ''}</div>
+            </div>
           </div>
-          <div class="v8-employer">${escapeHtml(companyName)}</div>
-          <div class="v8-place">${escapeHtml(job.location_raw || '')}${(!isRemoteJob(job) && job.distance_miles != null) ? ' · ' + Math.round(job.distance_miles) + ' mi away' : ''}</div>
           <div class="v8-badges">${recBadge}${recruiterBadge}${industryLabels.slice(0, 3).map(label => `<span class="v8-industry-tag">${escapeHtml(label)}</span>`).join('')}</div>
           ${!completeMatch && displayScore != null ? `<span class="score-basis" style="font-size:12px;font-weight:700;color:#5B6B85;">${scoreBasis === 'Preference fit only' ? 'Based on your onboarding answers' : scoreBasis}</span>` : ''}
           ${comp ? `<div class="v8-comp">${escapeHtml(comp)}</div>` : ''}
