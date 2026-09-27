@@ -5,6 +5,7 @@ const {project}=require('./pretrialProjection');
 const base={location:{lat:28.9,lng:-82,city:'Oxford',state:'FL',zip:'34484',label:'Oxford, FL'},industry:'Diagnostics'};
 const p=validate(base);
 assert.equal(p.total_sales_years,null);assert.deepEqual(p.territory_size_preferences,[]);
+assert.equal(validate({...base,location:{...base.location,state:'Florida',stateAbbr:'FL'}}).home_state,'FL');
 assert.throws(()=>validate({...base,location:{...base.location,lat:999}}));
 assert.throws(()=>validate({...base,industry:'all'}));
 const jobs=[

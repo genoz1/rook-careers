@@ -25,10 +25,10 @@ router.use((req,res,next)=>{
 function validate(body) {
   const l=body?.location, industry=body?.industry;
   if(!l || !Number.isFinite(l.lat) || !Number.isFinite(l.lng) || Math.abs(l.lat)>90 || Math.abs(l.lng)>180 ||
-    !/^[A-Z]{2}$/.test(String(l.state||l.stateAbbr||'')) || !/^\d{5}$/.test(String(l.zip||''))) throw Error('Select a city, state or ZIP from the suggestions.');
+    !/^[A-Z]{2}$/.test(String(l.stateAbbr||l.state||'')) || !/^\d{5}$/.test(String(l.zip||''))) throw Error('Select a city, state or ZIP from the suggestions.');
   if(!allowed.includes(industry)) throw Error('Select an industry preference.');
   return {home_lat:l.lat,home_lng:l.lng,home_city:String(l.city||'').slice(0,150),
-    home_state:String(l.state||l.stateAbbr).slice(0,2),home_zip:l.zip,
+    home_state:String(l.stateAbbr||l.state).slice(0,2),home_zip:l.zip,
     home_location_label:String(l.label||'').slice(0,150),desired_industries:[industry],
     // An unanswered experience question is unknown, never invented.
     total_sales_years:null, territory_size_preferences:[], work_style:'field',onboarding_version:'v8',

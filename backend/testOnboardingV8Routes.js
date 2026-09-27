@@ -28,7 +28,7 @@ const app=express();app.use(express.json());app.use('/api/v8',require('./routes/
 (async()=>{const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));const root=`http://127.0.0.1:${server.address().port}/api/v8`;
  try{
   const call=async(path,method='GET',body,token='',auth=false)=>{const r=await fetch(root+path,{method,headers:{'Content-Type':'application/json','X-ROOK-V7':token,...(auth?{Authorization:'Bearer valid'}:{})},...(body?{body:JSON.stringify(body)}:{})});return {status:r.status,data:await r.json()};};
-  const entry=await call('/session','POST',{industry:'Diagnostics',location:{lat:28.9,lng:-82,city:'Oxford',state:'FL',zip:'34484',label:'Oxford, FL'}});
+  const entry=await call('/session','POST',{industry:'Diagnostics',location:{lat:28.9,lng:-82,city:'Oxford',state:'Florida',stateAbbr:'FL',zip:'34484',label:'Oxford, FL'}});
   assert.equal(entry.status,200);const token=entry.data.token;
   let page=await call('/session?initial=1','GET',null,token);assert.equal(page.status,200);assert.equal(page.data.count,3);
   assert.equal(page.data.jobs[0].company_name,'Diagnostics Employer');assert.equal(page.data.jobs[1].company_name,'Device Employer');
