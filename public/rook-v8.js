@@ -16,7 +16,6 @@
   $('startTrial').onclick=()=>{if(token()&&sessionStorage.getItem('rook_v8_active')===token())goSignup('header');else{$('overlay').hidden=false;$('locationInput').focus();}};
   $('unlockButton').onclick=()=>goSignup('banner');
   const widget=RookLocationWidget.init({inputEl:$('locationInput'),listEl:$('locationList'),statusEl:$('locationStatus'),onSelect:l=>{selectedLocation=l;},onClear:()=>{selectedLocation=null;}});
-  $('closeOverlay').onclick=()=>{$('overlay').hidden=true;};
   $('changeLocation').onclick=()=>{$('overlay').hidden=false;$('locationInput').focus();track('v8_overlay_displayed',{source:'change_location'});};
   function age(job){const raw=job.date_posted||job.first_seen_at;if(!raw)return '';const days=Math.max(0,Math.floor((Date.now()-new Date(raw).getTime())/86400000));return Number.isFinite(days)?days===0?'Posted today':days===1?'Posted 1 day ago':`Posted ${days} days ago`:'';}
   function score(job){return job.match?.overall_score??job.match?.preference_fit??0;}
@@ -64,9 +63,11 @@
     if(data.unlocked){window.location.replace('rook-dashboard-v8.html');return;}
   }
   $('industryControl').onchange=async()=>{
-    const control=$('industryControl');control.disabled=true;$('status').textContent='Updating order…';
+    const control=$('industryControl'),progress=$('industryProgress');
+    control.disabled=true;progress.hidden=false;$('status').textContent='';$('jobGrid').setAttribute('aria-busy','true');
     try{await api('/preference',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({industry:control.value})});await load();track('v8_industry_preference_changed');$('status').textContent='Preference updated. All qualifying industries remain available.';}
-    catch(e){$('status').textContent=e.message;}finally{control.disabled=false;}
+    catch(e){$('status').textContent=e.message;}
+    finally{progress.hidden=true;control.disabled=false;$('jobGrid').removeAttribute('aria-busy');}
   };
   $('searchForm').onsubmit=async e=>{
     e.preventDefault();if(busy)return;
