@@ -5,13 +5,17 @@ const {hasUnambiguousForeignCountryEvidence,normalizeCountryCode} = require('./l
 const zipcodes = require('zipcodes');
 const countries = require('i18n-iso-countries');
 const crypto = require('crypto');
-// Version 4 recognizes city evidence inside titles and remote ATS labels.
-// Revalidate v3 decisions that incorrectly reduced explicit cities to states.
+const {distanceMiles} = require('./geocoding');
 const VERSION = 4;
 const clean = s => String(s || '').trim().replace(/\s+/g,' ');
 const key = s => clean(s).toLowerCase().replace(/[^a-z0-9]/g,'');
 const cityIndex=new Map(Object.values(zipcodes.codes).map(z=>[key(z.city)+'|'+z.state,z]));
 const validPoint = p => p && [p.lat,p.lng].every(Number.isFinite) && Math.abs(p.lat)<=90 && Math.abs(p.lng)<=180 && resolveUsStateCode(p.state);
+function pointMatchesCity(point, query) {
+  const city=cityIndex.get(key(query.city)+'|'+query.state);
+  return !!city && validPoint(point) && resolveUsStateCode(point.state)===query.state &&
+    distanceMiles(city.latitude,city.longitude,point.lat,point.lng)<=75;
+}
 const descriptionHash = text => crypto.createHash('md5').update(String(text || '')).digest('hex');
 function stateOnly(raw) {
   return resolveUsStateCode(clean(raw).replace(/\b(united states(?: of america)?|usa|us|remote|office|virtual|home|based|field|work|from|any city|state of|address|loc)\b/gi,'').replace(/[\d_>,:()|–—-]+/g,' ').trim());
@@ -19,7 +23,7 @@ function stateOnly(raw) {
 // Exact city/state entries only: do not guess a state for a bare city, or
 // geocode a state centroid as though it were an employer's street address.
 function cityQuery(segment) {
-  let s=clean(segment).replace(/\bUnited States(?: of America)?\b|\bUSA\b|\bUS\b/g,'').replace(/\((?:remote|hybrid|on.?site)\)/gi,'').replace(/^\s*Remote\s*[-,]\s*/i,'').replace(/[,\s]+$/,'').trim();
+  let s=clean(segment).replace(/\bUnited States(?: of America)?\b|\bUSA\b|\bUS\b/gi,'').replace(/\((?:remote|hybrid|on.?site)\)/gi,'').replace(/^\s*Remote\s*[-,]\s*/i,'').replace(/[,\s]+$/,'').trim();
   s=s.replace(/^[-,\s]+/,'');
   if (/^(?:NYC|New York City)$/i.test(s)) s='New York, NY';
   s=s.replace(/^New York City(?=,)/i,'New York');
@@ -118,7 +122,9 @@ function classifyLocation(job) {
   const raw=clean(job.location_raw), country=normalizeCountryCode(job.location_evidence?.source_country_code);
   const old=job.location_evidence;
   const currentDescriptionHash=descriptionHash(job.description_text);
-  if(old?.version===VERSION && clean(old.source_location)===raw && old.source_title===clean(job.title_original) && old.scope && (!old.source_description_hash||old.source_description_hash===currentDescriptionHash)) return old.scope;
+  const newlyParsedCity=/,\s*us$/i.test(raw) && cityQuery(raw);
+  if(old?.version===VERSION && clean(old.source_location)===raw && old.source_title===clean(job.title_original) && old.scope && (!old.source_description_hash||old.source_description_hash===currentDescriptionHash) &&
+    !(newlyParsedCity && !/^explicit_(?:title|description)/.test(old.scope.reason||''))) return old.scope;
   const titleScope=explicitTitleScope(job); if(titleScope)return titleScope;
   const descriptionScope=explicitDescriptionScope(job); if(descriptionScope)return descriptionScope;
   if(hasUnambiguousForeignCountryEvidence(raw)||(country&&!US_COUNTRY_CODES.has(country))) return {kind:'foreign',reason:'explicit_foreign_evidence'};
@@ -163,7 +169,7 @@ async function resolveLocation(job, geocode) {
     const locations=[];
     for(const q of scope.queries) {
       let p;try{p=await geocode(q.query,{sourceCountryCode:'US'});}catch{}
-      if(validPoint(p)&&resolveUsStateCode(p.state)===q.state)locations.push({...p,state:q.state,location:q.query});
+      if(pointMatchesCity(p,q))locations.push({...p,state:q.state,location:q.query});
     }
     if(locations.length) return {job_lat:locations[0].lat,job_lng:locations[0].lng,state:locations[0].state,location_evidence:{...evidence,status:'validated',locations,incomplete:locations.length<scope.queries.length,geocoded_location:locations.map(p=>p.location).join(' | ')}};
     return {job_lat:null,job_lng:null,state:null,location_evidence:{...evidence,status:'unresolved',scope:{...scope,kind:'unresolved',reason:'geocode_failed',requested_scope:scope}}};
@@ -171,4 +177,4 @@ async function resolveLocation(job, geocode) {
   if(scope.kind==='local')return {job_lat:job.job_lat,job_lng:job.job_lng,state:job.state,location_evidence:evidence};
   return {job_lat:null,job_lng:null,state:null,location_evidence:{...evidence,status:scope.kind==='foreign'?'foreign':scope.kind==='unresolved'?'unresolved':'validated'}};
 }
-module.exports={VERSION,classifyLocation,resolveLocation,cityQuery,stateOnly,validPoint,explicitTitleScope,explicitDescriptionScope,stateCodesInText,cityQueriesInText,descriptionHash};
+module.exports={VERSION,classifyLocation,resolveLocation,cityQuery,stateOnly,validPoint,pointMatchesCity,explicitTitleScope,explicitDescriptionScope,stateCodesInText,cityQueriesInText,descriptionHash};

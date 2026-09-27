@@ -89,8 +89,9 @@ router.get('/session',wrap(async(req,res)=>{
     profile={...profile,...data,...s.profile};
   }
   const unlocked=!!(s.user_id && u?.id===s.user_id && hasFullAccess(profile));
-  // Initial snapshot keeps the same first two during the first page paint.
-  const jobs=prioritize(req.query.initial==='1' && !s.user_id ? s.jobs : await rank(db,profile,[]),profile.desired_industries[0]);
+  // Re-rank even the initial paint: saved session snapshots may contain
+  // coordinates scored before a location correction.
+  const jobs=prioritize(await rank(db,profile,[]),profile.desired_industries[0]);
   res.json({profile:{home_location_label:profile.home_location_label,desired_industries:profile.desired_industries,
     subscription_status:profile.subscription_status},unlocked,count:jobs.length,
     jobs:jobs.map((j,i)=>unlocked?reveal(j):i<2?reveal(j):project(j,i,{dashboard:true}))});

@@ -143,8 +143,11 @@ app.listen(PORT, () => {
   const { fetchActiveJobs } = require("./backend/scoring/precompute");
   const { createClient } = require("@supabase/supabase-js");
   if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+    require('./backend/repairCitySuffixCoordinates').repairCitySuffixCoordinates(supabaseAdmin)
+      .then(result => console.log('[location-repair]', JSON.stringify(result)))
+      .catch(err => console.error('[location-repair] failed:', err.message));
     setTimeout(() => {
-      const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
       fetchActiveJobs(supabaseAdmin)
         .then(jobs => console.log(`[boot] active-jobs cache warmed: ${jobs.length} jobs`))
         .catch(err => console.warn(`[boot] cache warm failed: ${err.message}`));

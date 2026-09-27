@@ -1,5 +1,5 @@
 const {geocodeLocation}=require('./geocoding');
-const {resolveLocation,VERSION}=require('./jobLocationScope');
+const {resolveLocation,cityQuery,pointMatchesCity,VERSION}=require('./jobLocationScope');
 const {normalizeCountryCode}=require('./locationTextRules');
 const crypto=require('crypto');
 const normalized=s=>String(s||'').trim().replace(/\s+/g,' ');
@@ -13,7 +13,10 @@ async function validateJobLocation(job,geocode=geocodeLocation,previous=null) {
   // Every v3 decision records the description hash because a later edit can
   // introduce higher-priority explicit territory evidence even when the ATS
   // location and title did not change.
-  if(same&&old.version===VERSION&&old.source_title===normalized(job.title_original)&&old.source_description_hash===descriptionHash&&old.status==='validated'&&!old.incomplete&&age>=0&&age<30*86400000)return {job_lat:previous.job_lat,job_lng:previous.job_lng,state:previous.state,location_evidence:old};
+  const explicitCity=/,\s*us$/i.test(normalized(job.location_raw)) && cityQuery(job.location_raw);
+  const points=old?.locations?.length ? old.locations : [{lat:previous?.job_lat,lng:previous?.job_lng,state:previous?.state}];
+  const cityValid=!explicitCity || points.some(p=>pointMatchesCity(p,explicitCity));
+  if(same&&old.version===VERSION&&old.source_title===normalized(job.title_original)&&old.source_description_hash===descriptionHash&&old.status==='validated'&&!old.incomplete&&cityValid&&age>=0&&age<30*86400000)return {job_lat:previous.job_lat,job_lng:previous.job_lng,state:previous.state,location_evidence:old};
   // Preserve validated legacy points only against exactly the same source.
   const input=same&&!descriptionBacked?{...job,job_lat:previous.job_lat,job_lng:previous.job_lng,state:previous.state,location_evidence:{...old,version:1,scope:undefined}}:job;
   return resolveLocation(input,geocode);

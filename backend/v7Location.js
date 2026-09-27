@@ -25,7 +25,7 @@ function allowsBroadLocations(profile) {
 function prepareJob(job, profile) {
   if (!job || !isUsEligibleJob(job)) return null;
   if (/^(leiden|barcelona)$/i.test(String(job.location_raw || '').trim())) return null;
-  const {classifyLocation,validPoint,VERSION} = require('./jobLocationScope');
+  const {classifyLocation,validPoint,pointMatchesCity,VERSION} = require('./jobLocationScope');
   const scope=classifyLocation(job);
   const evidence=job.location_evidence;
   const trusted=evidence?.version===VERSION && evidence.source_location===String(job.location_raw||'').trim().replace(/\s+/g,' ') && evidence.source_title===String(job.title_original||'').trim().replace(/\s+/g,' ');
@@ -45,9 +45,18 @@ function prepareJob(job, profile) {
   const stateEligible=scope.states?.includes(homeState);
   if(scope.kind==='territory') return stateEligible ? scoped('territory') : null;
   if(locationScope(job).imprecise && !trusted) return null;
-  const points = evidence?.status==='validated' && evidence.source_location===String(job.location_raw||'').trim()
+  let points = evidence?.status==='validated' && evidence.source_location===String(job.location_raw||'').trim()
     ? (evidence.locations || []).filter(validPoint) : [];
   if(!points.length && validPoint({lat:job.job_lat,lng:job.job_lng,state:job.state})) points.push({lat:job.job_lat,lng:job.job_lng,state:job.state});
+  // A stored point (including a previously validated geocode) cannot
+  // contradict an explicit source-backed city. This also protects old rows
+  // immediately, before their next ingestion refresh.
+  const descriptionTerritory=evidence?.status==='validated' &&
+    evidence.source_location===String(job.location_raw||'').trim() &&
+    evidence.source_title===String(job.title_original||'').trim() &&
+    evidence.scope?.reason==='explicit_description_territory';
+  if(scope.kind==='local' && scope.queries?.length && !descriptionTerritory)
+    points=points.filter(p=>scope.queries.some(q=>pointMatchesCity(p,q)));
   if(!points.length || ![profile.home_lat,profile.home_lng].every(Number.isFinite))return stateEligible ? scoped('territory') : null;
   const nearest=points.reduce((a,b)=>distanceMiles(profile.home_lat,profile.home_lng,a.lat,a.lng)<=distanceMiles(profile.home_lat,profile.home_lng,b.lat,b.lng)?a:b);
   // Retain the established legacy-title conflict guard until those older
