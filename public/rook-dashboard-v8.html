@@ -320,7 +320,7 @@
     <input type="file" id="profileGateResumeInput" accept=".pdf,.doc,.docx" hidden>
     <div class="v8-resume-drop" id="v8ResumeDrop" role="button" tabindex="0" aria-label="Browse for a résumé or drop a file here">📄<strong>Drag and drop your résumé here</strong>or click to browse<br><span>PDF, DOC or DOCX (max 10 MB)</span></div>
     <div class="v8-resume-benefits"><span>◎ More relevant job matches</span><span>▥ Higher match scores</span><span>◷ Save time in your search</span></div>
-    <a class="btn-primary" href="rook-settings.html" id="profileGateLink">Upload Résumé (Optional) →</a>
+    <a class="btn-primary" href="rook-settings.html?rook_v8=1" id="profileGateLink">Upload Résumé (Optional) →</a>
     <div id="profileGateUploadStatus" role="status" aria-live="polite" style="display:none;font-size:13px;color:var(--royal);font-weight:600;margin-top:8px;text-align:center;"></div>
     <button type="button" class="dismiss" id="profileGateDismiss">Skip for now</button>
   </div>
@@ -343,7 +343,7 @@
   <div class="logo" style="gap:8px;">
     <img src="assets/rook-full-logo-900.png" alt="ROOK" class="v8-official-logo">
   </div>
-  <a href="rook-mobile-menu.html" class="mobile-menu-btn" aria-label="Menu" style="display:grid;place-items:center;width:38px;height:38px;border-radius:13px;background:linear-gradient(145deg,#062d55,#0877d1);color:#fff;font-size:18px;font-weight:900;text-decoration:none;">☰</a>
+  <a href="rook-mobile-menu.html?rook_v8=1" class="mobile-menu-btn" aria-label="Menu" style="display:grid;place-items:center;width:38px;height:38px;border-radius:13px;background:linear-gradient(145deg,#062d55,#0877d1);color:#fff;font-size:18px;font-weight:900;text-decoration:none;">☰</a>
 </div>
 
 <div class="shell">
@@ -357,13 +357,13 @@
     <nav class="side-nav">
       <a href="/resources/">Resources</a>
       <a href="rook-dashboard-v8.html" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l9-9 9 9M5 10v10h14V10"/></svg>Dashboard<span class="count" id="sidebarJobCount">—</span></a>
-      <a href="rook-search.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>Job Search</a>
-      <a href="rook-recruiter-jobs.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>Recruiter Jobs</a>
-      <a href="rook-tracker.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>Applications</a>
-      <a href="rook-saved.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-4-7 4V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>Saved Jobs</a>
-      <a href="rook-intelligence.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>Career Intelligence</a>
-      <a href="rook-onboarding-v2.html?ob=resume_upload"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>My Résumés</a>
-      <a href="rook-settings.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09A1.65 1.65 0 0015 4.6a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>Settings</a>
+      <a href="rook-search.html?rook_v8=1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>Job Search</a>
+      <a href="rook-recruiter-jobs.html?rook_v8=1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>Recruiter Jobs</a>
+      <a href="rook-tracker.html?rook_v8=1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>Applications</a>
+      <a href="rook-saved.html?rook_v8=1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-4-7 4V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>Saved Jobs</a>
+      <a href="rook-intelligence.html?rook_v8=1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>Career Intelligence</a>
+      <a href="rook-resume.html?rook_v8=1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>My Résumés</a>
+      <a href="rook-settings.html?rook_v8=1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09A1.65 1.65 0 0015 4.6a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>Settings</a>
     </nav>
     <div class="side-foot">
       <div class="avatar" id="sideAvatar"></div>
@@ -379,8 +379,8 @@
         <p id="greetingSubtitle">Finding opportunities matching your career profile...</p>
       </div>
       <div class="top-actions">
-        <a href="rook-onboarding-v2.html?edit=preferences" class="btn btn-outline">Edit Preferences</a>
-        <a href="rook-search.html" class="btn btn-primary">+ New Search</a>
+        <a href="rook-settings.html?section=preferences&amp;rook_v8=1" class="btn btn-outline">Edit Preferences</a>
+        <a href="rook-search.html?rook_v8=1" class="btn btn-primary">+ New Search</a>
       </div>
     </div>
 
@@ -547,7 +547,7 @@
         </div>
         <div class="job-actions">
           <span class="match-level ml-excellent">Excellent Match</span>
-          <a href="rook-job-analysis.html" class="btn btn-primary btn-sm">View Analysis</a>
+          <a href="rook-job-analysis-v8.html" class="btn btn-primary btn-sm">View Analysis</a>
         </div>
       </div>
 
@@ -565,7 +565,7 @@
         </div>
         <div class="job-actions">
           <span class="match-level ml-excellent">Excellent Match</span>
-          <a href="rook-job-analysis.html" class="btn btn-primary btn-sm">View Analysis</a>
+          <a href="rook-job-analysis-v8.html" class="btn btn-primary btn-sm">View Analysis</a>
         </div>
       </div>
 
@@ -583,7 +583,7 @@
         </div>
         <div class="job-actions">
           <span class="match-level ml-strong">Strong Match</span>
-          <a href="rook-job-analysis.html" class="btn btn-primary btn-sm">View Analysis</a>
+          <a href="rook-job-analysis-v8.html" class="btn btn-primary btn-sm">View Analysis</a>
         </div>
       </div>
 
@@ -601,7 +601,7 @@
         </div>
         <div class="job-actions">
           <span class="match-level ml-possible">Possible Match</span>
-          <a href="rook-job-analysis.html" class="btn btn-outline btn-sm">View Analysis</a>
+          <a href="rook-job-analysis-v8.html" class="btn btn-outline btn-sm">View Analysis</a>
         </div>
       </div>
 
@@ -1570,7 +1570,7 @@
     if (job.subscription_required) {
       primaryActionBtn = `<button type="button" class="btn btn-primary btn-sm" onclick="rookGoToCheckout('job_card')">${escapeHtml(lockedJobCtaLabel)}</button>`;
     } else if (isRecruiterPosted) {
-      primaryActionBtn = `<a href="rook-apply.html?job=${escapeHtml(job.id)}" class="btn btn-primary btn-sm">Apply Now</a>`;
+      primaryActionBtn = `<a href="rook-apply.html?job=${escapeHtml(job.id)}&rook_v8=1" class="btn btn-primary btn-sm">Apply Now</a>`;
     } else {
       primaryActionBtn = `<a href="${job.source_url || '#'}" target="_blank" class="btn btn-outline btn-sm">View Original</a>`;
     }
@@ -1812,8 +1812,8 @@
   (function setupRookProductTour() {
     const steps = [
       { href: 'rook-dashboard-v8.html', title: 'Dashboard', body: 'These are personalized recommendations ranked against your profile and preferences.' },
-      { href: 'rook-search.html', title: 'Job Search', body: 'Search ROOK’s complete active-job database by company, location, distance, or industry.' },
-      { href: 'rook-saved.html', title: 'Saved Jobs', body: 'Save promising roles here so you can quickly return to them later.' },
+      { href: 'rook-search.html?rook_v8=1', title: 'Job Search', body: 'Search ROOK’s complete active-job database by company, location, distance, or industry.' },
+      { href: 'rook-saved.html?rook_v8=1', title: 'Saved Jobs', body: 'Save promising roles here so you can quickly return to them later.' },
     ];
     let index = 0;
     let user = null;
@@ -1897,9 +1897,9 @@ s.parentNode.insertBefore(b, s);})(window.lintrk);
 </noscript>
 <nav class="rm-bottomnav">
   <a href="rook-dashboard-v8.html" class="rm-bn-item rm-active"><span>⌂</span>Home</a>
-  <a href="rook-search.html" class="rm-bn-item"><span>⌕</span>Job Search</a>
-  <a href="rook-saved.html" class="rm-bn-item"><span>♡</span>Saved</a>
-  <a href="rook-settings.html" class="rm-bn-item"><span>◉</span>Profile</a>
+  <a href="rook-search.html?rook_v8=1" class="rm-bn-item"><span>⌕</span>Job Search</a>
+  <a href="rook-saved.html?rook_v8=1" class="rm-bn-item"><span>♡</span>Saved</a>
+  <a href="rook-settings.html?rook_v8=1" class="rm-bn-item"><span>◉</span>Profile</a>
 </nav>
 </body>
 </html>

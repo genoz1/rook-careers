@@ -214,7 +214,7 @@ router.get("/jobs/:id", async (req, res, next) => {
       <h2 style="font-size:18px;margin-bottom:12px">Employer: 🔒 Hidden until free trial</h2>
       <p style="line-height:1.7;margin-bottom:20px">${escapeHtml(safe.summary)}</p>
       <p style="line-height:1.7;margin-bottom:20px">Want to see the employer, complete job description and application link?</p>
-      <a class="btn btn-primary" href="/rook-onboarding-v7.html?${escapeHtml(query.toString())}">Start My 3-Day Free Trial</a>
+      <a class="btn btn-primary" href="/rook-onboarding-v8.html?${escapeHtml(query.toString())}">Start My 3-Day Free Trial</a>
       <p style="font-size:13px;margin-top:16px">3 days free, then $19.99/month. Cancel anytime.</p>
     </section><script src="/rook-attribution.js"></script>`;
   res.send(pageShell({title:`${title} — ROOK`,description,canonicalUrl,bodyHtml,jobId:job.id,

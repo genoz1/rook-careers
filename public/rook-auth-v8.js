@@ -4,7 +4,7 @@
 // Member résumé navigation opens the document manager, not onboarding.
 function rookLinkResumeManager(){
   document.querySelectorAll('a[href]').forEach(link=>{
-    if(/^My Résumés?$/.test(link.textContent.trim()))link.href='rook-resume.html';
+    if(/^My Résumés?$/.test(link.textContent.trim()))link.href='rook-resume.html?rook_v8=1';
   });
 }
 if(typeof document!=='undefined'){
@@ -124,7 +124,7 @@ function rookTrackEvent(name, params = {}) {
 // never a separate/parallel payment path.
 function rookGoToCheckout(source) {
   rookTrackEvent('job_unlock_clicked', { event_category: 'engagement', source: String(source || 'unknown') });
-  window.location.href = 'rook-checkout.html';
+  window.location.href = 'rook-checkout-v8.html';
 }
 
 // Fills in the sidebar's name/avatar/plan card (the ".side-foot" block
@@ -193,7 +193,7 @@ async function rookPopulateSidebar() {
 // password, and reset it ended up on an empty, unscored dashboard having
 // never seen onboarding.
 //
-// Routes to rook-onboarding-v2.html (Stage 2) for new users.
+// Routes new V8 users to the V8 location overlay.
 // Existing subscribers and trialing users with a profile go to the dashboard.
 async function rookRouteAfterLogin() {
   try {
@@ -208,7 +208,7 @@ async function rookRouteAfterLogin() {
       sessionStorage.removeItem("rook_login_return");
       const url = new URL(returnUrl);
       // Only redirect back to safe ROOK pages — not login itself
-      if (url.origin === window.location.origin && !url.pathname.includes('rook-login')) {
+      if (url.origin === window.location.origin && (/^\/rook-(?:dashboard-v8|job-analysis-v8|onboarding-v8(?:-signup)?|checkout-v8)\.html$/.test(url.pathname) || (url.searchParams.get('rook_v8') === '1' && /^\/rook-(?:search|recruiter-jobs|tracker|saved|intelligence|settings|resume|apply|mobile-menu)\.html$/.test(url.pathname)))) {
         window.location.href = returnUrl;
         return;
       }
@@ -218,12 +218,12 @@ async function rookRouteAfterLogin() {
   try {
     const res = await rookApiFetch('/profile');
     const profile = res.ok ? await res.json() : null;
-    window.location.href = profile ? 'rook-dashboard-v8.html' : 'rook-onboarding-v2.html';
+    window.location.href = profile ? 'rook-dashboard-v8.html' : 'rook-onboarding-v8.html';
   } catch {
     // Fall back to onboarding, not the dashboard, when the check itself
     // fails (network blip, backend not configured, etc.) — the safe
     // default on an uncertain check is to route toward setup, not away
     // from it.
-    window.location.href = 'rook-onboarding-v2.html';
+    window.location.href = 'rook-onboarding-v8.html';
   }
 }

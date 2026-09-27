@@ -13,7 +13,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="rook-config.js"></script>
 <script src="rook-auth.js"></script>
-<script src="rook-access.js"></script>
+<script src="rook-v8-context.js"></script>
+<script src="rook-access-context.js"></script>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:Inter,ui-sans-serif,-apple-system,sans-serif;background:#f7fbfe;min-height:100vh}
@@ -154,13 +155,13 @@
 <section class="menu-panel" id="publicPanel" style="display:none">
   <div class="section-label">Explore ROOK</div>
 
-  <a class="navlink" href="rook-onboarding-v7.html">Find Jobs <span class="arrow">→</span></a>
+  <a class="navlink" href="rook-onboarding-v8.html">Find Jobs <span class="arrow">→</span></a>
   <a class="navlink" href="rook-companies.html">Companies We Search <span class="arrow">→</span></a>
   <a class="navlink" href="rook-pricing.html">Pricing <span class="arrow">→</span></a>
   <a class="navlink" href="rook-about.html">About ROOK <span class="arrow">→</span></a>
   <a class="navlink" href="rook-employers.html">For Employers <span class="arrow">→</span></a>
 
-  <a class="primary" href="rook-onboarding-v2.html">Find My Matches</a>
+  <a class="primary" href="rook-onboarding-v8.html">Find My Matches</a>
   <a class="btn-secondary" href="rook-login.html">Log In</a>
   <div class="trust">Medical and veterinary sales only</div>
 </section>
@@ -175,7 +176,7 @@
     if (document.referrer && document.referrer !== window.location.href) {
       history.back();
     } else {
-      window.location.href = _isSignedIn ? 'rook-dashboard.html' : 'index.html';
+      window.location.href = _isSignedIn ? (new URLSearchParams(location.search).get('rook_v8') === '1' ? 'rook-dashboard-v8.html' : 'rook-dashboard.html') : 'index.html';
     }
   });
 

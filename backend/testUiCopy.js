@@ -107,8 +107,8 @@ console.log("\n=== REGRESSION: homepage hero trial CTA ===");
 test("the homepage hero's primary CTA is the exact requested trial wording and opens signup mode directly", () => {
   const src = readPublic("index.html");
   assert.ok(src.includes(">START YOUR 3-DAY FREE TRIAL<"), "must use the exact requested CTA text");
-  // V4 is now a legacy redirect to V7, which is the current onboarding flow.
-  assert.ok(src.includes('href="rook-onboarding-v7.html" class="btn btn-primary"'), "the primary CTA must point to current V7 onboarding");
+  // Primary acquisition now opens V8; V7 retains its direct rollback URL.
+  assert.ok(src.includes('href="rook-onboarding-v8.html" class="btn btn-primary"'), "the primary CTA must point to current V8 onboarding");
   assert.ok(src.includes("Medical sales jobs only") && src.includes("Cancel anytime"), "supporting line must be present in the hero");
 });
 test("the old 'Find My Matches' hero CTA text and its plain (login-tab) destination are both gone", () => {

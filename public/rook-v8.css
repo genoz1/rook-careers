@@ -94,3 +94,7 @@
   .reassure{line-height:1.4}
 }
 @media(max-width:380px){.modal h2{font-size:31px}}
+
+/* V8 overlay: keep the interactive location suggestions over later fields. */
+.modal .location-field{z-index:3}
+.modal .location-field #locationList{z-index:4}

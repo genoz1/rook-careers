@@ -44,7 +44,7 @@ test('public routes return indexable HTML without authentication; missing articl
   await route.stack[0].handle({params,query},res);return {body,status,headers};
  };
  for(const [path,params] of [['/resources',{}],['/resources/category/:category',{category:'medical-device'}],['/resources/:slug',{slug:a.slug}]]){
-  const res=await request(path,params);assert.equal(res.status,200);assert.ok(res.body.includes('rel="canonical"'));assert.ok(!res.body.includes('noindex'));assert.ok(res.body.includes('/rook-onboarding-v7.html'));
+  const res=await request(path,params);assert.equal(res.status,200);assert.ok(res.body.includes('rel="canonical"'));assert.ok(!res.body.includes('noindex'));assert.ok(res.body.includes('/rook-onboarding-v8.html'));
  }
  assert.equal((await request('/resources/category/:category',{category:'missing'})).status,404);
  assert.equal((await request('/resources',{}, {q:'medical'})).headers['x-robots-tag'],'noindex, follow');
