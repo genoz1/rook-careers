@@ -196,3 +196,29 @@
  body:has(.v7-onboarding-card) footer.conversion-trust a{font-size:13px;min-height:24px}
  body:has(.v7-onboarding-card)>a[href='/resources/']{padding:4px 12px!important;min-height:24px}
 }
+
+/* Fit account creation, verification and checkout in the same desktop frame. */
+@media(min-width:1024px){
+ body:has(#createSection),body:has(main){padding-bottom:0}
+ body:has(#createSection) .bar,body:has(main)>nav{z-index:1}
+ body:has(#createSection)::before,body:has(#createSection)::after,
+ body:has(main)::before,body:has(main)::after{top:62px;bottom:0;aspect-ratio:auto}
+ body:has(#createSection) .shell{margin-top:94px}
+ body:has(#createSection) .screen{padding:14px 24px}
+ body:has(#createSection) h2{font-size:28px;margin-bottom:6px}
+ body:has(#createSection) .lead{font-size:15px;margin-bottom:10px}
+ body:has(#createSection) .privacy-trust{margin-bottom:10px;padding-top:10px;padding-bottom:10px}
+ body:has(#createSection) .field-group{gap:8px}
+ body:has(#createSection) .field-input{min-height:44px;padding:9px 13px}
+ body:has(#createSection) .btn-primary{min-height:44px;margin-top:8px!important}
+ body:has(#createSection) .fine{margin-top:6px}
+ body:has(#createSection) footer.conversion-trust,
+ body:has(main) footer.conversion-trust{
+  max-width:900px;margin-top:6px!important;padding:0 20px!important;
+  align-items:center;gap:6px 20px;font-size:13px;
+ }
+ body:has(#createSection) footer.conversion-trust>span,
+ body:has(main) footer.conversion-trust>span{width:auto}
+ body:has(#createSection) footer.conversion-trust a,
+ body:has(main) footer.conversion-trust a{font-size:13px;min-height:24px}
+}
