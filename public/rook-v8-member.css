@@ -81,6 +81,14 @@ body{background:#f3f8ff}.main{max-width:1900px;width:100%;margin:0 auto}.v8-offi
 .v8-search-row #locationRow button{padding:4px 8px!important}
 .v8-industry-control{display:flex;flex-direction:column;justify-content:center;gap:3px;padding:6px 11px;background:#fff;border:1px solid #dce6f2;border-radius:12px;font-size:10px;font-weight:700;color:#60738f;min-width:0}
 .v8-industry-control select{width:100%;min-width:0;border:0;background:transparent;color:#0b2858;font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer;outline-color:#0877ef}
+.v8-industry-status{display:flex;align-items:center;gap:8px;margin:-3px 0 11px;padding:8px 11px;border:1px solid #bad7f4;border-radius:10px;background:#edf6ff;color:#075b9e;font-size:12px;font-weight:700}
+.v8-industry-status[hidden]{display:none}
+.v8-industry-status.is-error{border-color:#f3c7c7;background:#fff3f3;color:#a42d2d}
+.v8-industry-status.is-error .v8-industry-spinner{display:none}
+.v8-industry-spinner{width:13px;height:13px;flex:none;border:2px solid #b8d8f6;border-top-color:#0877d1;border-radius:50%;animation:v8-industry-spin .7s linear infinite}
+@keyframes v8-industry-spin{to{transform:rotate(360deg)}}
+#jobList[aria-busy="true"]{opacity:.6;pointer-events:none;transition:opacity .15s ease}
+@media(prefers-reduced-motion:reduce){.v8-industry-spinner{animation:none}}
 #memberJobSearch{height:54px;min-width:0;width:100%;background:#fff;border:1px solid #dce6f2;border-radius:12px;padding:0 13px;font-family:inherit;font-size:12.5px;font-weight:500;color:#0b2858;outline-color:#0877ef}
 .panel-head{margin:0 0 5px;gap:8px}
 .filter-row{flex-wrap:wrap;gap:6px}

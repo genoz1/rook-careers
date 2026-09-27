@@ -309,7 +309,7 @@
   .rook-tour-next{background:#1463ff;color:#fff}
   @media(max-width:900px){.rook-tour-card{left:16px!important;right:16px!important;bottom:98px!important;top:auto!important;width:auto}.rook-tour-highlight{z-index:1004!important}}
 </style>
-<link rel="stylesheet" href="rook-v8-member.css?v=5">
+<link rel="stylesheet" href="rook-v8-member.css?v=6">
 </head>
 <body>
 <div class="profile-gate-overlay" id="profileGateOverlay">
@@ -406,6 +406,10 @@
       </select>
     </label>
     <input id="memberJobSearch" type="search" placeholder="Search jobs, titles or companies…" aria-label="Search jobs, titles or companies">
+    </div>
+    <div id="memberIndustryStatus" class="v8-industry-status" role="status" aria-live="polite" hidden>
+      <span class="v8-industry-spinner" aria-hidden="true"></span>
+      <span id="memberIndustryStatusText">Updating matches for your industry preference…</span>
     </div>
     <!-- Inline location editor — hidden until "Change" is clicked -->
     <div id="locationEditor" style="display:none; margin-bottom:16px; padding:14px; background:#fff; border:1.5px solid #0877d1; border-radius:13px; position:relative;">
@@ -655,20 +659,35 @@
     showAllIndustries = true;
   }
   const industryPreferenceControl = document.getElementById('memberIndustryPreference');
+  const industryStatus = document.getElementById('memberIndustryStatus');
+  const industryStatusText = document.getElementById('memberIndustryStatusText');
+  let industryUpdatePending = false;
+  function setIndustryUpdateState(state) {
+    industryUpdatePending = state === 'working';
+    industryPreferenceControl.disabled = industryUpdatePending;
+    industryStatus.hidden = state === 'idle';
+    industryStatus.classList.toggle('is-error', state === 'error');
+    industryStatusText.textContent = state === 'error'
+      ? 'Could not update matches. Please try again.'
+      : 'Updating matches for your industry preference…';
+    document.getElementById('jobList').setAttribute('aria-busy', String(industryUpdatePending));
+  }
   industryPreferenceControl.addEventListener('change', async () => {
     const value = industryPreferenceControl.value;
-    industryPreferenceControl.disabled = true;
+    setIndustryUpdateState('working');
     try {
       const response = await rookApiFetch('/profile', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ desired_industries: value ? [value] : [] }),
       });
       if (!response.ok) throw new Error('Preference could not be saved');
-      await window.reloadIndustryJobs?.();
+      if (!window.reloadIndustryJobs) throw new Error('Job reload unavailable');
+      await window.reloadIndustryJobs();
     } catch {
       industryPreferenceControl.value = industryPreferenceControl.dataset.saved || '';
       showBanner('Could not save your industry preference. Please try again.');
-    } finally { industryPreferenceControl.disabled = false; }
+      setIndustryUpdateState('error');
+    }
   });
   document.getElementById('memberJobSearch').addEventListener('input', applyRecruiterToggle);
   function changeIndustryFilter() {
@@ -1159,6 +1178,7 @@
         if (_ms0) _ms0.textContent = 'No ranked opportunities yet.';
         showBanner('No jobs match the selected industries. Try All industries or another location.');
         revealDemo();
+        if (industryUpdatePending) setIndustryUpdateState('idle');
         return;
       }
 
@@ -1194,13 +1214,16 @@
       applyRecruiterToggle();
       updateStats(jobs);
       revealDemo();
+      if (industryUpdatePending) setIndustryUpdateState('idle');
     } catch (err) {
+      if (requestVersion !== jobsLoadVersion) return;
       const _mce = document.getElementById('mobileJobCount');
       const _mse = document.getElementById('mobileJobSub');
       if (_mce) _mce.textContent = '—';
       if (_mse) _mse.textContent = 'Unable to load opportunities.';
       showBanner('Could not reach the ROOK API (' + err.message + '). Showing example matches below — see ROOK-Setup-Guide.pdf to get the backend running.');
       revealDemo();
+      if (industryUpdatePending) setIndustryUpdateState('error');
     }
     }
 
