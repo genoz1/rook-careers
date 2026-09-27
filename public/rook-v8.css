@@ -50,13 +50,13 @@
   .reassure{margin-top:8px;font-size:12px}
   .close-overlay{top:14px;right:15px;width:34px;height:34px;font-size:24px}
   .modal .left-note{left:13px;top:255px;font-size:18px}
-  .modal .right-note{display:block;right:9px;top:315px;width:160px;font-size:18px;line-height:1.06;text-align:left;transform:rotate(-4deg)}
+  .modal .right-note{display:block;right:9px;top:315px;width:190px;font-size:19px;line-height:1.06;text-align:left;transform:rotate(-4deg)}
   .modal .right-note::before{content:'↖';position:absolute;left:-22px;top:43px;font-size:31px;transform:rotate(-8deg)}
   .preview-callout{height:78px}
   .preview-callout .hand-note{left:32%;top:0;width:360px;font-size:23px;line-height:1.02;transform:rotate(-3deg)}
   .preview-callout .hand-note::after{content:'↙';left:8px;top:83%;font-size:37px;transform:rotate(5deg)}
 }
 @media(min-width:701px) and (max-width:1150px){.modal .left-note,.modal .right-note{display:none}.preview-callout{height:72px}.preview-callout .hand-note{left:28%;font-size:21px}}
-@media(min-width:1151px){.modal .field,.modal .privacy{transform:translateX(-34px)}}
+@media(min-width:1151px){.modal .field,.modal .privacy{transform:translateX(-55px)}}
 @media(min-width:701px) and (max-width:900px){.modal .right-note{display:none}}
 @media(max-width:700px){.modal .right-note{display:none}}

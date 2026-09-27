@@ -178,7 +178,7 @@
  body:has(#createSection)::before,body:has(#createSection)::after{top:62px;background-size:100% auto}
  body:has(#createSection) .bar{height:62px;padding:6px 32px}
  body:has(#createSection) .bar::after{font-size:13px}
- body:has(#createSection) .shell{max-width:510px;margin-top:83px;margin-left:0}
+ body:has(#createSection) .shell{max-width:510px;margin-top:103px;margin-left:0}
  body:has(#createSection) .screen{padding:18px 24px 17px;border-radius:18px}
  body:has(#createSection) .eyebrow{top:-25px;left:27px;font-size:11px}
  body:has(#createSection) h2{font-size:34px;line-height:1.1;margin-bottom:6px;letter-spacing:-1px}
