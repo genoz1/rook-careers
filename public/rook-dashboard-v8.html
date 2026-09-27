@@ -309,7 +309,7 @@
   .rook-tour-next{background:#1463ff;color:#fff}
   @media(max-width:900px){.rook-tour-card{left:16px!important;right:16px!important;bottom:98px!important;top:auto!important;width:auto}.rook-tour-highlight{z-index:1004!important}}
 </style>
-<link rel="stylesheet" href="rook-v8-member.css?v=2">
+<link rel="stylesheet" href="rook-v8-member.css?v=3">
 </head>
 <body>
 <div class="profile-gate-overlay" id="profileGateOverlay">
@@ -356,7 +356,7 @@
     </div>
     <nav class="side-nav">
       <a href="/resources/">Resources</a>
-      <a href="rook-dashboard-v8.html" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l9-9 9 9M5 10v10h14V10"/></svg>Dashboard<span class="count">17</span></a>
+      <a href="rook-dashboard-v8.html" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l9-9 9 9M5 10v10h14V10"/></svg>Dashboard<span class="count" id="sidebarJobCount">—</span></a>
       <a href="rook-search.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>Job Search</a>
       <a href="rook-recruiter-jobs.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>Recruiter Jobs</a>
       <a href="rook-tracker.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>Applications</a>
@@ -384,19 +384,28 @@
       </div>
     </div>
 
-    <div class="experience-guide" style="background:#edf7ff;border:1px solid #cfe6f8;border-radius:12px;padding:12px 14px;margin-bottom:16px;font-size:13px;line-height:1.5;color:#47637c;">
-      <strong style="color:#062d55;">Dashboard:</strong> Personalized job recommendations ranked for your profile and preferences.
-      <a href="rook-search.html" style="color:#1463ff;font-weight:700;white-space:nowrap;">Looking for a specific company, location, or industry? Use Job Search.</a>
-    </div>
-
     <!-- Primary Job-Search Location row — shows the saved work location and
          lets the candidate change it inline. Changing it saves to the profile,
          rescores, and reloads the job list. Does NOT affect the Find Jobs page
          (temporary location searches there are independent). -->
-    <div id="locationRow" style="display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:16px; padding:10px 14px; background:#f3f8fc; border:1px solid #dce7f0; border-radius:13px;">
+    <div class="stat-grid">
+      <div class="stat-card"><div class="num" id="statNewMatches">—</div><div class="lbl">New Matches Today</div></div>
+      <div class="stat-card accent"><div class="num" id="statExcellent">—</div><div class="lbl">Excellent Matches (85%+)</div></div>
+      <div class="stat-card"><div class="num" id="statStrong">—</div><div class="lbl">Strong Matches (75–84%)</div></div>
+      <div class="stat-card"><div class="num" id="statApplications">—</div><div class="lbl">Applications In Progress</div></div>
+    </div>
+
+    <div class="v8-search-row"><div id="locationRow" style="display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:16px; padding:10px 14px; background:#f3f8fc; border:1px solid #dce7f0; border-radius:13px;">
       <span style="font-size:13px; font-weight:700; color:#47637c; white-space:nowrap; flex-shrink:0;">📍 Primary Job-Search Location:</span>
       <span id="locationLabel" style="font-size:13px; font-weight:700; color:#062d55; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">—</span>
       <button id="btnChangeLocation" style="font-size:12px; font-weight:700; color:#0877d1; background:none; border:1.5px solid #c4ddf5; border-radius:8px; padding:5px 11px; cursor:pointer; flex-shrink:0;">Change</button>
+    </div>
+    <label class="v8-industry-control">Industry Preference
+      <select id="memberIndustryPreference" aria-label="Industry Preference">
+        <option value="">All industries</option><option value="Diagnostics">Diagnostics / Laboratory</option><option value="Medical Device">Medical Device</option><option value="Pharmaceutical">Pharmaceutical</option><option value="Biotech/Life Sciences">Biotechnology / Life Sciences</option><option value="Healthcare SaaS">Healthcare / Health Tech</option><option value="Dental">Dental</option><option value="Veterinary">Veterinary / Animal Health</option><option value="Distribution">Distribution</option><option value="Capital Equipment">Capital Equipment</option>
+      </select>
+    </label>
+    <input id="memberJobSearch" type="search" placeholder="Search jobs, titles or companies…" aria-label="Search jobs, titles or companies">
     </div>
     <!-- Inline location editor — hidden until "Change" is clicked -->
     <div id="locationEditor" style="display:none; margin-bottom:16px; padding:14px; background:#fff; border:1.5px solid #0877d1; border-radius:13px; position:relative;">
@@ -426,13 +435,6 @@
       <h2>opportunities ranked for you</h2>
       <p id="mobileJobSub">Loading your matches…</p>
     </div>
-    <div class="stat-grid">
-      <div class="stat-card"><div class="num" id="statNewMatches">—</div><div class="lbl">New Matches Today</div></div>
-      <div class="stat-card accent"><div class="num" id="statExcellent">—</div><div class="lbl">Excellent Matches (85%+)</div></div>
-      <div class="stat-card"><div class="num" id="statStrong">—</div><div class="lbl">Strong Matches (75–84%)</div></div>
-      <div class="stat-card"><div class="num" id="statApplications">—</div><div class="lbl">Applications In Progress</div></div>
-    </div>
-
     <!-- Primary unlock banner — shown only to candidates without full
          access (see rookHasFullAccess() in rook-auth-v8.js), hidden below
          via inline display:none until the profile fetch below decides.
@@ -446,18 +448,16 @@
     </div>
 
     <div class="panel-head">
-      <h2>Today's Matches</h2>
       <div class="filter-row" id="tierFilters">
         <span class="chip active" onclick="setTierFilter('all', this)">All</span>
         <span class="chip" onclick="setTierFilter('new', this)">New</span>
-        <span class="chip" onclick="setTierFilter('excellent', this)">Excellent</span>
-        <span class="chip" onclick="setTierFilter('strong', this)">Strong</span>
+        <span class="chip" onclick="setTierFilter('excellent', this)">Excellent Match</span>
+        <span class="chip" onclick="setTierFilter('strong', this)">Strong Match</span>
         <span class="chip" onclick="setTierFilter('saved', this)">Saved</span>
       </div>
+      <label class="v8-sort">Sort by <select id="sortSelect" onchange="applyRecruiterToggle()"><option value="best_match">Best Match</option><option value="closest">Closest to You</option><option value="newest">Newest</option></select></label>
     </div>
-    <div class="full-dashboard-explainer" style="font-size:12.5px; color:#8B96AB; margin:-10px 0 16px;">Local/regional searches use a 300-mile radius across state lines. Large/national or remote/inside selections also include broader U.S. locations. Looking farther out, or considering a different city? Try <a href="rook-search.html" style="color:var(--royal, #1463FF); font-weight:600;">Job Search</a>.</div>
-
-    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:14px;">
+    <details class="v8-more-filters"><summary>More filters</summary><div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:14px;">
       <div style="display:flex; align-items:center; flex-wrap:wrap; gap:16px;">
         <div>
           <label style="display:flex; align-items:center; gap:7px; font-size:12.5px; color:#5B6B85; font-weight:600; cursor:pointer; margin:0;">
@@ -492,15 +492,7 @@
           <span style="font-size:11px;color:#8B96AB;">Scores reflect your saved preferences.</span>
         </div>
       </div>
-      <label style="display:flex; align-items:center; gap:7px; font-size:12.5px; color:#5B6B85; font-weight:600; margin:0;">
-        Sort by
-        <select id="sortSelect" onchange="applyRecruiterToggle()" style="border:1px solid #E2E7F0; border-radius:8px; padding:5px 9px; font-size:12.5px; color:#3D4A63; font-weight:600; background:#fff;">
-          <option value="best_match">Best Match</option>
-          <option value="closest">Closest to You</option>
-          <option value="newest">Newest</option>
-        </select>
-      </label>
-    </div>
+    </div></details>
 
     <div id="jobListLoading" aria-live="polite">
       <div class="skeleton-row" style="display:flex; gap:16px; align-items:center; padding:18px; border:1px solid #E4E9F2; border-radius:12px; margin-bottom:12px;">
@@ -659,13 +651,26 @@
   function initializeIndustryFilters(profile) {
     if (industryFiltersInitialized) return;
     industryFiltersInitialized = true;
-    const desired = RookJobClassification.normalizeSelection(profile?.desired_industries);
-    const boxes = Array.from(document.querySelectorAll('.dash-filter-category'));
-    if (boxes.some(box => desired.includes(RookJobClassification.normalizeSelection([box.value])[0]))) {
-      showAllIndustries = false;
-      boxes.forEach(box => { box.checked = desired.includes(RookJobClassification.normalizeSelection([box.value])[0]); });
-    }
+    // Preference affects stored matching scores, never the default result set.
+    showAllIndustries = true;
   }
+  const industryPreferenceControl = document.getElementById('memberIndustryPreference');
+  industryPreferenceControl.addEventListener('change', async () => {
+    const value = industryPreferenceControl.value;
+    industryPreferenceControl.disabled = true;
+    try {
+      const response = await rookApiFetch('/profile', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ desired_industries: value ? [value] : [] }),
+      });
+      if (!response.ok) throw new Error('Preference could not be saved');
+      await window.reloadIndustryJobs?.();
+    } catch {
+      industryPreferenceControl.value = industryPreferenceControl.dataset.saved || '';
+      showBanner('Could not save your industry preference. Please try again.');
+    } finally { industryPreferenceControl.disabled = false; }
+  });
+  document.getElementById('memberJobSearch').addEventListener('input', applyRecruiterToggle);
   function changeIndustryFilter() {
     industryFiltersInitialized = true;
     showAllIndustries = false;
@@ -1107,6 +1112,9 @@
       const profileRes = await rookApiFetch('/profile');
       const profileForLocation = profileRes.ok ? await profileRes.json() : null;
       initializeIndustryFilters(profileForLocation);
+      const preference = RookJobClassification.normalizeSelection(profileForLocation?.desired_industries)[0] || '';
+      industryPreferenceControl.value = preference;
+      industryPreferenceControl.dataset.saved = preference;
 
       // Update the Primary Job-Search Location label in the UI
       updateLocationLabel(profileForLocation);
@@ -1185,7 +1193,6 @@
       if (requestVersion !== jobsLoadVersion) return;
       applyRecruiterToggle();
       updateStats(jobs);
-      showBanner('Showing live jobs from your database, ranked by your real match score.', 'info');
       revealDemo();
     } catch (err) {
       const _mce = document.getElementById('mobileJobCount');
@@ -1202,6 +1209,7 @@
   })();
 
   async function updateStats(jobs) {
+    document.getElementById('sidebarJobCount').textContent = jobs.length;
     const excellent = jobs.filter((j) => (j.match?.overall_score ?? -1) >= 85).length;
     const strong = jobs.filter((j) => (j.match?.overall_score ?? -1) >= 75 && j.match.overall_score < 85).length;
 
@@ -1247,7 +1255,7 @@
     }
 
     document.getElementById('greetingSubtitle').textContent =
-      `We found ${jobs.length} opportunit${jobs.length === 1 ? 'y' : 'ies'} matching your career profile.`;
+      `${jobs.length} opportunit${jobs.length === 1 ? 'y' : 'ies'} matching your career profile.`;
 
     // Mobile scorehero — populated here with the real count from /api/jobs.
     // The endpoint applies limit=300, so jobs.length <= 300. If the response
@@ -1337,6 +1345,8 @@
     if (!showAllIndustries) {
       visible = visible.filter(j => RookJobClassification.matches(j, selectedIndustries()));
     }
+    const searchTerm = document.getElementById('memberJobSearch').value.trim().toLowerCase();
+    if (searchTerm) visible = visible.filter(j => [j.title_original, j.title_normalized, j.company_name, j.location_raw, ...RookJobClassification.classify(j).labels].some(v => String(v || '').toLowerCase().includes(searchTerm)));
 
     // "Best Match" is the default order the API already returns (sorted
     // by overall_score). "Closest to You" and "Newest" are pulled out
@@ -1552,9 +1562,8 @@
     // source_url, and any recruiter contact fields are simply absent.
     // Real match score and reasons stay fully visible; only the "who"
     // and "how to apply" are gated, same principle as MedReps.
-    const companyLine = job.subscription_required
-      ? `<span style="color:#7C3AED; font-weight:600;">🔒 Subscribe to see who's hiring</span> — ${escapeHtml(job.location_raw || '')} ${comp ? '&nbsp;·&nbsp; ' + escapeHtml(comp) : ''}`
-      : `${escapeHtml(job.company_name || (isRecruiterPosted ? 'Confidential search' : ''))} — ${escapeHtml(job.location_raw || '')} ${comp ? '&nbsp;·&nbsp; ' + escapeHtml(comp) : ''}`;
+    const companyName = job.subscription_required ? '🔒 Subscribe to see who is hiring' : (job.company_name || (isRecruiterPosted ? 'Confidential search' : ''));
+    const industryLabels = RookJobClassification.classify(job).labels;
 
     // Recruiter-posted jobs have no source_url to link to at all — there's
     // no external posting, the recruiter IS the application path. This
@@ -1588,23 +1597,25 @@
 
     return `
       <div class="job-row" data-job-id="${escapeHtml(job.id)}" style="${rowStyle}">
-        <div class="score-ring" style="--pct:${scorePct};" aria-label="${scoreBasis}: ${scoreDisplay}"><span>${scoreDisplay}</span></div>
+        <div class="v8-card-head">
+          <div class="score-ring" style="--pct:${scorePct};" aria-label="${scoreBasis}: ${scoreDisplay}"><span>${scoreDisplay}</span></div>
+          <div class="v8-card-head-right">${justPostedBadge}<span class="v8-posted">${job.date_posted ? 'Posted ' + escapeHtml(job.date_posted) : escapeHtml(job.freshness_label || '')}</span></div>
+        </div>
         <div class="job-info">
-          ${justPostedBadge}
           <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
             <h4 style="margin:0;">${escapeHtml(job.title_original || job.title_normalized || 'Untitled role')}</h4>
             ${newBadge}
-            ${recBadge}
-            ${!completeMatch && displayScore != null ? `<span class="score-basis" style="font-size:12px;font-weight:700;color:#5B6B85;">${scoreBasis === 'Preference fit only' ? 'Based on your onboarding answers' : scoreBasis}</span>` : ''}
-            ${recruiterBadge}
           </div>
-          <div class="company">${companyLine}</div>
+          <div class="v8-employer">${escapeHtml(companyName)}</div>
+          <div class="v8-place">${escapeHtml(job.location_raw || '')}${(!isRemoteJob(job) && job.distance_miles != null) ? ' · ' + Math.round(job.distance_miles) + ' mi away' : ''}</div>
+          <div class="v8-badges">${recBadge}${recruiterBadge}${industryLabels.map(label => `<span class="v8-industry-tag">${escapeHtml(label)}</span>`).join('')}</div>
+          ${!completeMatch && displayScore != null ? `<span class="score-basis" style="font-size:12px;font-weight:700;color:#5B6B85;">${scoreBasis === 'Preference fit only' ? 'Based on your onboarding answers' : scoreBasis}</span>` : ''}
+          ${comp ? `<div class="v8-comp">${escapeHtml(comp)}</div>` : ''}
           ${subScores}
           <div class="category-grid-wrap">${match?.categories ? renderCategoryRows(match.categories) : completeMatch ? '<div style="font-size:12px;color:#5B6B85;margin-top:8px;">Detailed category scoring is not available in this preview.</div>' : '<div style="font-size:12px;color:#5B6B85;margin-top:8px;line-height:1.5;">Qualification match is not complete. Upload a résumé or complete your profile to assess your experience and qualifications.</div>'}</div>
           ${summarySentence}
           ${employerNote}
           ${isApplied ? `<div style="font-size:11.5px; color:#00806E; font-weight:600; margin-top:4px;">✓ Application status: ${escapeHtml(job.application_status)}</div>` : ''}
-          <div class="job-meta-line">${job.subscription_required ? escapeHtml(job.freshness_label || (isNewJob(job) ? 'Recently posted' : 'Current opportunity')) : (job.date_posted ? 'Posted ' + escapeHtml(job.date_posted) : '')}${(!isRemoteJob(job) && job.distance_miles != null) ? ' · ' + job.distance_miles + ' mi away' : ''}</div>
         </div>
         <div class="job-actions">
           <a href="rook-job-analysis.html?job=${escapeHtml(job.id)}" class="btn btn-outline btn-sm">View Analysis</a>
