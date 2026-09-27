@@ -54,7 +54,8 @@ function prepareJob(job, profile) {
   const descriptionTerritory=evidence?.status==='validated' &&
     evidence.source_location===String(job.location_raw||'').trim() &&
     evidence.source_title===String(job.title_original||'').trim() &&
-    evidence.scope?.reason==='explicit_description_territory';
+    evidence.scope?.reason==='explicit_description_territory' &&
+    !/,\s*us$/i.test(String(job.location_raw||''));
   if(scope.kind==='local' && scope.queries?.length && !descriptionTerritory)
     points=points.filter(p=>scope.queries.some(q=>pointMatchesCity(p,q)));
   if(!points.length || ![profile.home_lat,profile.home_lng].every(Number.isFinite))return stateEligible ? scoped('territory') : null;

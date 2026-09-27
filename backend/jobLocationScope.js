@@ -107,13 +107,17 @@ function explicitDescriptionScope(job) {
   const clauses=description.split(/(?:\r?\n|(?<=[.!?])\s+)/).map(clean).filter(Boolean);
   const trigger=/\b(territory includes?|assigned territory|covering|responsible for (?:the )?[^.;]{0,80}\bterritory|based in|must reside in|national (?:u\.?s\.?|united states) territory)\b/i;
   for(const clause of clauses) {
-    if(!trigger.test(clause))continue;
-    if(/\bnational (?:u\.?s\.?|united states) territory\b/i.test(clause))return {kind:'national_us',reason:'explicit_description_territory'};
-    let queries=cityQueriesInText(clause);
-    const shared=sharedStateCityQueries(clause);
+    const match=trigger.exec(clause);
+    if(!match)continue;
+    // A corporate address earlier in the same flattened ATS paragraph is
+    // not a city in the territory statement that follows it.
+    const relevant=clause.slice(match.index);
+    if(/\bnational (?:u\.?s\.?|united states) territory\b/i.test(relevant))return {kind:'national_us',reason:'explicit_description_territory'};
+    let queries=cityQueriesInText(relevant);
+    const shared=sharedStateCityQueries(relevant);
     for(const q of shared)if(!queries.some(x=>x.city===q.city&&x.state===q.state))queries.push(q);
     if(queries.length)return {kind:'local',queries,states:[...new Set(queries.map(q=>q.state))],reason:'explicit_description_territory'};
-    const states=stateCodesInText(clause);
+    const states=stateCodesInText(relevant);
     if(states.length)return {kind:'territory',states,reason:'explicit_description_territory'};
   }
   return null;
@@ -123,8 +127,9 @@ function classifyLocation(job) {
   const old=job.location_evidence;
   const currentDescriptionHash=descriptionHash(job.description_text);
   const newlyParsedCity=/,\s*us$/i.test(raw) && cityQuery(raw);
-  if(old?.version===VERSION && clean(old.source_location)===raw && old.source_title===clean(job.title_original) && old.scope && (!old.source_description_hash||old.source_description_hash===currentDescriptionHash) &&
-    !(newlyParsedCity && !/^explicit_(?:title|description)/.test(old.scope.reason||''))) return old.scope;
+  if(old?.version===VERSION && clean(old.source_location)===raw && old.source_title===clean(job.title_original) && old.scope &&
+    (job.description_text===undefined || !old.source_description_hash || old.source_description_hash===currentDescriptionHash) &&
+    !(newlyParsedCity && !/^explicit_title/.test(old.scope.reason||''))) return old.scope;
   const titleScope=explicitTitleScope(job); if(titleScope)return titleScope;
   const descriptionScope=explicitDescriptionScope(job); if(descriptionScope)return descriptionScope;
   if(hasUnambiguousForeignCountryEvidence(raw)||(country&&!US_COUNTRY_CODES.has(country))) return {kind:'foreign',reason:'explicit_foreign_evidence'};
