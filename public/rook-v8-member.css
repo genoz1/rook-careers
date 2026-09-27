@@ -7,3 +7,60 @@ body{background:#f3f8ff}.main{max-width:1900px;width:100%;margin:0 auto}.v8-offi
 /* Optional résumé modal retains the existing upload and rescore handler. */
 .profile-gate-overlay{z-index:350!important;padding:16px;overflow-y:auto}.profile-gate-card{position:relative;max-width:760px;width:min(100%,760px);padding:25px clamp(20px,4vw,54px) 30px;border-radius:25px;max-height:calc(100dvh - 32px);overflow:auto}.profile-gate-card .v8-resume-brand{display:block;width:180px;height:60px;object-fit:contain;margin:0 auto 16px}.profile-gate-card h2{font:600 clamp(35px,4vw,50px)/1.03 Caveat,cursive;color:#092d64;margin:0 auto 15px;max-width:450px}.profile-gate-card p{max-width:580px;margin:0 auto 19px}.v8-resume-drop{border:1.5px dashed #95b9ea;border-radius:14px;background:#f8fbff;padding:23px 15px;margin:20px auto 16px;cursor:pointer;color:#113568}.v8-resume-drop strong{display:block;font-size:17px;margin:8px 0 4px}.v8-resume-drop span{font-size:13px;color:#657a96}.v8-resume-drop:focus-visible,.v8-resume-drop.dragging{outline:2px solid #0877ef;background:#e9f3ff}.v8-resume-benefits{display:flex;justify-content:space-between;gap:10px;color:#123c71;font-size:13px;margin:14px 0}.v8-resume-benefits span{flex:1}.profile-gate-card .btn-primary{display:block;width:100%;background:#0877ef!important;border-radius:40px;padding:16px}.profile-gate-card .dismiss{margin:15px auto 0}.profile-gate-card #profileGateUploadStatus{line-height:1.5}
 @media(max-width:650px){.profile-gate-card{padding:20px}.v8-resume-benefits{display:block;text-align:left}.v8-resume-benefits span{display:block;margin:5px 0}.v8-resume-drop{padding:15px}}
+/* The V8 results area uses the preview's compact grid, borders and controls.
+   Inline recruiter/Just Posted accents from renderRealJobRow retain precedence. */
+.main{max-width:none;background:#f3f8ff}
+.topline{margin-bottom:12px;align-items:center}
+.greeting h1{font-size:clamp(22px,2vw,29px);color:#0b2858}
+.greeting p{font-size:13px;margin-top:2px}
+.top-actions{gap:7px}
+.top-actions .btn{padding:9px 13px;border-radius:11px}
+.experience-guide{padding:8px 12px!important;margin-bottom:10px!important;font-size:12px!important}
+#locationRow{padding:8px 12px!important;margin-bottom:12px!important;background:#fff!important}
+.stat-grid{gap:9px;margin-bottom:14px}
+.stat-card{padding:10px 13px;border-radius:12px}
+.stat-card .num{font-size:21px}
+.stat-card .lbl{font-size:11px;margin-top:1px}
+.panel-head{margin-bottom:9px}
+.panel-head h2{font-size:21px;color:#0b2858}
+.full-dashboard-explainer{margin:0 0 10px!important;font-size:11px!important}
+.filter-row{gap:6px}
+.chip{border-radius:11px;padding:7px 11px}
+.chip.active{background:#0877ef;border-color:#0877ef}
+#dashCategoryFilters{gap:9px!important}
+#jobList{margin-bottom:25px}
+.job-row{border-radius:16px;border-color:#dce6f2;box-shadow:0 4px 15px #203d6010}
+.job-info .company{color:#455876}
+.job-row .category-grid-wrap{display:block}
+.job-row .category-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:5px;padding:10px 0;margin-top:9px;border-top:1px solid #e4ebf3;border-bottom:1px solid #e4ebf3}
+.job-row .category-grid>div{min-width:0;gap:7px!important}
+.job-row .category-grid span:nth-child(2){min-width:0;overflow-wrap:anywhere}
+.job-row .category-grid span:last-child{white-space:nowrap}
+.job-row .job-meta-line{margin-top:9px}
+.job-row .job-actions{border-top:1px solid #e4ebf3;padding-top:10px}
+.job-row .job-actions .btn{border-radius:9px;padding:7px 9px;font-size:11px}
+.job-actions-overflow{margin-left:auto}
+.score-ring{width:50px;height:50px;font-size:13px}
+.profile-gate-card{max-width:620px;padding:16px 30px 20px;border-radius:20px}
+.profile-gate-card .v8-resume-brand{width:145px;height:48px;margin-bottom:7px}
+.profile-gate-card h2{font-size:clamp(32px,3vw,39px);margin-bottom:8px}
+.profile-gate-card p{font-size:13px;margin-bottom:11px;line-height:1.4}
+.v8-resume-drop{padding:13px;margin:10px auto}
+.v8-resume-drop strong{font-size:15px;margin:4px 0}
+.v8-resume-benefits{margin:8px 0;font-size:12px}
+.profile-gate-card .btn-primary{padding:11px}
+.profile-gate-card .dismiss{margin-top:9px}
+@media(min-width:901px){
+ .main{padding:24px clamp(18px,2.2vw,36px) 50px}
+ .job-list{gap:12px}
+ .job-row{display:grid;grid-template-columns:50px minmax(0,1fr);align-content:start;align-items:start;column-gap:12px;row-gap:0;padding:16px;min-height:0}
+ .job-row .score-ring{grid-column:1;grid-row:1;align-self:start;margin:0}
+ .job-row .job-info{grid-column:2;grid-row:1;min-width:0;overflow-wrap:anywhere}
+ .job-row .job-info h4{font-size:16px;line-height:1.25;color:#0b2858}
+ .job-row .job-info .company{font-size:12px;margin:5px 0}
+ .job-row .job-actions{grid-column:1/-1;grid-row:2;display:flex;align-items:center;flex-direction:row;flex-wrap:wrap;gap:5px;margin-top:10px}
+}
+@media(min-width:901px) and (max-width:1559px){.job-list{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(min-width:1560px){.job-list{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:900px){.main{padding:17px 15px 45px}.stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.job-list{grid-template-columns:minmax(0,1fr)}.job-row .category-grid-wrap{display:block}.job-row .job-actions{border-top:1px solid #e4ebf3}.profile-gate-card{padding:17px;max-height:calc(100dvh - 24px)}}
+@media(max-width:540px){.stat-grid{gap:6px}.stat-card{padding:8px}.stat-card .num{font-size:17px}.stat-card .lbl{font-size:10px}.profile-gate-card .v8-resume-brand{width:125px;height:42px}.profile-gate-card h2{font-size:30px}}

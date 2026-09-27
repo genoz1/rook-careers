@@ -11,3 +11,52 @@
 .search-progress{max-width:490px;margin:10px auto 0;color:#245585;font-size:13px;font-weight:600}.search-progress[hidden]{display:none}.progress-track{display:block;height:7px;margin-top:8px;border-radius:99px;background:#e5edf7;overflow:hidden}.progress-fill{display:block;width:35%;height:100%;border-radius:99px;background:#0877ef;animation:v8-progress 1.4s ease-in-out infinite alternate}@keyframes v8-progress{from{transform:translateX(-90%)}to{transform:translateX(290%)}}.submit:disabled{cursor:wait;opacity:.83}
 @media(max-width:1150px){.preview-callout{height:105px}.preview-callout .hand-note{left:29%;font-size:25px}.preview-callout .hand-note::after{font-size:35px}.modal .modal-note{display:none}}
 @media(max-width:700px){.brand img{width:122px;height:42px}.modal-brand img{width:150px;height:50px}.preview-callout{height:auto;padding:8px 0 14px}.preview-callout .hand-note{position:static;width:auto;text-align:left;font-size:23px;transform:none}.preview-callout .hand-note br,.preview-callout .hand-note::after{display:none}}
+/* V8 desktop proportions. Keep the small-screen form and single-card layout independent. */
+@media(min-width:701px){
+  .site-head{height:68px;padding-inline:clamp(24px,3vw,48px);gap:24px}
+  .site-head .brand img{width:147px;height:49px}
+  .site-head nav{margin-left:clamp(20px,5vw,84px);gap:clamp(16px,2.5vw,34px)}
+  .site-head nav a{padding:23px 0}
+  .head-actions{gap:18px}
+  .primary.small{padding:10px 21px}
+  main{max-width:1536px;padding:23px clamp(22px,2.8vw,44px) 60px}
+  .intro h1{font-size:clamp(27px,2.45vw,36px);margin-bottom:6px}
+  .intro p{font-size:14px}
+  .search-wrap{height:44px}
+  .controls{margin-top:17px;gap:9px}
+  .controls button,.controls label{padding:9px 12px;border-radius:11px}
+  .preference-note{margin:8px 0 5px}
+  #status{min-height:0;margin:0 0 5px}
+  #status:empty{display:none}
+  .job-grid{gap:12px}
+  .job-card{min-height:211px;padding:15px 17px;border-radius:14px}
+  .job-card h2{font-size:16px;margin-bottom:7px}
+  .company{font-size:15px;margin:10px 0 5px}
+  .employer-line{margin-top:6px}
+  .card-meta{gap:5px;font-size:12px}
+  .badge{font-size:11px;padding:6px 10px}
+  .modal{width:min(690px,100%);padding:15px 35px 20px;border-radius:23px}
+  .modal-brand img{width:161px;height:53px}
+  .modal h2{font-size:clamp(38px,3.4vw,49px);margin:12px 0 8px;line-height:.98}
+  .modal-intro{font-size:16px;line-height:1.35;margin-bottom:11px}
+  .field{max-width:440px;margin:5px auto}
+  .field-input{height:51px;padding-inline:15px}
+  .field-input input{font-size:16px}
+  .field-input select{font-size:14px}
+  .privacy{max-width:440px;margin:10px auto 8px;padding:11px 15px;gap:12px;font-size:13px}
+  .privacy strong{font-size:15px}
+  .lock{font-size:24px}
+  .submit{width:min(500px,100%);font-size:19px;padding:13px}
+  .reassure{margin-top:8px;font-size:12px}
+  .close-overlay{top:14px;right:15px;width:34px;height:34px;font-size:24px}
+  .modal .left-note{left:13px;top:255px;font-size:18px}
+  .modal .right-note{display:block;right:9px;top:315px;width:160px;font-size:18px;line-height:1.06;text-align:left;transform:rotate(-4deg)}
+  .modal .right-note::before{content:'↖';position:absolute;left:-22px;top:43px;font-size:31px;transform:rotate(-8deg)}
+  .preview-callout{height:78px}
+  .preview-callout .hand-note{left:32%;top:0;width:360px;font-size:23px;line-height:1.02;transform:rotate(-3deg)}
+  .preview-callout .hand-note::after{content:'↙';left:8px;top:83%;font-size:37px;transform:rotate(5deg)}
+}
+@media(min-width:701px) and (max-width:1150px){.modal .left-note,.modal .right-note{display:none}.preview-callout{height:72px}.preview-callout .hand-note{left:28%;font-size:21px}}
+@media(min-width:1151px){.modal .field,.modal .privacy{transform:translateX(-34px)}}
+@media(min-width:701px) and (max-width:900px){.modal .right-note{display:none}}
+@media(max-width:700px){.modal .right-note{display:none}}
