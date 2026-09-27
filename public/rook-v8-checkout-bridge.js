@@ -1,0 +1,149 @@
+// V7-only orchestration. Payment, email verification, résumé parsing and
+// dashboard rendering remain the existing implementations.
+let rookV7Snapshot = null;
+let rookV7Unlocked = false;
+let rookV7Client;
+let rookV7InitialJobs = false;
+function rookV7Auth() {
+  if (typeof rookSupabase !== 'undefined') return rookSupabase;
+  return rookV7Client ||= window.supabase.createClient(window.ROOK_CONFIG.SUPABASE_URL,window.ROOK_CONFIG.SUPABASE_ANON_KEY);
+}
+async function rookV7Request(path, options={}) {
+  const {data:{session}} = await rookV7Auth().auth.getSession();
+  return fetch('/api/v7'+path, {...options, headers:{...options.headers,'X-ROOK-V7':sessionStorage.getItem('rook_v7_token') || '',...(session ? {Authorization:`Bearer ${session.access_token}`} : {})}});
+}
+async function rookV7Read(query = '') {
+  const res=await rookV7Request('/session' + query);
+  const data=await res.json();
+  if(!res.ok) throw new Error(data.error || 'Unable to load your saved matches.');
+  rookV7Snapshot=data; rookV7Unlocked=data.unlocked;
+  return data;
+}
+async function rookV7PrepareAccount() {
+  const {data:{session}}=await rookV7Auth().auth.getSession();
+  const claim=await fetch('/api/v8/claim',{method:'POST',headers:{'X-ROOK-V7':sessionStorage.getItem('rook_v7_token') || '',Authorization:`Bearer ${session.access_token}`}});
+  if(!claim.ok) throw new Error('Unable to transfer your matches. Return to your V8 dashboard to retry.');
+  const data=await rookV7Read();
+  if(!data.resume_pending) return;
+  // Process the staged file even if this account already has another résumé.
+  // An interrupted completion can safely retry the existing upload endpoint.
+  {
+    const staged=await rookV7Request('/resume');
+    if(!staged.ok) throw new Error('Unable to retrieve your résumé. Please retry.');
+    const file=new File([await staged.blob()],decodeURIComponent(staged.headers.get('X-Resume-Name') || 'resume.pdf'),{type:staged.headers.get('X-Resume-Type') || 'application/pdf'});
+    const fd=new FormData();fd.append('resume',file);
+    const {data:{session}}=await rookV7Auth().auth.getSession();
+    const processed=await fetch('/api/resume',{method:'POST',headers:{Authorization:`Bearer ${session.access_token}`},body:fd});
+    if(!processed.ok || (await processed.json()).analysis_status !== 'ok') throw new Error('Unable to analyze your résumé. Please retry with a readable PDF or Word file.');
+  }
+  const done=await rookV7Request('/resume-complete',{method:'POST'});
+  if(!done.ok) throw new Error('Unable to finish saving your résumé. Please retry.');
+  await rookV7Read();
+}
+// One document owns the pending request. A reload during submission must not
+// replay it or silently fall back to results from an earlier search.
+function rookV7FinishOnboarding() {
+  if (window.rookV7SessionReady) return window.rookV7SessionReady;
+  window.rookV7SessionReady = (async () => {
+    const pending = sessionStorage.getItem('rook_v7_pending');
+    if (!pending) {
+      if (sessionStorage.getItem('rook_v7_creating')) throw new Error('Your search was interrupted. Please start again.');
+      return;
+    }
+    const creation = crypto.randomUUID();
+    sessionStorage.setItem('rook_v7_creating', creation);
+    sessionStorage.removeItem('rook_v7_pending');
+    const res = await fetch('/api/v7/session', {method:'POST', headers:{'Content-Type':'application/json'}, body:pending});
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Unable to load matches. Please try again.');
+    if (sessionStorage.getItem('rook_v7_creating') !== creation) throw new Error('Your search changed. Please start again.');
+    sessionStorage.setItem('rook_v7_token', data.token);
+    sessionStorage.setItem('rook_v7_initial', data.token);
+    sessionStorage.removeItem('rook_v7_creating');
+  })();
+  return window.rookV7SessionReady;
+}
+async function rookV7Init() {
+  try {
+    await rookV7FinishOnboarding();
+    const initial = sessionStorage.getItem('rook_v7_initial') === sessionStorage.getItem('rook_v7_token') && !!sessionStorage.getItem('rook_v7_token');
+    await rookV7Read(initial ? '?initial=1' : '?summary=1');
+    if (initial) {sessionStorage.removeItem('rook_v7_initial'); rookV7InitialJobs=true;}
+    if(new URLSearchParams(location.search).get('trial') === 'started') {
+      try { sessionStorage.setItem('rook_v7_trial_pending', '1'); } catch (_) {}
+      // Stripe activation can precede the webhook. Access stays masked until
+      // the server confirms entitlement; never trust the return URL.
+      for(let i=0;!rookV7Unlocked && i<10;i++) {
+        await new Promise(resolve=>setTimeout(resolve,2000)); await rookV7Read();
+      }
+    }
+    var pendingTrial = new URLSearchParams(location.search).get('trial') === 'started';
+    try { pendingTrial = pendingTrial || sessionStorage.getItem('rook_v7_trial_pending') === '1'; } catch (_) {}
+    if(pendingTrial && rookV7Unlocked && rookV7Snapshot.profile.subscription_status === 'trialing') {
+      if (typeof rookTrackFunnelEvent === 'function') rookTrackFunnelEvent('v7_trial_activated', {}, rookV7Snapshot.profile.user_id || sessionStorage.getItem('rook_v7_token'));
+      try { sessionStorage.removeItem('rook_v7_trial_pending'); } catch (_) {}
+    }
+    // A saved job is navigation context only. Access is confirmed by the server.
+    if (rookV7Unlocked) {
+      const job = sessionStorage.getItem('rook_v7_return_job');
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(job || '')) {
+        sessionStorage.removeItem('rook_v7_return_job');
+        window.location.replace('/rook-job-analysis.html?job=' + encodeURIComponent(job));
+        return null;
+      }
+    }
+    return 'v7-session';
+  } catch(e) {
+    const list=document.getElementById('jobListLoading');
+    if(list) {list.textContent=e.message+' ';const link=document.createElement('a');link.href='rook-onboarding-v8.html';link.textContent='Start again';list.appendChild(link);}
+    return null;
+  }
+}
+async function rookV7Fetch(path,options={}) {
+  const data=rookV7Snapshot || await rookV7Read();
+  const reply=value=>Promise.resolve(new Response(JSON.stringify(value),{headers:{'Content-Type':'application/json'}}));
+  if(path === '/profile' && !options.method) return reply(data.profile);
+  if(path === '/profile' && options.method === 'PUT') {
+    const res=await rookV7Request('/location',options);
+    if(res.ok) await rookV7Read();
+    return res;
+  }
+  if(path.startsWith('/jobs?')) {
+    const params = new URLSearchParams(path.split('?')[1]);
+    if (params.has('industries')) {
+      const wanted = params.get('industries') === 'all' ? 'all' : RookJobClassification.normalizeSelection(params.get('industries').split(',')).join(',');
+      const saved = RookJobClassification.normalizeSelection(data.profile.desired_industries).join(',') || 'all';
+      if (rookV7InitialJobs && wanted === saved) {rookV7InitialJobs=false; return reply({jobs:data.jobs});}
+      rookV7InitialJobs=false;
+      const res = await rookV7Request('/session?industries=' + encodeURIComponent(params.get('industries')));
+      if (!res.ok) return res;
+      const refreshed = await res.json();
+      rookV7Snapshot = refreshed; rookV7Unlocked = refreshed.unlocked;
+      return reply({jobs:refreshed.jobs});
+    }
+    return reply({jobs:data.jobs});
+  }
+  if(path === '/new-matches-today-count') return reply({new_today:data.jobs.filter(j=>(j.date_posted || '').slice(0,10)===new Date().toISOString().slice(0,10)).length});
+  if(!rookV7Unlocked) {
+    if(path === '/applications') return reply([]);
+    await rookGoToCheckout('locked_action');
+    return new Response('{}',{status:403});
+  }
+  return rookApiFetch(path,options);
+}
+async function rookV7Upload(fd) {
+  const {data:{session}}=await rookV7Auth().auth.getSession();
+  if(!rookV7Snapshot?.profile.user_id) return rookV7Request('/resume',{method:'POST',body:fd});
+  const response=await fetch('/api/resume',{method:'POST',headers:{Authorization:`Bearer ${session.access_token}`},body:fd});
+  if(response.ok && (await response.clone().json()).analysis_status !== 'ok') throw new Error('Unable to analyze your résumé. Please retry with a readable PDF or Word file.');
+  return response;
+}
+// Override only on V7 pages; all V6 users retain the shared checkout behavior.
+async function rookGoToCheckout(source) {
+  if (window.rookV7SessionReady) {try {await window.rookV7SessionReady;} catch (_) {return;}}
+  window.rookPretrialAlerts?.trial();
+  if(typeof rookTrackFunnelEvent === 'function') rookTrackFunnelEvent('v7_unlock_clicked',{source:source==='banner'?'banner':'job'});
+  else if(typeof rookTrackEvent === 'function') rookTrackEvent('v7_unlock_clicked',{source:source==='banner'?'banner':'job'});
+  const {data:{session}}=await rookV7Auth().auth.getSession();
+  window.location.href=session ? 'rook-checkout-v8.html' : 'rook-onboarding-v8-signup.html';
+}

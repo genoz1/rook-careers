@@ -31,6 +31,7 @@ app.use(
 app.use(express.json());
 app.use("/api", stripeRoutes);
 app.use("/api/v7", require("./backend/routes/onboardingV7"));
+app.use("/api/v8", require("./backend/routes/onboardingV8"));
 
 app.use("/api", require("./backend/routes/profile"));
 app.use("/api", require("./backend/routes/jobs"));

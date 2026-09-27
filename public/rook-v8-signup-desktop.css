@@ -1,0 +1,174 @@
+/* Approved desktop artwork. All functional controls and V7 scripts remain in place.
+   Below 1024px the existing tablet/mobile presentation is untouched. */
+@media (min-width:1024px) {
+  body {--muted:#4d6b90;--ink:#08285a;--line:#d9e7f3;--blue:#0085ff;
+    position:relative;isolation:isolate;padding:0 0 24px;min-height:max(100vh,56.28vw);background:#f3faff;color:var(--ink);}
+  body::before,body::after {content:"";position:absolute;z-index:-1;pointer-events:none;top:75px;bottom:0;background-repeat:no-repeat;background-size:100% auto;}
+  body::before {left:0;width:34.09vw;background-image:url('assets/v7-desktop/5-left.webp');}
+  body::after {right:0;width:33.014vw;background-image:url('assets/v7-desktop/5-right.webp');}
+  body:has(#s-details.active)::before{background-image:url('assets/v7-desktop/1-left.webp')}
+  body:has(#s-details.active)::after{width:29.426vw;background-image:url('assets/v7-desktop/1-right.webp')}
+  body:has(#s-industry.active)::before{background-image:url('assets/v7-desktop/2-left.webp')}
+  body:has(#s-industry.active)::after{background-image:url('assets/v7-desktop/2-right.webp')}
+  body:has(#s-years.active)::before{background-image:url('assets/v7-desktop/3-left.webp')}
+  body:has(#s-years.active)::after{background-image:url('assets/v7-desktop/3-right.webp')}
+  body:has(#s-territory.active)::before{background-image:url('assets/v7-desktop/4-left.webp')}
+  body:has(#s-territory.active)::after{background-image:url('assets/v7-desktop/4-right.webp')}
+  .topbar,body>nav {width:100%;max-width:none;height:75px;flex-shrink:0;background:#052d55;padding:11px 42px;}
+  .rookmark {width:52px;height:52px;border-radius:13px;background:url('assets/v7-desktop/rook.webp') center/cover;color:transparent;font-size:0;}
+  .brand-name,.nav-name {font-size:29px;letter-spacing:.06em;font-weight:800;color:#fff;}
+  .topbar>div,.nav-logo{gap:14px!important}
+  .topbar::after {content:'♙  Secured by Stripe';font-size:17px;color:#fff;}
+  body:has(#s-details.active) .topbar::after {content:'🔒  Your search stays private'}
+  body:has(#s-details.active) .brand-name::after {content:'Medical & Veterinary Sales Jobs';font-size:18px;font-weight:400;letter-spacing:0;margin-left:18px;padding-left:12px;border-left:1px solid #52718a;}
+  .nav-secure {color:#fff;font-size:17px;gap:10px}.nav-secure svg{width:20px;height:24px}
+  .progress-wrap {max-width:440px;padding:0;margin:18px 0;gap:14px;height:16px;}
+  .progress-bar{height:7px}.step-label{font-size:14px;font-weight:700}
+  .shell {max-width:540px;padding:0;}
+  .screen.active {background:rgba(255,255,255,.95);border:1px solid #e8f1f9;border-radius:22px;padding:29px 34px 19px;box-shadow:0 10px 28px #b5cfe012;}
+  h2 {font-size:32px;line-height:1.13;letter-spacing:-.7px;margin-bottom:10px;color:#082d60}
+  .lead {font-size:18px;line-height:1.5;margin-bottom:16px;}
+  .choice {min-height:70px;padding:12px 17px;border-radius:13px;gap:20px;}
+  .choice input{width:21px;height:21px;cursor:pointer;}
+  .choice-label{font-size:17px;color:#08285a}.choice-sub{font-size:14px;line-height:1.35;margin-top:5px}
+  .btn-primary {min-height:59px;padding:16px;font-size:21px;background:linear-gradient(115deg,#0086ff,#0078ff);}
+  .btn-primary::after{content:' →'}
+  .btn-primary:disabled{opacity:1;cursor:not-allowed;}
+  .btn-back {font-size:18px;padding:17px 0 8px;}
+  .trust{font-size:14px;line-height:1.5;}
+  .err:empty {display:none}
+  #s-years{padding-top:33px;padding-bottom:59px}
+  #s-years .lead{white-space:nowrap;font-size:18px;margin-bottom:24px}
+  #s-years .choice{min-height:71px;margin-bottom:2px}
+  #s-years .btn-primary{margin-top:28px!important}
+  #s-territory .choice{min-height:75px}
+  #s-territory .btn-primary{margin-top:26px!important}
+  #s-territory.active{display:flex;flex-direction:column;padding-bottom:26px}
+  #s-territory .btn-back{order:1}#s-territory .trust{order:2;margin-top:3px}
+  body:has(#s-details.active) .progress-wrap {max-width:520px;margin:47px 0 33px;}
+  body:has(#s-details.active) .shell {max-width:598px;transform:translateX(40px)}
+  #s-details{padding:36px 43px 44px;}
+  #s-details h2{font-size:40px;line-height:1.16;color:#081c69;margin-bottom:12px}
+  #s-details .lead{font-size:20px;line-height:1.5;margin-bottom:32px}
+  .field label{font-size:16px;letter-spacing:0;margin-bottom:12px}
+  #locationInput{height:65px;font-size:20px!important;padding-left:56px!important;background:transparent!important;}
+  #s-details .field>div:has(#locationInput)::before{content:'📍';position:absolute;left:19px;top:18px;font-size:24px;pointer-events:none;}
+  #locationStatus:empty{display:none}#locationStatus:not(:empty){min-height:0!important}
+  #s-details .privacy-trust {position:relative;padding:13px 16px 13px 65px;margin:24px 0 22px;font-size:13px;min-height:74px;background:#effaf6;color:#007455;border-color:#c3ece5;}
+  #s-details .privacy-trust::before{content:'🔒';position:absolute;left:20px;top:17px;font-size:28px}
+  #s-details .privacy-trust strong{font-size:16px;color:#007455;margin-bottom:2px}
+  #s-details .btn-primary{height:65px}#s-details .trust{margin-top:22px;font-size:15px}
+  footer.conversion-trust{max-width:650px;margin:34px auto 0!important;padding:8px 20px!important;font-size:14px;gap:5px 18px;}
+  footer.conversion-trust nav{background:transparent;padding:0;width:auto;gap:26px;}
+  footer.conversion-trust a{color:#092d74!important;font-size:15px;}
+  body:has(#s-details.active) footer.conversion-trust{margin-top:40px!important}
+  main{max-width:552px;padding:14px 20px 0;gap:14px;}
+  .trial-badge{font-size:14px;padding:6px 15px;margin-bottom:12px}
+  .trial-badge svg{width:16px;height:16px}
+  .checkout-header h1{font-size:34px;letter-spacing:-.6px;margin-bottom:4px}
+  .checkout-header p{font-size:18px;line-height:1.45;margin:0 10px}
+  .price-summary{padding:20px 22px 14px;margin-top:1px}
+  .price-row{font-size:17px;margin-bottom:10px}.price-total-value{font-size:30px}
+  .card-section{padding:20px 22px}.card-section-label{font-size:14px;margin-bottom:12px;letter-spacing:0}
+  .field-label{font-size:14px;font-weight:400}.stripe-element{min-height:49px;padding:14px}
+  .submit-btn{font-size:19px;min-height:58px;background:linear-gradient(115deg,#0086ff,#0078ff)}
+  .fine{font-size:13.5px;line-height:1.5;margin-top:-2px}.trust-row{margin-top:7px;gap:22px}.trust-item{font-size:13px;color:#0b2b5c}.trust-item svg{width:18px;height:18px}
+  body:has(main) footer.conversion-trust{margin-top:36px!important}
+  @media (max-width:1350px) {
+    body::before{width:calc((100vw - 500px)/2);background-size:auto 760px;background-position:right top}
+    body::after,body:has(#s-details.active)::after{width:calc((100vw - 500px)/2);background-size:auto 760px;background-position:left top}
+    .shell{max-width:500px}body:has(#s-details.active) .shell{max-width:530px;transform:none}
+    body:has(#s-details.active) .progress-wrap{margin-top:24px;margin-bottom:24px;max-width:470px}
+    #s-details{padding:30px}#s-details h2{font-size:35px}#s-details .lead{font-size:18px}
+    #s-years .lead{white-space:normal}
+  }
+}
+@media(min-width:1024px){
+  .topbar::after{content:'Secured by Stripe';padding-left:30px;background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='26' fill='none' stroke='white' stroke-width='2'%3E%3Crect x='2' y='10' width='16' height='14' rx='2'/%3E%3Cpath d='M6 10V6a4 4 0 018 0v4'/%3E%3C/svg%3E") left center/20px 26px no-repeat}
+  body:has(#s-details.active) .topbar::after{content:'Your search stays private'}
+  body:has(#s-details.active) .progress-wrap{transform:translateX(40px);gap:18px;max-width:518px}.step-label{font-size:15px}
+  body:has(#s-details.active) .step-label{font-size:18px}
+  body:has(#s-industry.active)::before{width:34.689vw}
+  body::before{mask-image:linear-gradient(to right,#000 calc(100% - 8px),transparent)}
+  body::after{mask-image:linear-gradient(to left,#000 calc(100% - 8px),transparent)}
+  body:has(#s-industry.active) .shell{max-width:530px;transform:translateX(11px)}
+  body:has(#s-years.active) .shell{max-width:532px;transform:translateX(2px)}
+  body:has(#s-territory.active) .shell{transform:translateX(8px)}
+  #s-industry{padding-top:25px;padding-bottom:19px}#s-industry .lead{margin-bottom:14px}
+  #s-industry .choice{min-height:70px;padding-top:10px;padding-bottom:10px}
+  .legacy-choice-icon{display:none}
+  #s-industry .choice>div,#s-territory .choice>div{position:relative;padding-left:51px}
+  #s-industry .choice>div::before,#s-territory .choice>div::before{content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);width:40px;height:40px;background:center/contain no-repeat}
+  #s-industry .choice:nth-child(1)>div::before{background-image:url('assets/v7-desktop/industry-1.webp')}
+  #s-industry .choice:nth-child(2)>div::before{background-image:url('assets/v7-desktop/industry-2.webp')}
+  #s-industry .choice:nth-child(3)>div::before{background-image:url('assets/v7-desktop/industry-3.webp')}
+  #s-industry .choice:nth-child(4)>div::before{background-image:url('assets/v7-desktop/industry-4.webp')}
+  #s-industry .choice:nth-child(5)>div::before{background-image:url('assets/v7-desktop/industry-5.webp')}
+  #s-territory .choice:nth-child(1)>div::before{background-image:url('assets/v7-desktop/territory-1.webp')}
+  #s-territory .choice:nth-child(2)>div::before{background-image:url('assets/v7-desktop/territory-2.webp')}
+  #s-territory .choice:nth-child(3)>div::before{background-image:url('assets/v7-desktop/territory-3.webp')}
+  #s-territory .choice:nth-child(4)>div::before{background-image:url('assets/v7-desktop/territory-4.webp')}
+  #s-territory .choice:last-child>div::after{content:'Work from home or office';display:block;font-size:14px;color:var(--muted);margin-top:5px}
+  #s-details .field>div:has(#locationInput)::before{content:'';background:url('assets/v7-desktop/location.webp') center/contain no-repeat;width:29px;height:34px;top:15px}
+  #s-details .privacy-trust::before{content:'';background:url('assets/v7-desktop/privacy.webp') center/contain no-repeat;width:36px;height:39px;top:16px;left:16px}
+  @media(max-width:1350px){body:has(#s-industry.active)::before{width:calc((100vw - 500px)/2)}body:has(#s-details.active) .progress-wrap{transform:none}.shell,body:has(#s-industry.active) .shell,body:has(#s-years.active) .shell{max-width:500px;transform:none}body:has(#s-territory.active) .shell{transform:none}}
+}
+@media(min-width:1024px){
+  .choice input{appearance:none;border:2px solid #cdd1d4;background:#fff;border-radius:50%;width:23px;height:23px;display:grid;place-content:center}
+  .choice input[type=checkbox]{border-radius:7px}
+  .choice input:checked{border-color:#0085ff;background:#0085ff}
+  .choice input:checked::before{content:'';width:9px;height:9px;border-radius:50%;background:white}
+  .choice input[type=checkbox]:checked::before{width:10px;height:6px;background:none;border:solid white;border-width:0 0 2px 2px;transform:rotate(-45deg);border-radius:0}
+  #s-years h2{font-size:36px;letter-spacing:-1px}#s-years{margin-top:5px}
+  #s-years .choice-label,#s-territory .choice-label{font-size:18px}
+  #s-territory h2{font-size:31px;letter-spacing:-.9px}
+}
+@media(min-width:1024px) and (max-width:1350px){
+ body::before,body::after,body:has(#s-details.active)::after{background-size:100% auto;background-position:center top}
+}
+@media(min-width:1351px){body:has(main)::after{width:34.21vw}}
+@media(min-width:1024px) and (max-width:1350px){
+ body::before,body::after{bottom:auto;aspect-ratio:570/866;mask-image:linear-gradient(to bottom,#000 92%,transparent)}
+ body:has(#s-details.active)::before,body:has(#s-details.active)::after{width:calc((100vw - 530px)/2)}
+ body:has(#s-details.active)::after{aspect-ratio:492/866}
+}
+/* Approved account screen; verification uses the same desktop card and artwork. */
+@media(min-width:1024px){
+ body:has(#createSection)::before{width:33.373vw;background-image:url('assets/v7-desktop/6-left.webp')}
+ body:has(#createSection)::after{width:31.4vw;background-image:url('assets/v7-desktop/6-right.webp')}
+ body:has(#createSection) .bar{position:absolute;top:0;left:0;width:100%;height:75px;padding:11px 46px;background:#052d55;justify-content:space-between}
+ body:has(#createSection) .bar::after{content:'Your information is private';color:white;font-size:17px;padding-left:34px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='26' fill='none' stroke='white' stroke-width='2'%3E%3Crect x='2' y='10' width='16' height='14' rx='2'/%3E%3Cpath d='M6 10V6a4 4 0 018 0v4'/%3E%3C/svg%3E") left center/20px 26px no-repeat}
+ body:has(#createSection) .brand{gap:14px}
+ body:has(#createSection) .shell{max-width:588px;margin-top:127px;padding:0;transform:translateX(15px)}
+ body:has(#createSection) .screen{position:relative;padding:29px 30px 22px;background:#fff;border:1px solid #e4eef7;border-radius:22px}
+ body:has(#createSection) .eyebrow{position:absolute;top:-32px;left:37px;font-size:14px;color:#0085ff;margin:0;letter-spacing:.12em}
+ body:has(#createSection) h2{font-size:48px;line-height:1.15;letter-spacing:-1.7px;margin-bottom:9px;color:#08214c}
+ body:has(#createSection) .lead{font-size:20px;line-height:1.4;margin-bottom:20px}
+ body:has(#createSection) .form-section{border:0;border-radius:0;padding:0;margin:0;background:transparent}
+ body:has(#createSection) #createSection>.form-section-label{display:none}
+ body:has(#createSection) .form-section-label{font-size:14px;margin-bottom:14px}
+ body:has(#createSection) .privacy-trust{position:relative;font-size:16px;line-height:1.45;margin:0 0 18px;padding:15px 18px 15px 72px;min-height:108px;color:#126b66;background:#effaf6;border-color:#c3ece5}
+ body:has(#createSection) .privacy-trust::before{content:'';position:absolute;left:20px;top:14px;width:36px;height:40px;background:url('assets/v7-desktop/6-privacy.webp') center/contain no-repeat}
+ body:has(#createSection) .privacy-trust strong{font-size:19px;color:#007466;margin-bottom:4px}
+ body:has(#createSection) .field-input{font-size:20px;min-height:59px;padding:14px 18px}
+ body:has(#createSection) .field-label{font-size:16px;font-weight:700;margin-bottom:5px}
+ body:has(#createSection) .field-group{gap:18px}
+ body:has(#createSection) .name-row{gap:18px}
+ body:has(#createSection) .btn-primary{font-size:21px;border-radius:99px;margin-top:22px;min-height:60px}
+ body:has(#createSection) .btn-primary::after{content:none}
+ body:has(#createSection) .fine{font-size:15px;line-height:1.55;margin-top:14px}
+ body:has(#createSection) .verify-actions button{font-size:14px;min-height:44px}
+ body:has(#createSection) footer.conversion-trust{margin-top:30px!important}
+ @media(max-width:1350px){
+  body:has(#createSection)::before,body:has(#createSection)::after{width:calc((100vw - 550px)/2)}
+  body:has(#createSection)::after{aspect-ratio:525/866}
+  body:has(#createSection) .shell{max-width:550px;transform:none}
+  body:has(#createSection) h2{font-size:43px}
+  body:has(#createSection) .lead{font-size:18px}
+ }
+}
+@media(min-width:1024px){
+ body:has(#createSection) .shell{transform:none;margin-left:30px}
+ body:has(#createSection) .lead{font-family:Arial,Inter,sans-serif}
+ @media(max-width:1350px){body:has(#createSection) .shell{margin-left:0}}
+}
