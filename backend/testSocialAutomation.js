@@ -240,6 +240,8 @@ async function run() {
     assert.ok(!keys.includes("employer_id"));
     assert.ok(!keys.includes("ai_analysis"), "the raw AI analysis blob itself must not leak, only the normalized category derived from it");
     assert.ok(!JSON.stringify(response).includes("Acme"));
+    assert.match(response.public_url_facebook, /^https:\/\/rookcareers\.com\/rook-onboarding-v8\.html\?utm_source=facebook/);
+    assert.match(response.public_url_linkedin, /\/jobs\//);
   });
 
   console.log("\n=== Eligibility: expired-job rejection ===");

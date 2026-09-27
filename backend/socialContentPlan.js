@@ -1,5 +1,6 @@
 const { nyWallClockToUtc } = require('./socialAutomation');
 const { getEasternParts } = require('./socialScheduler');
+const { socialV8Destination } = require('./socialV8Destination');
 // Preserve the four custom marketing times observed in the live Sept 23 queue.
 const DAILY_SLOTS = [
   { slot: 'am', hour: 8, minute: 30, kind: 'featured' },
@@ -48,8 +49,9 @@ function personalLinkedinSlot(slot) {
   return { ...slot, dueAt: new Date(slot.dueAt.getTime() + 45 * 60000) };
 }
 function regularPost(slot, platform, copy) {
-  const url = new URL(copy.resource_url || 'https://rookcareers.com/');
-  url.search = new URLSearchParams({ utm_source: platform, utm_medium: 'social', utm_campaign: 'organic', utm_content: copy.resource_url ? 'resource_article' : slot.kind }).toString();
+  const content = copy.resource_url ? 'resource_article' : slot.kind;
+  const url = platform === 'facebook' ? socialV8Destination('facebook', content) : new URL(copy.resource_url || 'https://rookcareers.com/');
+  if (platform !== 'facebook') url.search = new URLSearchParams({ utm_source: platform, utm_medium: 'social', utm_campaign: 'organic', utm_content: content }).toString();
   const headline = copy.headline || 'Medical & veterinary sales careers';
   const body = copy[platform] || copy.text;
   // Advice stands on its own. Product posts retain the existing attribution.

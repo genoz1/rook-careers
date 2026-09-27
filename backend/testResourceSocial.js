@@ -4,10 +4,10 @@ const sharp=require('sharp');
 const {captionFor}=require('./resources/meta');
 const {renderResourceGraphic}=require('./resources/socialGraphic');
 const {createRouter}=require('./resources/routes');
-test('Instagram ends in bio CTA without URLs; Facebook retains exact copy and article URL',()=>{
+test('Facebook and Instagram resource posts lead to V8 with channel attribution',()=>{
  const a={slug:'sales-guide',social_copy:{instagram:'Plan your next career move. https://rookcareers.com/resources/sales-guide/ Link in bio.',facebook:'Facebook original copy.'}};
- const ig=captionFor(a,'instagram');assert.ok(!/https?:|www\./.test(ig));assert.ok(ig.endsWith('Read the full guide — link in bio.'));assert.equal((ig.match(/link in bio/gi)||[]).length,1);
- assert.equal(captionFor(a,'facebook'),'Facebook original copy.\n\nhttps://rookcareers.com/resources/sales-guide/');
+ const ig=captionFor(a,'instagram');assert.ok(!ig.includes('resources/sales-guide'));assert.ok(!/link in bio/i.test(ig));assert.match(ig,/rook-onboarding-v8\.html\?utm_source=instagram&utm_medium=social&utm_campaign=organic&utm_content=resource_article/);
+ assert.equal(captionFor(a,'facebook'),'Facebook original copy.\n\nhttps://rookcareers.com/rook-onboarding-v8.html?utm_source=facebook&utm_medium=social&utm_campaign=organic&utm_content=resource_article');
 });
 test('Resources social endpoint returns a square JPEG and rejects missing articles',async()=>{
  let found=true;

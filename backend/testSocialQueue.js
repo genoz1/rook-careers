@@ -157,6 +157,10 @@ test('validation-only fallback is logged but does not send an urgent alert',asyn
 test('channel UTM links are deterministic and Reddit remains generation-only',()=>{
  const slot={kind:'industry',industry:'Medical Device'};
  for(const channel of ['linkedin','facebook','reddit']){const text=regularPost(slot,channel,copy);assert.match(text,new RegExp('utm_source='+channel));assert.match(text,/utm_medium=social/);}
+ assert.match(regularPost(slot,'facebook',copy),/rook-onboarding-v8\.html\?utm_source=facebook/);
+ const resourceCopy={...copy,resource_url:'https://rookcareers.com/resources/sales-guide/'};
+ assert.doesNotMatch(regularPost(slot,'facebook',resourceCopy),/\/resources\//);
+ assert.match(regularPost(slot,'linkedin',resourceCopy),/\/resources\//);
 });
 test('Buffer queue API follows pagination and uses live plan limit',async()=>{
  let page=0;const result=await readQueue('fake','org',{httpFetch:async()=>({ok:true,text:async()=>JSON.stringify({data:{account:{organizations:[{id:'org',limits:{scheduledPosts:10}}]},posts:{edges:[{node:{id:String(++page)}}],pageInfo:{hasNextPage:page===1,endCursor:'next'}}}})})});
