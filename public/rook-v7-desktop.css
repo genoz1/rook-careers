@@ -178,3 +178,21 @@
  main .field-group{gap:10px}
  main .field-label{margin-bottom:4px}
 }
+
+/* Keep the four question steps, artwork and footer within the desktop page.
+   The source artwork has a thin navy top edge; tuck it behind the header. */
+@media(min-width:1024px){
+ body:has(.v7-onboarding-card){padding-bottom:4px}
+ body:has(.v7-onboarding-card) .topbar{position:relative;z-index:1}
+ body:has(.v7-onboarding-card)::before,
+ body:has(.v7-onboarding-card)::after,
+ body:has(#s-details.active)::after{top:62px;bottom:0;aspect-ratio:auto}
+ body:has(.v7-onboarding-card) footer.conversion-trust,
+ body:has(#s-details.active) footer.conversion-trust{
+  max-width:900px;margin-top:6px!important;padding:0 20px!important;
+  align-items:center;gap:6px 20px;font-size:13px;
+ }
+ body:has(.v7-onboarding-card) footer.conversion-trust>span{width:auto}
+ body:has(.v7-onboarding-card) footer.conversion-trust a{font-size:13px;min-height:24px}
+ body:has(.v7-onboarding-card)>a[href='/resources/']{padding:4px 12px!important;min-height:24px}
+}
