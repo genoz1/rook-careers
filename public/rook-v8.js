@@ -37,10 +37,8 @@
       ${revealed&&url?`<a class="card-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer" data-job-link="true">View job →</a>`:revealed?'':`<span class="card-link">Unlock full details →</span>`}</article>`;
   }
   function render(){
-    const query=$('jobSearch').value.trim().toLowerCase(),sort=$('sortControl').value;
-    let jobs=allJobs.filter(j=>!query || [j.subscription_required?'':j.company_name,j.subscription_required?j.role_type:j.title_original,(j.industry_classification?.labels||[]).join(' ')].some(s=>String(s||'').toLowerCase().includes(query)));
-    if(sort==='closest')jobs=[...jobs].sort((a,b)=>(a.distance_miles??Infinity)-(b.distance_miles??Infinity));
-    if(sort==='newest')jobs=[...jobs].sort((a,b)=>Date.parse(b.date_posted||b.first_seen_at||0)-Date.parse(a.date_posted||a.first_seen_at||0));
+    const query=$('jobSearch').value.trim().toLowerCase();
+    const jobs=allJobs.filter(j=>!query || [j.subscription_required?'':j.company_name,j.subscription_required?j.role_type:j.title_original,(j.industry_classification?.labels||[]).join(' ')].some(s=>String(s||'').toLowerCase().includes(query)));
     $('resultHeading').textContent=`${jobs.length} ${jobs.length===1?'opportunity':'opportunities'} near you`;
     $('jobGrid').innerHTML=jobs.map(card).join('')||'<p>No opportunities match that search.</p>';
     const locked=jobs.filter(j=>j.subscription_required).length;
@@ -48,11 +46,10 @@
     $('jobGrid').querySelectorAll('[data-locked]').forEach(el=>{el.onclick=()=>goSignup('job_card');el.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();goSignup('job_card');}};});
     $('jobGrid').querySelectorAll('[data-job-link]').forEach(el=>el.onclick=()=>track('v8_revealed_job_clicked'));
   }
-  $('jobSearch').oninput=render;$('sortControl').onchange=render;
+  $('jobSearch').oninput=render;
   async function load(initial=false){
     data=await api('/session'+(initial?'?initial=1':''));allJobs=data.jobs;
     $('locationLine').textContent=data.profile.home_location_label||'Your location';
-    $('industryControl').value=data.profile.desired_industries?.[0]||'Diagnostics';
     $('overlay').hidden=true;render();
     if(!window.rookV8PaintTracked){
       track('v8_preview_dashboard_displayed',{unlocked:data.unlocked,job_count:data.count});
@@ -62,13 +59,6 @@
     }
     if(data.unlocked){window.location.replace('rook-dashboard-v8.html');return;}
   }
-  $('industryControl').onchange=async()=>{
-    const control=$('industryControl'),progress=$('industryProgress');
-    control.disabled=true;progress.hidden=false;$('status').textContent='';$('jobGrid').setAttribute('aria-busy','true');
-    try{await api('/preference',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({industry:control.value})});await load();track('v8_industry_preference_changed');$('status').textContent='Preference updated. All qualifying industries remain available.';}
-    catch(e){$('status').textContent=e.message;}
-    finally{progress.hidden=true;control.disabled=false;$('jobGrid').removeAttribute('aria-busy');}
-  };
   $('searchForm').onsubmit=async e=>{
     e.preventDefault();if(busy)return;
     if(!selectedLocation){$('formError').textContent='Choose a city, state or ZIP from the suggestions.';return;}
