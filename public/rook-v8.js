@@ -61,6 +61,7 @@
       if(data.unlocked)track('v8_unlocked_dashboard_viewed');
       window.rookV8PaintTracked=true;
     }
+    if(data.unlocked){window.location.replace('rook-dashboard-v8.html');return;}
   }
   $('industryControl').onchange=async()=>{
     const control=$('industryControl');control.disabled=true;$('status').textContent='Updating order…';
@@ -70,13 +71,15 @@
   $('searchForm').onsubmit=async e=>{
     e.preventDefault();if(busy)return;
     if(!selectedLocation){$('formError').textContent='Choose a city, state or ZIP from the suggestions.';return;}
-    busy=true;const button=$('searchForm').querySelector('.submit');button.disabled=true;button.textContent='Finding your jobs…';$('formError').textContent='';
+    busy=true;const button=$('searchForm').querySelector('.submit');button.disabled=true;button.textContent='Finding your best opportunities…';$('formError').textContent='';
+    const progress=$('searchProgress'),progressText=$('searchProgressText');progress.hidden=false;progressText.textContent='Matching your location…';
+    const started=Date.now();const timer=setInterval(()=>{const elapsed=Date.now()-started;progressText.textContent=elapsed>12000?'Ranking opportunities…':elapsed>3500?'Prioritizing your industry…':'Matching your location…';},500);
     try{
       const attribution=Object.fromEntries(new URLSearchParams(location.search).entries());
       const result=await api('/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:selectedLocation,industry:$('industryInput').value,attribution})});
       sessionStorage.setItem('rook_v7_token',result.token);sessionStorage.setItem('rook_v8_active',result.token);
       track('v8_overlay_submitted');await load(true);
-    }catch(err){$('formError').textContent=err.message;}finally{busy=false;button.disabled=false;button.textContent='Show My Jobs →';}
+    }catch(err){$('formError').textContent=err.message;}finally{clearInterval(timer);progress.hidden=true;busy=false;button.disabled=false;button.textContent='Show My Jobs →';}
   };
   async function init(){
     track('v8_dashboard_impression');

@@ -1,0 +1,229 @@
+// Shared auth helpers for ROOK frontend pages.
+// Requires rook-config.js and the Supabase JS CDN script to be loaded first.
+
+// Member résumé navigation opens the document manager, not onboarding.
+function rookLinkResumeManager(){
+  document.querySelectorAll('a[href]').forEach(link=>{
+    if(/^My Résumés?$/.test(link.textContent.trim()))link.href='rook-resume.html';
+  });
+}
+if(typeof document!=='undefined'){
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',rookLinkResumeManager);
+  else rookLinkResumeManager();
+}
+
+const rookSupabase = window.supabase.createClient(
+  window.ROOK_CONFIG.SUPABASE_URL,
+  window.ROOK_CONFIG.SUPABASE_ANON_KEY
+);
+
+// Returns the current session's access token, or null if signed out.
+async function rookGetAccessToken() {
+  const { data } = await rookSupabase.auth.getSession();
+  return data.session ? data.session.access_token : null;
+}
+
+// Redirects to the login page if there's no active session.
+// Saves the current page URL so rookRouteAfterLogin can return here.
+async function rookRequireAuth(loginPage = "rook-login-v8.html") {
+  const token = await rookGetAccessToken();
+  if (!token) {
+    // Save current URL so login can redirect back after success
+    try { sessionStorage.setItem("rook_login_return", window.location.href); } catch (_) {}
+    window.location.href = loginPage;
+    return null;
+  }
+  return token;
+}
+
+// Wrapper around fetch() that attaches the Authorization header automatically.
+async function rookApiFetch(path, options = {}) {
+  const token = await rookGetAccessToken();
+  const headers = { ...(options.headers || {}) };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return fetch(`${window.ROOK_CONFIG.API_BASE}${path}`, { ...options, headers });
+}
+
+async function rookSignOut(loginPage = "rook-login-v8.html") {
+  await rookSupabase.auth.signOut();
+  window.location.href = loginPage;
+}
+
+// Cached trial-day lookup shared by every page that needs to decide
+// between "Subscribe to Unlock" and a trial CTA for a locked job —
+// one fetch per page load, reused by every job card render rather
+// than one request per card. Resolves to 0 (the safe "no trial"
+// default) if the request fails, same reasoning as every other
+// trial-config consumer in the app: never show a trial claim that
+// might not be real.
+let rookTrialDaysCache = null;
+async function rookGetTrialDays() {
+  if (rookTrialDaysCache !== null) return rookTrialDaysCache;
+  try {
+    const res = await fetch(`${window.ROOK_CONFIG.API_BASE}/stripe/trial-config`);
+    const data = res.ok ? await res.json() : {};
+    rookTrialDaysCache = Number(data.trialDays) || 0;
+  } catch {
+    rookTrialDaysCache = 0;
+  }
+  return rookTrialDaysCache;
+}
+
+// The actual locked-job CTA label, shared everywhere a candidate sees
+// one, so the wording can't drift between pages. While a trial is
+// active, this replaces the friction of "Subscribe to Unlock" (asking
+// for money) with a trial-framed CTA — access rules are unchanged,
+// this is copy only. Falls back to the original wording the instant
+// TRIAL_PERIOD_DAYS is 0, with no separate code path to keep in sync.
+async function rookLockedJobCtaLabel() {
+  const days = await rookGetTrialDays();
+  if (days <= 0) return "Subscribe to Unlock";
+  return `Start ${days}-Day Free Trial`;
+}
+
+// Client-side mirror of backend/matching.js's hasFullAccess(). This is
+// NOT a security boundary — the server (redactForNonSubscriber / the
+// jobs & application-package routes) is the only thing that actually
+// withholds data. This copy exists purely so pages can decide what to
+// SHOW (e.g. whether to render the "Unlock" banner) without an extra
+// round trip or guessing at the rule. Kept logically identical to the
+// backend version on purpose — same two timestamp checks, same two
+// statuses — so the two never quietly drift apart.
+function rookHasFullAccess(profile) {
+  if (!profile) return false;
+  const status = profile.subscription_status;
+  if (status !== "trialing" && status !== "active") return false;
+  const now = Date.now();
+  if (profile.subscription_cancel_at && new Date(profile.subscription_cancel_at).getTime() <= now) return false;
+  if (status === "trialing" && profile.trial_ends_at && new Date(profile.trial_ends_at).getTime() <= now) return false;
+  return true;
+}
+
+// Fires a GA4 event via the shared gtag() runtime already loaded on
+// every page (see product_information: one gtag.js instance, both the
+// Ads conversion ID and the GA4 measurement ID configured on it).
+// Direct instruction: never send email addresses, résumé contents, or
+// other PII as event params — callers must only pass non-identifying
+// context (counts, categories, source labels). No-ops safely if gtag
+// isn't loaded yet or a param is missing, so a tracking hiccup never
+// breaks the actual user-facing action it's attached to.
+function rookTrackEvent(name, params = {}) {
+  try {
+    if (typeof gtag === 'function') gtag('event', name, params);
+  } catch (_) {
+    // Analytics must never be able to break the page it's attached to.
+  }
+}
+
+// Shared "go unlock" action for every locked-job CTA, primary unlock
+// banner, gated Apply button, and gated Application Package link across
+// the app (dashboard, search, job analysis). Fires job_unlock_clicked
+// with a `source` label identifying which surface was clicked, then
+// sends the candidate to the existing rook-checkout.html flow — the
+// same authenticated Setup-Intent-based checkout used everywhere else,
+// never a separate/parallel payment path.
+function rookGoToCheckout(source) {
+  rookTrackEvent('job_unlock_clicked', { event_category: 'engagement', source: String(source || 'unknown') });
+  window.location.href = 'rook-checkout.html';
+}
+
+// Fills in the sidebar's name/avatar/plan card (the ".side-foot" block
+// present on every logged-in page) from a real candidate profile object.
+// This used to be literal hardcoded text ("Gene Zentko", "Professional
+// Plan") baked directly into 8 separate page templates — the plan name
+// itself is accurate (ROOK's one paid tier is genuinely branded
+// "Professional" on rook-pricing.html), but it was shown unconditionally
+// to every candidate regardless of their real subscription_status, and
+// the name was always Gene's own. Split out from rookPopulateSidebar()
+// below so a page that already has the profile object for another
+// reason (the dashboard, for its greeting) can apply it directly
+// instead of fetching it a second time.
+function rookApplySidebarProfile(profile) {
+  if (!profile) return; // fetch failed or no profile row at all — leave the neutral fallback markup in place
+  // Name and plan status are independent of each other — a candidate
+  // whose profile has no name filled in yet should still see their
+  // real plan status, not have the whole card stuck on the neutral
+  // placeholder just because one of the two fields is empty. That
+  // coupling was itself a bug: reported directly as "the name AND plan
+  // no longer show up" together on an account with no name on file.
+  const displayName = profile.name?.trim() || profile.email || null;
+  if (displayName) {
+    const initials = /\s/.test(displayName)
+      ? displayName.trim().split(/\s+/).map((p) => p[0]).slice(0, 2).join('').toUpperCase()
+      : displayName.slice(0, 2).toUpperCase();
+    document.querySelectorAll('.side-foot .avatar').forEach((el) => { el.textContent = initials; });
+    document.querySelectorAll('.side-foot .n').forEach((el) => { el.textContent = displayName; });
+  }
+  // Trial added: a trialing candidate has full access (same as
+  // 'active', per matching.js's hasFullAccess) but the sidebar should
+  // say so plainly rather than either calling it a paid "Professional
+  // Plan" (it isn't paid yet) or "No Active Subscription" (which reads
+  // as no access, and they do have full access).
+  const statusLabel = profile.subscription_status === 'active'
+    ? 'Professional Plan'
+    : profile.subscription_status === 'trialing'
+      ? 'Free Trial'
+      : 'No Active Subscription';
+  document.querySelectorAll('.side-foot .r').forEach((el) => { el.textContent = statusLabel; });
+}
+
+// Fetches the candidate's profile and applies it to the sidebar card.
+// Use on any page that isn't already fetching /profile for something
+// else (the dashboard fetches it anyway for its greeting/profile-gate
+// check, so it calls rookApplySidebarProfile directly with that same
+// result instead of calling this and fetching twice).
+async function rookPopulateSidebar() {
+  try {
+    const res = await rookApiFetch('/profile');
+    if (!res.ok) return;
+    rookApplySidebarProfile(await res.json());
+  } catch {
+    // Best-effort — leave the sidebar's neutral fallback markup in
+    // place rather than get stuck if this fails.
+  }
+}
+
+// Sends a just-authenticated candidate to onboarding or the dashboard,
+// depending on whether they've actually completed a profile yet (GET
+// /api/profile returns null until onboarding has been submitted).
+// Used after normal sign-in AND after password reset — those used to be
+// two separate, drifted implementations. Password reset had its own
+// hardcoded redirect straight to the dashboard with no profile check at
+// all, which is how a brand-new candidate who signed up, mistyped their
+// password, and reset it ended up on an empty, unscored dashboard having
+// never seen onboarding.
+//
+// Routes to rook-onboarding-v2.html (Stage 2) for new users.
+// Existing subscribers and trialing users with a profile go to the dashboard.
+async function rookRouteAfterLogin() {
+  try {
+    const r=await rookApiFetch('/profile');
+    const profile=r.ok ? await r.json() : null;
+    if(profile && !rookHasFullAccess(profile)) {window.location.href='rook-dashboard-v8.html';return;}
+  } catch(_) {}
+  // Restore the page the user was trying to reach before being sent to login
+  try {
+    const returnUrl = sessionStorage.getItem("rook_login_return");
+    if (returnUrl) {
+      sessionStorage.removeItem("rook_login_return");
+      const url = new URL(returnUrl);
+      // Only redirect back to safe ROOK pages — not login itself
+      if (url.origin === window.location.origin && !url.pathname.includes('rook-login')) {
+        window.location.href = returnUrl;
+        return;
+      }
+    }
+  } catch (_) {}
+
+  try {
+    const res = await rookApiFetch('/profile');
+    const profile = res.ok ? await res.json() : null;
+    window.location.href = profile ? 'rook-dashboard-v8.html' : 'rook-onboarding-v2.html';
+  } catch {
+    // Fall back to onboarding, not the dashboard, when the check itself
+    // fails (network blip, backend not configured, etc.) — the safe
+    // default on an uncertain check is to route toward setup, not away
+    // from it.
+    window.location.href = 'rook-onboarding-v2.html';
+  }
+}

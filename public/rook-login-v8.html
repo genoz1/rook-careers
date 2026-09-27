@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="rook-attribution.js"></script>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=AW-18428232873"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'AW-18428232873');
+
+  // Direct instruction: integrate with the existing gtag.js runtime
+  // already loaded above for Google Ads, rather than loading a second,
+  // duplicate copy of gtag.js just for GA4 — gtag.js is a single shared
+  // runtime that supports multiple config() calls for different
+  // products (Ads conversion ID, GA4 measurement ID) side by side.
+  gtag('config', 'G-LDG2CL5Z8R');
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="assets/favicon.ico" sizes="any">
+<link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="icon" href="assets/favicon-16.png" type="image/png" sizes="16x16">
+<link rel="apple-touch-icon" href="assets/rook-icon-180.png">
+<link rel="icon" href="assets/rook-icon-192.png" type="image/png" sizes="192x192">
+<meta name="theme-color" content="#071E41">
+<title>Log In — ROOK</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --navy:#071E41; --royal:#1463FF; --teal:#12B8A6; --gray:#F5F7FA;
+    --muted:#5B6B85; --border:#E3E8F0;
+    --font-display:'Space Grotesk', sans-serif; --font-body:'Inter', sans-serif;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    font-family:var(--font-body); color:var(--navy); background:var(--gray);
+    min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:24px; overflow-x:hidden;}
+  h1,h2{font-family:var(--font-display); letter-spacing:-0.01em;}
+  a{color:var(--royal); text-decoration:none;}
+  .logo{display:flex; align-items:center; gap:12px; font-family:var(--font-display); font-weight:700; font-size:22px; margin-bottom:32px;}
+  .logo svg{width:26px; height:26px;}
+  .card{background:#fff; border-radius:16px; padding:36px; width:100%; max-width:400px; box-shadow:0 20px 45px -18px rgba(11,29,58,0.2);}
+  .tabs{display:flex; gap:4px; background:var(--gray); border-radius:10px; padding:4px; margin-bottom:24px;}
+  .tab{flex:1; text-align:center; padding:9px; border-radius:8px; font-size:13.5px; font-weight:600; color:var(--muted); cursor:pointer;}
+  .tab.active{background:#fff; color:var(--navy); box-shadow:0 1px 3px rgba(11,29,58,0.1);}
+  h2{font-size:20px; margin-bottom:6px;}
+  .sub{font-size:13.5px; color:var(--muted); margin-bottom:22px;}
+  .field{display:flex; flex-direction:column; gap:6px; margin-bottom:16px;}
+  .field label{font-size:12.5px; font-weight:600; color:var(--muted);}
+  .field input{padding:11px 13px; border-radius:9px; border:1px solid var(--border); font-size:14px; font-family:var(--font-body);}
+  .btn{width:100%; padding:12px; border-radius:999px; border:none; background:var(--royal); color:#fff; font-size:14.5px; font-weight:600; cursor:pointer; margin-top:6px;}
+  .btn:disabled{background:#B9C6DE; cursor:not-allowed;}
+  .msg{font-size:13px; margin-top:14px; text-align:center; line-height:1.5;}
+  .msg.error{color:#C23B3B;}
+  .msg.success{color:#00806E;}
+  .config-warning{
+    max-width:400px; width:100%; margin-top:16px; font-size:12px; color:var(--muted);
+    background:#fff; border-left:3px solid #B98900; border-radius:8px; padding:12px 14px; line-height:1.5;
+  }
+  .pw-wrap{position:relative;}
+  .pw-wrap input{width:100%; padding-right:40px; box-sizing:border-box;}
+  .pw-toggle{position:absolute; right:10px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; padding:4px; color:#8B96AB; display:flex;}
+  .pw-toggle:hover{color:#3D4A63;}
+
+  @media(max-width:880px){
+    body{background:radial-gradient(circle at 95% 0,#dff3ff 0,transparent 34%),linear-gradient(165deg,#fff,#f1fbf5);}
+    /* Card stays centered, add slight padding */
+    .login-wrap,.auth-wrap{padding:24px 20px;}
+    .logo{margin-bottom:24px;}
+    /* Form card */
+    .card,.form-card{border:1px solid #dce7f0; border-radius:24px; background:#fff; padding:20px; box-shadow:0 16px 38px rgba(7,44,80,.11);}
+    /* Tabs */
+    .tab-bar,.tabs{background:#eaf2f7; border-radius:13px; padding:4px; display:grid; grid-template-columns:1fr 1fr; margin-bottom:24px;}
+    .tab,.tabs span{padding:11px; text-align:center; border-radius:10px; font-size:12px; font-weight:850; color:#637589;}
+    .tab.active,.tabs .active{background:#fff; color:#062d55; box-shadow:0 4px 12px rgba(7,44,80,.08);}
+    /* Buttons */
+    .btn-primary,.btn{min-height:54px; border-radius:15px; width:100%; font-weight:850;}
+    .btn-primary{background:linear-gradient(105deg,#062d55,#0877d1); color:#fff; box-shadow:0 11px 25px rgba(8,78,137,.22); border:0;}
+  }
+
+
+.privacy-trust{background:#EFF8F6;border:1px solid #CDE8E1;border-radius:12px;padding:14px 16px;margin:16px 0;color:#345A57;font-size:13px;line-height:1.55;text-align:left;}
+.privacy-trust strong{display:block;color:#176557;font-size:14px;font-weight:700;margin-bottom:4px;}
+</style>
+<link rel="stylesheet" href="rook-mobile.css">
+<link rel="stylesheet" href="rook-login-design.css">
+<link rel="stylesheet" href="rook-v8-login.css">
+</head>
+<body>
+
+<header class="login-header"><a href="index.html" class="login-brand" aria-label="ROOK home"><img src="assets/rook-full-logo-900.png" alt=""></a><span class="login-private">Your information is private</span></header>
+<div class="card">
+<a class="card-brand" href="index.html" aria-label="ROOK home"><img src="assets/rook-full-logo-900.png" alt=""></a>
+  <div class="tabs">
+    <button type="button" class="tab active" id="tabSignin" onclick="switchTab('signin')">Log In</button>
+    <button type="button" class="tab" id="tabSignup" onclick="switchTab('signup')">Create Account</button>
+  </div>
+
+  <div id="panelSignin">
+    <h2>Welcome back.</h2>
+    <div class="sub">Log in to see your personalized matches.</div>
+    <div class="field"><label for="signinEmail">Email</label><input type="email" id="signinEmail" autocomplete="email" required></div>
+    <div class="field"><label for="signinPassword">Password</label>
+      <div class="pw-wrap">
+        <input type="password" id="signinPassword" autocomplete="current-password" required>
+        <button type="button" class="pw-toggle" onclick="togglePasswordVisibility('signinPassword', this)" aria-label="Show password">👁</button>
+      </div>
+    </div>
+    <button class="btn" id="signinBtn" onclick="handleSignIn()">Log In</button>
+    <div style="text-align:center; margin-top:14px;"><a href="#" onclick="showForgotPassword(); return false;" style="font-size:13px;">Forgot your password?</a></div>
+  </div>
+
+  <div id="panelForgot" style="display:none;">
+    <h2>Reset your password</h2>
+    <div class="sub">Enter your email and we'll send you a link to set a new password.</div>
+    <div class="field"><label for="forgotEmail">Email</label><input type="email" id="forgotEmail" autocomplete="email" required></div>
+    <button class="btn" id="forgotBtn" onclick="handleForgotPassword()">Send Reset Link</button>
+    <div style="text-align:center; margin-top:14px;"><a href="#" onclick="switchTab('signin'); return false;" style="font-size:13px;">← Back to log in</a></div>
+  </div>
+
+  <div id="panelSignup" style="display:none;">
+    <h2>Start your 3-day free trial</h2>
+    <div class="sub">Create your profile to see employers, complete job details, and personalized ROOK matches.</div>
+    <ul style="font-size:13.5px; color:var(--muted); line-height:1.9; margin:0 0 20px; padding-left:20px;">
+      <li>Medical sales jobs only</li>
+      <li>Opportunities from hundreds of employer career sites</li>
+      <li>Three days of full ROOK access</li>
+      <li>Cancel anytime</li>
+    </ul>
+    <div class="privacy-trust"><strong>🔒 Private &amp; confidential</strong>Creating an account does not make you visible to employers or recruiters.</div>
+    <div class="field"><label for="signupEmail">Email</label><input type="email" id="signupEmail" autocomplete="email" required></div>
+    <div class="field"><label for="signupPassword">Password</label>
+      <div class="pw-wrap">
+        <input type="password" id="signupPassword" autocomplete="new-password" required minlength="8">
+        <button type="button" class="pw-toggle" onclick="togglePasswordVisibility('signupPassword', this)" aria-label="Show password">👁</button>
+      </div>
+    </div>
+    <div class="field"><label for="signupPasswordConfirm">Confirm Password</label>
+      <div class="pw-wrap">
+        <input type="password" id="signupPasswordConfirm" autocomplete="new-password" required minlength="8">
+        <button type="button" class="pw-toggle" onclick="togglePasswordVisibility('signupPasswordConfirm', this)" aria-label="Show password">👁</button>
+      </div>
+    </div>
+    <button class="btn" id="signupBtn" onclick="handleSignUp()">CREATE ACCOUNT &amp; START FREE TRIAL</button>
+  </div>
+
+  <!-- Direct instruction: after signup, the user must see an
+       unmissable confirmation state, not a small inline message next
+       to a form that's already switched back to the login tab (easy
+       to read as "signup failed, try logging in" instead of "you're
+       almost done"). A dedicated panel, same pattern as panelForgot
+       above, replaces the whole form rather than just adding text
+       near it. -->
+  <div id="panelCheckEmail" style="display:none;">
+    <h2>Check your email</h2>
+    <div class="sub">We sent a verification link to <strong id="checkEmailAddress"></strong>. Click it to verify your account. Once verified, you can sign in and continue.</div>
+    <div style="text-align:center; margin-top:14px;"><a href="#" onclick="switchTab('signin'); return false;" style="font-size:13px;">← Back to log in</a></div>
+  </div>
+
+  <div class="msg" id="authMsg"></div>
+</div>
+
+<div class="config-warning" id="configWarning" style="display:none;">
+  ⚠ ROOK_CONFIG in rook-config.js still has placeholder Supabase values. Auth won't work until you fill in your real Supabase URL and anon key — see ROOK-Setup-Guide.pdf, Section 1.4.
+</div>
+
+<script src="rook-config.js"></script>
+<script src="rook-auth-v8.js"></script>
+<script>
+  // Direct instruction: every "Start Your 3-Day Free Trial" CTA opens
+  // Create Account directly via a stable URL (?mode=signup), and that
+  // state must survive a refresh or someone opening the link directly
+  // — so, unlike the verified=1 handler below, this does NOT strip the
+  // query param from the URL afterward. Placed before any Supabase-
+  // dependent code below: switching tabs needs no Supabase client at
+  // all, so it shouldn't be vulnerable to that CDN script failing to
+  // load for any reason (slow network, ad-blocker, brief outage) —
+  // confirmed as a real failure mode while testing this exact page.
+  if (new URLSearchParams(window.location.search).get('mode') === 'signup') {
+    switchTab('signup');
+  }
+
+  const configured = window.ROOK_CONFIG.SUPABASE_URL !== "YOUR_SUPABASE_PROJECT_URL";
+  if (!configured) document.getElementById('configWarning').style.display = 'block';
+
+  // Reported via audit: pages loading both rook-auth-v8.js (which creates
+  // the shared rookSupabase client) and their own separate
+  // createClient() call trigger Supabase's own "Multiple GoTrueClient
+  // instances detected... may cause undefined behavior" warning, since
+  // both instances point at the same project and use the same
+  // localStorage session key. Reuses the shared client instead of
+  // creating a second, redundant one.
+  const client = configured ? rookSupabase : null;
+
+  // Landed here from rook-verify-email.html after a successful
+  // confirmation click — see that page for the full routing logic.
+  // Stays on the (already-default-active) sign-in tab.
+  if (new URLSearchParams(window.location.search).get('verified') === '1') {
+    setMsg('Email verified — you can now sign in.', 'success');
+    window.history.replaceState({}, '', 'rook-login-v8.html');
+  }
+
+  if (new URLSearchParams(window.location.search).get('reason') === 'existing') {
+    setMsg('You already have a ROOK account. Sign in below to access your dashboard.', 'success');
+    window.history.replaceState({}, '', 'rook-login-v8.html');
+  }
+
+  // Save ?return= URL so rookRouteAfterLogin redirects back after login
+  const returnUrl = new URLSearchParams(window.location.search).get('return');
+  if (returnUrl) {
+    try { sessionStorage.setItem('rook_login_return', returnUrl); } catch (_) {}
+  }
+
+  // No auth call here was protected against hanging forever — if
+  // Supabase's SMTP relay is slow or failing (it tries to send a
+  // confirmation/reset email as part of these same requests), the
+  // underlying call can hang indefinitely with the button stuck
+  // disabled and no error ever shown. This wraps any promise with a
+  // hard time limit so that failure mode always resolves into a real,
+  // visible error instead.
+  function withTimeout(promise, ms, timeoutMessage) {
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error(timeoutMessage)), ms)),
+    ]);
+  }
+
+  function switchTab(tab) {
+    document.getElementById('tabSignin').classList.toggle('active', tab === 'signin');
+    document.getElementById('tabSignup').classList.toggle('active', tab === 'signup');
+    document.getElementById('panelSignin').style.display = tab === 'signin' ? 'block' : 'none';
+    document.getElementById('panelSignup').style.display = tab === 'signup' ? 'block' : 'none';
+    document.getElementById('panelForgot').style.display = 'none';
+    document.getElementById('panelCheckEmail').style.display = 'none';
+    setMsg('');
+  }
+
+  function showForgotPassword() {
+    document.getElementById('panelSignin').style.display = 'none';
+    document.getElementById('panelSignup').style.display = 'none';
+    document.getElementById('panelCheckEmail').style.display = 'none';
+    document.getElementById('panelForgot').style.display = 'block';
+    document.getElementById('tabSignin').classList.remove('active');
+    document.getElementById('tabSignup').classList.remove('active');
+    setMsg('');
+  }
+
+  // Replaces the signup form entirely with an unmissable confirmation
+  // state — see panelCheckEmail above for why this exists instead of
+  // just an inline message next to the (now-hidden) form.
+  function showCheckEmail(email) {
+    document.getElementById('panelSignin').style.display = 'none';
+    document.getElementById('panelSignup').style.display = 'none';
+    document.getElementById('panelForgot').style.display = 'none';
+    document.getElementById('panelCheckEmail').style.display = 'block';
+    document.getElementById('tabSignin').classList.remove('active');
+    document.getElementById('tabSignup').classList.remove('active');
+    document.getElementById('checkEmailAddress').textContent = email;
+    setMsg('');
+  }
+
+  async function handleForgotPassword() {
+    if (!configured) return setMsg('Supabase isn\'t configured yet — see the warning below.', 'error');
+    const email = document.getElementById('forgotEmail').value.trim();
+    if (!email) return setMsg('Enter your email.', 'error');
+
+    document.getElementById('forgotBtn').disabled = true;
+    setMsg('Sending...');
+    // redirectTo must be an allowed Redirect URL in Supabase's
+    // Authentication → URL Configuration settings, same requirement as
+    // the email-confirmation flow — otherwise Supabase silently refuses
+    // to send the user anywhere useful after they click the emailed link.
+    let result;
+    try {
+      result = await withTimeout(
+        client.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/rook-reset-password.html` }),
+        15000,
+        'The request timed out — the email server may be having trouble right now. Please try again shortly.'
+      );
+    } catch (err) {
+      document.getElementById('forgotBtn').disabled = false;
+      return setMsg(err.message, 'error');
+    }
+    document.getElementById('forgotBtn').disabled = false;
+
+    // IMPORTANT: this used to swallow every error unconditionally, which
+    // meant a genuine SMTP delivery failure looked identical to success
+    // — "check your inbox" with nothing actually sent. Supabase never
+    // reports "no account with that email" as an error here (that's
+    // deliberate on their end, real account-enumeration protection) — so
+    // any error that DOES come back is a real infrastructure problem
+    // (bad SMTP config, rate limiting, etc.), not an account-existence
+    // signal, and is safe to show directly.
+    if (result.error) {
+      return setMsg('Could not send the reset email: ' + result.error.message, 'error');
+    }
+    setMsg('If an account exists for that email, a reset link is on its way. Check your inbox.', 'success');
+  }
+
+  function setMsg(text, type) {
+    const el = document.getElementById('authMsg');
+    el.textContent = text;
+    el.className = 'msg' + (type ? ' ' + type : '');
+  }
+
+  // Sign-in and password reset both route through the shared
+  // rookRouteAfterLogin() in rook-auth-v8.js — see that file for why.
+
+  function togglePasswordVisibility(id, btn) {
+    const input = document.getElementById(id);
+    const showing = input.type === 'text';
+    input.type = showing ? 'password' : 'text';
+    btn.textContent = showing ? '👁' : '🙈';
+    btn.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
+  }
+
+  async function handleSignIn() {
+    if (!configured) return setMsg('Supabase isn\'t configured yet — see the warning below.', 'error');
+    const emailEl = document.getElementById('signinEmail');
+    const passwordEl = document.getElementById('signinPassword');
+    // Reported via audit: relying entirely on custom JS validation
+    // (below) skips native browser validation UI and accessibility
+    // benefits (screen readers announcing a real invalid-field state,
+    // built-in red-outline/tooltip feedback) that required/minlength
+    // attributes provide for free. Checking native validity first adds
+    // that layer without replacing the existing custom checks.
+    if (!emailEl.reportValidity() || !passwordEl.reportValidity()) return;
+    const email = emailEl.value.trim();
+    const password = passwordEl.value;
+    if (!email || !password) return setMsg('Enter your email and password.', 'error');
+
+    document.getElementById('signinBtn').disabled = true;
+    setMsg('Logging in...');
+    let result;
+    try {
+      result = await withTimeout(
+        client.auth.signInWithPassword({ email, password }),
+        15000,
+        'The request timed out. Please try again.'
+      );
+    } catch (err) {
+      document.getElementById('signinBtn').disabled = false;
+      return setMsg(err.message, 'error');
+    }
+
+    if (result.error) {
+      document.getElementById('signinBtn').disabled = false;
+      return setMsg(result.error.message, 'error');
+    }
+    setMsg('Checking your profile...');
+    await rookRouteAfterLogin();
+  }
+
+  async function handleSignUp() {
+    if (!configured) return setMsg('Supabase isn\'t configured yet — see the warning below.', 'error');
+    const emailEl = document.getElementById('signupEmail');
+    const passwordEl = document.getElementById('signupPassword');
+    const passwordConfirmEl = document.getElementById('signupPasswordConfirm');
+    if (!emailEl.reportValidity() || !passwordEl.reportValidity() || !passwordConfirmEl.reportValidity()) return;
+    const email = emailEl.value.trim();
+    const password = passwordEl.value;
+    const passwordConfirm = passwordConfirmEl.value;
+    if (!email || password.length < 8) return setMsg('Enter a valid email and an 8+ character password.', 'error');
+    if (password !== passwordConfirm) return setMsg('Passwords don\'t match — please re-enter them.', 'error');
+
+    document.getElementById('signupBtn').disabled = true;
+    setMsg('Creating your account...');
+    let result;
+    try {
+      // 15s timeout — Supabase's signUp() call attempts to send the
+      // confirmation email as part of this same request; if the SMTP
+      // relay is failing or slow, this used to hang indefinitely with
+      // the button stuck disabled and no error ever shown. This is what
+      // "the page froze" on sign-up actually was.
+      // Root cause of "the verification link sends the user to the
+      // homepage": this call never specified emailRedirectTo, so
+      // Supabase fell back to its account-wide Site URL default (the
+      // homepage) for the confirmation link's destination — regardless
+      // of which page the signup itself happened on. Pointed instead
+      // at a dedicated landing page that knows what to do next
+      // (onboarding vs. login), rather than relying on a generic
+      // account-wide default that was never meant for this specific
+      // flow.
+      result = await withTimeout(
+        client.auth.signUp({
+          email, password,
+          options: { emailRedirectTo: `${window.location.origin}/rook-verify-email.html` },
+        }),
+        15000,
+        'The request timed out — the email server may be having trouble sending your confirmation email right now. Please try again shortly.'
+      );
+    } catch (err) {
+      document.getElementById('signupBtn').disabled = false;
+      return setMsg(err.message, 'error');
+    }
+    document.getElementById('signupBtn').disabled = false;
+
+    if (result.error) return setMsg(result.error.message, 'error');
+    showCheckEmail(email);
+  }
+</script>
+
+<script type="text/javascript">
+_linkedin_partner_id = "9629410";
+window._linkedin_data_partner_ids = window._linkedin_data_partner_ids || [];
+window._linkedin_data_partner_ids.push(_linkedin_partner_id);
+</script><script type="text/javascript">
+(function(l) {
+if (!l){window.lintrk = function(a,b){window.lintrk.q.push([a,b])};
+window.lintrk.q=[]}
+var s = document.getElementsByTagName("script")[0];
+var b = document.createElement("script");
+b.type = "text/javascript";b.async = true;
+b.src = "https://snap.licdn.com/li.lms-analytics/insight.min.js";
+s.parentNode.insertBefore(b, s);})(window.lintrk);
+</script>
+<noscript>
+<img height="1" width="1" style="display:none;" alt="" src="https://px.ads.linkedin.com/collect/?pid=9629410&fmt=gif" />
+</noscript>
+<div class="login-bottom" aria-hidden="true"></div><footer class="login-footer"><span>ROOK · Medical &amp; veterinary sales careers</span><nav><a href="rook-about.html">About ROOK</a><a href="mailto:hello@rookcareers.com">Contact</a><a href="rook-privacy.html">Privacy</a><a href="rook-terms.html">Terms</a></nav></footer>
+</body>
+</html>
