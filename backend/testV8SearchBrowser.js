@@ -3,7 +3,7 @@ const source=fs.readFileSync('public/rook-v8.js','utf8');
 const preview={profile:{home_location_label:'Test city'},unlocked:false,count:3,jobs:Array.from({length:3},(_,i)=>({id:'locked-'+i,subscription_required:true,role_type:'Field Sales',match:{overall_score:80}}))};
 function run({failure=false,legacy=false,analyticsError=false}={}){
  const elements=new Map(),events=[],calls=[],frames=[],saved=new Map();let select,clock=0;
- const el=id=>{if(!elements.has(id))elements.set(id,{dataset:{},value:id==='industryInput'?'Diagnostics':'',hidden:false,querySelector:()=>el('submit'),querySelectorAll:()=>[],focus(){}});return elements.get(id);};
+ const el=id=>{if(!elements.has(id))elements.set(id,{dataset:{},value:id==='industryInput'?'Diagnostics':'',hidden:false,querySelector:()=>el('submit'),querySelectorAll:()=>[],focus(){},addEventListener(){}});return elements.get(id);};
  const ctx={URL,URLSearchParams,AbortSignal,Date,crypto:{randomUUID:()=> 'non-identifying-search-id'},performance:{now:()=>++clock},
  document:{getElementById:el},location:{search:'',replace(){}},sessionStorage:{getItem:k=>saved.get(k),setItem:(k,v)=>saved.set(k,v),removeItem:k=>saved.delete(k)},
  setInterval:()=>1,clearInterval(){},requestAnimationFrame:fn=>frames.push(fn),
@@ -20,7 +20,7 @@ test('valid submit fires requested before auth/network; fresh POST renders witho
  assert.deepEqual(r.calls,['auth','/api/v8/session']);assert(r.el('jobGrid').innerHTML.includes('job-card'));
  assert(!r.events.some(e=>e.name==='v8_preview_results_rendered'));r.paint();
  for(const name of ['v8_overlay_submitted','v8_initial_search_succeeded','v8_preview_results_received','v8_preview_results_rendered','v8_search_elapsed_time'])assert(r.events.some(e=>e.name===name),name);
- for(const e of r.events.filter(e=>e.params.search_id))assert.deepEqual(Object.keys(e.params).filter(k=>!['onboarding_version','search_id','elapsed_ms','job_count'].includes(k)),[]);
+ for(const e of r.events.filter(e=>e.params.request_id))assert.deepEqual(Object.keys(e.params).filter(k=>!['onboarding_version','request_id','elapsed_bucket_ms','job_count'].includes(k)),[]);
 });
 test('failure category never includes raw errors; invalid selection never records an attempt',async()=>{
  const r=run({failure:true});await r.submit();assert(!r.events.some(e=>e.name==='v8_show_my_jobs_requested'));

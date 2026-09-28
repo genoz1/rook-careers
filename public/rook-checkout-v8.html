@@ -429,6 +429,7 @@
   if (typeof gtag !== 'undefined') {
     gtag('event', 'checkout_started', { event_category: 'conversion' });
   }
+  if (typeof rookTrackFunnelEvent === 'function') rookTrackFunnelEvent('v8_checkout_page_loaded');
 
   // ── Init Stripe Elements ───────────────────────────────────────────────
   const publishableKey = window.ROOK_CONFIG.STRIPE_PUBLISHABLE_KEY;
@@ -490,6 +491,7 @@
   }
   // ── Submit ─────────────────────────────────────────────────────────────
   btn.addEventListener('click', async () => {
+    if (typeof rookTrackFunnelEvent === 'function') rookTrackFunnelEvent('v8_checkout_submitted');
     showErr('');
     btn.disabled = true;
     btn.innerHTML = '<div class="spinner"></div> Processing…';

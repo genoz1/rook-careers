@@ -45,10 +45,13 @@
       }
       var safe = {onboarding_version: 'v8'};
       // Only fixed, non-identifying event context is accepted.
-      ['event_category', 'event_label', 'method', 'source', 'stage'].forEach(function (field) {
+      ['event_category', 'event_label', 'method', 'source', 'stage', 'error_category'].forEach(function (field) {
         var value = params && params[field];
         if (typeof value === 'string' && /^[a-z0-9_ -]{1,40}$/i.test(value)) safe[field] = value;
       });
+      if (params && /^[a-f0-9-]{36}$/i.test(params.request_id || '')) safe.request_id = params.request_id;
+      if (params && Number.isInteger(params.http_status) && params.http_status >= 400 && params.http_status <= 599) safe.http_status = params.http_status;
+      if (params && Number.isInteger(params.elapsed_bucket_ms) && params.elapsed_bucket_ms >= 0) safe.elapsed_bucket_ms = Math.min(params.elapsed_bucket_ms, 120000);
       // Preserve first-touch campaign context without replacing native GA attribution.
       var attribution = typeof rookGetStoredAttribution === 'function' ? rookGetStoredAttribution() : {};
       ['source', 'medium', 'campaign', 'content', 'term'].forEach(function (field) {

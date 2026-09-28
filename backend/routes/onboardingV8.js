@@ -14,9 +14,20 @@ if(db)startIndex(db);
 const calls = new Map();
 const table='onboarding_v7_sessions';
 const allowed=['Diagnostics','Medical Device','Pharmaceutical','Veterinary','Biotech/Life Sciences','Healthcare SaaS','Dental','Distribution','Capital Equipment'];
-const wrap=fn=>(req,res)=>Promise.resolve(fn(req,res)).catch(()=>res.status(503).json({error:'Unable to load jobs. Please try again.'}));
+const wrap=fn=>(req,res)=>Promise.resolve(fn(req,res)).catch(error=>{
+  // Keep the error details in server logs; the browser receives a stable,
+  // non-sensitive category and a correlation ID only.
+  const code=String(error?.code||'').replace(/[^A-Za-z0-9_]/g,'').slice(0,40);
+  const message=String(error?.message||'Unexpected error').replace(/\S+@\S+/g,'[email]')
+    .replace(/(password|token|secret|key)\s*[:=]\s*\S+/gi,'$1=[redacted]').slice(0,400);
+  console.error('V8 request failed',{request_id:req.v8RequestId,path:req.path,error_name:error?.name||'Error',code,message});
+  res.status(503).json({error:'Unable to load jobs. Please try again.',request_id:req.v8RequestId});
+});
 router.use((req,res,next)=>{
   res.set('Cache-Control','private, no-store');
+  req.v8RequestId=/^[a-f0-9-]{36}$/i.test(req.get('X-ROOK-Request-ID')||'')
+    ? req.get('X-ROOK-Request-ID') : crypto.randomUUID();
+  res.set('X-ROOK-Request-ID',req.v8RequestId);
   if(!db) return res.status(503).json({error:'Search is temporarily unavailable.'});
   const now=Date.now(), ip=req.ip;
   for(const [key,value] of calls) if(value.until<now) calls.delete(key);

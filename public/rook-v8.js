@@ -2,7 +2,7 @@
   'use strict';
   const $=id=>document.getElementById(id);
   const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const track=(name,extra={})=>{try{if(typeof gtag==='function')gtag('event',name,{onboarding_version:'v8',...extra});}catch(_){}};
+  const track=(name,extra={})=>{try{if(typeof rookTrackFunnelEvent==='function')rookTrackFunnelEvent(name,extra);else if(typeof gtag==='function')gtag('event',name,{onboarding_version:'v8',...extra});}catch(_){}};
   const token=()=>sessionStorage.getItem('rook_v7_token')||'';
   const safeUrl=value=>{try{const u=new URL(value);return u.protocol==='https:'?u.href:null;}catch(_){return null;}};
   let data=null,selectedLocation=null,allJobs=[],busy=false;
@@ -10,7 +10,7 @@
   async function api(path,options={}) {
     const {data:{session}}=await client().auth.getSession();
     const response=await fetch('/api/v8'+path,{...options,headers:{'X-ROOK-V7':token(),...(session?{Authorization:'Bearer '+session.access_token}:{}),...options.headers},cache:'no-store'});
-    const json=await response.json();if(!response.ok)throw Object.assign(Error(json.error||'Please try again.'),{status:response.status});return json;
+    const json=await response.json();if(!response.ok)throw Object.assign(Error(json.error||'Please try again.'),{status:response.status,request_id:response.headers?.get('X-ROOK-Request-ID')||json.request_id});return json;
   }
   // Own the checkout return before attaching any onboarding handlers. The
   // temporary preview token may have expired; the authenticated profile is
@@ -68,7 +68,8 @@
     api('/prepare',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:l}),signal:AbortSignal.timeout(10000)})
       .then(result=>{if(preparation===work)work.token=result.preparation;}).catch(()=>{});
   }
-  const widget=RookLocationWidget.init({inputEl:$('locationInput'),listEl:$('locationList'),statusEl:$('locationStatus'),onSelect:l=>{selectedLocation=l;prepareLocation(l);},onClear:()=>{selectedLocation=null;preparation=null;}});
+  const widget=RookLocationWidget.init({inputEl:$('locationInput'),listEl:$('locationList'),statusEl:$('locationStatus'),onSelect:l=>{selectedLocation=l;track('v8_location_completed');prepareLocation(l);},onClear:()=>{selectedLocation=null;preparation=null;}});
+  $('industryInput').addEventListener('change',()=>{if($('industryInput').value)track('v8_industry_selected');});
   $('changeLocation').onclick=()=>{$('overlay').hidden=false;$('locationInput').focus();track('v8_overlay_displayed',{source:'change_location'});};
   function age(job){const raw=job.date_posted||job.first_seen_at;if(!raw)return '';const days=Math.max(0,Math.floor((Date.now()-new Date(raw).getTime())/86400000));return Number.isFinite(days)?days===0?'Posted today':days===1?'Posted 1 day ago':`Posted ${days} days ago`:'';}
   function score(job){return job.match?.overall_score??job.match?.preference_fit??0;}
@@ -118,32 +119,32 @@
     e.preventDefault();if(busy)return;
     if(!selectedLocation){$('formError').textContent='Choose a city, state or ZIP from the suggestions.';return;}
     const searchId=crypto.randomUUID(),searchStarted=performance.now();
-    track('v8_show_my_jobs_requested',{search_id:searchId});
+    track('v8_show_my_jobs_requested',{request_id:searchId});
     let initialSucceeded=false;
     busy=true;const button=$('searchForm').querySelector('.submit');button.disabled=true;button.textContent='Finding your best opportunities…';$('formError').textContent='';
     const progress=$('searchProgress'),progressText=$('searchProgressText');progress.hidden=false;progressText.textContent='Matching your location…';
     const started=Date.now();const timer=setInterval(()=>{const elapsed=Date.now()-started;progressText.textContent=elapsed>12000?'Ranking opportunities…':elapsed>3500?'Prioritizing your industry…':'Matching your location…';},500);
     try{
-      const attribution=Object.fromEntries(new URLSearchParams(location.search).entries());
-      const result=await api('/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:selectedLocation,industry:$('industryInput').value,attribution,preparation:preparation?.location===selectedLocation&&Date.now()-preparation.started<80000?preparation.token:null})});
+      const attribution=typeof rookGetStoredAttribution==='function'?rookGetStoredAttribution():{};
+      const result=await api('/session',{method:'POST',headers:{'Content-Type':'application/json','X-ROOK-Request-ID':searchId},body:JSON.stringify({location:selectedLocation,industry:$('industryInput').value,attribution,preparation:preparation?.location===selectedLocation&&Date.now()-preparation.started<80000?preparation.token:null})});
       initialSucceeded=true;
-      track('v8_initial_search_succeeded',{search_id:searchId,elapsed_ms:Math.round(performance.now()-searchStarted)});
+      track('v8_initial_search_succeeded',{request_id:searchId,elapsed_bucket_ms:Math.round((performance.now()-searchStarted)/500)*500});
       sessionStorage.setItem('rook_v7_token',result.token);sessionStorage.setItem('rook_v8_active',result.token);
       track('v8_overlay_submitted');
       // Fallback supports a new browser asset reaching an older server during rollout.
       const preview=result.preview || await api('/session?initial=1');
       if(!Array.isArray(preview.jobs) || !preview.profile || preview.count!==preview.jobs.length)throw Error('Invalid preview response');
-      track('v8_preview_results_received',{search_id:searchId,elapsed_ms:Math.round(performance.now()-searchStarted),job_count:preview.count});
+      track('v8_preview_results_received',{request_id:searchId});
       displayPreview(preview);
       // Two frames allow the newly built cards to reach a browser paint.
       requestAnimationFrame(()=>requestAnimationFrame(()=>{
         const elapsed_ms=Math.round(performance.now()-searchStarted);
         $('jobGrid').dataset.searchElapsedMs=String(elapsed_ms);
         performance.measure?.('rook-v8-click-to-render',{start:searchStarted,end:performance.now()});
-        track('v8_preview_results_rendered',{search_id:searchId,elapsed_ms,job_count:preview.count});
-        track('v8_search_elapsed_time',{search_id:searchId,elapsed_ms});
+        track('v8_preview_results_rendered',{request_id:searchId,elapsed_bucket_ms:Math.round(elapsed_ms/500)*500});
+        track('v8_search_elapsed_time',{elapsed_bucket_ms:Math.round(elapsed_ms/500)*500});
       }));
-    }catch(err){track(initialSucceeded?'v8_preview_results_failed':'v8_initial_search_failed',{search_id:searchId,error_category:err.status===429?'rate_limited':err.status>=500?'server':err.status>=400?'request':'network_or_client',elapsed_ms:Math.round(performance.now()-searchStarted)});$('formError').textContent=err.message;}finally{clearInterval(timer);progress.hidden=true;busy=false;button.disabled=false;button.textContent='Show My Jobs →';}
+    }catch(err){track(initialSucceeded?'v8_preview_results_failed':'v8_initial_search_failed',{request_id:err.request_id||searchId,error_category:err.status===429?'rate_limited':err.status>=500?'server':err.status>=400?'request':err.name==='TimeoutError'?'timeout':'network_or_client',http_status:err.status,elapsed_bucket_ms:Math.round((performance.now()-searchStarted)/500)*500});$('formError').textContent=err.message;}finally{clearInterval(timer);progress.hidden=true;busy=false;button.disabled=false;button.textContent='Show My Jobs →';}
   };
   async function init(){
     track('v8_dashboard_impression');
@@ -153,7 +154,7 @@
       }catch(e){sessionStorage.removeItem('rook_v8_active');}
     }
     $('jobGrid').innerHTML=Array.from({length:9},(_,i)=>`<article class="job-card masked" aria-hidden="true"><div class="card-top"><span class="badge ${i%2?'good':''}">${i%2?'GOOD':'STRONG'} MATCH</span></div><div class="employer-line"><div class="company">${i%2?'Caralume':'Beredicalis'}</div></div><h2>Territory Sales Opportunity</h2><div class="card-meta"><span>▣ &nbsp;Field Sales</span><span>⌖ &nbsp;Opportunity near you</span><span>▥ &nbsp;<span class="category">Sales</span></span></div></article>`).join('');
-    $('overlay').hidden=false;track('v8_overlay_displayed');
+    $('overlay').hidden=false;track('v8_overlay_displayed');track('v8_location_step_viewed');track('v8_industry_step_viewed');
   }
   init();
 })();
