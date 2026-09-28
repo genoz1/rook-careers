@@ -8,7 +8,7 @@ const { fetchPreviewReports } = require('./previewReporting');
     reddit: { fetchCampaignPerformance: () => new Promise(() => {}) },
   };
   const results = await fetchPreviewReports(['meta', 'google', 'reddit'], clients, 10);
-  assert.deepEqual(results[0], { platform:'meta', campaigns:[{ period:'7d', clicks:3 }] });
+  assert.deepEqual(results[0], { platform:'meta', campaigns:[{ period:'yesterday', clicks:3 }] });
   assert.match(results[1].error, /Google unavailable/);
   assert.match(results[2].error, /exceeded/);
   assert.equal(results.length, 3);

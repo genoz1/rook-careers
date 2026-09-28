@@ -34,12 +34,12 @@ function allocateBudget({ budgetCents, campaigns, controls }) {
   const minimum = eligible.reduce((n,c) => n+c.min,0);
   if (minimum > available) return {ok:false,error:'Approved campaign minimums plus unapproved budgets exceed the requested daily amount.'};
   if (!eligible.length) return {ok:true,budget_cents:budgetCents,reserved_cents:reserved,allocated_cents:reserved,unallocated_cents:available,campaigns:fixed};
-  const proven = eligible.filter(c => c.clicks >= 20 && c.spend_cents >= 500 && c.spend_cents > 0);
+  const proven = eligible.filter(c => c.clicks > 0 && c.spend_cents > 0);
   const average = proven.length ? proven.reduce((n,c)=>n+c.clicks/c.spend_cents,0)/proven.length : 1;
   for (const c of eligible) {
     c.proposed_budget_cents = c.min;
     c.score = proven.includes(c) ? c.clicks/c.spend_cents : average*0.25;
-    c.reason = proven.includes(c) ? '7-day clicks per dollar' : 'Limited data; exploration share';
+    c.reason = proven.includes(c) ? 'Yesterday’s clicks per dollar' : 'No usable clicks and spend yesterday; exploration share';
   }
   let left = Math.min(available - minimum, eligible.reduce((n,c)=>n+c.max-c.min,0));
   while (left > 0) {

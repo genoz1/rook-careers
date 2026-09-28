@@ -302,7 +302,7 @@ router.get("/admin/admanager/portfolio/preview", async (req, res) => {
   if (errors.length) return { status:502, body:{ error:"Platform reporting failed; no allocation proposed.", platforms:errors.map(r=>({platform:r.platform,error:r.error})) } };
   const campaigns=results.flatMap(r=>r.campaigns.map(c=>({...c,platform:r.platform})));
   const preview=require("../admanager/portfolio").allocateBudget({ budgetCents:setting.daily_budget_cents, campaigns, controls:controls || [] });
-  return { status:200, body:{ configured:true, preview, period:"7d", generated_at:new Date().toISOString(), execution_enabled:false } };
+  return { status:200, body:{ configured:true, preview, period:"yesterday", generated_at:new Date().toISOString(), execution_enabled:false } };
   });
   return job.state === 'pending' ? res.status(202).json({ pending:true, job:job.id }) : res.status(job.result.status).json(job.result.body);
 });
