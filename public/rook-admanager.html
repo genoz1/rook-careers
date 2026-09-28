@@ -113,6 +113,10 @@ input:checked + .slider:before{transform:translateX(16px)}
 .banner-warn{background:#fef3cd;color:#92600a}
 
 
+.budget-entry{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;font-weight:700;font-size:12px}
+.budget-entry>div{display:flex;align-items:center;gap:6px}.budget-entry input{width:110px;padding:8px;border:1px solid var(--line);border-radius:8px;font:inherit}
+.allocation-row{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);font-size:12px}
+.allocation-row span{min-width:0;overflow-wrap:anywhere}.allocation-row strong{white-space:nowrap}.allocation-summary{font-weight:700;margin:8px 0;font-size:12px}
 .overview-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap}
 .overview-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .period-select{font:inherit;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--navy)}
@@ -173,6 +177,14 @@ input:checked + .slider:before{transform:translateX(16px)}
   </div>
 
   <div class="section">
+    <div class="section-hd"><span class="section-title">Daily Budget · Click Allocation Preview</span></div>
+    <div class="section-body">
+      <div class="budget-entry"><label for="portfolioAmount">Combined daily amount across Meta, Google and Reddit</label><div><span>$</span><input id="portfolioAmount" type="number" min="1" max="10000" step="0.01" inputmode="decimal" placeholder="Enter amount"><button class="btn btn-primary btn-sm" onclick="savePortfolio()">Save &amp; preview</button></div></div>
+      <div class="ts" style="margin:8px 0 12px">Based on the previous 7 calendar days, including today. Preview only; saving never changes an ad platform budget.</div>
+      <div id="portfolioMessage" role="status"></div><div id="portfolioPreview"></div>
+    </div>
+  </div>
+  <div class="section">
     <div class="section-hd"><span class="section-title">Campaigns — Live Data</span></div>
     <div class="campaign-table-wrap"><table class="campaign-table">
       <thead><tr><th>Platform</th><th>Campaign</th><th>Status</th><th>Daily Budget</th><th>Spend</th><th>Impressions</th><th>Clicks</th><th>Conversions</th><th>CTR</th><th>CPC</th><th>Cost/Conversion</th></tr></thead>
@@ -194,6 +206,7 @@ input:checked + .slider:before{transform:translateX(16px)}
 
   <div class="banner banner-info">⚡ Execution is disabled. These are proposed actions only — nothing will change until you enable write mode and approve automation per campaign.</div>
 
+  <div class="section"><div class="section-hd"><span class="section-title">Combined Budget Preview</span></div><div class="section-body" id="dryrunPortfolio">Set your daily amount on Overview to see a proposed split.</div></div>
   <div class="section">
     <div class="section-hd"><span class="section-title">Policy Engine Config</span></div>
     <div class="section-body">
@@ -208,7 +221,7 @@ input:checked + .slider:before{transform:translateX(16px)}
       <strong style="color:var(--ink)">Scale up (+20%):</strong> When CPA &lt; $14 (70% of target) — campaign is profitable, give it more budget.<br>
       <strong style="color:var(--ink)">Scale down (−15%):</strong> When CTR &lt; 0.1% with 5,000+ impressions — creative fatigue, reduce waste.<br>
       <strong style="color:var(--ink)">Recommend pause:</strong> When CPA &gt; $60 (3× target) — spending too much per conversion, flag for review.<br>
-      <strong style="color:var(--ink)">Combined cap:</strong> Total daily budget across all campaigns is $25/day. App can shift up to 20% ($5) between campaigns to follow performance. Hard ceiling is $30/day — never exceeded.<br>
+      <strong style="color:var(--ink)">Combined amount:</strong> The Overview entry shows a preview of a click-based split. The legacy CPA/CTR policy below is separate and does not apply this split.<br>
       <strong style="color:var(--ink)">Minimum data:</strong> 20 clicks AND $5 spend required before any budget action fires.<br>
       <strong style="color:var(--ink)">Schedule:</strong> Runs daily at 8 AM ET via DigitalOcean scheduled job (not yet enabled — see below).
     </div>
@@ -332,6 +345,13 @@ async function api(path) {
   if (r.status === 401) { sessionStorage.removeItem(TOKEN_KEY); token=''; showLogin(); throw new Error('unauthorized'); }
   return r.json();
 }
+async function apiPut(path, body) {
+  const r = await fetch('/api/admin/admanager/' + path + '?token=' + encodeURIComponent(token), {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if (r.status === 401) { sessionStorage.removeItem(TOKEN_KEY); token=''; showLogin(); throw new Error('unauthorized'); }
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error || 'Save failed');
+  return data;
+}
 async function apiPost(path, body) {
   const r = await fetch('/api/admin/admanager/' + path + '?token=' + encodeURIComponent(token), { method:'POST', headers:{'Content-Type':'application/json'}, body: body ? JSON.stringify(body) : undefined });
   if (r.status === 401) { sessionStorage.removeItem(TOKEN_KEY); token=''; showLogin(); throw new Error('unauthorized'); }
@@ -366,6 +386,7 @@ async function loadAll() {
     if (request !== overviewRequest) return;
     dashData = data;
     renderOverview(data);
+    await loadPortfolio();
     if (dryrunData) {} // don't auto-reload dryrun
     if (controlsData) loadControls();
   } catch(e) { if (e.message !== 'unauthorized') console.error(e); }
@@ -424,6 +445,40 @@ function renderOverview(data) {
   const alertSection = document.getElementById('alertsSection');
   alertSection.style.display = alerts.length ? '' : 'none';
   document.getElementById('alertsBanner').innerHTML = alerts.map(a=>`<div class="alert-box alert-${a.type}"><div class="alert-body"><div class="alert-msg">⚠️ ${escapeHtml(a.msg)}</div></div></div>`).join('');
+}
+
+// ── Combined budget preview (read only) ───────────────────────────────────
+function portfolioMarkup(data) {
+  if (!data?.configured) return '<div class="ts">Enter a daily amount to see a proposed split.</div>';
+  const p=data.preview;
+  if (!p?.ok) return `<div class="banner banner-warn">${escapeHtml(p?.error || 'Allocation unavailable')}</div>`;
+  const rows=p.campaigns.map(c=>`<div class="allocation-row"><span><strong>${escapeHtml(c.platform.toUpperCase())} · ${escapeHtml(c.campaign_name || c.campaign_id)}</strong><br>${escapeHtml(c.reason)} · 7-day clicks ${fmtN(c.clicks)} · spend ${fmtD(c.spend_cents)}</span><strong>${fmtD(c.current_budget_cents)} → ${fmtD(c.proposed_budget_cents)}</strong></div>`).join('');
+  return `<div class="allocation-summary">Entered amount ${fmtD(p.budget_cents)} · Proposed ${fmtD(p.allocated_cents)}${p.unallocated_cents ? ` · Unallocated ${fmtD(p.unallocated_cents)}` : ''}</div>${rows || '<div class="ts">No active campaigns available.</div>'}<div class="ts" style="margin-top:9px">Unapproved campaigns retain their current budgets. No platform budgets were changed.</div>`;
+}
+async function loadPortfolio() {
+  try {
+    const saved=await api('portfolio');
+    if (saved.error) throw new Error(saved.error);
+    document.getElementById('portfolioAmount').value=saved.budget ? (saved.budget.daily_budget_cents/100).toFixed(2) : '';
+    if (!saved.budget) { document.getElementById('portfolioPreview').innerHTML=portfolioMarkup({configured:false}); return; }
+    const preview=await api('portfolio/preview');
+    if (preview.error) throw new Error(preview.error + (preview.platforms?.length ? ' ' + preview.platforms.map(p=>p.platform+': '+p.error).join('; ') : ''));
+    document.getElementById('portfolioPreview').innerHTML=portfolioMarkup(preview);
+    document.getElementById('dryrunPortfolio').innerHTML=portfolioMarkup(preview);
+  } catch(e) {
+    if (e.message !== 'unauthorized') document.getElementById('portfolioPreview').innerHTML=`<div class="banner banner-warn">Preview unavailable: ${escapeHtml(e.message)}</div>`;
+  }
+}
+async function savePortfolio() {
+  const input=document.getElementById('portfolioAmount');
+  const value=input.value.trim();
+  const message=document.getElementById('portfolioMessage');
+  if (!/^(?:[1-9]\d{0,4})(?:\.\d{1,2})?$/.test(value) || Number(value)>10000) { message.textContent='Enter $1 to $10,000, with at most two decimal places.'; return; }
+  try {
+    await apiPut('portfolio',{daily_budget_cents:Math.round(Number(value)*100)});
+    message.textContent='Saved. This is a preview; ad platform budgets were not changed.';
+    await loadPortfolio();
+  } catch(e) { message.textContent='Could not save: '+e.message; }
 }
 
 // ── Dry Run ───────────────────────────────────────────────────────────────
@@ -493,7 +548,7 @@ function renderConfig(cfg) {
     <div class="config-item"><div class="config-key">CPA Target</div><div class="config-val">${fmtD(cfg.cpa_target_cents)}</div></div>
     <div class="config-item"><div class="config-key">Pause if CPA ></div><div class="config-val">${fmtD(cfg.cpa_target_cents * cfg.cpa_pause_threshold)}</div></div>
     <div class="config-item"><div class="config-key">Scale Up if CPA <</div><div class="config-val">${fmtD(cfg.cpa_target_cents * cfg.cpa_scale_threshold)}</div></div>
-    <div class="config-item"><div class="config-key">Combined Daily Cap</div><div class="config-val">${fmtD(cfg.total_daily_budget_cap_cents)}</div></div>
+    <div class="config-item"><div class="config-key">Legacy Policy Threshold</div><div class="config-val">${fmtD(cfg.total_daily_budget_cap_cents)}</div></div>
     <div class="config-item"><div class="config-key">Budget Step Up</div><div class="config-val">+${(cfg.budget_scale_up_pct*100).toFixed(0)}%</div></div>
     <div class="config-item"><div class="config-key">Budget Step Down</div><div class="config-val">−${(cfg.budget_scale_down_pct*100).toFixed(0)}%</div></div>`;
 }
@@ -509,7 +564,7 @@ function renderConfigFull(cfg) {
     ['AD_BUDGET_SCALE_DOWN_PCT', (cfg.budget_scale_down_pct*100).toFixed(0)+'%', 'How much to reduce budget when CTR is very low.'],
     ['AD_MIN_CLICKS', cfg.min_clicks_for_budget_decision, 'Minimum clicks required before any budget action fires.'],
     ['AD_MIN_SPEND_CENTS', fmtD(cfg.min_spend_cents_for_decision), 'Minimum spend required before any budget action fires.'],
-    ['AD_COMBINED_DAILY_BUDGET_CENTS', fmtD(cfg.total_daily_budget_cap_cents), 'Total daily budget across ALL campaigns combined ($25/day). App can shift up to 20% ($5) between campaigns. Hard ceiling is $30/day.'],
+    ['AD_COMBINED_DAILY_BUDGET_CENTS', fmtD(cfg.total_daily_budget_cap_cents), 'Legacy CPA/CTR policy alert threshold. The click allocation preview uses the amount saved on Overview.'],
     ['AD_MANAGER_MODE', 'dry-run / write / off', 'Operating mode. Keep dry-run until ready to activate write mode.'],
   ];
   document.getElementById('configTable').innerHTML = vars.map(([k,v,d])=>`<tr><td><code style="font-size:11px;background:#f1f5f9;padding:2px 6px;border-radius:4px">${k}</code></td><td style="font-weight:600">${v}</td><td style="color:var(--muted)">${d}</td></tr>`).join('');

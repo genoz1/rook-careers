@@ -261,6 +261,45 @@ router.patch("/admin/admanager/controls/:id", async (req, res) => {
   return res.json({ control: data });
 });
 
+// Portfolio daily amount and read-only allocation preview.
+router.get("/admin/admanager/portfolio", async (req, res) => {
+  if (!process.env.AD_MANAGER_TEST_TOKEN || req.query.token !== process.env.AD_MANAGER_TEST_TOKEN) return res.status(401).json({ error:"unauthorized" });
+  const { data, error } = await supabaseAdmin.from("ad_manager_portfolio_budget").select("daily_budget_cents,updated_at").eq("id",true).maybeSingle();
+  if (error) return res.status(500).json({ error:error.message });
+  res.json({ budget:data || null });
+});
+router.put("/admin/admanager/portfolio", async (req, res) => {
+  if (!process.env.AD_MANAGER_TEST_TOKEN || req.query.token !== process.env.AD_MANAGER_TEST_TOKEN) return res.status(401).json({ error:"unauthorized" });
+  const amount = req.body?.daily_budget_cents;
+  if (!Number.isInteger(amount) || amount < 100 || amount > 1000000) return res.status(400).json({ error:"Enter a daily budget from $1 to $10,000." });
+  const { data, error } = await supabaseAdmin.from("ad_manager_portfolio_budget")
+    .upsert({ id:true,daily_budget_cents:amount,updated_at:new Date().toISOString() }, { onConflict:"id" })
+    .select("daily_budget_cents,updated_at").single();
+  if (error) return res.status(500).json({ error:error.message });
+  res.json({ budget:data });
+});
+router.get("/admin/admanager/portfolio/preview", async (req, res) => {
+  if (!process.env.AD_MANAGER_TEST_TOKEN || req.query.token !== process.env.AD_MANAGER_TEST_TOKEN) return res.status(401).json({ error:"unauthorized" });
+  const [{data:setting,error:settingError},{data:controls,error:controlsError}] = await Promise.all([
+    supabaseAdmin.from("ad_manager_portfolio_budget").select("daily_budget_cents").eq("id",true).maybeSingle(),
+    supabaseAdmin.from("ad_campaign_controls").select("*")
+  ]);
+  if (settingError || controlsError) return res.status(500).json({ error:settingError?.message || controlsError?.message });
+  if (!setting) return res.json({ configured:false, message:"Enter a daily budget to preview its allocation." });
+  const enabled = (process.env.AD_ENABLED_PLATFORMS || "").split(",").map(p=>p.trim()).filter(Boolean);
+  const configured = enabled.filter(p=>p === "meta" ? process.env.META_ADS_ACCESS_TOKEN : p === "google" ? process.env.GOOGLE_ADS_CUSTOMER_ID : p === "reddit" ? process.env.REDDIT_ADS_ACCOUNT_ID : false);
+  const clients = { meta:require("../admanager/clients/meta"), google:require("../admanager/clients/google"), reddit:require("../admanager/clients/reddit") };
+  const results = await Promise.all(configured.map(async platform => {
+    try { return { platform, campaigns:await clients[platform].fetchCampaignPerformance("7d") }; }
+    catch(e) { return { platform, error:e.message }; }
+  }));
+  const errors=results.filter(r=>r.error);
+  if (errors.length) return res.status(502).json({ error:"Platform reporting failed; no allocation proposed.", platforms:errors.map(r=>({platform:r.platform,error:r.error})) });
+  const campaigns=results.flatMap(r=>r.campaigns.map(c=>({...c,platform:r.platform})));
+  const preview=require("../admanager/portfolio").allocateBudget({ budgetCents:setting.daily_budget_cents, campaigns, controls:controls || [] });
+  res.json({ configured:true, preview, period:"7d", generated_at:new Date().toISOString(), execution_enabled:false });
+});
+
 // GET /api/admin/admanager/dryrun?token=...
 // Runs the full policy engine against today's live data and returns proposed actions.
 router.get("/admin/admanager/dryrun", async (req, res) => {
