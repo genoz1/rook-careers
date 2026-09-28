@@ -130,7 +130,7 @@ router.post('/claim',wrap(async(req,res)=>{
     const profile={...s.profile};delete profile.onboarding_version;
     if(existing?.utm_source)for(const key of ['utm_source','utm_medium','utm_campaign','utm_term','utm_content'])delete profile[key];
     const name=[u.user_metadata?.first_name,u.user_metadata?.last_name].filter(Boolean).join(' ');
-    const {error}=await db.from('candidate_profiles').upsert({...profile,user_id:u.id,...(name?{name}:{})},{onConflict:'user_id'});
+    const {error}=await db.from('candidate_profiles').upsert({...profile,user_id:u.id,email:u.email,...(name?{name}:{})},{onConflict:'user_id'});
     if(error)throw error;
     const saved=await db.from(table).update({transferred_at:new Date().toISOString()}).eq('token_hash',s.token_hash).eq('user_id',u.id);
     if(saved.error)throw saved.error;

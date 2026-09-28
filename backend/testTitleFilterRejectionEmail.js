@@ -30,13 +30,17 @@ test('sends one daily email containing recent rejection details', async () => {
   assert.equal(emails[0].idempotencyKey, 'title-filter-rejections-2026-09-26');
 });
 
-test('does not send outside 8 AM, twice in one day, or with no rows', async () => {
-  let sends = 0;
-  const sendEmail = async () => { sends++; };
+test('catches up after 8 AM, sends a zero-count report, and does not repeat that day', async () => {
+  const emails = [];
+  const sendEmail = async email => { emails.push(email); };
   assert.equal((await sendDailyTitleFilterRejections(dbWith([{}]), { now: new Date('2026-09-26T11:59:00Z'), sendEmail })).sent, false);
   assert.equal((await sendDailyTitleFilterRejections(dbWith([{}]), { now: new Date('2026-09-26T12:05:00Z'), lastSentDate: '2026-09-26', sendEmail })).sent, false);
-  const empty = await sendDailyTitleFilterRejections(dbWith([]), { now: new Date('2026-09-26T12:05:00Z'), sendEmail });
-  assert.equal(empty.sent, false);
+  const empty = await sendDailyTitleFilterRejections(dbWith([]), { now: new Date('2026-09-26T14:05:00Z'), sendEmail });
+  assert.equal(empty.sent, true);
   assert.equal(empty.date, '2026-09-26');
-  assert.equal(sends, 0);
+  assert.equal(empty.count, 0);
+  assert.match(emails[0].html, /No title-filter rejections/);
+  assert.equal(emails[0].idempotencyKey, 'title-filter-rejections-2026-09-26');
+  assert.equal((await sendDailyTitleFilterRejections(dbWith([{}]), { now: new Date('2026-09-26T15:05:00Z'), lastSentDate: empty.date, sendEmail })).sent, false);
+  assert.equal(emails.length, 1);
 });

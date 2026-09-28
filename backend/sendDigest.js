@@ -9,32 +9,30 @@
 require("dotenv").config();
 const { createClient } = require("@supabase/supabase-js");
 const { sendDigestForCandidate } = require("./email/dailyDigest");
-
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+const { resolveDigestEmail } = require("./email/resolveDigestEmail");
 
 const APP_BASE_URL = process.env.PUBLIC_APP_URL || "https://seashell-app-hbjuo.ondigitalocean.app";
 
 async function run() {
+  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
   const { data: profiles, error } = await supabase
     .from("candidate_profiles")
-    .select("*")
-    .not("email", "is", null);
+    .select("*");
 
   if (error) {
     console.error("Could not load candidate profiles:", error.message);
     process.exit(1);
   }
 
-  console.log(`Found ${profiles.length} candidate(s) with an email on file.\n`);
+  console.log(`Found ${profiles.length} candidate profile(s).\n`);
 
   let sentCount = 0;
   let skippedCount = 0;
+  let failedCount = 0;
 
-  for (const profile of profiles) {
+  for (const originalProfile of profiles) {
     try {
+      const profile = await resolveDigestEmail(supabase, originalProfile);
       const result = await sendDigestForCandidate(supabase, profile, APP_BASE_URL);
       if (result.sent) {
         sentCount++;
@@ -48,13 +46,15 @@ async function run() {
         console.log(`  Skipped ${profile.email} — ${result.reason}`);
       }
     } catch (err) {
-      console.error(`  FAILED for ${profile.email}: ${err.message}`);
+      failedCount++;
+      console.error(`  FAILED for profile ${originalProfile.id}: ${err.message}`);
     }
   }
 
   await require("./email/pretrialDigest").sendPretrialDigests(supabase, APP_BASE_URL);
 
-  console.log(`\nDigest run complete. Sent ${sentCount}, skipped ${skippedCount}, out of ${profiles.length} candidate(s).`);
+  console.log(`\nDigest run complete. Sent ${sentCount}, skipped ${skippedCount}, failed ${failedCount}, out of ${profiles.length} candidate(s).`);
+  if (failedCount) process.exitCode = 1;
 }
 
-run();
+run().catch(error => { console.error('Digest run failed:', error); process.exitCode = 1; });
