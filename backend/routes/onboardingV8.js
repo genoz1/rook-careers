@@ -2,7 +2,17 @@
 const express = require('express');
 const crypto = require('crypto');
 const {createClient} = require('@supabase/supabase-js');
-const {rank} = require('../v7Matching');
+const {rank,readCandidates} = require('../v8Matching');
+const {rankPool} = require('../v7Matching');
+// Reuse V7's bounded, expiring, single-use preparation store. V8 binds the
+// pool to geography, not industry: industry remains a scoring preference.
+const preparation=require('../v7Preparation').createPreparation({readCandidates:async(db,[key])=>{
+  const timing={};
+  const jobs=await readCandidates(db,JSON.parse(key),timing);
+  return {jobs,timing};
+}});
+const preparationKey=profile=>JSON.stringify({home_lat:profile.home_lat,home_lng:profile.home_lng,home_state:profile.home_state,territory_size_preferences:[]});
+const {performance} = require('node:perf_hooks');
 const {project} = require('../pretrialProjection');
 const {classify,normalizeSelection} = require('../../public/rook-job-classification');
 const {hasFullAccess} = require('../matching');
@@ -37,12 +47,11 @@ function validate(body) {
 }
 function prioritize(jobs,industry) {
   const pref=normalizeSelection([industry])[0];
-  return [...jobs].sort((a,b)=>{
-    const fit=j=>classify(j).labels.includes(pref)?1:0;
-    // Preference breaks close scores without displacing much stronger matches.
-    const score=j=>(Number(j.match?.overall_score)||0)+fit(j)*12;
-    return score(b)-score(a) || (b.match?.overall_score||0)-(a.match?.overall_score||0) || String(a.id).localeCompare(String(b.id));
-  });
+  // Classification is deterministic for a job. Compute it once rather than
+  // re-reading all evidence on every sort comparison.
+  const scores=new Map(jobs.map(j=>[j,(Number(j.match?.overall_score)||0)+(classify(j).labels.includes(pref)?12:0)]));
+  return [...jobs].sort((a,b)=>scores.get(b)-scores.get(a) ||
+    (b.match?.overall_score||0)-(a.match?.overall_score||0) || String(a.id).localeCompare(String(b.id)));
 }
 function reveal(job) {
   return {id:job.id,subscription_required:false,preview_revealed:true,
@@ -52,6 +61,11 @@ function reveal(job) {
     employment_type:job.employment_type,date_posted:job.date_posted,first_seen_at:job.first_seen_at,
     industry_classification:classify(job),match:job.match,
     application_url:job.application_url,source_url:job.source_url};
+}
+function previewResponse(profile,jobs,unlocked) {
+  return {profile:{home_location_label:profile.home_location_label,desired_industries:profile.desired_industries,
+    subscription_status:profile.subscription_status},unlocked,count:jobs.length,
+    jobs:jobs.map((j,i)=>unlocked?reveal(j):i<2?reveal(j):project(j,i,{dashboard:true}))};
 }
 async function session(req) {
   const token=req.get('X-ROOK-V7')||'';
@@ -67,15 +81,43 @@ async function user(req) {
   const {data,error}=await db.auth.getUser(token);
   return !error && data?.user?.email_confirmed_at?data.user:null;
 }
+router.post('/prepare',wrap(async(req,res)=>{
+  let profile;
+  // Preparation depends only on location and can begin before industry is chosen.
+  try {profile=validate({...req.body,industry:allowed[0]});} catch(e){return res.status(400).json({error:e.message});}
+  res.json({preparation:preparation.start(db,preparationKey(profile))});
+}));
 router.post('/session',wrap(async(req,res)=>{
   let profile;
   try {profile=validate(req.body);} catch(e){return res.status(400).json({error:e.message});}
-  const jobs=prioritize(await rank(db,profile,[]),profile.desired_industries[0]);
+  const started=performance.now(),timing={};
+  const pool=await preparation.take(req.body?.preparation,preparationKey(profile));
+  timing.prepared=pool?1:0;timing.matching_passes=1;
+  const matchingStarted=performance.now();
+  const ranked=pool?rankPool(pool.jobs,profile,[]):await rank(db,profile,[],timing);
+  if(pool){
+    timing.scoring_ms=performance.now()-matchingStarted;
+    for(const [key,value] of Object.entries(pool.timing))timing['preparation_'+key]=value;
+  }
+  timing.preparation_wait_ms=matchingStarted-started;
+  const priorityStarted=performance.now();
+  const jobs=prioritize(ranked,profile.desired_industries[0]);
+  timing.industry_ms=performance.now()-priorityStarted;
   const token=crypto.randomBytes(32).toString('hex');
+  const persistenceStarted=performance.now();
   const {error}=await db.from(table).insert({token_hash:crypto.createHash('sha256').update(token).digest('hex'),profile,
     jobs,expires_at:new Date(Date.now()+24*60*60*1000).toISOString()});
   if(error) throw error;
-  res.json({token});
+  timing.persistence_ms=performance.now()-persistenceStarted;
+  const projectionStarted=performance.now();
+  // Freshly ranked against this request's validated location. Keep persisted
+  // snapshots private; only the established server-side allowlists cross here.
+  const preview=previewResponse(profile,jobs,false);
+  timing.response_ms=performance.now()-projectionStarted;
+  timing.total_ms=performance.now()-started;
+  res.set('Server-Timing',Object.entries(timing).filter(([k])=>k.endsWith('_ms'))
+    .map(([k,v])=>`${k.slice(0,-3)};dur=${v.toFixed(1)}`).join(', '));
+  res.json({token,preview,timing:Object.fromEntries(Object.entries(timing).map(([k,v])=>[k,Math.round(v)]))});
 }));
 router.get('/session',wrap(async(req,res)=>{
   const s=await session(req);
@@ -89,12 +131,10 @@ router.get('/session',wrap(async(req,res)=>{
     profile={...profile,...data,...s.profile};
   }
   const unlocked=!!(s.user_id && u?.id===s.user_id && hasFullAccess(profile));
-  // Re-rank even the initial paint: saved session snapshots may contain
-  // coordinates scored before a location correction.
+  // Reloads still re-rank current inventory: old snapshots can predate a
+  // location correction. Initial POST now returns its fresh safe projection.
   const jobs=prioritize(await rank(db,profile,[]),profile.desired_industries[0]);
-  res.json({profile:{home_location_label:profile.home_location_label,desired_industries:profile.desired_industries,
-    subscription_status:profile.subscription_status},unlocked,count:jobs.length,
-    jobs:jobs.map((j,i)=>unlocked?reveal(j):i<2?reveal(j):project(j,i,{dashboard:true}))});
+  res.json(previewResponse(profile,jobs,unlocked));
 }));
 router.put('/preference',wrap(async(req,res)=>{
   const s=await session(req);

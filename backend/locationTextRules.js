@@ -64,11 +64,12 @@ function normalizeLocationText(text) {
 // conflicting-location text using a "/" separator (e.g. "United States
 // / Canada") — direct instruction requires that case to be caught, so
 // this uses \b word boundaries instead of specific separator characters.
-function textNamesCountry(text, countryName) {
-  const c = escapeRegex(countryName);
-  const pattern = new RegExp(`\\b${c}\\b`, "i");
-  return pattern.test(text);
-}
+// Compile the identical, non-global patterns once. Rebuilding/escaping every
+// country on every job consumed most of V8's geographic eligibility CPU time.
+const FOREIGN_COUNTRY_PATTERNS=FOREIGN_COUNTRY_NAMES.map(name=>({
+  jersey:name.toLowerCase()==='jersey',
+  pattern:new RegExp(`\\b${escapeRegex(name)}\\b`, 'i')
+}));
 
 /**
  * True if `locationRaw` unambiguously names a foreign country. This is
@@ -95,13 +96,13 @@ function hasUnambiguousForeignCountryEvidence(locationRaw) {
     // different foreign country alongside an unrelated "Georgia").
   }
 
-  for (const name of FOREIGN_COUNTRY_NAMES) {
+  for (const {jersey,pattern} of FOREIGN_COUNTRY_PATTERNS) {
     // Remove only the two unambiguous U.S. phrases for the Jersey check.
     // A separate Jersey or another foreign country must still win.
-    const countryText = name.toLowerCase() === 'jersey'
+    const countryText = jersey
       ? text.replace(/\bnew\s+jersey\b|\bjersey\s+city\b/gi, ' ')
       : text;
-    if (textNamesCountry(countryText, name)) return true;
+    if (pattern.test(countryText)) return true;
   }
   return false;
 }

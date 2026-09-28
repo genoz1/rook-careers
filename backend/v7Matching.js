@@ -100,4 +100,4 @@ function rankPool(jobs, profile, industrySelection = profile.desired_industries)
 
 return scored.map(({job,score,distMi}) => ({...job, match:score, distance_miles:distMi}));
 }
-module.exports = {rank, readCandidates, rankPool, hydrateDescriptionTerritories};
+module.exports = {rank, readCandidates, rankPool, hydrateDescriptionTerritories, JOB_LIST_COLUMNS_NO_DESCRIPTION};

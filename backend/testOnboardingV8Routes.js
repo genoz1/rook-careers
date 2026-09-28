@@ -23,17 +23,34 @@ class Query{
 }
 const db={from:name=>new Query(name),auth:{getUser:async token=>({data:{user:token==='valid'?{id:'user',email:'verified@example.test',email_confirmed_at:'yes'}:null}})}};
 require.cache[require.resolve('@supabase/supabase-js')]={exports:{createClient:()=>db}};
-require.cache[require.resolve('./v7Matching')]={exports:{rank:async()=>jobs}};
+let rankCalls=0;
+require.cache[require.resolve('./v8Matching')]={exports:{rank:async()=>{rankCalls++;return jobs;},readCandidates:async()=>jobs}};
+const originalMatching=require('./v7Matching');
+require.cache[require.resolve('./v7Matching')].exports={...originalMatching,rankPool:()=>{rankCalls++;return jobs;}};
 const app=express();app.use(express.json());app.use('/api/v8',require('./routes/onboardingV8'));
 (async()=>{const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));const root=`http://127.0.0.1:${server.address().port}/api/v8`;
  try{
   const call=async(path,method='GET',body,token='',auth=false)=>{const r=await fetch(root+path,{method,headers:{'Content-Type':'application/json','X-ROOK-V7':token,...(auth?{Authorization:'Bearer valid'}:{})},...(body?{body:JSON.stringify(body)}:{})});return {status:r.status,data:await r.json()};};
   const entry=await call('/session','POST',{industry:'Diagnostics',location:{lat:28.9,lng:-82,city:'Oxford',state:'Florida',stateAbbr:'FL',zip:'34484',label:'Oxford, FL'}});
   assert.equal(entry.status,200);const token=entry.data.token;
+  assert.equal(rankCalls,1);assert.equal(entry.data.preview.count,3);
+  assert.equal(entry.data.preview.unlocked,false);
+  assert.equal(entry.data.preview.jobs[0].company_name,'Diagnostics Employer');
+  const initialLocked=JSON.stringify(entry.data.preview.jobs[2]);
+  for(const secret of ['Veterinary Employer','Exact Veterinary Title','https://secret.example/c'])assert(!initialLocked.includes(secret));
   let page=await call('/session?initial=1','GET',null,token);assert.equal(page.status,200);assert.equal(page.data.count,3);
   assert.equal(page.data.jobs[0].company_name,'Diagnostics Employer');assert.equal(page.data.jobs[1].company_name,'Device Employer');
   const locked=JSON.stringify(page.data.jobs[2]);for(const secret of ['Veterinary Employer','Exact Veterinary Title','https://secret.example/c'])assert(!locked.includes(secret));
   assert.equal((await call('/session','GET',null,'deadbeef')).status,410);
+  const input={industry:'Diagnostics',location:{lat:28.9,lng:-82,city:'Oxford',stateAbbr:'FL',zip:'34484'}};
+  const prepared=await call('/prepare','POST',{location:input.location});assert.equal(prepared.status,200);
+  assert.deepEqual(Object.keys(prepared.data),['preparation']);
+  const warm=await call('/session','POST',{...input,preparation:prepared.data.preparation});
+  assert.equal(warm.data.timing.prepared,1);
+  const reused=await call('/session','POST',{...input,preparation:prepared.data.preparation});assert.equal(reused.data.timing.prepared,0);
+  const changed=await call('/prepare','POST',{location:input.location});
+  const mismatch=await call('/session','POST',{...input,location:{...input.location,lat:42},preparation:changed.data.preparation});assert.equal(mismatch.data.timing.prepared,0);
+
   assert.equal((await call('/preference','PUT',{industry:'Veterinary'},token)).status,200);
   page=await call('/session','GET',null,token);assert.equal(page.data.count,3);assert.equal(page.data.jobs[0].company_name,'Veterinary Employer');
   assert.equal((await call('/claim','POST',null,token,true)).status,200);assert.equal(tables.candidate_profiles.length,1);

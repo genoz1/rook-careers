@@ -2,7 +2,7 @@
   'use strict';
   const $=id=>document.getElementById(id);
   const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const track=(name,extra={})=>{if(typeof gtag==='function')gtag('event',name,{onboarding_version:'v8',...extra});};
+  const track=(name,extra={})=>{try{if(typeof gtag==='function')gtag('event',name,{onboarding_version:'v8',...extra});}catch(_){}};
   const token=()=>sessionStorage.getItem('rook_v7_token')||'';
   const safeUrl=value=>{try{const u=new URL(value);return u.protocol==='https:'?u.href:null;}catch(_){return null;}};
   let data=null,selectedLocation=null,allJobs=[],busy=false;
@@ -10,7 +10,7 @@
   async function api(path,options={}) {
     const {data:{session}}=await client().auth.getSession();
     const response=await fetch('/api/v8'+path,{...options,headers:{'X-ROOK-V7':token(),...(session?{Authorization:'Bearer '+session.access_token}:{}),...options.headers},cache:'no-store'});
-    const json=await response.json();if(!response.ok)throw Error(json.error||'Please try again.');return json;
+    const json=await response.json();if(!response.ok)throw Object.assign(Error(json.error||'Please try again.'),{status:response.status});return json;
   }
   // Own the checkout return before attaching any onboarding handlers. The
   // temporary preview token may have expired; the authenticated profile is
@@ -62,7 +62,13 @@
   function goSignup(source) {track('v8_masked_unlock_interaction',{source});track('v8_signup_reached');location.href='rook-onboarding-v8-signup.html';}
   $('startTrial').onclick=()=>{if(token()&&sessionStorage.getItem('rook_v8_active')===token())goSignup('header');else{$('overlay').hidden=false;$('locationInput').focus();}};
   $('unlockButton').onclick=()=>goSignup('banner');
-  const widget=RookLocationWidget.init({inputEl:$('locationInput'),listEl:$('locationList'),statusEl:$('locationStatus'),onSelect:l=>{selectedLocation=l;},onClear:()=>{selectedLocation=null;}});
+  let preparation=null;
+  function prepareLocation(l){
+    const work={location:l,started:Date.now(),token:null};preparation=work;
+    api('/prepare',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:l}),signal:AbortSignal.timeout(10000)})
+      .then(result=>{if(preparation===work)work.token=result.preparation;}).catch(()=>{});
+  }
+  const widget=RookLocationWidget.init({inputEl:$('locationInput'),listEl:$('locationList'),statusEl:$('locationStatus'),onSelect:l=>{selectedLocation=l;prepareLocation(l);},onClear:()=>{selectedLocation=null;preparation=null;}});
   $('changeLocation').onclick=()=>{$('overlay').hidden=false;$('locationInput').focus();track('v8_overlay_displayed',{source:'change_location'});};
   function age(job){const raw=job.date_posted||job.first_seen_at;if(!raw)return '';const days=Math.max(0,Math.floor((Date.now()-new Date(raw).getTime())/86400000));return Number.isFinite(days)?days===0?'Posted today':days===1?'Posted 1 day ago':`Posted ${days} days ago`:'';}
   function score(job){return job.match?.overall_score??job.match?.preference_fit??0;}
@@ -94,8 +100,9 @@
     $('jobGrid').querySelectorAll('[data-job-link]').forEach(el=>el.onclick=()=>track('v8_revealed_job_clicked'));
   }
   $('jobSearch').oninput=render;
-  async function load(initial=false){
-    data=await api('/session'+(initial?'?initial=1':''));allJobs=data.jobs;
+  function displayPreview(preview){
+    if(!preview || !Array.isArray(preview.jobs) || !preview.profile || preview.count!==preview.jobs.length)throw Error('Invalid preview response');
+    data=preview;allJobs=data.jobs;
     $('locationLine').textContent=data.profile.home_location_label||'Your location';
     $('overlay').hidden=true;render();
     if(!window.rookV8PaintTracked){
@@ -106,18 +113,37 @@
     }
     if(data.unlocked){window.location.replace('rook-dashboard-v8.html');return;}
   }
+  async function load(){displayPreview(await api('/session'));}
   $('searchForm').onsubmit=async e=>{
     e.preventDefault();if(busy)return;
     if(!selectedLocation){$('formError').textContent='Choose a city, state or ZIP from the suggestions.';return;}
+    const searchId=crypto.randomUUID(),searchStarted=performance.now();
+    track('v8_show_my_jobs_requested',{search_id:searchId});
+    let initialSucceeded=false;
     busy=true;const button=$('searchForm').querySelector('.submit');button.disabled=true;button.textContent='Finding your best opportunities…';$('formError').textContent='';
     const progress=$('searchProgress'),progressText=$('searchProgressText');progress.hidden=false;progressText.textContent='Matching your location…';
     const started=Date.now();const timer=setInterval(()=>{const elapsed=Date.now()-started;progressText.textContent=elapsed>12000?'Ranking opportunities…':elapsed>3500?'Prioritizing your industry…':'Matching your location…';},500);
     try{
       const attribution=Object.fromEntries(new URLSearchParams(location.search).entries());
-      const result=await api('/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:selectedLocation,industry:$('industryInput').value,attribution})});
+      const result=await api('/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:selectedLocation,industry:$('industryInput').value,attribution,preparation:preparation?.location===selectedLocation&&Date.now()-preparation.started<80000?preparation.token:null})});
+      initialSucceeded=true;
+      track('v8_initial_search_succeeded',{search_id:searchId,elapsed_ms:Math.round(performance.now()-searchStarted)});
       sessionStorage.setItem('rook_v7_token',result.token);sessionStorage.setItem('rook_v8_active',result.token);
-      track('v8_overlay_submitted');await load(true);
-    }catch(err){$('formError').textContent=err.message;}finally{clearInterval(timer);progress.hidden=true;busy=false;button.disabled=false;button.textContent='Show My Jobs →';}
+      track('v8_overlay_submitted');
+      // Fallback supports a new browser asset reaching an older server during rollout.
+      const preview=result.preview || await api('/session?initial=1');
+      if(!Array.isArray(preview.jobs) || !preview.profile || preview.count!==preview.jobs.length)throw Error('Invalid preview response');
+      track('v8_preview_results_received',{search_id:searchId,elapsed_ms:Math.round(performance.now()-searchStarted),job_count:preview.count});
+      displayPreview(preview);
+      // Two frames allow the newly built cards to reach a browser paint.
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{
+        const elapsed_ms=Math.round(performance.now()-searchStarted);
+        $('jobGrid').dataset.searchElapsedMs=String(elapsed_ms);
+        performance.measure?.('rook-v8-click-to-render',{start:searchStarted,end:performance.now()});
+        track('v8_preview_results_rendered',{search_id:searchId,elapsed_ms,job_count:preview.count});
+        track('v8_search_elapsed_time',{search_id:searchId,elapsed_ms});
+      }));
+    }catch(err){track(initialSucceeded?'v8_preview_results_failed':'v8_initial_search_failed',{search_id:searchId,error_category:err.status===429?'rate_limited':err.status>=500?'server':err.status>=400?'request':'network_or_client',elapsed_ms:Math.round(performance.now()-searchStarted)});$('formError').textContent=err.message;}finally{clearInterval(timer);progress.hidden=true;busy=false;button.disabled=false;button.textContent='Show My Jobs →';}
   };
   async function init(){
     track('v8_dashboard_impression');
