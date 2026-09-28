@@ -7,6 +7,8 @@ const countries = require('i18n-iso-countries');
 const crypto = require('crypto');
 const {distanceMiles} = require('./geocoding');
 const VERSION = 4;
+// Internal-only derived scope. JSON/request data cannot supply a Symbol key.
+const LOCAL_MATCHING_SCOPE=Symbol('v8MatchingScope');
 const clean = s => String(s || '').trim().replace(/\s+/g,' ');
 const key = s => clean(s).toLowerCase().replace(/[^a-z0-9]/g,'');
 const cityIndex=new Map(Object.values(zipcodes.codes).map(z=>[key(z.city)+'|'+z.state,z]));
@@ -123,6 +125,7 @@ function explicitDescriptionScope(job) {
   return null;
 }
 function classifyLocation(job) {
+  if(job[LOCAL_MATCHING_SCOPE])return job[LOCAL_MATCHING_SCOPE];
   const raw=clean(job.location_raw), country=normalizeCountryCode(job.location_evidence?.source_country_code);
   const old=job.location_evidence;
   const currentDescriptionHash=descriptionHash(job.description_text);
@@ -182,4 +185,4 @@ async function resolveLocation(job, geocode) {
   if(scope.kind==='local')return {job_lat:job.job_lat,job_lng:job.job_lng,state:job.state,location_evidence:evidence};
   return {job_lat:null,job_lng:null,state:null,location_evidence:{...evidence,status:scope.kind==='foreign'?'foreign':scope.kind==='unresolved'?'unresolved':'validated'}};
 }
-module.exports={VERSION,classifyLocation,resolveLocation,cityQuery,stateOnly,validPoint,pointMatchesCity,explicitTitleScope,explicitDescriptionScope,stateCodesInText,cityQueriesInText,descriptionHash};
+module.exports={VERSION,LOCAL_MATCHING_SCOPE,classifyLocation,resolveLocation,cityQuery,stateOnly,validPoint,pointMatchesCity,explicitTitleScope,explicitDescriptionScope,stateCodesInText,cityQueriesInText,descriptionHash};

@@ -6,6 +6,12 @@ const {prepareJob}=require('./v7Location');
 const {rankPool,hydrateDescriptionTerritories,JOB_LIST_COLUMNS_NO_DESCRIPTION}=require('./v7Matching');
 const GEO_COLUMNS='id,source_type,title_original,location_raw,location_evidence,extraction_evidence,job_lat,job_lng,state';
 const PAGE_SIZE=500, CONCURRENCY=4;
+const indexes=new WeakMap();
+function indexFor(db) {
+  if(!indexes.has(db))indexes.set(db,require('./v8MatchingIndex').createIndex(db,{readPages:pages}));
+  return indexes.get(db);
+}
+function startIndex(db){indexFor(db).start();}
 async function pages(db,columns,timing){
   const rows=[];
   for(let offset=0;;offset+=PAGE_SIZE*CONCURRENCY){
@@ -55,10 +61,15 @@ async function readCandidates(db,profile,timing={}){
   return hydrated;
 }
 async function rank(db,profile,unused=[],timing={}){
-  const hydrated=await readCandidates(db,profile,timing);
+  const local=await indexFor(db).current(timing);
+  const hydrated=local||await readCandidates(db,profile,timing);
+  if(local){
+    timing.database_fallback=0;timing.candidate_retrieval_ms=0;timing.scoring_retrieval_ms=0;
+    timing.candidate_page_reads=0;timing.scoring_page_reads=0;timing.candidate_count=local.length;
+  }
   const scoreStarted=performance.now();
   const ranked=rankPool(hydrated,profile,[]);
   timing.scoring_ms=performance.now()-scoreStarted;
   return ranked;
 }
-module.exports={rank,readCandidates,GEO_COLUMNS};
+module.exports={rank,readCandidates,GEO_COLUMNS,startIndex,indexFor,pages};

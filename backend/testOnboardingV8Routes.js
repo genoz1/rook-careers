@@ -5,10 +5,11 @@ const jobs=[
  {id:'b',title_original:'Exact Diagnostics Title',company_name:'Diagnostics Employer',source_url:'https://secret.example/b',ai_analysis:{product_categories:['Diagnostics']},match:{overall_score:75}},
  {id:'c',title_original:'Exact Veterinary Title',company_name:'Veterinary Employer',source_url:'https://secret.example/c',ai_analysis:{product_categories:['Veterinary']},match:{overall_score:70}}
 ];
-const tables={onboarding_v7_sessions:[],candidate_profiles:[]};
+const tables={jobs:jobs.map(j=>({...j,status:'active',moderation_status:'approved'})),onboarding_v7_sessions:[],candidate_profiles:[]};
 class Query{
  constructor(name){this.name=name;this.filters=[];this.value=null;this.one=false;}
  select(){return this;}eq(k,v){this.filters.push(r=>r[k]===v);return this;}
+ in(k,ids){this.filters.push(r=>ids.includes(r[k]));return this;}
  gt(k,v){this.filters.push(r=>r[k]>v);return this;}
  is(k,v){this.filters.push(r=>(r[k]??null)===v);return this;}
  maybeSingle(){this.one=true;return this;}
@@ -23,8 +24,9 @@ class Query{
 }
 const db={from:name=>new Query(name),auth:{getUser:async token=>({data:{user:token==='valid'?{id:'user',email:'verified@example.test',email_confirmed_at:'yes'}:null}})}};
 require.cache[require.resolve('@supabase/supabase-js')]={exports:{createClient:()=>db}};
-let rankCalls=0;
-require.cache[require.resolve('./v8Matching')]={exports:{rank:async()=>{rankCalls++;return jobs;},readCandidates:async()=>jobs}};
+let rankCalls=0,useRpc=false,rejectOnce=false,refreshes=0,rpcCalls=0;
+db.rpc=async(name,args)=>{assert.equal(name,'create_v8_preview_session');rpcCalls++;if(rejectOnce){rejectOnce=false;return {data:{accepted:false}};}tables.onboarding_v7_sessions.push({token_hash:args.p_token_hash,profile:args.p_profile,jobs:[],expires_at:args.p_expires_at});return {data:{accepted:true,jobs:tables.jobs.filter(j=>args.p_job_ids.includes(j.id)),details_ms:1}};};
+require.cache[require.resolve('./v8Matching')]={exports:{rank:async(_db,_profile,_unused,timing={})=>{rankCalls++;if(useRpc){timing.index_revision='1';timing.local_index=1;}return jobs;},readCandidates:async()=>jobs,startIndex:()=>{},indexFor:()=>({refresh:async()=>{refreshes++;}})}};
 const originalMatching=require('./v7Matching');
 require.cache[require.resolve('./v7Matching')].exports={...originalMatching,rankPool:()=>{rankCalls++;return jobs;}};
 const app=express();app.use(express.json());app.use('/api/v8',require('./routes/onboardingV8'));
@@ -46,7 +48,9 @@ const app=express();app.use(express.json());app.use('/api/v8',require('./routes/
   const prepared=await call('/prepare','POST',{location:input.location});assert.equal(prepared.status,200);
   assert.deepEqual(Object.keys(prepared.data),['preparation']);
   const warm=await call('/session','POST',{...input,preparation:prepared.data.preparation});
-  assert.equal(warm.data.timing.prepared,1);
+  assert.equal(warm.data.timing.prepared,0);
+  assert.deepEqual(tables.onboarding_v7_sessions[0].jobs,[]);
+  assert(entry.data.timing.persistence_bytes<1500);
   const reused=await call('/session','POST',{...input,preparation:prepared.data.preparation});assert.equal(reused.data.timing.prepared,0);
   const changed=await call('/prepare','POST',{location:input.location});
   const mismatch=await call('/session','POST',{...input,location:{...input.location,lat:42},preparation:changed.data.preparation});assert.equal(mismatch.data.timing.prepared,0);
@@ -58,6 +62,10 @@ const app=express();app.use(express.json());app.use('/api/v8',require('./routes/
   tables.candidate_profiles[0].subscription_status='trialing';tables.candidate_profiles[0].trial_ends_at='2099-01-01T00:00:00Z';
   assert.equal((await call('/session','GET',null,token)).status,403);
   page=await call('/session','GET',null,token,true);assert.equal(page.data.unlocked,true);assert(page.data.jobs.every(j=>j.company_name));
+  useRpc=true;rejectOnce=true;const recovered=await call('/session','POST',input);
+  assert.equal(recovered.status,200);assert.equal(recovered.data.timing.index_rejected,1);
+  assert.equal(refreshes,1);assert.equal(rpcCalls,2);assert.equal(recovered.data.preview.jobs.filter(j=>j.preview_revealed).length,2);
+  assert(tables.onboarding_v7_sessions.every(s=>s.jobs.length===0));
   console.log('PASS V8 route: session, first-two reveal, locked sanitization, industry rerank, ownership, account claim and authorized unlock.');
  }finally{server.close();server.closeAllConnections();}
 })().catch(e=>{console.error(e);process.exitCode=1});
