@@ -280,21 +280,31 @@ router.put("/admin/admanager/portfolio", async (req, res) => {
 });
 router.get("/admin/admanager/portfolio/preview", async (req, res) => {
   if (!process.env.AD_MANAGER_TEST_TOKEN || req.query.token !== process.env.AD_MANAGER_TEST_TOKEN) return res.status(401).json({ error:"unauthorized" });
+  const previewJobs = require("../admanager/previewJobs");
+  if (req.query.job) {
+    const job = previewJobs.getJob(String(req.query.job));
+    if (!job) return res.status(404).json({ error:"Preview expired. Please try Save & preview again." });
+    return job.state === 'pending' ? res.status(202).json({ pending:true, job:job.id }) : res.status(job.result.status).json(job.result.body);
+  }
   const [{data:setting,error:settingError},{data:controls,error:controlsError}] = await Promise.all([
     supabaseAdmin.from("ad_manager_portfolio_budget").select("daily_budget_cents").eq("id",true).maybeSingle(),
     supabaseAdmin.from("ad_campaign_controls").select("*")
   ]);
   if (settingError || controlsError) return res.status(500).json({ error:settingError?.message || controlsError?.message });
   if (!setting) return res.json({ configured:false, message:"Enter a daily budget to preview its allocation." });
+  const key = require("node:crypto").createHash("sha256").update(JSON.stringify([setting.daily_budget_cents,controls])).digest("hex");
+  const job = previewJobs.getOrStart(key, async () => {
   const enabled = (process.env.AD_ENABLED_PLATFORMS || "").split(",").map(p=>p.trim()).filter(Boolean);
   const configured = enabled.filter(p=>p === "meta" ? process.env.META_ADS_ACCESS_TOKEN : p === "google" ? process.env.GOOGLE_ADS_CUSTOMER_ID : p === "reddit" ? process.env.REDDIT_ADS_ACCOUNT_ID : false);
   const clients = { meta:require("../admanager/clients/meta"), google:require("../admanager/clients/google"), reddit:require("../admanager/clients/reddit") };
-  const results = await require("../admanager/previewReporting").fetchPreviewReports(configured, clients);
+  const results = await require("../admanager/previewReporting").fetchPreviewReports(configured, clients, 45_000);
   const errors=results.filter(r=>r.error);
-  if (errors.length) return res.status(502).json({ error:"Platform reporting failed; no allocation proposed.", platforms:errors.map(r=>({platform:r.platform,error:r.error})) });
+  if (errors.length) return { status:502, body:{ error:"Platform reporting failed; no allocation proposed.", platforms:errors.map(r=>({platform:r.platform,error:r.error})) } };
   const campaigns=results.flatMap(r=>r.campaigns.map(c=>({...c,platform:r.platform})));
   const preview=require("../admanager/portfolio").allocateBudget({ budgetCents:setting.daily_budget_cents, campaigns, controls:controls || [] });
-  res.json({ configured:true, preview, period:"7d", generated_at:new Date().toISOString(), execution_enabled:false });
+  return { status:200, body:{ configured:true, preview, period:"7d", generated_at:new Date().toISOString(), execution_enabled:false } };
+  });
+  return job.state === 'pending' ? res.status(202).json({ pending:true, job:job.id }) : res.status(job.result.status).json(job.result.body);
 });
 
 // GET /api/admin/admanager/dryrun?token=...
