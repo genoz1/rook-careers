@@ -8,9 +8,9 @@ async function fetchPreviewReports(platforms, clients, timeoutMs = PREVIEW_TIMEO
     let timer;
     try {
       const campaigns = await Promise.race([
-        clients[platform].fetchCampaignPerformance("7d"),
+        clients[platform].fetchCampaignPerformance("yesterday"),
         new Promise((_, reject) => {
-          timer = setTimeout(() => reject(new Error(`7-day report exceeded ${Math.round(timeoutMs / 1000)} seconds`)), timeoutMs);
+          timer = setTimeout(() => reject(new Error(`Yesterday's report exceeded ${Math.round(timeoutMs / 1000)} seconds`)), timeoutMs);
         }),
       ]);
       return { platform, campaigns };

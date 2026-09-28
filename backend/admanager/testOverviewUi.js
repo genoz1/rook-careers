@@ -19,7 +19,8 @@ for(const [period,spend] of [['today',100],['yesterday',250],['7d',600]]){
  assert.ok(html.indexOf('id="campaignCards"')<html.indexOf('id="alertsSection"'));
  assert.match(node('campaignCards').innerHTML,/Cost\/Conversion/);
 }
-const preview=context.portfolioMarkup({configured:true,preview:{ok:true,budget_cents:1000,allocated_cents:1000,unallocated_cents:0,campaigns:[{platform:'meta',campaign_name:'Example',campaign_id:'m',reason:'7-day clicks per dollar',clicks:20,spend_cents:500,current_budget_cents:300,proposed_budget_cents:1000}]}});
+const preview=context.portfolioMarkup({configured:true,preview:{ok:true,budget_cents:1000,allocated_cents:1000,unallocated_cents:0,campaigns:[{platform:'meta',campaign_name:'Example',campaign_id:'m',reason:'Yesterday’s clicks per dollar',clicks:2,spend_cents:500,current_budget_cents:300,proposed_budget_cents:1000}]}});
 assert.match(preview,/\$10\.00/); assert.match(preview,/\$3\.00 → \$10\.00/);
+assert.match(preview,/yesterday’s clicks 2/);
 assert.match(context.portfolioMarkup({configured:true,preview:{ok:false,error:'Missing report'}}),/Missing report/);
 console.log('Overview and portfolio render tests passed');
