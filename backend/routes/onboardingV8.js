@@ -2,16 +2,7 @@
 const express = require('express');
 const crypto = require('crypto');
 const {createClient} = require('@supabase/supabase-js');
-const {rank,readCandidates} = require('../v8Matching');
-const {rankPool} = require('../v7Matching');
-// Reuse V7's bounded, expiring, single-use preparation store. V8 binds the
-// pool to geography, not industry: industry remains a scoring preference.
-const preparation=require('../v7Preparation').createPreparation({readCandidates:async(db,[key])=>{
-  const timing={};
-  const jobs=await readCandidates(db,JSON.parse(key),timing);
-  return {jobs,timing};
-}});
-const preparationKey=profile=>JSON.stringify({home_lat:profile.home_lat,home_lng:profile.home_lng,home_state:profile.home_state,territory_size_preferences:[]});
+const {rank,startIndex,indexFor} = require('../v8Matching');
 const {performance} = require('node:perf_hooks');
 const {project} = require('../pretrialProjection');
 const {classify,normalizeSelection} = require('../../public/rook-job-classification');
@@ -19,6 +10,7 @@ const {hasFullAccess} = require('../matching');
 const router = express.Router();
 const db = process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
   ? createClient(process.env.SUPABASE_URL,process.env.SUPABASE_SERVICE_ROLE_KEY) : null;
+if(db)startIndex(db);
 const calls = new Map();
 const table='onboarding_v7_sessions';
 const allowed=['Diagnostics','Medical Device','Pharmaceutical','Veterinary','Biotech/Life Sciences','Healthcare SaaS','Dental','Distribution','Capital Equipment'];
@@ -67,6 +59,16 @@ function previewResponse(profile,jobs,unlocked) {
     subscription_status:profile.subscription_status},unlocked,count:jobs.length,
     jobs:jobs.map((j,i)=>unlocked?reveal(j):i<2?reveal(j):project(j,i,{dashboard:true}))};
 }
+async function previewDetails(jobs,unlocked=false) {
+  const ids=jobs.slice(0,unlocked?jobs.length:2).map(j=>j.id);
+  if(!ids.length)return jobs;
+  // Only jobs actually revealed need identification and application links.
+  const {data,error}=await db.from('jobs').select('id,company_name,city,application_url,source_url')
+    .eq('status','active').eq('moderation_status','approved').in('id',ids);
+  if(error||data?.length!==ids.length)throw Error('Preview details changed; retry search');
+  const details=new Map(data.map(j=>[j.id,j]));
+  return jobs.map(j=>details.has(j.id)?{...j,...details.get(j.id)}:j);
+}
 async function session(req) {
   const token=req.get('X-ROOK-V7')||'';
   if(!/^[a-f0-9]{64}$/.test(token)) return null;
@@ -85,30 +87,55 @@ router.post('/prepare',wrap(async(req,res)=>{
   let profile;
   // Preparation depends only on location and can begin before industry is chosen.
   try {profile=validate({...req.body,industry:allowed[0]});} catch(e){return res.status(400).json({error:e.message});}
-  res.json({preparation:preparation.start(db,preparationKey(profile))});
+  // Keep older browsers compatible. Every server warms its own shared index;
+  // never trust a visitor pool which could predate an inventory correction.
+  res.json({preparation:null});
 }));
 router.post('/session',wrap(async(req,res)=>{
   let profile;
   try {profile=validate(req.body);} catch(e){return res.status(400).json({error:e.message});}
-  const started=performance.now(),timing={};
-  const pool=await preparation.take(req.body?.preparation,preparationKey(profile));
-  timing.prepared=pool?1:0;timing.matching_passes=1;
-  const matchingStarted=performance.now();
-  const ranked=pool?rankPool(pool.jobs,profile,[]):await rank(db,profile,[],timing);
-  if(pool){
-    timing.scoring_ms=performance.now()-matchingStarted;
-    for(const [key,value] of Object.entries(pool.timing))timing['preparation_'+key]=value;
-  }
-  timing.preparation_wait_ms=matchingStarted-started;
+  const started=performance.now(),timing={validate_with_session:true};
+  timing.prepared=0;timing.matching_passes=1;
+  const ranked=await rank(db,profile,[],timing);
+  timing.preparation_wait_ms=0;
   const priorityStarted=performance.now();
-  const jobs=prioritize(ranked,profile.desired_industries[0]);
+  let jobs=prioritize(ranked,profile.desired_industries[0]);
   timing.industry_ms=performance.now()-priorityStarted;
   const token=crypto.randomBytes(32).toString('hex');
   const persistenceStarted=performance.now();
-  const {error}=await db.from(table).insert({token_hash:crypto.createHash('sha256').update(token).digest('hex'),profile,
-    jobs,expires_at:new Date(Date.now()+24*60*60*1000).toISOString()});
-  if(error) throw error;
-  timing.persistence_ms=performance.now()-persistenceStarted;
+  const record={token_hash:crypto.createHash('sha256').update(token).digest('hex'),profile,
+    jobs:[],expires_at:new Date(Date.now()+24*60*60*1000).toISOString()};
+  timing.persistence_bytes=Buffer.byteLength(JSON.stringify(record));timing.persistence_calls=1;
+  // Durable token/profile before response preserves immediate claim/checkout.
+  // V8 always re-ranks on reload; its old full snapshot was never consumed.
+  if(timing.index_revision){
+    const save=()=>db.rpc('create_v8_preview_session',{p_token_hash:record.token_hash,p_profile:profile,
+      p_expires_at:record.expires_at,p_revision:String(timing.index_revision),p_job_ids:jobs.slice(0,2).map(j=>j.id)});
+    let result=await save();
+    if(result.error)throw result.error;
+    if(!result.data.accepted){
+      timing.index_rejected=1;
+      // One bounded recovery, never return an outdated index's results.
+      await indexFor(db).refresh();
+      jobs=prioritize(await rank(db,profile,[],timing),profile.desired_industries[0]);
+      result=await save();timing.persistence_calls++;
+      if(result.error||!result.data.accepted)throw Error('Inventory is changing; retry search');
+    }
+    const details=new Map(result.data.jobs.map(j=>[j.id,j]));
+    jobs=jobs.map(j=>details.has(j.id)?{...j,...details.get(j.id)}:j);
+    timing.persistence_ms=performance.now()-persistenceStarted;
+    timing.preview_details_ms=result.data.details_ms;
+  } else {
+    // Rolling deployment or missing migration: existing authoritative path.
+    const [,detailed]=await Promise.all([
+      (async()=>{const {error}=await db.from(table).insert(record);if(error)throw error;
+        timing.persistence_ms=performance.now()-persistenceStarted;})(),
+      (async()=>{const t=performance.now();const result=await previewDetails(jobs);
+        timing.preview_details_ms=performance.now()-t;return result;})()
+    ]);
+    jobs=detailed;
+  }
+  timing.deferred_persistence_ms=0;delete timing.validate_with_session;
   const projectionStarted=performance.now();
   // Freshly ranked against this request's validated location. Keep persisted
   // snapshots private; only the established server-side allowlists cross here.
@@ -133,7 +160,7 @@ router.get('/session',wrap(async(req,res)=>{
   const unlocked=!!(s.user_id && u?.id===s.user_id && hasFullAccess(profile));
   // Reloads still re-rank current inventory: old snapshots can predate a
   // location correction. Initial POST now returns its fresh safe projection.
-  const jobs=prioritize(await rank(db,profile,[]),profile.desired_industries[0]);
+  const jobs=await previewDetails(prioritize(await rank(db,profile,[]),profile.desired_industries[0]),unlocked);
   res.json(previewResponse(profile,jobs,unlocked));
 }));
 router.put('/preference',wrap(async(req,res)=>{
@@ -144,8 +171,7 @@ router.put('/preference',wrap(async(req,res)=>{
   const industry=req.body?.industry;
   if(!allowed.includes(industry)) return res.status(400).json({error:'Select an industry preference.'});
   const profile={...s.profile,desired_industries:[industry]};
-  const jobs=prioritize(await rank(db,profile,[]),industry);
-  let query=db.from(table).update({profile,jobs}).eq('token_hash',s.token_hash);
+  let query=db.from(table).update({profile,jobs:[]}).eq('token_hash',s.token_hash);
   query=s.user_id?query.eq('user_id',s.user_id):query.is('user_id',null);
   const {data,error}=await query.select('token_hash').maybeSingle();
   if(error) throw error;
