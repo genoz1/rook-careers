@@ -112,7 +112,23 @@ input:checked + .slider:before{transform:translateX(16px)}
 .banner-info{background:#e8f0fe;color:#1a56db}
 .banner-warn{background:#fef3cd;color:#92600a}
 
-@media(max-width:800px){.stats-row{grid-template-columns:1fr 1fr}.config-grid{grid-template-columns:1fr}}
+
+.budget-entry{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;font-weight:700;font-size:12px}
+.budget-entry>div{display:flex;align-items:center;gap:6px}.budget-entry input{width:110px;padding:8px;border:1px solid var(--line);border-radius:8px;font:inherit}
+.allocation-row{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);font-size:12px}
+.allocation-row span{min-width:0;overflow-wrap:anywhere}.allocation-row strong{white-space:nowrap}.allocation-summary{font-weight:700;margin:8px 0;font-size:12px}
+.overview-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+.overview-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.period-select{font:inherit;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--navy)}
+.campaign-name,.alert-msg{overflow-wrap:anywhere;word-break:break-word}
+.campaign-table-wrap{overflow-x:auto}
+.campaign-table{min-width:1050px}
+.campaign-cards{display:none}
+#page-config .section-body{overflow-x:auto}
+#page-config table{min-width:650px}
+@media(max-width:800px){.stats-row{grid-template-columns:repeat(2,minmax(0,1fr))}.config-grid{grid-template-columns:1fr}.topbar{padding:10px 12px;flex-wrap:wrap;gap:8px}.topnav{order:3;width:100%;overflow-x:auto;white-space:nowrap;scrollbar-width:thin}.tab{flex:none}.shell{padding:12px;min-width:0}.section-hd{gap:8px;flex-wrap:wrap}.campaign-table-wrap{display:none}.campaign-cards{display:block;padding:12px}.campaign-card{border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px;min-width:0}.campaign-card:last-child{margin-bottom:0}.campaign-card-name{font-weight:700;margin:9px 0;overflow-wrap:anywhere;word-break:break-word}.campaign-card-meta{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:700;text-transform:uppercase}.campaign-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;font-size:12px}.campaign-metrics span{min-width:0;overflow-wrap:anywhere}.campaign-metrics strong{display:block;color:var(--navy)}#page-controls>.section{max-width:100%}}
+@media(max-width:430px){.stat{padding:12px}.stat-val{font-size:20px}.brand{font-size:13px}.overview-actions{width:100%;justify-content:space-between}#page-controls>.page-head{flex-wrap:wrap;gap:10px}}
+
 </style>
 </head>
 <body>
@@ -144,31 +160,38 @@ input:checked + .slider:before{transform:translateX(16px)}
 
 <!-- OVERVIEW -->
 <div id="page-overview" class="page active">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+  <div class="overview-head">
     <div>
       <div style="font-size:18px;font-weight:900;color:var(--navy)">Advertising Overview</div>
       <div class="ts" id="overviewTs"></div>
     </div>
-    <button class="refresh-btn" onclick="loadAll()">↻ Refresh</button>
+    <div class="overview-actions"><label for="periodSelect" class="ts">Period</label><select id="periodSelect" class="period-select" onchange="loadAll()"><option value="today">Today</option><option value="yesterday">Yesterday</option><option value="7d">7 Days</option></select><button class="refresh-btn" onclick="loadAll()">↻ Refresh</button></div>
   </div>
 
   <div class="stats-row">
-    <div class="stat"><div class="stat-label">Spend Today</div><div class="stat-val" id="s-spend">—</div><div class="stat-sub">all platforms</div></div>
-    <div class="stat"><div class="stat-label">Impressions</div><div class="stat-val" id="s-imp">—</div><div class="stat-sub">today</div></div>
-    <div class="stat"><div class="stat-label">Clicks</div><div class="stat-val" id="s-clicks">—</div><div class="stat-sub">today</div></div>
+    <div class="stat"><div class="stat-label">Spend</div><div class="stat-val" id="s-spend">—</div><div class="stat-sub">all platforms</div></div>
+    <div class="stat"><div class="stat-label">Impressions</div><div class="stat-val" id="s-imp">—</div><div class="stat-sub">selected period</div></div>
+    <div class="stat"><div class="stat-label">Clicks</div><div class="stat-val" id="s-clicks">—</div><div class="stat-sub">selected period</div></div>
     <div class="stat"><div class="stat-label">Conversions</div><div class="stat-val" id="s-conv">—</div><div class="stat-sub">platform-reported</div></div>
-    <div class="stat"><div class="stat-label">Active Campaigns</div><div class="stat-val" id="s-active">—</div><div class="stat-sub">across platforms</div></div>
+    <div class="stat"><div class="stat-label">Active Campaigns</div><div class="stat-val" id="s-active">—</div><div class="stat-sub">current status</div></div>
   </div>
-
-  <div id="alertsBanner"></div>
 
   <div class="section">
-    <div class="section-hd"><span class="section-title">Campaigns — Live Data</span></div>
-    <table>
-      <thead><tr><th>Platform</th><th>Campaign</th><th>Status</th><th>Daily Budget</th><th>Spend Today</th><th>Impressions</th><th>Clicks</th><th>Conversions</th><th>CTR</th><th>CPA</th></tr></thead>
-      <tbody id="overviewTable"><tr><td colspan="10" class="loading">Loading…</td></tr></tbody>
-    </table>
+    <div class="section-hd"><span class="section-title">Daily Budget · Click Allocation Preview</span></div>
+    <div class="section-body">
+      <div class="budget-entry"><label for="portfolioAmount">Combined daily amount across Meta, Google and Reddit</label><div><span>$</span><input id="portfolioAmount" type="number" min="1" max="10000" step="0.01" inputmode="decimal" placeholder="Enter amount"><button class="btn btn-primary btn-sm" onclick="savePortfolio()">Save &amp; preview</button></div></div>
+      <div class="ts" style="margin:8px 0 12px">Based on the previous 7 calendar days, including today. Preview only; saving never changes an ad platform budget.</div>
+      <div id="portfolioMessage" role="status"></div><div id="portfolioPreview"></div>
+    </div>
   </div>
+  <div class="section">
+    <div class="section-hd"><span class="section-title">Campaigns — Live Data</span></div>
+    <div class="campaign-table-wrap"><table class="campaign-table">
+      <thead><tr><th>Platform</th><th>Campaign</th><th>Status</th><th>Daily Budget</th><th>Spend</th><th>Impressions</th><th>Clicks</th><th>Conversions</th><th>CTR</th><th>CPC</th><th>Cost/Conversion</th></tr></thead>
+      <tbody id="overviewTable"><tr><td colspan="11" class="loading">Loading…</td></tr></tbody>
+    </table></div><div class="campaign-cards" id="campaignCards"></div>
+  </div>
+  <div class="section" id="alertsSection" style="display:none"><div class="section-hd"><span class="section-title">Campaign Alerts</span></div><div class="section-body" id="alertsBanner"></div></div>
 </div>
 
 <!-- DRY RUN -->
@@ -183,6 +206,7 @@ input:checked + .slider:before{transform:translateX(16px)}
 
   <div class="banner banner-info">⚡ Execution is disabled. These are proposed actions only — nothing will change until you enable write mode and approve automation per campaign.</div>
 
+  <div class="section"><div class="section-hd"><span class="section-title">Combined Budget Preview</span></div><div class="section-body" id="dryrunPortfolio">Set your daily amount on Overview to see a proposed split.</div></div>
   <div class="section">
     <div class="section-hd"><span class="section-title">Policy Engine Config</span></div>
     <div class="section-body">
@@ -197,7 +221,7 @@ input:checked + .slider:before{transform:translateX(16px)}
       <strong style="color:var(--ink)">Scale up (+20%):</strong> When CPA &lt; $14 (70% of target) — campaign is profitable, give it more budget.<br>
       <strong style="color:var(--ink)">Scale down (−15%):</strong> When CTR &lt; 0.1% with 5,000+ impressions — creative fatigue, reduce waste.<br>
       <strong style="color:var(--ink)">Recommend pause:</strong> When CPA &gt; $60 (3× target) — spending too much per conversion, flag for review.<br>
-      <strong style="color:var(--ink)">Combined cap:</strong> Total daily budget across all campaigns is $25/day. App can shift up to 20% ($5) between campaigns to follow performance. Hard ceiling is $30/day — never exceeded.<br>
+      <strong style="color:var(--ink)">Combined amount:</strong> The Overview entry shows a preview of a click-based split. The legacy CPA/CTR policy below is separate and does not apply this split.<br>
       <strong style="color:var(--ink)">Minimum data:</strong> 20 clicks AND $5 spend required before any budget action fires.<br>
       <strong style="color:var(--ink)">Schedule:</strong> Runs daily at 8 AM ET via DigitalOcean scheduled job (not yet enabled — see below).
     </div>
@@ -280,7 +304,7 @@ input:checked + .slider:before{transform:translateX(16px)}
 <script>
 const TOKEN_KEY = 'rook_adm_tok';
 let token = sessionStorage.getItem(TOKEN_KEY) || '';
-let dashData = null, dryrunData = null, controlsData = null;
+let dashData = null, dryrunData = null, controlsData = null, overviewRequest = 0;
 
 // ── Auth ──────────────────────────────────────────────────────────────────
 function login() {
@@ -321,6 +345,13 @@ async function api(path) {
   if (r.status === 401) { sessionStorage.removeItem(TOKEN_KEY); token=''; showLogin(); throw new Error('unauthorized'); }
   return r.json();
 }
+async function apiPut(path, body) {
+  const r = await fetch('/api/admin/admanager/' + path + '?token=' + encodeURIComponent(token), {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if (r.status === 401) { sessionStorage.removeItem(TOKEN_KEY); token=''; showLogin(); throw new Error('unauthorized'); }
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error || 'Save failed');
+  return data;
+}
 async function apiPost(path, body) {
   const r = await fetch('/api/admin/admanager/' + path + '?token=' + encodeURIComponent(token), { method:'POST', headers:{'Content-Type':'application/json'}, body: body ? JSON.stringify(body) : undefined });
   if (r.status === 401) { sessionStorage.removeItem(TOKEN_KEY); token=''; showLogin(); throw new Error('unauthorized'); }
@@ -350,62 +381,104 @@ function platformIcon(p) {
 // ── Load all ──────────────────────────────────────────────────────────────
 async function loadAll() {
   try {
-    dashData = await api('dashboard');
-    renderOverview(dashData);
+    const request = ++overviewRequest;
+    const data = await api('dashboard&period=' + encodeURIComponent(document.getElementById('periodSelect').value));
+    if (request !== overviewRequest) return;
+    dashData = data;
+    renderOverview(data);
+    await loadPortfolio();
     if (dryrunData) {} // don't auto-reload dryrun
     if (controlsData) loadControls();
   } catch(e) { if (e.message !== 'unauthorized') console.error(e); }
 }
 
 // ── Overview ──────────────────────────────────────────────────────────────
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+function statusRank(c) {
+  const status = (c.effective_status || c.status || '').toLowerCase();
+  const configured = (c.status || '').toLowerCase();
+  if (['active','enabled'].includes(status)) return 0;
+  if (['paused'].includes(status) || ['paused'].includes(configured)) return 2;
+  if (['error','disabled','removed','archived','rejected','disapproved','with_issues'].includes(status) || ['disabled','removed','archived'].includes(configured)) return 3;
+  return 1;
+}
 function renderOverview(data) {
   const badge = document.getElementById('modeBadge');
   badge.textContent = (data.mode||'off').toUpperCase();
   badge.className = 'mode-badge ' + (data.mode==='live'?'mode-live':data.mode==='dry-run'?'mode-dry':'mode-off');
   document.getElementById('overviewTs').textContent = 'Updated ' + new Date(data.fetched_at).toLocaleTimeString();
-
-  let spend=0, imp=0, clicks=0, conv=0, active=0;
-  const rows = [];
-  for (const [pName, pData] of Object.entries(data.platforms||{})) {
-    if (!pData?.ok) { rows.push(`<tr><td colspan="9" style="color:var(--red);padding:10px">${pName} error: ${pData?.error}</td></tr>`); continue; }
-    for (const c of (pData.campaigns||[])) {
-      spend += c.spend_cents||0; imp += c.impressions||0; clicks += c.clicks||0; conv += c.conversions||0;
-      const st = (c.status||'').toLowerCase();
-      if (st === 'active' || st === 'enabled') active++;
-      rows.push(`<tr>
-        <td>${platformIcon(pName)}${pName}</td>
-        <td style="max-width:240px;font-weight:600">${c.campaign_name||c.external_campaign_id}</td>
-        <td>${pillFor(c.status||c.effective_status)}</td>
-        <td style="font-weight:600">${c.daily_budget_cents ? fmtD(c.daily_budget_cents) : c.budget_cents ? fmtD(c.budget_cents) : '—'}</td>
-        <td>${fmtD(c.spend_cents)}</td>
-        <td>${fmtN(c.impressions)}</td>
-        <td>${fmtN(c.clicks)}</td>
-        <td>${fmtN(c.conversions)}</td>
-        <td>${ctr(c.clicks, c.impressions)}</td>
-        <td>${cpa(c.spend_cents, c.conversions)}</td>
-      </tr>`);
+  const seen = new Set(), campaigns = [], alerts = [];
+  for (const [platform, result] of Object.entries(data.platforms || {})) {
+    if (!result?.ok) { alerts.push({type:'critical', msg:`${platform.toUpperCase()} reporting error: ${result?.error || 'Unknown error'}`}); continue; }
+    for (const c of result.campaigns || []) {
+      const key = platform + ':' + c.external_campaign_id;
+      if (seen.has(key)) { alerts.push({type:'warning',msg:`${platform.toUpperCase()} returned duplicate campaign ${c.external_campaign_id}`}); continue; }
+      seen.add(key);
+      campaigns.push({platform, c});
+      const st = (c.status || c.effective_status || '').toLowerCase();
+      if (c.spend_cents === 0 && ['active','enabled'].includes(st) && data.period === 'today') alerts.push({type:'warning',msg:`${platform.toUpperCase()} · ${c.campaign_name}: $0 spend today`});
+      if (st === 'paused') alerts.push({type:'warning',msg:`${platform.toUpperCase()} · ${c.campaign_name}: paused`});
     }
   }
-  document.getElementById('s-spend').textContent = fmtD(spend);
-  document.getElementById('s-imp').textContent = fmtN(imp);
-  document.getElementById('s-clicks').textContent = fmtN(clicks);
-  document.getElementById('s-conv').textContent = fmtN(conv);
-  document.getElementById('s-active').textContent = active;
-  document.getElementById('overviewTable').innerHTML = rows.join('') || '<tr><td colspan="9" class="empty">No campaign data</td></tr>';
+  campaigns.sort((a,b) => statusRank(a.c) - statusRank(b.c));
+  const sum = key => campaigns.reduce((n,{c}) => n + (Number(c[key]) || 0), 0);
+  const conversionGroups = [...new Set(campaigns.filter(({c}) => c.conversions != null).map(({platform,c}) => platform + ':' + (c.conversion_label || 'Conversions')))];
+  document.getElementById('s-spend').textContent = fmtD(sum('spend_cents'));
+  document.getElementById('s-imp').textContent = fmtN(sum('impressions'));
+  document.getElementById('s-clicks').textContent = fmtN(sum('clicks'));
+  document.getElementById('s-conv').textContent = conversionGroups.length === 1 ? fmtN(sum('conversions')) : conversionGroups.length ? 'Mixed' : '—';
+  document.querySelector('#s-conv + .stat-sub').textContent = conversionGroups.length > 1 ? 'definitions differ by platform' : 'platform-reported';
+  document.getElementById('s-active').textContent = campaigns.filter(({c}) => statusRank(c) === 0).length;
+  const renderMetric = (label, value) => `<span>${label}<strong>${value}</strong></span>`;
+  document.getElementById('overviewTable').innerHTML = campaigns.map(({platform,c}) => `<tr>
+    <td>${platformIcon(platform)}${escapeHtml(platform)}</td><td class="campaign-name" style="max-width:240px;font-weight:600">${escapeHtml(c.campaign_name || c.external_campaign_id)}</td>
+    <td>${pillFor(escapeHtml(c.effective_status || c.status))}</td><td>${fmtD(c.daily_budget_cents ?? c.budget_cents)}</td>
+    <td>${fmtD(c.spend_cents)}</td><td>${fmtN(c.impressions)}</td><td>${fmtN(c.clicks)}</td><td title="${escapeHtml(c.conversion_label || '')}">${fmtN(c.conversions)}</td>
+    <td>${ctr(c.clicks,c.impressions)}</td><td>${cpa(c.spend_cents,c.clicks)}</td><td>${cpa(c.spend_cents,c.conversions)}</td></tr>`).join('') || '<tr><td colspan="11" class="empty">No campaign data</td></tr>';
+  document.getElementById('campaignCards').innerHTML = campaigns.map(({platform,c}) => `<article class="campaign-card">
+    <div class="campaign-card-meta">${escapeHtml(platform)} · ${pillFor(escapeHtml(c.effective_status || c.status))}</div>
+    <div class="campaign-card-name">${escapeHtml(c.campaign_name || c.external_campaign_id)}</div>
+    <div class="campaign-metrics">${renderMetric('Spend',fmtD(c.spend_cents))}${renderMetric('Impressions',fmtN(c.impressions))}${renderMetric('Clicks',fmtN(c.clicks))}${renderMetric('Conversions',fmtN(c.conversions))}${renderMetric('CTR',ctr(c.clicks,c.impressions))}${renderMetric('CPC',cpa(c.spend_cents,c.clicks))}${c.conversions > 0 ? renderMetric('Cost/Conversion',cpa(c.spend_cents,c.conversions)) : ''}</div>
+  </article>`).join('') || '<div class="empty">No campaign data</div>';
+  const alertSection = document.getElementById('alertsSection');
+  alertSection.style.display = alerts.length ? '' : 'none';
+  document.getElementById('alertsBanner').innerHTML = alerts.map(a=>`<div class="alert-box alert-${a.type}"><div class="alert-body"><div class="alert-msg">⚠️ ${escapeHtml(a.msg)}</div></div></div>`).join('');
+}
 
-  // Alerts banner
-  const alerts = [];
-  for (const [pName, pData] of Object.entries(data.platforms||{})) {
-    for (const c of (pData?.campaigns||[])) {
-      const st = (c.status||'').toLowerCase();
-      if (c.spend_cents === 0 && (st==='active'||st==='enabled')) alerts.push({type:'warning',msg:`${pName.toUpperCase()} · ${c.campaign_name}: $0 spend today`});
-      if (st === 'paused') alerts.push({type:'warning',msg:`${pName.toUpperCase()} · ${c.campaign_name}: paused`});
-    }
+// ── Combined budget preview (read only) ───────────────────────────────────
+function portfolioMarkup(data) {
+  if (!data?.configured) return '<div class="ts">Enter a daily amount to see a proposed split.</div>';
+  const p=data.preview;
+  if (!p?.ok) return `<div class="banner banner-warn">${escapeHtml(p?.error || 'Allocation unavailable')}</div>`;
+  const rows=p.campaigns.map(c=>`<div class="allocation-row"><span><strong>${escapeHtml(c.platform.toUpperCase())} · ${escapeHtml(c.campaign_name || c.campaign_id)}</strong><br>${escapeHtml(c.reason)} · 7-day clicks ${fmtN(c.clicks)} · spend ${fmtD(c.spend_cents)}</span><strong>${fmtD(c.current_budget_cents)} → ${fmtD(c.proposed_budget_cents)}</strong></div>`).join('');
+  return `<div class="allocation-summary">Entered amount ${fmtD(p.budget_cents)} · Proposed ${fmtD(p.allocated_cents)}${p.unallocated_cents ? ` · Unallocated ${fmtD(p.unallocated_cents)}` : ''}</div>${rows || '<div class="ts">No active campaigns available.</div>'}<div class="ts" style="margin-top:9px">Unapproved campaigns retain their current budgets. No platform budgets were changed.</div>`;
+}
+async function loadPortfolio() {
+  try {
+    const saved=await api('portfolio');
+    if (saved.error) throw new Error(saved.error);
+    document.getElementById('portfolioAmount').value=saved.budget ? (saved.budget.daily_budget_cents/100).toFixed(2) : '';
+    if (!saved.budget) { document.getElementById('portfolioPreview').innerHTML=portfolioMarkup({configured:false}); return; }
+    const preview=await api('portfolio/preview');
+    if (preview.error) throw new Error(preview.error + (preview.platforms?.length ? ' ' + preview.platforms.map(p=>p.platform+': '+p.error).join('; ') : ''));
+    document.getElementById('portfolioPreview').innerHTML=portfolioMarkup(preview);
+    document.getElementById('dryrunPortfolio').innerHTML=portfolioMarkup(preview);
+  } catch(e) {
+    if (e.message !== 'unauthorized') document.getElementById('portfolioPreview').innerHTML=`<div class="banner banner-warn">Preview unavailable: ${escapeHtml(e.message)}</div>`;
   }
-  const b = document.getElementById('alertsBanner');
-  if (alerts.length) {
-    b.innerHTML = alerts.map(a=>`<div class="alert-box alert-${a.type}"><div class="alert-body"><div class="alert-msg">${a.type==='warning'?'⚠️':''} ${a.msg}</div></div></div>`).join('');
-  } else b.innerHTML = '';
+}
+async function savePortfolio() {
+  const input=document.getElementById('portfolioAmount');
+  const value=input.value.trim();
+  const message=document.getElementById('portfolioMessage');
+  if (!/^(?:[1-9]\d{0,4})(?:\.\d{1,2})?$/.test(value) || Number(value)>10000) { message.textContent='Enter $1 to $10,000, with at most two decimal places.'; return; }
+  try {
+    await apiPut('portfolio',{daily_budget_cents:Math.round(Number(value)*100)});
+    message.textContent='Saved. This is a preview; ad platform budgets were not changed.';
+    await loadPortfolio();
+  } catch(e) { message.textContent='Could not save: '+e.message; }
 }
 
 // ── Dry Run ───────────────────────────────────────────────────────────────
@@ -475,7 +548,7 @@ function renderConfig(cfg) {
     <div class="config-item"><div class="config-key">CPA Target</div><div class="config-val">${fmtD(cfg.cpa_target_cents)}</div></div>
     <div class="config-item"><div class="config-key">Pause if CPA ></div><div class="config-val">${fmtD(cfg.cpa_target_cents * cfg.cpa_pause_threshold)}</div></div>
     <div class="config-item"><div class="config-key">Scale Up if CPA <</div><div class="config-val">${fmtD(cfg.cpa_target_cents * cfg.cpa_scale_threshold)}</div></div>
-    <div class="config-item"><div class="config-key">Combined Daily Cap</div><div class="config-val">${fmtD(cfg.total_daily_budget_cap_cents)}</div></div>
+    <div class="config-item"><div class="config-key">Legacy Policy Threshold</div><div class="config-val">${fmtD(cfg.total_daily_budget_cap_cents)}</div></div>
     <div class="config-item"><div class="config-key">Budget Step Up</div><div class="config-val">+${(cfg.budget_scale_up_pct*100).toFixed(0)}%</div></div>
     <div class="config-item"><div class="config-key">Budget Step Down</div><div class="config-val">−${(cfg.budget_scale_down_pct*100).toFixed(0)}%</div></div>`;
 }
@@ -491,7 +564,7 @@ function renderConfigFull(cfg) {
     ['AD_BUDGET_SCALE_DOWN_PCT', (cfg.budget_scale_down_pct*100).toFixed(0)+'%', 'How much to reduce budget when CTR is very low.'],
     ['AD_MIN_CLICKS', cfg.min_clicks_for_budget_decision, 'Minimum clicks required before any budget action fires.'],
     ['AD_MIN_SPEND_CENTS', fmtD(cfg.min_spend_cents_for_decision), 'Minimum spend required before any budget action fires.'],
-    ['AD_COMBINED_DAILY_BUDGET_CENTS', fmtD(cfg.total_daily_budget_cap_cents), 'Total daily budget across ALL campaigns combined ($25/day). App can shift up to 20% ($5) between campaigns. Hard ceiling is $30/day.'],
+    ['AD_COMBINED_DAILY_BUDGET_CENTS', fmtD(cfg.total_daily_budget_cap_cents), 'Legacy CPA/CTR policy alert threshold. The click allocation preview uses the amount saved on Overview.'],
     ['AD_MANAGER_MODE', 'dry-run / write / off', 'Operating mode. Keep dry-run until ready to activate write mode.'],
   ];
   document.getElementById('configTable').innerHTML = vars.map(([k,v,d])=>`<tr><td><code style="font-size:11px;background:#f1f5f9;padding:2px 6px;border-radius:4px">${k}</code></td><td style="font-weight:600">${v}</td><td style="color:var(--muted)">${d}</td></tr>`).join('');

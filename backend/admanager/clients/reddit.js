@@ -12,6 +12,7 @@
 const BASE_URL = "https://ads-api.reddit.com/api/v3";
 const TOKEN_URL = "https://www.reddit.com/api/v1/access_token";
 const REQUEST_TIMEOUT_MS = 30_000;
+const { calendarRange } = require("../reportingPeriod");
 
 function getCredentials() {
   const required = ["REDDIT_ADS_CLIENT_ID", "REDDIT_ADS_CLIENT_SECRET", "REDDIT_ADS_REFRESH_TOKEN", "REDDIT_ADS_ACCOUNT_ID"];
@@ -174,50 +175,48 @@ async function fetchCampaignStats(campaignId, startDate, endDate) {
 /**
  * Fetch all campaigns with today's performance, normalized.
  */
-async function fetchCampaignPerformance() {
+async function fetchCampaignPerformance(period = "today") {
   const creds = getCredentials();
-  const today = new Date().toISOString().slice(0, 10);
-
+  // Reddit's report defaults to UTC; use the same UTC calendar for its boundaries.
+  const range = calendarRange(period, "UTC");
   const campaignsData = await redditGet(`/ad_accounts/${creds.accountId}/campaigns`);
   const campaigns = campaignsData.data || [];
-
-  const results = await Promise.all(campaigns.map(async (c) => {
-    let stats = null;
-    try {
-      stats = await fetchCampaignStats(c.id, today, today);
-    } catch (_) {}
-
-    // v3 /reports response: {data: {metrics: [{date, impressions, clicks, spend}]}}
-    // spend is in micros (1,000,000 = $1.00)
-    const metrics = stats?.data?.metrics || [];
-    const statsData = metrics[0] || {};
-    const spendRaw = statsData.spend ?? 0;
-    const spendCents = spendRaw ? Math.round(spendRaw / 10_000) : 0;
-
-    return {
-      platform: "reddit",
-      external_campaign_id: c.id,
-      campaign_name: c.name || "",
-      status: c.status || "",
-      effective_status: c.effective_status || c.status || "",
-      objective: c.objective || "",
-      start_date: c.start_date || null,
-      end_date: c.end_date || null,
-      daily_budget_cents: c.daily_budget_cents
-        ? Math.round(c.daily_budget_cents / 100)   // Reddit budget already in microcents → cents
-        : c.goal_value
-        ? Math.round(c.goal_value / 10_000)         // goal_value in micros → cents
-        : null,
-      total_budget_cents: c.total_budget_cents || null,
-      spend_cents: spendCents,
-      impressions: Number(statsData.impressions ?? 0),
-      clicks:      Number(statsData.clicks      ?? 0),
-      conversions: 0,
-      _raw: sanitizeResponse(c),
-    };
+  if (!campaigns.length) return [];
+  const token = await getAccessToken();
+  const res = await fetch(`${BASE_URL}/ad_accounts/${creds.accountId}/reports`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "User-Agent": "ROOK:AdManager:1.0 (by /u/rookcareers)", "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ data: {
+      starts_at: range.since + "T00:00:00Z",
+      ends_at: range.until + "T23:59:59Z",
+      fields: ["IMPRESSIONS", "CLICKS", "SPEND"],
+      breakdowns: ["CAMPAIGN_ID"],
+    } }),
+  });
+  if (!res.ok) throw new Error(`Reddit campaign report failed (${res.status})`);
+  const report = await res.json();
+  if (!Array.isArray(report?.data?.metrics)) throw new Error("Reddit campaign report missing metrics");
+  const byId = new Map();
+  for (const row of report.data.metrics) {
+    const id = String(row.campaign_id || row.campaignId || "");
+    if (!id) throw new Error("Reddit campaign report missing campaign ID breakdown");
+    const current = byId.get(id) || { spend_cents: 0, impressions: 0, clicks: 0 };
+    current.spend_cents += Math.round(Number(row.spend || 0) / 10_000);
+    current.impressions += Number(row.impressions || 0);
+    current.clicks += Number(row.clicks || 0);
+    byId.set(id, current);
+  }
+  return campaigns.map(c => ({
+    platform: "reddit", external_campaign_id: c.id, campaign_name: c.name || "",
+    status: c.status || "", effective_status: c.effective_status || c.status || "",
+    objective: c.objective || "", start_date: c.start_date || null, end_date: c.end_date || null,
+    daily_budget_cents: c.daily_budget_cents ? Math.round(c.daily_budget_cents / 100)
+      : c.goal_value ? Math.round(c.goal_value / 10_000) : null,
+    total_budget_cents: c.total_budget_cents || null,
+    ...(byId.get(String(c.id)) || { spend_cents: 0, impressions: 0, clicks: 0 }),
+    conversions: null, conversion_label: "Unavailable from Reddit report",
+    reporting_timezone: "UTC", _raw: sanitizeResponse(c),
   }));
-
-  return results;
 }
 
 /**

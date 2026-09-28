@@ -11,6 +11,7 @@
 const META_API_VERSION = "v21.0";
 const BASE_URL = `https://graph.facebook.com/${META_API_VERSION}`;
 const REQUEST_TIMEOUT_MS = 30_000;
+const { calendarRange } = require("../reportingPeriod");
 
 function getCredentials() {
   const required = ["META_ADS_ACCESS_TOKEN", "META_ADS_ACCOUNT_ID"];
@@ -84,12 +85,12 @@ async function metaPost(path, body = {}) {
   }
 }
 
-function buildMetaCampaignFields(datePreset = "today") {
+function buildMetaCampaignFields(range) {
   return [
     "id", "name", "status", "effective_status",
     "objective", "start_time", "stop_time",
     "daily_budget", "lifetime_budget", "budget_remaining",
-    `insights.date_preset(${datePreset}).fields(spend,impressions,clicks,actions,cost_per_action_type)`,
+    `insights.time_range(${JSON.stringify({since: range.since, until: range.until})}).fields(spend,impressions,clicks,actions,cost_per_action_type)`,
   ].join(",");
 }
 
@@ -98,12 +99,20 @@ function buildMetaCampaignFields(datePreset = "today") {
  */
 async function fetchCampaignPerformance(datePreset = "today") {
   const creds = getCredentials();
+  const account = await metaGet(`/${creds.accountId}`, { fields: "timezone_name" });
+  const range = calendarRange(datePreset === "last_7d" ? "7d" : datePreset, account.timezone_name || "UTC");
   const data = await metaGet(`/${creds.accountId}/campaigns`, {
-    fields: buildMetaCampaignFields(datePreset),
+    fields: buildMetaCampaignFields(range),
     limit: "200",
   });
 
   const campaigns = data.data || [];
+  let next = data.paging?.next;
+  while (next) {
+    const page = await metaGet(new URL(next).pathname, Object.fromEntries(new URL(next).searchParams));
+    campaigns.push(...(page.data || []));
+    next = page.paging?.next;
+  }
   return campaigns.map((c) => {
     const insights = c.insights?.data?.[0] || {};
     const actions = insights.actions || [];
@@ -137,6 +146,10 @@ async function fetchCampaignPerformance(datePreset = "today") {
       conversions_lead: getAction("lead"),
       conversions_complete_registration: getAction("complete_registration"),
       conversions_purchase: getAction("purchase"),
+      // Registration is the displayed Meta conversion; do not add unlike actions.
+      conversions: Number(actions.find(a => ["complete_registration", "offsite_conversion.fb_pixel_complete_registration", "offsite_conversion.custom.complete_registration"].includes(a.action_type))?.value || 0),
+      conversion_label: "Complete registration",
+      reporting_timezone: range.time_zone,
       _raw: sanitizeResponse(c),
     };
   });

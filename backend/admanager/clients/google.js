@@ -16,6 +16,7 @@ const GOOGLE_ADS_API_VERSION = "v25";
 const BASE_URL = `https://googleads.googleapis.com/${GOOGLE_ADS_API_VERSION}`;
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const REQUEST_TIMEOUT_MS = 30_000;
+const { calendarRange } = require("../reportingPeriod");
 
 function getCredentials() {
   const required = [
@@ -149,7 +150,10 @@ function sanitizeResponse(obj) {
  * Fetch campaign-level performance. GAQL fields verified against v25.
  */
 async function fetchCampaignPerformance(dateRange = "TODAY") {
-  const today = new Date().toISOString().slice(0, 10);
+  const account = await googleAdsQuery("SELECT customer.time_zone FROM customer LIMIT 1");
+  const zone = account.results?.[0]?.customer?.timeZone;
+  if (!zone) throw new Error("Google Ads account timezone unavailable");
+  const range = calendarRange(dateRange === "TODAY" ? "today" : dateRange === "YESTERDAY" ? "yesterday" : dateRange === "LAST_7_DAYS" ? "7d" : dateRange, zone);
   const gaql = `
     SELECT
       campaign.id,
@@ -165,7 +169,7 @@ async function fetchCampaignPerformance(dateRange = "TODAY") {
       metrics.all_conversions,
       metrics.view_through_conversions
     FROM campaign
-    WHERE segments.date BETWEEN '${today}' AND '${today}'
+    WHERE segments.date BETWEEN '${range.since}' AND '${range.until}'
       AND campaign.status != REMOVED
     ORDER BY campaign.id
   `;
@@ -191,6 +195,8 @@ async function fetchCampaignPerformance(dateRange = "TODAY") {
     clicks:               Number(row.metrics?.clicks || 0),
     conversions:          Number(row.metrics?.conversions || 0),
     all_conversions:      Number(row.metrics?.allConversions || 0),
+    conversion_label:     "Google Ads conversions",
+    reporting_timezone:  range.time_zone,
     _raw: sanitizeResponse(row),
   }));
 }
