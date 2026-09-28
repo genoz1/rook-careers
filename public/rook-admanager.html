@@ -341,9 +341,12 @@ function showPage(name) {
 
 // ── API ───────────────────────────────────────────────────────────────────
 async function api(path) {
-  const r = await fetch('/api/admin/admanager/' + path + '?token=' + encodeURIComponent(token));
+  const separator = path.includes('?') ? '&' : '?';
+  const r = await fetch('/api/admin/admanager/' + path + separator + 'token=' + encodeURIComponent(token));
   if (r.status === 401) { sessionStorage.removeItem(TOKEN_KEY); token=''; showLogin(); throw new Error('unauthorized'); }
-  return r.json();
+  const data = await r.json().catch(() => null);
+  if (!r.ok || !data) throw new Error(data?.error || `Request failed (${r.status})`);
+  return data;
 }
 async function apiPut(path, body) {
   const r = await fetch('/api/admin/admanager/' + path + '?token=' + encodeURIComponent(token), {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -382,14 +385,22 @@ function platformIcon(p) {
 async function loadAll() {
   try {
     const request = ++overviewRequest;
-    const data = await api('dashboard&period=' + encodeURIComponent(document.getElementById('periodSelect').value));
+    const data = await api('dashboard?period=' + encodeURIComponent(document.getElementById('periodSelect').value));
     if (request !== overviewRequest) return;
     dashData = data;
     renderOverview(data);
     await loadPortfolio();
     if (dryrunData) {} // don't auto-reload dryrun
     if (controlsData) loadControls();
-  } catch(e) { if (e.message !== 'unauthorized') console.error(e); }
+  } catch(e) {
+    if (e.message !== 'unauthorized') {
+      console.error(e);
+      document.getElementById('overviewTs').textContent = 'Could not load campaign data: ' + e.message;
+      for (const id of ['s-spend','s-imp','s-clicks','s-conv','s-active']) document.getElementById(id).textContent = '—';
+      document.getElementById('overviewTable').innerHTML = `<tr><td colspan="11" class="empty">${escapeHtml(e.message)}</td></tr>`;
+      document.getElementById('campaignCards').innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`;
+    }
+  }
 }
 
 // ── Overview ──────────────────────────────────────────────────────────────
