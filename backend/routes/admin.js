@@ -289,10 +289,7 @@ router.get("/admin/admanager/portfolio/preview", async (req, res) => {
   const enabled = (process.env.AD_ENABLED_PLATFORMS || "").split(",").map(p=>p.trim()).filter(Boolean);
   const configured = enabled.filter(p=>p === "meta" ? process.env.META_ADS_ACCESS_TOKEN : p === "google" ? process.env.GOOGLE_ADS_CUSTOMER_ID : p === "reddit" ? process.env.REDDIT_ADS_ACCOUNT_ID : false);
   const clients = { meta:require("../admanager/clients/meta"), google:require("../admanager/clients/google"), reddit:require("../admanager/clients/reddit") };
-  const results = await Promise.all(configured.map(async platform => {
-    try { return { platform, campaigns:await clients[platform].fetchCampaignPerformance("7d") }; }
-    catch(e) { return { platform, error:e.message }; }
-  }));
+  const results = await require("../admanager/previewReporting").fetchPreviewReports(configured, clients);
   const errors=results.filter(r=>r.error);
   if (errors.length) return res.status(502).json({ error:"Platform reporting failed; no allocation proposed.", platforms:errors.map(r=>({platform:r.platform,error:r.error})) });
   const campaigns=results.flatMap(r=>r.campaigns.map(c=>({...c,platform:r.platform})));

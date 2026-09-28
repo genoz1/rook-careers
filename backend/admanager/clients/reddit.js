@@ -183,18 +183,29 @@ async function fetchCampaignPerformance(period = "today") {
   const campaigns = campaignsData.data || [];
   if (!campaigns.length) return [];
   const token = await getAccessToken();
-  const res = await fetch(`${BASE_URL}/ad_accounts/${creds.accountId}/reports`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "User-Agent": "ROOK:AdManager:1.0 (by /u/rookcareers)", "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ data: {
-      starts_at: range.since + "T00:00:00Z",
-      ends_at: range.until + "T23:59:59Z",
-      fields: ["IMPRESSIONS", "CLICKS", "SPEND"],
-      breakdowns: ["CAMPAIGN_ID"],
-    } }),
-  });
-  if (!res.ok) throw new Error(`Reddit campaign report failed (${res.status})`);
-  const report = await res.json();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let report;
+  try {
+    const res = await fetch(`${BASE_URL}/ad_accounts/${creds.accountId}/reports`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "User-Agent": "ROOK:AdManager:1.0 (by /u/rookcareers)", "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ data: {
+        starts_at: range.since + "T00:00:00Z",
+        ends_at: range.until + "T23:59:59Z",
+        fields: ["IMPRESSIONS", "CLICKS", "SPEND"],
+        breakdowns: ["CAMPAIGN_ID"],
+      } }),
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`Reddit campaign report failed (${res.status})`);
+    report = await res.json();
+  } catch (err) {
+    if (controller.signal.aborted) throw new Error("Reddit campaign report timed out");
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
   if (!Array.isArray(report?.data?.metrics)) throw new Error("Reddit campaign report missing metrics");
   const byId = new Map();
   for (const row of report.data.metrics) {
