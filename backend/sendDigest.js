@@ -24,7 +24,7 @@ async function run() {
     process.exit(1);
   }
 
-  console.log(`Found ${profiles.length} candidate(s) with an email on file.\n`);
+  console.log(`Found ${profiles.length} candidate profile(s).\n`);
 
   let sentCount = 0;
   let skippedCount = 0;
