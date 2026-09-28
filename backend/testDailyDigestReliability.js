@@ -81,7 +81,8 @@ async function run() {
     const p = ${JSON.stringify(profile)};
     const r = ${JSON.stringify(row('lifecycle'))};
     require('@supabase/supabase-js').createClient = () => ({ from(table) {
-      if (table === 'candidate_profiles') return { select: () => ({ not: async () => ({ data: [p], error: null }) }), update: () => ({ eq: async () => { writes++; return { error: null }; } }) };
+      if (table === 'candidate_profiles') return { select: async () => ({ data: [p], error: null }), update: () => ({ eq: async () => { writes++; return { error: null }; } }) };
+      if (table === 'pretrial_leads') { const q = { select: () => q, eq: () => q, order: () => q, range: async () => ({ data: [], error: null }) }; return q; }
       const q = { select: () => q, eq: () => q, gte: () => q, order: () => q, limit: async () => ({ data: [r], error: null }) }; return q;
     } });
     process.on('beforeExit', () => { assert.equal(sends, 1); assert.equal(writes, 1); assert.equal(intervals, 0); assert(!require.cache[require.resolve('./backend/routes/jobs')]); console.log('NATURAL_EXIT_NO_REFERENCED_TIMERS'); });
@@ -89,7 +90,7 @@ async function run() {
   `], { cwd: require('node:path').resolve(__dirname, '..'), encoding: 'utf8', timeout: 8000 });
   assert.equal(child.error, undefined, child.error?.message);
   assert.equal(child.status, 0, child.stderr);
-  assert.match(child.stdout, /Digest run complete\. Sent 1, skipped 0, out of 1/);
+  assert.match(child.stdout, /Digest run complete\. Sent 1, skipped 0, failed 0, out of 1/);
   assert.match(child.stdout, /NATURAL_EXIT_NO_REFERENCED_TIMERS/);
   console.log('Daily digest reliability: 21 fallback/error/access scenarios and natural CLI exit passed (all sends mocked)');
 }

@@ -21,7 +21,7 @@ class Query{
  if(this.value?.upsert){assert(!('onboarding_version'in this.value.upsert));arr.push(this.value.upsert);rows=[];}
  return Promise.resolve({data:this.one?rows[0]||null:rows,error:null}).then(resolve);}
 }
-const db={from:name=>new Query(name),auth:{getUser:async token=>({data:{user:token==='valid'?{id:'user',email_confirmed_at:'yes'}:null}})}};
+const db={from:name=>new Query(name),auth:{getUser:async token=>({data:{user:token==='valid'?{id:'user',email:'verified@example.test',email_confirmed_at:'yes'}:null}})}};
 require.cache[require.resolve('@supabase/supabase-js')]={exports:{createClient:()=>db}};
 require.cache[require.resolve('./v7Matching')]={exports:{rank:async()=>jobs}};
 const app=express();app.use(express.json());app.use('/api/v8',require('./routes/onboardingV8'));
@@ -37,6 +37,7 @@ const app=express();app.use(express.json());app.use('/api/v8',require('./routes/
   assert.equal((await call('/preference','PUT',{industry:'Veterinary'},token)).status,200);
   page=await call('/session','GET',null,token);assert.equal(page.data.count,3);assert.equal(page.data.jobs[0].company_name,'Veterinary Employer');
   assert.equal((await call('/claim','POST',null,token,true)).status,200);assert.equal(tables.candidate_profiles.length,1);
+  assert.equal(tables.candidate_profiles[0].email,'verified@example.test');
   tables.candidate_profiles[0].subscription_status='trialing';tables.candidate_profiles[0].trial_ends_at='2099-01-01T00:00:00Z';
   assert.equal((await call('/session','GET',null,token)).status,403);
   page=await call('/session','GET',null,token,true);assert.equal(page.data.unlocked,true);assert(page.data.jobs.every(j=>j.company_name));
