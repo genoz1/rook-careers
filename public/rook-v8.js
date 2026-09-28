@@ -5,12 +5,59 @@
   const track=(name,extra={})=>{if(typeof gtag==='function')gtag('event',name,{onboarding_version:'v8',...extra});};
   const token=()=>sessionStorage.getItem('rook_v7_token')||'';
   const safeUrl=value=>{try{const u=new URL(value);return u.protocol==='https:'?u.href:null;}catch(_){return null;}};
-  let data=null,selectedLocation=null,allJobs=[],busy=false,auth=null;
-  const client=()=>auth ||= window.supabase.createClient(window.ROOK_CONFIG.SUPABASE_URL,window.ROOK_CONFIG.SUPABASE_ANON_KEY);
+  let data=null,selectedLocation=null,allJobs=[],busy=false;
+  const client=()=>rookSupabase;
   async function api(path,options={}) {
     const {data:{session}}=await client().auth.getSession();
     const response=await fetch('/api/v8'+path,{...options,headers:{'X-ROOK-V7':token(),...(session?{Authorization:'Bearer '+session.access_token}:{}),...options.headers},cache:'no-store'});
     const json=await response.json();if(!response.ok)throw Error(json.error||'Please try again.');return json;
+  }
+  // Own the checkout return before attaching any onboarding handlers. The
+  // temporary preview token may have expired; the authenticated profile is
+  // authoritative and already contains the preferences claimed before checkout.
+  if(new URLSearchParams(location.search).get('trial')==='started'){
+    let activating=false;
+    async function activate(){
+      if(activating)return;
+      activating=true;
+      $('trialActivationRetry').hidden=true;$('trialActivationLogin').hidden=true;
+      $('trialActivationMessage').textContent='Activating your trial…';
+      $('trialActivationDetail').textContent='We’re confirming your membership. This may take a moment.';
+      const controller=new AbortController();
+      let deadline;
+      const expired=new Promise((_,reject)=>{deadline=setTimeout(()=>{controller.abort();reject(Error('Activation timed out'));},25000);});
+      try{
+        const profile=await Promise.race([ (async()=>{
+          for(let n=0;n<10;n++){
+            if(controller.signal.aborted)throw Error('Activation timed out');
+            try{
+              const response=await rookApiFetch('/profile',{cache:'no-store',signal:controller.signal});
+              if(response.status===401 || response.status===403)throw Object.assign(Error('Sign in to confirm your membership.'),{signIn:true});
+              if(response.ok){const profile=await response.json();if(rookHasFullAccess(profile))return profile;}
+            }catch(error){if(error.signIn || controller.signal.aborted)throw error;}
+            if(n<9)await new Promise(resolve=>setTimeout(resolve,2000));
+          }
+          throw Error('Activation is still pending');
+        })(),expired]);
+        // Keep the existing trial conversion guard; analytics cannot block navigation.
+        try{
+          if(profile.subscription_status==='trialing' && sessionStorage.getItem('rook_trial_activated_fired')!=='1'){
+            if(typeof rookTrackFunnelEvent==='function')rookTrackFunnelEvent('v8_trial_started');
+            gtag('event','conversion',{send_to:'AW-18428232873',event_category:'conversion',event_label:'trial_started_dashboard',value:0,currency:'USD'});
+            gtag('event','trial_activated',{event_category:'conversion',onboarding_version:'v8'});
+            sessionStorage.setItem('rook_trial_activated_fired','1');
+          }
+        }catch(_){}
+        window.location.replace('rook-dashboard-v8.html');
+      }catch(error){
+        $('trialActivationMessage').textContent='We haven’t confirmed your trial yet.';
+        $('trialActivationDetail').textContent=error.signIn?'Sign in to confirm your membership.':'Please try again in a moment. Your saved preferences are unchanged.';
+        $('trialActivationRetry').hidden=false;$('trialActivationLogin').hidden=false;
+      }finally{clearTimeout(deadline);controller.abort();activating=false;}
+    }
+    $('trialActivationRetry').onclick=activate;
+    $('trialActivationLogin').onclick=()=>{try{sessionStorage.setItem('rook_login_return',location.href);}catch(_){}};
+    activate();return;
   }
   function goSignup(source) {track('v8_masked_unlock_interaction',{source});track('v8_signup_reached');location.href='rook-onboarding-v8-signup.html';}
   $('startTrial').onclick=()=>{if(token()&&sessionStorage.getItem('rook_v8_active')===token())goSignup('header');else{$('overlay').hidden=false;$('locationInput').focus();}};
@@ -76,16 +123,7 @@
     track('v8_dashboard_impression');
     if(token()&&sessionStorage.getItem('rook_v8_active')===token()){
       try{
-        if(new URLSearchParams(location.search).get('trial')==='started'){
-          for(let n=0;n<10;n++){await load();if(data.unlocked)break;await new Promise(r=>setTimeout(r,2000));}
-          if(data.unlocked && data.profile.subscription_status==='trialing' && sessionStorage.getItem('rook_trial_activated_fired')!=='1'){
-            if(typeof rookTrackFunnelEvent==='function')rookTrackFunnelEvent('v8_trial_started');
-            gtag('event','conversion',{send_to:'AW-18428232873',event_category:'conversion',event_label:'trial_started_dashboard',value:0,currency:'USD'});
-            gtag('event','trial_activated',{event_category:'conversion',onboarding_version:'v8'});
-            sessionStorage.setItem('rook_trial_activated_fired','1');
-          }
-          if(data.unlocked)history.replaceState({},'',location.pathname);
-        }else await load();return;
+        await load();return;
       }catch(e){sessionStorage.removeItem('rook_v8_active');}
     }
     $('jobGrid').innerHTML=Array.from({length:9},(_,i)=>`<article class="job-card masked" aria-hidden="true"><div class="card-top"><span class="badge ${i%2?'good':''}">${i%2?'GOOD':'STRONG'} MATCH</span></div><div class="employer-line"><div class="company">${i%2?'Caralume':'Beredicalis'}</div></div><h2>Territory Sales Opportunity</h2><div class="card-meta"><span>▣ &nbsp;Field Sales</span><span>⌖ &nbsp;Opportunity near you</span><span>▥ &nbsp;<span class="category">Sales</span></span></div></article>`).join('');
