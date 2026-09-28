@@ -112,7 +112,19 @@ input:checked + .slider:before{transform:translateX(16px)}
 .banner-info{background:#e8f0fe;color:#1a56db}
 .banner-warn{background:#fef3cd;color:#92600a}
 
-@media(max-width:800px){.stats-row{grid-template-columns:1fr 1fr}.config-grid{grid-template-columns:1fr}}
+
+.overview-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+.overview-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.period-select{font:inherit;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--navy)}
+.campaign-name,.alert-msg{overflow-wrap:anywhere;word-break:break-word}
+.campaign-table-wrap{overflow-x:auto}
+.campaign-table{min-width:1050px}
+.campaign-cards{display:none}
+#page-config .section-body{overflow-x:auto}
+#page-config table{min-width:650px}
+@media(max-width:800px){.stats-row{grid-template-columns:repeat(2,minmax(0,1fr))}.config-grid{grid-template-columns:1fr}.topbar{padding:10px 12px;flex-wrap:wrap;gap:8px}.topnav{order:3;width:100%;overflow-x:auto;white-space:nowrap;scrollbar-width:thin}.tab{flex:none}.shell{padding:12px;min-width:0}.section-hd{gap:8px;flex-wrap:wrap}.campaign-table-wrap{display:none}.campaign-cards{display:block;padding:12px}.campaign-card{border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px;min-width:0}.campaign-card:last-child{margin-bottom:0}.campaign-card-name{font-weight:700;margin:9px 0;overflow-wrap:anywhere;word-break:break-word}.campaign-card-meta{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:700;text-transform:uppercase}.campaign-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;font-size:12px}.campaign-metrics span{min-width:0;overflow-wrap:anywhere}.campaign-metrics strong{display:block;color:var(--navy)}#page-controls>.section{max-width:100%}}
+@media(max-width:430px){.stat{padding:12px}.stat-val{font-size:20px}.brand{font-size:13px}.overview-actions{width:100%;justify-content:space-between}#page-controls>.page-head{flex-wrap:wrap;gap:10px}}
+
 </style>
 </head>
 <body>
@@ -144,31 +156,30 @@ input:checked + .slider:before{transform:translateX(16px)}
 
 <!-- OVERVIEW -->
 <div id="page-overview" class="page active">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+  <div class="overview-head">
     <div>
       <div style="font-size:18px;font-weight:900;color:var(--navy)">Advertising Overview</div>
       <div class="ts" id="overviewTs"></div>
     </div>
-    <button class="refresh-btn" onclick="loadAll()">↻ Refresh</button>
+    <div class="overview-actions"><label for="periodSelect" class="ts">Period</label><select id="periodSelect" class="period-select" onchange="loadAll()"><option value="today">Today</option><option value="yesterday">Yesterday</option><option value="7d">7 Days</option></select><button class="refresh-btn" onclick="loadAll()">↻ Refresh</button></div>
   </div>
 
   <div class="stats-row">
-    <div class="stat"><div class="stat-label">Spend Today</div><div class="stat-val" id="s-spend">—</div><div class="stat-sub">all platforms</div></div>
-    <div class="stat"><div class="stat-label">Impressions</div><div class="stat-val" id="s-imp">—</div><div class="stat-sub">today</div></div>
-    <div class="stat"><div class="stat-label">Clicks</div><div class="stat-val" id="s-clicks">—</div><div class="stat-sub">today</div></div>
+    <div class="stat"><div class="stat-label">Spend</div><div class="stat-val" id="s-spend">—</div><div class="stat-sub">all platforms</div></div>
+    <div class="stat"><div class="stat-label">Impressions</div><div class="stat-val" id="s-imp">—</div><div class="stat-sub">selected period</div></div>
+    <div class="stat"><div class="stat-label">Clicks</div><div class="stat-val" id="s-clicks">—</div><div class="stat-sub">selected period</div></div>
     <div class="stat"><div class="stat-label">Conversions</div><div class="stat-val" id="s-conv">—</div><div class="stat-sub">platform-reported</div></div>
-    <div class="stat"><div class="stat-label">Active Campaigns</div><div class="stat-val" id="s-active">—</div><div class="stat-sub">across platforms</div></div>
+    <div class="stat"><div class="stat-label">Active Campaigns</div><div class="stat-val" id="s-active">—</div><div class="stat-sub">current status</div></div>
   </div>
-
-  <div id="alertsBanner"></div>
 
   <div class="section">
     <div class="section-hd"><span class="section-title">Campaigns — Live Data</span></div>
-    <table>
-      <thead><tr><th>Platform</th><th>Campaign</th><th>Status</th><th>Daily Budget</th><th>Spend Today</th><th>Impressions</th><th>Clicks</th><th>Conversions</th><th>CTR</th><th>CPA</th></tr></thead>
-      <tbody id="overviewTable"><tr><td colspan="10" class="loading">Loading…</td></tr></tbody>
-    </table>
+    <div class="campaign-table-wrap"><table class="campaign-table">
+      <thead><tr><th>Platform</th><th>Campaign</th><th>Status</th><th>Daily Budget</th><th>Spend</th><th>Impressions</th><th>Clicks</th><th>Conversions</th><th>CTR</th><th>CPC</th><th>Cost/Conversion</th></tr></thead>
+      <tbody id="overviewTable"><tr><td colspan="11" class="loading">Loading…</td></tr></tbody>
+    </table></div><div class="campaign-cards" id="campaignCards"></div>
   </div>
+  <div class="section" id="alertsSection" style="display:none"><div class="section-hd"><span class="section-title">Campaign Alerts</span></div><div class="section-body" id="alertsBanner"></div></div>
 </div>
 
 <!-- DRY RUN -->
@@ -280,7 +291,7 @@ input:checked + .slider:before{transform:translateX(16px)}
 <script>
 const TOKEN_KEY = 'rook_adm_tok';
 let token = sessionStorage.getItem(TOKEN_KEY) || '';
-let dashData = null, dryrunData = null, controlsData = null;
+let dashData = null, dryrunData = null, controlsData = null, overviewRequest = 0;
 
 // ── Auth ──────────────────────────────────────────────────────────────────
 function login() {
@@ -350,62 +361,69 @@ function platformIcon(p) {
 // ── Load all ──────────────────────────────────────────────────────────────
 async function loadAll() {
   try {
-    dashData = await api('dashboard');
-    renderOverview(dashData);
+    const request = ++overviewRequest;
+    const data = await api('dashboard&period=' + encodeURIComponent(document.getElementById('periodSelect').value));
+    if (request !== overviewRequest) return;
+    dashData = data;
+    renderOverview(data);
     if (dryrunData) {} // don't auto-reload dryrun
     if (controlsData) loadControls();
   } catch(e) { if (e.message !== 'unauthorized') console.error(e); }
 }
 
 // ── Overview ──────────────────────────────────────────────────────────────
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+function statusRank(c) {
+  const status = (c.effective_status || c.status || '').toLowerCase();
+  const configured = (c.status || '').toLowerCase();
+  if (['active','enabled'].includes(status)) return 0;
+  if (['paused'].includes(status) || ['paused'].includes(configured)) return 2;
+  if (['error','disabled','removed','archived','rejected','disapproved','with_issues'].includes(status) || ['disabled','removed','archived'].includes(configured)) return 3;
+  return 1;
+}
 function renderOverview(data) {
   const badge = document.getElementById('modeBadge');
   badge.textContent = (data.mode||'off').toUpperCase();
   badge.className = 'mode-badge ' + (data.mode==='live'?'mode-live':data.mode==='dry-run'?'mode-dry':'mode-off');
   document.getElementById('overviewTs').textContent = 'Updated ' + new Date(data.fetched_at).toLocaleTimeString();
-
-  let spend=0, imp=0, clicks=0, conv=0, active=0;
-  const rows = [];
-  for (const [pName, pData] of Object.entries(data.platforms||{})) {
-    if (!pData?.ok) { rows.push(`<tr><td colspan="9" style="color:var(--red);padding:10px">${pName} error: ${pData?.error}</td></tr>`); continue; }
-    for (const c of (pData.campaigns||[])) {
-      spend += c.spend_cents||0; imp += c.impressions||0; clicks += c.clicks||0; conv += c.conversions||0;
-      const st = (c.status||'').toLowerCase();
-      if (st === 'active' || st === 'enabled') active++;
-      rows.push(`<tr>
-        <td>${platformIcon(pName)}${pName}</td>
-        <td style="max-width:240px;font-weight:600">${c.campaign_name||c.external_campaign_id}</td>
-        <td>${pillFor(c.status||c.effective_status)}</td>
-        <td style="font-weight:600">${c.daily_budget_cents ? fmtD(c.daily_budget_cents) : c.budget_cents ? fmtD(c.budget_cents) : '—'}</td>
-        <td>${fmtD(c.spend_cents)}</td>
-        <td>${fmtN(c.impressions)}</td>
-        <td>${fmtN(c.clicks)}</td>
-        <td>${fmtN(c.conversions)}</td>
-        <td>${ctr(c.clicks, c.impressions)}</td>
-        <td>${cpa(c.spend_cents, c.conversions)}</td>
-      </tr>`);
+  const seen = new Set(), campaigns = [], alerts = [];
+  for (const [platform, result] of Object.entries(data.platforms || {})) {
+    if (!result?.ok) { alerts.push({type:'critical', msg:`${platform.toUpperCase()} reporting error: ${result?.error || 'Unknown error'}`}); continue; }
+    for (const c of result.campaigns || []) {
+      const key = platform + ':' + c.external_campaign_id;
+      if (seen.has(key)) { alerts.push({type:'warning',msg:`${platform.toUpperCase()} returned duplicate campaign ${c.external_campaign_id}`}); continue; }
+      seen.add(key);
+      campaigns.push({platform, c});
+      const st = (c.status || c.effective_status || '').toLowerCase();
+      if (c.spend_cents === 0 && ['active','enabled'].includes(st) && data.period === 'today') alerts.push({type:'warning',msg:`${platform.toUpperCase()} · ${c.campaign_name}: $0 spend today`});
+      if (st === 'paused') alerts.push({type:'warning',msg:`${platform.toUpperCase()} · ${c.campaign_name}: paused`});
     }
   }
-  document.getElementById('s-spend').textContent = fmtD(spend);
-  document.getElementById('s-imp').textContent = fmtN(imp);
-  document.getElementById('s-clicks').textContent = fmtN(clicks);
-  document.getElementById('s-conv').textContent = fmtN(conv);
-  document.getElementById('s-active').textContent = active;
-  document.getElementById('overviewTable').innerHTML = rows.join('') || '<tr><td colspan="9" class="empty">No campaign data</td></tr>';
-
-  // Alerts banner
-  const alerts = [];
-  for (const [pName, pData] of Object.entries(data.platforms||{})) {
-    for (const c of (pData?.campaigns||[])) {
-      const st = (c.status||'').toLowerCase();
-      if (c.spend_cents === 0 && (st==='active'||st==='enabled')) alerts.push({type:'warning',msg:`${pName.toUpperCase()} · ${c.campaign_name}: $0 spend today`});
-      if (st === 'paused') alerts.push({type:'warning',msg:`${pName.toUpperCase()} · ${c.campaign_name}: paused`});
-    }
-  }
-  const b = document.getElementById('alertsBanner');
-  if (alerts.length) {
-    b.innerHTML = alerts.map(a=>`<div class="alert-box alert-${a.type}"><div class="alert-body"><div class="alert-msg">${a.type==='warning'?'⚠️':''} ${a.msg}</div></div></div>`).join('');
-  } else b.innerHTML = '';
+  campaigns.sort((a,b) => statusRank(a.c) - statusRank(b.c));
+  const sum = key => campaigns.reduce((n,{c}) => n + (Number(c[key]) || 0), 0);
+  const conversionGroups = [...new Set(campaigns.filter(({c}) => c.conversions != null).map(({platform,c}) => platform + ':' + (c.conversion_label || 'Conversions')))];
+  document.getElementById('s-spend').textContent = fmtD(sum('spend_cents'));
+  document.getElementById('s-imp').textContent = fmtN(sum('impressions'));
+  document.getElementById('s-clicks').textContent = fmtN(sum('clicks'));
+  document.getElementById('s-conv').textContent = conversionGroups.length === 1 ? fmtN(sum('conversions')) : conversionGroups.length ? 'Mixed' : '—';
+  document.querySelector('#s-conv + .stat-sub').textContent = conversionGroups.length > 1 ? 'definitions differ by platform' : 'platform-reported';
+  document.getElementById('s-active').textContent = campaigns.filter(({c}) => statusRank(c) === 0).length;
+  const renderMetric = (label, value) => `<span>${label}<strong>${value}</strong></span>`;
+  document.getElementById('overviewTable').innerHTML = campaigns.map(({platform,c}) => `<tr>
+    <td>${platformIcon(platform)}${escapeHtml(platform)}</td><td class="campaign-name" style="max-width:240px;font-weight:600">${escapeHtml(c.campaign_name || c.external_campaign_id)}</td>
+    <td>${pillFor(escapeHtml(c.effective_status || c.status))}</td><td>${fmtD(c.daily_budget_cents ?? c.budget_cents)}</td>
+    <td>${fmtD(c.spend_cents)}</td><td>${fmtN(c.impressions)}</td><td>${fmtN(c.clicks)}</td><td title="${escapeHtml(c.conversion_label || '')}">${fmtN(c.conversions)}</td>
+    <td>${ctr(c.clicks,c.impressions)}</td><td>${cpa(c.spend_cents,c.clicks)}</td><td>${cpa(c.spend_cents,c.conversions)}</td></tr>`).join('') || '<tr><td colspan="11" class="empty">No campaign data</td></tr>';
+  document.getElementById('campaignCards').innerHTML = campaigns.map(({platform,c}) => `<article class="campaign-card">
+    <div class="campaign-card-meta">${escapeHtml(platform)} · ${pillFor(escapeHtml(c.effective_status || c.status))}</div>
+    <div class="campaign-card-name">${escapeHtml(c.campaign_name || c.external_campaign_id)}</div>
+    <div class="campaign-metrics">${renderMetric('Spend',fmtD(c.spend_cents))}${renderMetric('Impressions',fmtN(c.impressions))}${renderMetric('Clicks',fmtN(c.clicks))}${renderMetric('Conversions',fmtN(c.conversions))}${renderMetric('CTR',ctr(c.clicks,c.impressions))}${renderMetric('CPC',cpa(c.spend_cents,c.clicks))}${c.conversions > 0 ? renderMetric('Cost/Conversion',cpa(c.spend_cents,c.conversions)) : ''}</div>
+  </article>`).join('') || '<div class="empty">No campaign data</div>';
+  const alertSection = document.getElementById('alertsSection');
+  alertSection.style.display = alerts.length ? '' : 'none';
+  document.getElementById('alertsBanner').innerHTML = alerts.map(a=>`<div class="alert-box alert-${a.type}"><div class="alert-body"><div class="alert-msg">⚠️ ${escapeHtml(a.msg)}</div></div></div>`).join('');
 }
 
 // ── Dry Run ───────────────────────────────────────────────────────────────

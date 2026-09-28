@@ -311,6 +311,8 @@ router.get("/admin/admanager/dashboard", async (req, res) => {
   if (!expectedToken || req.query.token !== expectedToken) {
     return res.status(401).json({ error: "unauthorized" });
   }
+  const period = req.query.period || "today";
+  if (!["today", "yesterday", "7d"].includes(period)) return res.status(400).json({ error: "Invalid period" });
   const enabled = (process.env.AD_ENABLED_PLATFORMS || "").split(",").map(p => p.trim()).filter(Boolean);
   const mode = process.env.AD_MANAGER_MODE || "off";
   const platforms = {};
@@ -325,13 +327,13 @@ router.get("/admin/admanager/dashboard", async (req, res) => {
 
   await Promise.all([
     enabled.includes("meta") && process.env.META_ADS_ACCESS_TOKEN
-      ? fetchPlatform("meta", () => require("../admanager/clients/meta").fetchCampaignPerformance("today"))
+      ? fetchPlatform("meta", () => require("../admanager/clients/meta").fetchCampaignPerformance(period))
       : Promise.resolve(),
     enabled.includes("google") && process.env.GOOGLE_ADS_CUSTOMER_ID
-      ? fetchPlatform("google", () => require("../admanager/clients/google").fetchCampaignPerformance())
+      ? fetchPlatform("google", () => require("../admanager/clients/google").fetchCampaignPerformance(period))
       : Promise.resolve(),
     enabled.includes("reddit") && process.env.REDDIT_ADS_ACCOUNT_ID
-      ? fetchPlatform("reddit", () => require("../admanager/clients/reddit").fetchCampaignPerformance())
+      ? fetchPlatform("reddit", () => require("../admanager/clients/reddit").fetchCampaignPerformance(period))
       : Promise.resolve(),
   ]);
 
@@ -347,7 +349,7 @@ router.get("/admin/admanager/dashboard", async (req, res) => {
     snapshots = data || [];
   } catch (_) {}
 
-  return res.json({ mode, enabled_platforms: enabled, platforms, snapshots, fetched_at: new Date().toISOString() });
+  return res.json({ mode, enabled_platforms: enabled, period, platforms, snapshots, fetched_at: new Date().toISOString() });
 });
 
 module.exports = router;
