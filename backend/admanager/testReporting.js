@@ -16,7 +16,7 @@ let requests=[];
 const ok = data => ({ok:true,json:async()=>data});
 global.fetch=async (url, options={}) => {
   const body=options.body && !(options.body instanceof URLSearchParams) ? JSON.parse(String(options.body)) : null;
-  requests.push({url:String(url),body});
+  requests.push({url:String(url),body,signal:options.signal});
   if (String(url).includes('oauth2.googleapis.com') || String(url).includes('reddit.com/api/v1/access_token')) return ok({access_token:'test',expires_in:3600});
   if (String(url).includes('graph.facebook.com')) {
     if (String(url).includes('/act_123/campaigns')) return ok({data:[{id:'m1',name:'Meta',status:'ACTIVE',effective_status:'ACTIVE',insights:{data:[{spend:'3.25',impressions:'100',clicks:'4',actions:[{action_type:'complete_registration',value:'2'}]}]}}]});
@@ -43,7 +43,9 @@ global.fetch=async (url, options={}) => {
     const redditQuery=requests.find(x=>x.url.includes('/reports')).body.data;
     assert.ok(metaQuery.includes('time_range('));
     assert.ok(googleQuery.includes('segments.date BETWEEN'));
+    assert.ok(googleQuery.includes('campaign_budget.resource_name'));
     assert.deepEqual(redditQuery.breakdowns,['CAMPAIGN_ID']);
+    assert.ok(requests.find(x=>x.url.includes('/reports')).signal);
     const duration=period==='7d'?6:0;
     const mRange=calendarRange(period,'America/New_York');
     const gRange=calendarRange(period,'America/Los_Angeles');

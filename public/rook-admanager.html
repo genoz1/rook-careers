@@ -345,7 +345,10 @@ async function api(path) {
   const r = await fetch('/api/admin/admanager/' + path + separator + 'token=' + encodeURIComponent(token));
   if (r.status === 401) { sessionStorage.removeItem(TOKEN_KEY); token=''; showLogin(); throw new Error('unauthorized'); }
   const data = await r.json().catch(() => null);
-  if (!r.ok || !data) throw new Error(data?.error || `Request failed (${r.status})`);
+  if (!r.ok || !data) {
+    const details = data?.platforms?.map(p => `${p.platform}: ${p.error}`).join('; ');
+    throw new Error((data?.error || `Request failed (${r.status})`) + (details ? ` ${details}` : ''));
+  }
   return data;
 }
 async function apiPut(path, body) {
