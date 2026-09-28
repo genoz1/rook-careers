@@ -304,7 +304,7 @@ input:checked + .slider:before{transform:translateX(16px)}
 <script>
 const TOKEN_KEY = 'rook_adm_tok';
 let token = sessionStorage.getItem(TOKEN_KEY) || '';
-let dashData = null, dryrunData = null, controlsData = null, overviewRequest = 0;
+let dashData = null, dryrunData = null, controlsData = null, overviewRequest = 0, portfolioRequest = 0;
 
 // ── Auth ──────────────────────────────────────────────────────────────────
 function login() {
@@ -470,17 +470,28 @@ function portfolioMarkup(data) {
   return `<div class="allocation-summary">Entered amount ${fmtD(p.budget_cents)} · Proposed ${fmtD(p.allocated_cents)}${p.unallocated_cents ? ` · Unallocated ${fmtD(p.unallocated_cents)}` : ''}</div>${rows || '<div class="ts">No active campaigns available.</div>'}<div class="ts" style="margin-top:9px">Unapproved campaigns retain their current budgets. No platform budgets were changed.</div>`;
 }
 async function loadPortfolio() {
+  const request = ++portfolioRequest;
   try {
     const saved=await api('portfolio');
+    if (request !== portfolioRequest) return;
     if (saved.error) throw new Error(saved.error);
     document.getElementById('portfolioAmount').value=saved.budget ? (saved.budget.daily_budget_cents/100).toFixed(2) : '';
     if (!saved.budget) { document.getElementById('portfolioPreview').innerHTML=portfolioMarkup({configured:false}); return; }
-    const preview=await api('portfolio/preview');
+    let preview=await api('portfolio/preview');
+    for (let attempts=0; preview.pending && attempts<30; attempts++) {
+      if (request !== portfolioRequest) return;
+      document.getElementById('portfolioPreview').innerHTML='<div class="ts">Preparing seven-day click allocation from live platform reports…</div>';
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      if (request !== portfolioRequest) return;
+      preview=await api('portfolio/preview?job=' + encodeURIComponent(preview.job));
+    }
+    if (request !== portfolioRequest) return;
+    if (preview.pending) throw new Error('Live platform reports are still pending. Please try again shortly.');
     if (preview.error) throw new Error(preview.error + (preview.platforms?.length ? ' ' + preview.platforms.map(p=>p.platform+': '+p.error).join('; ') : ''));
     document.getElementById('portfolioPreview').innerHTML=portfolioMarkup(preview);
     document.getElementById('dryrunPortfolio').innerHTML=portfolioMarkup(preview);
   } catch(e) {
-    if (e.message !== 'unauthorized') document.getElementById('portfolioPreview').innerHTML=`<div class="banner banner-warn">Preview unavailable: ${escapeHtml(e.message)}</div>`;
+    if (request === portfolioRequest && e.message !== 'unauthorized') document.getElementById('portfolioPreview').innerHTML=`<div class="banner banner-warn">Preview unavailable: ${escapeHtml(e.message)}</div>`;
   }
 }
 async function savePortfolio() {
