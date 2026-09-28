@@ -40,7 +40,7 @@ test('production routing: ten pages, privacy, pagination, canonicals, schema, si
  const express=require('express');let app;
  // Execute real server routing/static configuration without starting background workers.
  function fakeExpress(){app=express();app.listen=()=>null;return app;}Object.assign(fakeExpress,express);
- vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../server.js'),'utf8'),{require(name){if(name==='express')return fakeExpress;if(name==='dotenv')return {config(){}};if(name==='path')return path;if(name==='./backend/routes/publicPages')return require('./routes/publicPages');if(name==='./backend/publicSeo')return require('./publicSeo');if(name==='fs')return fs;return express.Router();},__dirname:path.join(__dirname,'..'),process:{env:process.env,on(){}},console});
+ vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../server.js'),'utf8'),{require(name){if(name==='express')return fakeExpress;if(name==='dotenv')return {config(){}};if(name==='path')return path;if(name==='./backend/routes/publicPages')return require('./routes/publicPages');if(name==='./backend/publicSeo')return require('./publicSeo');if(name==='./backend/resources/routes')return {createRouter:()=>express.Router()};if(name==='fs')return fs;return express.Router();},__dirname:path.join(__dirname,'..'),process:{env:process.env,on(){}},console,URLSearchParams});
  const server=express.application.listen.call(app,0,'127.0.0.1');await new Promise(r=>server.once('listening',r));const origin='http://127.0.0.1:'+server.address().port;
  const get=p=>fetch(origin+p,{redirect:'manual'});
  try {
@@ -60,8 +60,16 @@ test('production routing: ten pages, privacy, pagination, canonicals, schema, si
   for(const p of ['/jobs/category/no-such-category','/jobs/category/medical-sales-jobs/florida/orlando','/jobs/category/medical-sales-jobs/texas','/jobs/category/veterinary-sales-jobs/florida','/not-a-rook-page','/jobs/category/medical-sales-jobs?page=0','/jobs/category/medical-sales-jobs?page=999'])assert.equal((await get(p)).status,404,p);
   const alias=await get('/jobs/category/animal-health-sales-jobs');assert.equal(alias.status,301);assert.equal(alias.headers.get('location'),'/jobs/category/veterinary-sales-jobs');
   const home=await get('/index.html?utm_source=test');assert.equal(home.status,301);assert.equal(home.headers.get('location'),'/?utm_source=test');
-  for(const file of ['rook-dashboard-v7.html','rook-dashboard.html','rook-onboarding-v7.html','rook-onboarding-v7-signup.html','rook-checkout-v7.html','rook-login.html','rook-search.html']){const r=await get('/'+file);assert.equal(r.status,200,file);assert.equal(r.headers.get('x-robots-tag'),'noindex, follow');}
-  assert.equal((await get('/rook-onboarding-v4.html')).status,302);assert.equal((await get('/medical-sales/free-trial')).status,302);
+  for(const file of ['rook-dashboard-v7.html','rook-dashboard.html','rook-onboarding-v7-signup.html','rook-checkout-v7.html','rook-login.html','rook-search.html']){const r=await get('/'+file);assert.equal(r.status,200,file);assert.equal(r.headers.get('x-robots-tag'),'noindex, follow');}
+  for(const file of ['rook-onboarding.html',...[2,3,4,5,6,7].map(v=>`rook-onboarding-v${v}.html`)]){
+    const r=await get('/'+file+'?utm_source=google&gclid=test%2Bvalue');
+    assert.equal(r.status,302,file);
+    assert.equal(r.headers.get('location'),'/rook-onboarding-v8.html?utm_source=google&gclid=test%2Bvalue',file);
+  }
+  for(const [from,to] of [['/rook-onboarding-v2.html?ob=resume_upload','/rook-resume.html?ob=resume_upload&rook_v8=1'],['/rook-onboarding-v2.html?edit=preferences','/rook-settings.html?edit=preferences&rook_v8=1']]){
+    const r=await get(from);assert.equal(r.status,302);assert.equal(r.headers.get('location'),to);
+  }
+  const ad=await get('/medical-sales/free-trial?utm_source=google');assert.equal(ad.status,302);assert.equal(ad.headers.get('location'),'/rook-onboarding-v8.html?utm_source=google');
   for(const file of ['','rook-browse.html','rook-about.html','rook-employers.html','rook-companies.html']){const r=await get('/'+file);assert.equal(r.status,200);assert((await r.text()).includes(`rel="canonical" href="${PUBLIC}/${file}"`));}
   const map=await(await get('/sitemap.xml')).text();for(const slug of Object.keys(CATEGORIES)){assert(map.includes(PUBLIC+'/jobs/category/'+slug+'</loc>'));if(FLORIDA.includes(slug))assert(map.includes(PUBLIC+'/jobs/category/'+slug+'/florida</loc>'));}assert(!map.includes('/animal-health-sales-jobs'));assert(map.includes('/jobs/'+rows[0].id));noSecrets(map);
   for(const p of ['/jobs/'+rows[0].id,'/api/jobs/'+rows[0].id]){if(p.startsWith('/api'))continue;const r=await get(p);assert.equal(r.status,200);noSecrets(await r.text());}

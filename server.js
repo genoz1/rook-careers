@@ -50,7 +50,7 @@ app.get("/medical-sales/free-trial", (req, res) => {
   const queryStart = req.originalUrl.indexOf("?");
   const query = queryStart === -1 ? "" : req.originalUrl.slice(queryStart);
   res.set("Cache-Control", "no-store");
-  return res.redirect(302, "/rook-onboarding-v4.html" + query);
+  return res.redirect(302, "/rook-onboarding-v8.html" + query);
 });
 app.get("/medical-sales/:page", (req, res, next) => {
   const page = req.params.page;
@@ -59,6 +59,10 @@ app.get("/medical-sales/:page", (req, res, next) => {
   const queryStart = req.originalUrl.indexOf("?");
   const query = queryStart === -1 ? "" : req.originalUrl.slice(queryStart);
   res.set("Cache-Control", "no-store");
+  if (/^rook-onboarding(?:-v[2-7])?\.html$/.test(page) &&
+      !(page === "rook-onboarding-v2.html" && (req.query.ob === "resume_upload" || req.query.edit === "preferences"))) {
+    return res.redirect(302, "/rook-onboarding-v8.html" + query);
+  }
   return res.redirect(302, "/" + page + query);
 });
 
@@ -72,39 +76,19 @@ app.use("/", require("./backend/routes/publicPages"));
 // HTML files must revalidate on every request — no stale cached
 // layouts served after a deployment. JS/CSS/images can be cached
 // safely since they're content-addressed by filename.
-// v4 is the current onboarding — redirect earlier versions to it
-// Using 302 (temporary) not 301 (permanent) so browsers don't cache the redirect
-app.get("/rook-onboarding.html", (req, res) => {
-  const qs = Object.keys(req.query).length ? "?" + new URLSearchParams(req.query).toString() : "";
-  res.redirect(302, "/rook-onboarding-v4.html" + qs);
-});
-// v5 was created by a previous session — redirect it to v4
-app.get("/rook-onboarding-v5.html", (req, res) => {
-  const qs = Object.keys(req.query).length ? "?" + new URLSearchParams(req.query).toString() : "";
-  res.redirect(302, "/rook-onboarding-v4.html" + qs);
-});
-app.get("/rook-onboarding-v4.html", (req, res) => {
+// All legacy onboarding entry URLs go directly to V8. Keep the original
+// query string for ad attribution and avoid a cached permanent redirect.
+app.get(["/rook-onboarding.html", ...[2, 3, 4, 5, 6, 7].map(v => `/rook-onboarding-v${v}.html`)], (req, res) => {
   const queryStart = req.originalUrl.indexOf("?");
   const query = queryStart === -1 ? "" : req.originalUrl.slice(queryStart);
   res.set("Cache-Control", "no-store");
-  return res.redirect(302, "/rook-onboarding-v7.html" + query);
-});
-app.get("/rook-onboarding-v2.html", (req, res) => {
-  const ob   = req.query.ob;
-  const edit = req.query.edit;
-  if (ob === "v2_return" || ob === "resume_upload" || edit === "preferences") {
-    return res.sendFile(path.join(__dirname, "public", "rook-onboarding-v2.html"));
+  if (req.path === "/rook-onboarding-v2.html" && (req.query.ob === "resume_upload" || req.query.edit === "preferences")) {
+    const params = new URLSearchParams(query.slice(1));
+    params.set("rook_v8", "1");
+    const destination = req.query.ob === "resume_upload" ? "/rook-resume.html" : "/rook-settings.html";
+    return res.redirect(302, destination + "?" + params.toString());
   }
-  const qs = Object.keys(req.query).length ? "?" + new URLSearchParams(req.query).toString() : "";
-  res.redirect(302, "/rook-onboarding-v4.html" + qs);
-});
-app.get("/rook-onboarding-v3.html", (req, res) => {
-  const ob = req.query.ob;
-  if (ob === "v3_verified") {
-    return res.sendFile(path.join(__dirname, "public", "rook-onboarding-v3.html"));
-  }
-  const qs = Object.keys(req.query).length ? "?" + new URLSearchParams(req.query).toString() : "";
-  res.redirect(302, "/rook-onboarding-v4.html" + qs);
+  return res.redirect(302, "/rook-onboarding-v8.html" + query);
 });
 
 // Serve rook-config.js dynamically so STRIPE_PUBLISHABLE_KEY is injected
