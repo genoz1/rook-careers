@@ -159,8 +159,12 @@ test('channel UTM links are deterministic and Reddit remains generation-only',()
  for(const channel of ['linkedin','facebook','reddit']){const text=regularPost(slot,channel,copy);assert.match(text,new RegExp('utm_source='+channel));assert.match(text,/utm_medium=social/);}
  assert.match(regularPost(slot,'facebook',copy),/rook-onboarding-v8\.html\?utm_source=facebook/);
  const resourceCopy={...copy,resource_url:'https://rookcareers.com/resources/sales-guide/'};
- assert.doesNotMatch(regularPost(slot,'facebook',resourceCopy),/\/resources\//);
- assert.match(regularPost(slot,'linkedin',resourceCopy),/\/resources\//);
+ for(const channel of ['facebook','linkedin','instagram']){
+  const text=regularPost(slot,channel,resourceCopy);
+  assert.match(text,/\/resources\/sales-guide\/\?/);
+  assert.match(text,new RegExp('utm_source='+channel));
+  assert.doesNotMatch(text,/rook-onboarding-v8\.html/);
+ }
 });
 test('Buffer queue API follows pagination and uses live plan limit',async()=>{
  let page=0;const result=await readQueue('fake','org',{httpFetch:async()=>({ok:true,text:async()=>JSON.stringify({data:{account:{organizations:[{id:'org',limits:{scheduledPosts:10}}]},posts:{edges:[{node:{id:String(++page)}}],pageInfo:{hasNextPage:page===1,endCursor:'next'}}}})})});

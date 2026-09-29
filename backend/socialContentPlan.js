@@ -50,8 +50,12 @@ function personalLinkedinSlot(slot) {
 }
 function regularPost(slot, platform, copy) {
   const content = copy.resource_url ? 'resource_article' : slot.kind;
-  const url = platform === 'facebook' ? socialV8Destination('facebook', content) : new URL(copy.resource_url || 'https://rookcareers.com/');
-  if (platform !== 'facebook') url.search = new URLSearchParams({ utm_source: platform, utm_medium: 'social', utm_campaign: 'organic', utm_content: content }).toString();
+  const url = copy.resource_url
+    ? new URL(copy.resource_url)
+    : platform === 'facebook'
+      ? new URL(socialV8Destination('facebook', content))
+      : new URL('https://rookcareers.com/');
+  if (copy.resource_url || platform !== 'facebook') url.search = new URLSearchParams({ utm_source: platform, utm_medium: 'social', utm_campaign: 'organic', utm_content: content }).toString();
   const headline = copy.headline || 'Medical & veterinary sales careers';
   const body = copy[platform] || copy.text;
   // Advice stands on its own. Product posts retain the existing attribution.
