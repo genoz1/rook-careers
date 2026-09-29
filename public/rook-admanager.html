@@ -129,6 +129,12 @@ input:checked + .slider:before{transform:translateX(16px)}
 @media(max-width:800px){.stats-row{grid-template-columns:repeat(2,minmax(0,1fr))}.config-grid{grid-template-columns:1fr}.topbar{padding:10px 12px;flex-wrap:wrap;gap:8px}.topnav{order:3;width:100%;overflow-x:auto;white-space:nowrap;scrollbar-width:thin}.tab{flex:none}.shell{padding:12px;min-width:0}.section-hd{gap:8px;flex-wrap:wrap}.campaign-table-wrap{display:none}.campaign-cards{display:block;padding:12px}.campaign-card{border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px;min-width:0}.campaign-card:last-child{margin-bottom:0}.campaign-card-name{font-weight:700;margin:9px 0;overflow-wrap:anywhere;word-break:break-word}.campaign-card-meta{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:700;text-transform:uppercase}.campaign-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;font-size:12px}.campaign-metrics span{min-width:0;overflow-wrap:anywhere}.campaign-metrics strong{display:block;color:var(--navy)}#page-controls>.section{max-width:100%}}
 @media(max-width:430px){.stat{padding:12px}.stat-val{font-size:20px}.brand{font-size:13px}.overview-actions{width:100%;justify-content:space-between}#page-controls>.page-head{flex-wrap:wrap;gap:10px}}
 
+/* GA4 uses stacked cards at narrow widths. */
+.ga4-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0}
+.ga4-row{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:12px;padding:10px 0;border-bottom:1px solid var(--line);overflow-wrap:anywhere}
+.ga4-note{font-size:12px;color:var(--muted);line-height:1.6;margin:8px 0;overflow-wrap:anywhere}
+.ga4-value{font-size:20px;font-weight:800;color:var(--navy)}
+@media(max-width:430px){.ga4-row{grid-template-columns:1fr}.ga4-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style>
 </head>
 <body>
@@ -175,6 +181,11 @@ input:checked + .slider:before{transform:translateX(16px)}
     <div class="stat"><div class="stat-label">Conversions</div><div class="stat-val" id="s-conv">—</div><div class="stat-sub">platform-reported</div></div>
     <div class="stat"><div class="stat-label">Active Campaigns</div><div class="stat-val" id="s-active">—</div><div class="stat-sub">current status</div></div>
   </div>
+
+  <section class="section" aria-labelledby="ga4Title">
+    <div class="section-hd"><span class="section-title" id="ga4Title">ROOK Website / GA4</span><span class="ts" id="ga4Status" role="status">Not loaded</span></div>
+    <div class="section-body" id="ga4Body"></div>
+  </section>
 
   <div class="section">
     <div class="section-hd"><span class="section-title">Daily Budget · Click Allocation Preview</span></div>
@@ -386,9 +397,12 @@ function platformIcon(p) {
 
 // ── Load all ──────────────────────────────────────────────────────────────
 async function loadAll() {
+  const ga4Period = document.getElementById('periodSelect').value;
   try {
     const request = ++overviewRequest;
-    const data = await api('dashboard?period=' + encodeURIComponent(document.getElementById('periodSelect').value));
+    const dashboardPromise = api('dashboard?period=' + encodeURIComponent(ga4Period));
+    void loadGa4(ga4Period);
+    const data = await dashboardPromise;
     if (request !== overviewRequest) return;
     dashData = data;
     renderOverview(data);
@@ -459,6 +473,50 @@ function renderOverview(data) {
   const alertSection = document.getElementById('alertsSection');
   alertSection.style.display = alerts.length ? '' : 'none';
   document.getElementById('alertsBanner').innerHTML = alerts.map(a=>`<div class="alert-box alert-${a.type}"><div class="alert-body"><div class="alert-msg">⚠️ ${escapeHtml(a.msg)}</div></div></div>`).join('');
+}
+
+// GA4 request failures and stale responses cannot affect the advertising view.
+let ga4Request = 0;
+async function loadGa4(period) {
+  const request = ++ga4Request;
+  document.getElementById('ga4Status').textContent = 'Loading…';
+  document.getElementById('ga4Body').textContent = '';
+  try {
+    const data = await api('ga4?period=' + encodeURIComponent(period));
+    if (request !== ga4Request) return;
+    if (!data.ok) throw new Error(data.error || 'GA4 unavailable');
+    renderGa4(data);
+  } catch(e) {
+    if (request !== ga4Request) return;
+    document.getElementById('ga4Status').textContent = 'Unavailable';
+    document.getElementById('ga4Body').textContent = e.message === 'unauthorized' ? 'Sign in to view GA4.' : e.message;
+  }
+}
+function renderGa4(data) {
+  const esc = escapeHtml;
+  const ratio = (n,d) => n != null && d > 0 ? (n/d*100).toFixed(1)+'%' : '—';
+  document.getElementById('ga4Status').textContent = 'Updated ' + new Date(data.fetched_at).toLocaleTimeString();
+  const card = (label,n) => `<div class="stat"><div class="stat-label">${esc(label)}</div><div class="ga4-value">${fmtN(n)}</div></div>`;
+  let previous = data.totals.users;
+  const stages = data.stages.map(s => {
+    const pct = ratio(s.users,previous);
+    if(s.users != null) previous = s.users;
+    return `<div class="ga4-row"><div><strong>${esc(s.label)}</strong><div class="ts">${esc(s.event)}</div></div><div>${s.users == null ? 'No data returned' : `${fmtN(s.users)} users · ${fmtN(s.count)} events<br>${pct} of previous measured stage`}</div></div>`;
+  }).join('');
+  const traffic = data.traffic.map(r=>`<div class="ga4-row"><div><strong>${esc(r.source_medium)}</strong><br>${esc(r.campaign)}</div><div>${fmtN(r.sessions)} sessions · ${fmtN(r.users)} users</div></div>`).join('');
+  const events = data.attributed_events.map(r=>`<div class="ga4-row"><div><strong>${esc(r.source_medium)}</strong><br>${esc(r.campaign)}<br><span class="ts">${esc(r.event)}</span></div><div>${fmtN(r.count)} events</div></div>`).join('');
+  document.getElementById('ga4Body').innerHTML = `
+    <div class="ga4-note">Property ${esc(data.property_id)} · ${esc(data.time_zone)} · ${data.range ? esc(data.range.since)+' through '+esc(data.range.until) : 'Dates follow the GA4 property timezone'}<br>Last 7 Days includes today. Ads use each ad account’s timezone; day boundaries may differ. Recent GA4 data can be delayed.</div>
+    <div class="ga4-grid">${card('Users',data.totals.users)}${card('Sessions',data.totals.sessions)}${card('New users',data.totals.new_users)}${card('sign_up events',data.sign_up)}</div>
+    ${data.warnings.map(w=>`<div class="ga4-note">⚠ ${esc(w)}</div>`).join('')}
+    <h3 class="section-title">ROOK funnel activity</h3>
+    <div class="ga4-note">Unique users per stage in this period. Ratios compare independent totals, not sequential progression or conversion rates; users may skip stages, return later, or appear in multiple stages. Ratios can exceed 100%. Missing event rows mean no data returned, not verified zero or proof that tracking is absent.</div>
+    <div class="ga4-row"><strong>ROOK visits</strong><span>${fmtN(data.totals.users)} users · ${fmtN(data.totals.sessions)} sessions</span></div>${stages}
+    <div class="ga4-row"><strong>Paid conversion</strong><span>Not currently tracked reliably in GA4</span></div>
+    <h3 class="section-title" style="margin-top:16px">Traffic source / campaign</h3>
+    <div class="ga4-note">GA4 sessionSourceMedium and sessionCampaignName. Users across rows must not be added together.</div>${traffic || '<div class="ga4-note">No traffic rows returned.</div>'}
+    <details style="margin-top:12px"><summary>Signup / funnel events by source and campaign</summary>${events || '<div class="ga4-note">No attributed event rows returned.</div>'}</details>
+    <div class="ga4-note">Ad campaign matching and acquisition costs are unavailable: no verified mapping to ad campaign IDs. Advertising spend is shown separately; organic, direct and referral conversions are not used to calculate advertising costs.</div>`;
 }
 
 // ── Combined budget preview (read only) ───────────────────────────────────
