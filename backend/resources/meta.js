@@ -2,8 +2,7 @@
 // Separate ROOK-only variables; no automatic fallback to Florida Buzz tokens.
 require('dotenv').config();
 const {db,result}=require('./store');
-const {origin,urlFor}=require('./catalog');
-const {socialV8Destination}=require('../socialV8Destination');
+const {urlFor}=require('./catalog');
 function config(){
  const version=process.env.ROOK_META_GRAPH_VERSION||'v24.0';
  if(!/^v\d+\.0$/.test(version))throw Error('Invalid ROOK_META_GRAPH_VERSION');
@@ -40,8 +39,10 @@ async function resolve(deps={}){
 }
 async function check(deps={}){return (await resolve(deps)).report;}
 function captionFor(a,channel){
- if(channel==='instagram')return a.social_copy.instagram.replace(/https?:\/\/\S+|www\.\S+/gi,'').replace(/(?:read the full guide\s*[—–-]?\s*)?link in bio[.!]?/gi,'').trim()+'\n\nExplore matching jobs on ROOK: '+socialV8Destination('instagram','resource_article');
- return a.social_copy[channel]+'\n\n'+socialV8Destination('facebook','resource_article');
+ const articleUrl=new URL(urlFor(a.slug));
+ articleUrl.search=new URLSearchParams({utm_source:channel,utm_medium:'social',utm_campaign:'organic',utm_content:'resource_article'}).toString();
+ if(channel==='instagram')return a.social_copy.instagram.replace(/https?:\/\/\S+|www\.\S+/gi,'').replace(/(?:read the full guide\s*[—–-]?\s*)?link in bio[.!]?/gi,'').trim()+'\n\nRead the full guide: '+articleUrl;
+ return a.social_copy[channel]+'\n\n'+articleUrl;
 }
 async function sendArticle(a,channel,deps={}){
  const client=deps.db||db();
