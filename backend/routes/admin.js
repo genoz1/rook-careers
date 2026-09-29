@@ -451,3 +451,13 @@ router.get("/admin/admanager/test", async (req, res) => {
 
   return res.json({ mode, enabled_platforms: enabled, connections: results });
 });
+
+// GA4 is independent of ad reporting and uses the same access control.
+router.get("/admin/admanager/ga4", async (req, res) => {
+  const expectedToken = process.env.AD_MANAGER_TEST_TOKEN;
+  if (!expectedToken || req.query.token !== expectedToken) return res.status(401).json({ error: "unauthorized" });
+  const period = req.query.period || "today";
+  if (!["today", "yesterday", "7d"].includes(period)) return res.status(400).json({ error: "Invalid period" });
+  res.set("Cache-Control", "no-store");
+  return res.json(await require("../admanager/ga4").getReport(period));
+});
