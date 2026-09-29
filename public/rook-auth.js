@@ -199,7 +199,7 @@ async function rookRouteAfterLogin() {
   try {
     const r=await rookApiFetch('/profile');
     const profile=r.ok ? await r.json() : null;
-    if(profile && !rookHasFullAccess(profile)) {window.location.href='rook-dashboard.html';return;}
+    if(profile && !rookHasFullAccess(profile)) {window.location.href='rook-dashboard-v8.html';return;}
   } catch(_) {}
   // Restore the page the user was trying to reach before being sent to login
   try {
@@ -218,7 +218,7 @@ async function rookRouteAfterLogin() {
   try {
     const res = await rookApiFetch('/profile');
     const profile = res.ok ? await res.json() : null;
-    window.location.href = profile ? 'rook-dashboard.html' : 'rook-onboarding-v2.html';
+    window.location.href = profile ? 'rook-dashboard-v8.html' : 'rook-onboarding-v2.html';
   } catch {
     // Fall back to onboarding, not the dashboard, when the check itself
     // fails (network blip, backend not configured, etc.) — the safe
