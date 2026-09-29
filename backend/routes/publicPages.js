@@ -381,6 +381,7 @@ router.get("/sitemap.xml", async (req, res) => {
     `${APP_BASE_URL}/`,
     `${APP_BASE_URL}/jobs`,
     `${APP_BASE_URL}/resources/`,
+    `${APP_BASE_URL}/medreps-alternative`,
     `${APP_BASE_URL}/rook-browse.html`,
     `${APP_BASE_URL}/rook-about.html`,
     `${APP_BASE_URL}/rook-pricing.html`,

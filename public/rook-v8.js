@@ -2,7 +2,7 @@
   'use strict';
   const $=id=>document.getElementById(id);
   const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const track=(name,extra={})=>{try{if(typeof gtag==='function')gtag('event',name,{onboarding_version:'v8',...extra});}catch(_){}};
+  const track=(name,extra={})=>{try{if(typeof gtag==='function')gtag('event',name,{onboarding_version:'v8',...(sessionStorage.getItem('rook_acquisition_origin')==='medreps-alternative'?{acquisition_page:'medreps-alternative'}:{}),...extra});}catch(_){}};
   const token=()=>sessionStorage.getItem('rook_v7_token')||'';
   const safeUrl=value=>{try{const u=new URL(value);return u.protocol==='https:'?u.href:null;}catch(_){return null;}};
   let data=null,selectedLocation=null,allJobs=[],busy=false;

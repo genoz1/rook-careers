@@ -70,6 +70,10 @@ app.get("/medical-sales/:page", (req, res, next) => {
 // registered before the static file server and the SPA catch-all below,
 // since /jobs/:id and /sitemap.xml aren't real files in /public.
 app.use(require("./backend/resources/routes").createRouter());
+app.get('/medreps-alternative', (req,res) => {
+  res.set('Cache-Control','no-cache, no-store, must-revalidate');
+  res.sendFile(path.join(__dirname,'public','medreps-alternative.html'));
+});
 app.use("/", require("./backend/routes/publicPages"));
 
 // Static frontend (the UI prototype pages).

@@ -44,6 +44,7 @@
         try { storage.setItem(key, '1'); } catch (_) {}
       }
       var safe = {onboarding_version: 'v8'};
+      if (sessionStorage.getItem('rook_acquisition_origin') === 'medreps-alternative') safe.acquisition_page = 'medreps-alternative';
       // Only fixed, non-identifying event context is accepted.
       ['event_category', 'event_label', 'method', 'source', 'stage'].forEach(function (field) {
         var value = params && params[field];
