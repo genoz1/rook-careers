@@ -31,6 +31,44 @@ function resourceDb() {
   } };
 }
 
+test('SocialChamp rotation redirects to V8 with per-post Facebook and Instagram attribution', async t => {
+  const app = express();
+  app.use(createRouter());
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise(resolve => server.once('listening', resolve));
+  t.after(() => new Promise(resolve => { server.close(resolve); server.closeAllConnections(); }));
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  for (const platform of ['facebook', 'instagram']) {
+    for (const id of ['medical_sales_jobs_only', 'territory_sales_preview']) {
+      const short = `/go/socialchamp/${platform}/${id}`;
+      const query = '?ref=rotation&topic=jobs&topic=careers&utm_source=stale&utm_source=duplicate&UTM_MEDIUM=stale&utm_campaign=stale&utm_content=stale&utm_source_platform=stale';
+      const response = await fetch(origin + short + query, { redirect: 'manual' });
+      assert.equal(response.status, 302);
+      assert.equal(response.headers.get('x-robots-tag'), 'noindex, nofollow');
+      assert.equal(response.headers.get('cache-control'), 'no-store');
+      const target = new URL(response.headers.get('location'));
+      assert.equal(target.origin, 'https://rookcareers.com');
+      assert.equal(target.pathname, '/rook-onboarding-v8.html');
+      assert.deepEqual([...target.searchParams], [
+        ['ref', 'rotation'], ['topic', 'jobs'], ['topic', 'careers'],
+        ['utm_source', platform], ['utm_medium', 'organic_social'],
+        ['utm_campaign', 'socialchamp_rotation'], ['utm_content', id],
+      ]);
+      assert.equal(resolveShortLink('https://rookcareers.com' + short),
+        `https://rookcareers.com/rook-onboarding-v8.html?utm_source=${platform}&utm_medium=organic_social&utm_campaign=socialchamp_rotation&utm_content=${id}`);
+    }
+  }
+  for (const malformed of [
+    '/go/socialchamp/facebook/invalid%20id', '/go/socialchamp/instagram/%2F%2Fevil.example',
+    '/go/socialchamp/linkedin/medical_sales_jobs_only', '/go/socialchamp/facebook/no.dot',
+    '/go/socialchamp/facebook/', `/go/socialchamp/facebook/${'a'.repeat(161)}`,
+  ]) {
+    const response = await fetch(origin + malformed, { redirect: 'manual' });
+    assert.equal(response.status, 404, malformed);
+    assert.equal(response.headers.get('x-robots-tag'), 'noindex, nofollow');
+  }
+});
+
 test('all actual article destinations redirect and load the existing article with distinct attribution', async t => {
   const app = express();
   app.use(createRouter());

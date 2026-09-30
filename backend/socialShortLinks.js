@@ -20,6 +20,21 @@ function cleanQuery(query) {
 }
 function resolveShortLink(input) {
   const url = new URL(input, ORIGIN);
+  // Manually maintained SocialChamp rotation links use the same redirect
+  // and query-cleaning path, with their own campaign and V8 destination.
+  const socialChamp = url.pathname.match(/^\/go\/socialchamp\/(facebook|instagram)\/([^/]+)$/);
+  if (socialChamp) {
+    const [, platform, id] = socialChamp;
+    if (!ID.test(id)) throw Error('Invalid SocialChamp content identifier');
+    const resolved = new URL('/rook-onboarding-v8.html', ORIGIN);
+    resolved.search = cleanQuery(url.search).toString();
+    resolved.searchParams.set('utm_source', platform);
+    resolved.searchParams.set('utm_medium', 'organic_social');
+    resolved.searchParams.set('utm_campaign', 'socialchamp_rotation');
+    resolved.searchParams.set('utm_content', id);
+    resolved.hash = url.hash;
+    return resolved.toString();
+  }
   const match = url.pathname.match(/^\/go\/([^/]+)\/([^/]+)\/([^/]+)$/);
   if (!match) throw Error('Invalid organic short link');
   const [, destination, family, id] = match;
