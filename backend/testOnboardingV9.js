@@ -42,8 +42,11 @@ for(const feature of ['Job Analysis','Tailor Resume','Cover Letter','LinkedIn Co
 assert(!/salary|authorized to work/i.test(html));
 assert(html.includes('Now let’s find your'));assert(html.includes('opportunities that best match your interests and experience'));
 assert(html.includes('EXAMPLE DISPLAY ONLY'));assert(html.includes('These are not current job listings.'));
+assert(html.includes('data-screen="matching-intro"'));assert(html.includes('data-screen="samples"'));assert(html.includes('id="sampleJobs"'));
+assert(html.includes('rook-v9.css?v=4'));assert(html.includes('rook-v9.js?v=4'));
 for(const title of ['Diagnostic Territory Manager','Veterinary Territory Manager','Animal Health Specialty Representative','Dental Technology Sales Representative','Strategic Equipment Sales Representative'])assert(browser.includes(title));
 assert(browser.includes('SAMPLE ${score}% MATCH'));assert(browser.includes('Example location near'));
+assert(browser.includes('function ensureFlowDom()'));assert(browser.includes("document.getElementById('sampleJobs')"));
 assert(!browser.includes('rookRenderMaskedJob'));assert(!html.includes('data-screen="results"'));assert(!html.includes('rook-pretrial.js'));
 assert(!browser.includes("refine('industry')"));assert(!browser.includes("refine('experience')"));assert(!browser.includes('setTimeout('));
 const routeSource=fs.readFileSync('backend/routes/onboardingV9.js','utf8');
