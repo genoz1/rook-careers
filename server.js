@@ -33,6 +33,7 @@ app.use(express.json());
 app.use("/api", stripeRoutes);
 app.use("/api/v7", require("./backend/routes/onboardingV7"));
 app.use("/api/v8", require("./backend/routes/onboardingV8"));
+app.use("/api/v9", require("./backend/routes/onboardingV9"));
 
 app.use("/api", require("./backend/routes/profile"));
 app.use("/api", require("./backend/routes/jobs"));
@@ -74,6 +75,13 @@ app.use(require("./backend/resources/routes").createRouter());
 app.get('/medreps-alternative', (req,res) => {
   res.set('Cache-Control','no-cache, no-store, must-revalidate');
   res.sendFile(path.join(__dirname,'public','medreps-alternative.html'));
+});
+app.get('/meta/v9', (req,res) => {
+  res.set('Cache-Control','no-cache, no-store, must-revalidate');
+  res.set('X-Robots-Tag','noindex, follow');
+  const queryStart=req.originalUrl.indexOf('?');
+  const query=queryStart===-1?'':req.originalUrl.slice(queryStart);
+  res.redirect(302,'/rook-onboarding-v9.html'+query);
 });
 app.use("/", require("./backend/routes/publicPages"));
 
