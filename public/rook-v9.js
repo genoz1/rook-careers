@@ -3,8 +3,8 @@
   const workflowCss=document.createElement('link');workflowCss.rel='stylesheet';workflowCss.href='rook-v9-workflow.css?v=1';document.head.appendChild(workflowCss);
   const $=id=>document.getElementById(id),screens=[...document.querySelectorAll('.screen')],button=$('continueButton');
   const taxonomy=[['Diagnostics','Diagnostics / Laboratory'],['Medical Device','Medical Device'],['Pharmaceutical','Pharmaceutical'],['Veterinary','Veterinary / Animal Health'],['Biotech/Life Sciences','Biotech / Life Sciences'],['Healthcare SaaS','Healthcare Technology'],['Dental','Dental'],['Distribution','Distribution'],['Capital Equipment','Capital Equipment']];
-  const state={screen:'welcome',location:null,industries:[],years:null,territories:[],count:0,preview:null,busy:false,countRequest:0};
-  const order=['welcome','location','industry','trust','experience','territory','searching','results','workflow','offer'];
+  const state={screen:'welcome',location:null,industries:[],years:null,territories:[],count:0,countScope:'global',preview:null,busy:false,countRequest:0};
+  const order=['welcome','location','matching-intro','industry','trust','experience','territory','searching','samples','workflow','offer'];
   const art={
     search:`<svg class="floaty" viewBox="0 0 180 130" aria-hidden="true"><g fill="#eaf4ff" stroke="#c8def4"><rect x="14" y="31" width="53" height="68" rx="7"/><rect x="111" y="35" width="52" height="65" rx="7"/></g><g fill="#8fc4ff"><rect x="23" y="43" width="31" height="5" rx="3"/><rect x="120" y="47" width="29" height="5" rx="3"/><rect x="23" y="55" width="21" height="5" rx="3"/></g><circle cx="87" cy="61" r="31" fill="#50a3ff" stroke="#0877ff" stroke-width="7"/><circle cx="87" cy="61" r="19" fill="#d8efff"/><path d="M108 84l25 25" stroke="#075dd2" stroke-width="12" stroke-linecap="round"/></svg>`,
     location:`<svg class="floaty" viewBox="0 0 180 130" aria-hidden="true"><path d="M18 94l35-20 38 13 37-25 34 14-35 23-38-12-37 25z" fill="#e8f4ff" stroke="#b9d7f4"/><path d="M46 87c34-25 64 22 98-14" fill="none" stroke="#0877ff" stroke-width="4" stroke-dasharray="6 6"/><path d="M61 27c-15 0-26 11-26 25 0 21 26 42 26 42s26-21 26-42c0-14-11-25-26-25z" fill="#0877ff"/><circle cx="61" cy="52" r="9" fill="#d9efff"/><path d="M139 47c-11 0-20 9-20 20 0 15 20 31 20 31s20-16 20-31c0-11-9-20-20-20z" fill="#31c995"/><circle cx="139" cy="66" r="7" fill="#e7fff6"/></svg>`,
@@ -18,22 +18,23 @@
 
   function track(name,params={}){if(typeof rookV9Track==='function')rookV9Track(name,params)}
   function progress(){
-    const map={welcome:0,location:1,industry:2,trust:3,experience:3,territory:4,searching:5,results:6,workflow:6,offer:6},value=map[state.screen]||0;
+    const map={welcome:0,location:1,'matching-intro':2,industry:2,trust:3,experience:3,territory:4,searching:5,samples:6,workflow:6,offer:6},value=map[state.screen]||0;
     document.querySelectorAll('.segments i').forEach((el,index)=>el.className=index<value?'done':index===value?'active':'');
   }
   function setButton(label,disabled=false,green=false){button.textContent=label+'  →';button.disabled=disabled;button.classList.toggle('green',green);}
   function show(name){
     state.screen=name;screens.forEach(el=>el.classList.toggle('active',el.dataset.screen===name));progress();$('formError').textContent='';
-    const labels={welcome:'Get Started',location:'Continue',industry:'Continue',trust:'Continue',experience:'Continue',territory:'Find My Matches',results:'See What Membership Includes',workflow:'See Membership Offer',offer:'Continue to Membership'};
+    const labels={welcome:'Get Started',location:'Continue','matching-intro':'Continue',industry:'Continue',trust:'Continue',experience:'Continue',territory:'Find My Matches',samples:'See What Membership Includes',workflow:'See Membership Offer',offer:'Continue to Membership'};
     const hide=['searching'].includes(name);document.querySelector('.bottom').hidden=hide;
     setButton(labels[name]||'Continue',!ready(name),name==='offer');
     if(['location','industry','experience','territory'].includes(name))track('v9_question_viewed',{stage:name});
     if(name==='trust')track('v9_value_viewed',{stage:'founder_history'});
-    if(name==='results')track('v9_masked_dashboard_reveal',{best_match_count:state.preview.best_match_count,prioritized_match_count:state.preview.prioritized_match_count,opportunities:state.preview.opportunity_count});
+    if(name==='matching-intro')track('v9_value_viewed',{stage:'matching_intro'});
+    if(name==='samples')track('v9_value_viewed',{stage:'sample_job_display'});
     if(name==='workflow')track('v9_value_viewed',{stage:'member_workflow'});
-    if(name==='offer')track('v9_offer_view',{best_match_count:state.preview.best_match_count});
+    if(name==='offer')track('v9_offer_view',{opportunities:state.preview?.opportunity_count||state.count});
   }
-  function ready(name){return name==='welcome'||name==='trust'||name==='results'||name==='workflow'||name==='offer'||name==='location'&&!!state.location||name==='industry'&&state.industries.length>0||name==='experience'&&state.years!=null||name==='territory'&&state.territories.length>0}
+  function ready(name){return ['welcome','matching-intro','trust','samples','workflow','offer'].includes(name)||name==='location'&&!!state.location||name==='industry'&&state.industries.length>0||name==='experience'&&state.years!=null||name==='territory'&&state.territories.length>0}
   function animateCount(next,label,stage=state.screen){
     next=Math.max(0,Number(next)||0);const from=state.count||next,start=performance.now(),duration=650;state.count=next;$('counterLabel').textContent=label||'current opportunities';
     function frame(now){const p=Math.min(1,(now-start)/duration),ease=1-Math.pow(1-p,3),value=Math.round(from+(next-from)*ease);$('counterNumber').textContent=value.toLocaleString();if(p<1)requestAnimationFrame(frame)}requestAnimationFrame(frame);
@@ -45,6 +46,7 @@
     const requestId=++state.countRequest;track('v9_question_answered',{stage});
     request('/refine',{method:'POST',body:JSON.stringify(payload(stage))}).then(result=>{
       if(requestId!==state.countRequest)return;
+      state.countScope='location';
       animateCount(result.count,result.label,stage);
     }).catch(()=>{if(requestId===state.countRequest)$('formError').textContent='Your count is still updating. You can continue.';});
   }
@@ -53,37 +55,43 @@
   document.querySelectorAll('#experienceChoices .choice').forEach(el=>el.onclick=()=>{document.querySelectorAll('#experienceChoices .choice').forEach(x=>x.classList.remove('selected'));el.classList.add('selected');state.years=Number(el.dataset.value);setButton('Continue',false);});
   document.querySelectorAll('#territoryChoices .choice').forEach(el=>el.onclick=()=>{el.classList.toggle('selected');state.territories=[...document.querySelectorAll('#territoryChoices .selected')].map(x=>x.dataset.value);setButton('Find My Matches',!ready('territory'));});
   const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  function visibleCard(job){
-    const prioritized=job.preference_tier==='prioritized';
-    const badge=prioritized&&Number.isFinite(job.match?.overall_score)?`${Math.round(job.match.overall_score)}% Match`:'Broader opportunity';
-    return `<article class="result-card ${prioritized?'':'broader-card'}"><span class="match-pill ${prioritized?'':'broader-pill'}">${badge}</span><strong>${esc(job.title_original||'Sales opportunity')}</strong><span>${esc(job.location_raw||job.city||'Location varies')}</span></article>`;
+  const sampleCatalog={
+    'Diagnostics':['Diagnostic Territory Manager','Laboratory Sales Representative'],
+    'Medical Device':['Medical Device Territory Manager','Clinical Sales Specialist'],
+    'Pharmaceutical':['Pharmaceutical Territory Manager','Specialty Sales Representative'],
+    'Veterinary':['Veterinary Territory Manager','Animal Health Specialty Representative'],
+    'Biotech/Life Sciences':['Life Sciences Account Executive','Biotechnology Territory Manager'],
+    'Healthcare SaaS':['Healthcare Technology Account Executive','Clinical Solutions Specialist'],
+    'Dental':['Dental Territory Manager','Dental Technology Sales Representative'],
+    'Distribution':['Distribution Account Manager','Territory Sales Representative'],
+    'Capital Equipment':['Capital Equipment Territory Manager','Strategic Equipment Sales Representative']
+  };
+  const industryName=value=>taxonomy.find(([key])=>key===value)?.[1]||value||'Sales';
+  function sampleCard(title,score,industry,location){
+    return `<article class="sample-job"><span class="sample-score">SAMPLE ${score}% MATCH</span><h3>${esc(title)}</h3><div class="sample-tags"><span>${esc(industry)}</span><span>Field sales</span></div><p class="sample-location">⌖ ${esc(location)}</p><div class="sample-tools"><span>Job Analysis</span><span>Tailor Resume</span><span>Find Contacts</span></div></article>`;
   }
-  function resultGroup(label,jobs){return jobs.length?`<div class="result-group"><h3>${esc(label)}</h3>${jobs.map(visibleCard).join('')}</div>`:'';}
-  function renderResults(preview){
-    const visible=preview.jobs.slice(0,2),prioritized=visible.filter(job=>job.preference_tier==='prioritized'),broader=visible.filter(job=>job.preference_tier!=='prioritized');
-    const selected=preview.profile?.desired_industries||[],industryLabel=selected.length===1?(selected[0]==='Veterinary'?'Veterinary / Animal Health':selected[0]):'Preferred-industry';
-    const locked=preview.jobs.slice(2,5).map(job=>typeof rookRenderMaskedJob==='function'?rookRenderMaskedJob(job):'').join('');
-    const remaining=Math.max(0,preview.best_match_count-2-Math.min(3,Math.max(0,preview.jobs.length-2)));
-    $('resultSummary').textContent=`${preview.prioritized_match_count} prioritized ${preview.prioritized_match_count===1?'match':'matches'} and ${preview.broader_opportunity_count} broader eligible ${preview.broader_opportunity_count===1?'opportunity':'opportunities'} from ${preview.opportunity_count.toLocaleString()} current opportunities.`;
-    $('resultCards').innerHTML=resultGroup(`${industryLabel} prioritized matches`,prioritized)+resultGroup('Broader eligible opportunities',broader)+(locked?`<div class="masked-dashboard-preview"><h3>More opportunities in your masked dashboard</h3>${locked}${remaining?`<p class="masked-note">🔒 +${remaining} additional opportunities</p>`:''}</div>`:'');
-    $('widenedNote').hidden=!preview.broader_opportunity_count;
+  function renderSamples(){
+    const selected=state.industries[0]||'Medical Device',industry=industryName(selected),titles=sampleCatalog[selected]||sampleCatalog['Medical Device'];
+    const place=state.location?.city&&state.location?.stateAbbr?`${state.location.city}, ${state.location.stateAbbr}`:state.location?.label||'your area';
+    const location=`Example location near ${place}`;
+    $('sampleJobs').innerHTML=sampleCard(titles[0],92,industry,location)+sampleCard(titles[1],87,industry,location);
   }
-  window.rookV9UnlockFromCard=()=>show('workflow');
   async function finish(){
     show('searching');
-    try{const result=await request('/session',{method:'POST',body:JSON.stringify(payload('territory'))});sessionStorage.setItem('rook_v9_token',result.token);state.preview=result.preview;++state.countRequest;animateCount(result.preview.best_match_count,'selected opportunities','results');renderResults(result.preview);show('results')}
+    try{const result=await request('/session',{method:'POST',body:JSON.stringify(payload('territory'))});sessionStorage.setItem('rook_v9_token',result.token);state.preview=result.preview;++state.countRequest;if(state.countScope!=='location'){state.countScope='location';animateCount(result.preview.opportunity_count,'opportunities available from your area','final')}renderSamples();show('samples')}
     catch(error){show('territory');$('formError').textContent=error.message;track('v9_checkout_failure',{stage:'search'});}
   }
   button.onclick=async()=>{
     if(state.busy||!ready(state.screen))return;state.busy=true;button.disabled=true;
     try{
       if(state.screen==='welcome')show('location');
-      else if(state.screen==='location'){show('industry');refine('location')}
-      else if(state.screen==='industry'){show('trust');refine('industry')}
+      else if(state.screen==='location'){show('matching-intro');refine('location')}
+      else if(state.screen==='matching-intro')show('industry');
+      else if(state.screen==='industry'){track('v9_question_answered',{stage:'industry'});show('trust')}
       else if(state.screen==='trust')show('experience');
-      else if(state.screen==='experience'){show('territory');refine('experience')}
-      else if(state.screen==='territory')await finish();
-      else if(state.screen==='results')show('workflow');
+      else if(state.screen==='experience'){track('v9_question_answered',{stage:'experience'});show('territory')}
+      else if(state.screen==='territory'){track('v9_question_answered',{stage:'territory'});await finish()}
+      else if(state.screen==='samples')show('workflow');
       else if(state.screen==='workflow')show('offer');
       else if(state.screen==='offer')location.href='rook-onboarding-v9-signup.html';
     }catch(error){$('formError').textContent=error.message}
