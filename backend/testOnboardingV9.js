@@ -57,7 +57,8 @@ assert(routeSource.includes("stage!=='location'"));assert(routeSource.includes('
 assert(routeSource.includes('rankPool(opportunities,rankingProfile,[])'));
 assert(!routeSource.includes('prioritized_match_count'));
 const checkout=fs.readFileSync('public/rook-checkout-v9.html','utf8');
-assert(checkout.includes('$9.99')&&checkout.includes('$19.99/month')&&checkout.includes('No free trial'));
+assert(checkout.includes('$9.99')&&checkout.includes('$19.99/month')&&checkout.includes('<p class="lead">Immediate access.</p>'));
+assert(!checkout.includes(['No free', 'trial'].join(' ')));
 assert(checkout.includes('create-v9-subscription-from-setup'));
 const signup=fs.readFileSync('public/rook-onboarding-v9-signup.html','utf8');
 for(const page of [signup,checkout]){assert(page.includes('opportunities available from your area'));assert(page.includes('p.opportunity_count.toLocaleString()'));assert(!page.includes('p.best_match_count.toLocaleString()'));}
