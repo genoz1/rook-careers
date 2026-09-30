@@ -76,6 +76,24 @@ async function poolFor(profile,timing={}){
   const local=await indexFor(db).current(timing);
   return local||await readCandidates(db,{...profile,territory_size_preferences:TERRITORIES},timing);
 }
+function requiredYears(job){
+  for(const value of [job?.experience_min_years,job?.ai_analysis?.required_years_experience]){
+    if(Number.isFinite(Number(value)))return Math.max(0,Number(value));
+    const match=String(value||'').match(/\d+(?:\.\d+)?/);if(match)return Number(match[0]);
+  }
+  return null;
+}
+function refinementCount(pool,profile,stage){
+  const broadProfile={...profile,territory_size_preferences:TERRITORIES,territory_size_preference:'local'};
+  const opportunities=pool.map(job=>prepareJob(job,broadProfile)).filter(Boolean);
+  if(stage==='location')return {count:opportunities.length,label:'opportunities in your search area'};
+  const aligned=profile.desired_industries.length?opportunities.filter(job=>matches(job,profile.desired_industries)):opportunities;
+  if(stage==='industry')return {count:aligned.length,label:'opportunities in your preferred industries'};
+  const experienceAligned=profile.total_sales_years==null?aligned:aligned.filter(job=>{
+    const minimum=requiredYears(job);return minimum==null||minimum<=profile.total_sales_years;
+  });
+  return {count:experienceAligned.length,label:'opportunities fitting your preferences'};
+}
 function mergeFloor(preferred,widened,target=32){
   const seen=new Set(),jobs=[];
   for(const job of [...preferred,...widened])if(!seen.has(job.id)){seen.add(job.id);jobs.push(job);}
@@ -87,7 +105,10 @@ async function calculate(profile,timing={}){
   const broadProfile={...profile,territory_size_preferences:TERRITORIES,territory_size_preference:'local'};
   const opportunities=pool.map(job=>prepareJob(job,broadProfile)).filter(Boolean);
   const industryAligned=profile.desired_industries.length?opportunities.filter(job=>matches(job,profile.desired_industries)):opportunities;
-  const preferred=rankPool(pool,scoringProfile(profile),[]);
+  // Industry is a preference, not an exclusion from the complete search. It is
+  // nevertheless the first ranking tier so a qualifying Veterinary/Animal
+  // Health role can never be displaced by an unrelated high general-fit role.
+  const preferred=rankPool(pool,scoringProfile(profile),profile.desired_industries);
   const widened=rankPool(pool,scoringProfile(broadProfile),[]);
   const floor=mergeFloor(preferred,widened,32);
   return {pool,opportunities,industryAligned,preferred,widened,...floor};
@@ -96,7 +117,8 @@ function prioritize(jobs,industries){
   const selected=normalizeSelection(industries);
   return [...jobs].sort((a,b)=>{
     const ai=matches(a,selected)?1:0,bi=matches(b,selected)?1:0;
-    return bi-ai-(Number(a.match?.overall_score)||0)+(Number(b.match?.overall_score)||0)||String(a.id).localeCompare(String(b.id));
+    if(ai!==bi)return bi-ai;
+    return (Number(b.match?.overall_score)||0)-(Number(a.match?.overall_score)||0)||String(a.id).localeCompare(String(b.id));
   });
 }
 function reveal(job){
@@ -106,11 +128,14 @@ function reveal(job){
     industry_classification:classify(job),match:job.match,application_url:job.application_url,source_url:job.source_url};
 }
 function safePreview(profile,jobs,unlocked,widened,preferredCount,opportunityCount){
+  const tagged=jobs.map(job=>({job,preference_tier:matches(job,profile.desired_industries)?'prioritized':'broader'}));
+  const prioritizedCount=tagged.filter(item=>item.preference_tier==='prioritized').length;
   return {profile:{home_location_label:profile.home_location_label,desired_industries:profile.desired_industries,
     total_sales_years:profile.total_sales_years,territory_size_preferences:profile.territory_size_preferences,
     subscription_status:profile.subscription_status},unlocked,widened,preferred_count:preferredCount,
+    prioritized_match_count:prioritizedCount,broader_opportunity_count:jobs.length-prioritizedCount,
     opportunity_count:opportunityCount,best_match_count:jobs.length,
-    jobs:jobs.map((job,index)=>unlocked?reveal(job):index<2?reveal(job):project(job,index,{dashboard:true}))};
+    jobs:tagged.map(({job,preference_tier},index)=>({...(unlocked?reveal(job):index<2?reveal(job):project(job,index,{dashboard:true})),preference_tier}))};
 }
 async function details(jobs,unlocked=false){
   const ids=jobs.slice(0,unlocked?jobs.length:2).map(job=>job.id);
@@ -141,17 +166,13 @@ router.get('/pool',wrap(async(req,res)=>{
 }));
 router.post('/refine',wrap(async(req,res)=>{
   const profile=profileFrom(req.body,{partial:true});
-  const result=await calculate(profile);
   const stage=String(req.body.stage||'location');
-  let count=result.opportunities.length,label='opportunities in your search area';
-  if(['industry','experience','territory'].includes(stage)){
-    count=Math.min(result.opportunities.length,Math.max(Math.min(32,result.opportunities.length),result.industryAligned.length));label='opportunities aligned with your industry preferences';
-  }
-  if(['experience','territory'].includes(stage)){
-    count=Math.min(result.opportunities.length,Math.max(Math.min(32,result.opportunities.length),Math.min(result.industryAligned.length,result.preferred.length)));label='best available matches';
-  }
-  if(stage==='territory'){count=result.jobs.length;label=result.widened?'best available matches':'best matches for your preferences';}
-  res.json({count,opportunities:result.opportunities.length,label,widened:stage==='territory'&&result.widened,preferred_count:result.preferredCount});
+  if(!['location','industry','experience'].includes(stage))return res.status(400).json({error:'Invalid refinement stage.'});
+  // These between-question counts are deliberately a single light pass over
+  // the already-warmed V8 inventory. Full score/rank work happens only once,
+  // while the final searching screen is visible.
+  const pool=await poolFor(profile,{validate_with_session:true});
+  res.json(refinementCount(pool,profile,stage));
 }));
 router.post('/session',wrap(async(req,res)=>{
   const profile=profileFrom(req.body),timing={validate_with_session:true},started=performance.now();
@@ -189,4 +210,4 @@ router.post('/claim',wrap(async(req,res)=>{
 }));
 
 module.exports=router;
-module.exports._test={INDUSTRIES,TERRITORIES,profileFrom,mergeFloor,prioritize};
+module.exports._test={INDUSTRIES,TERRITORIES,profileFrom,mergeFloor,prioritize,requiredYears,refinementCount};
