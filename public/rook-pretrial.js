@@ -1,6 +1,7 @@
 // The API supplies only safe structured attributes and server-generated masks.
 (function () {
   const isV7 = () => typeof document !== 'undefined' && document.body?.dataset?.v7Conversion === 'true';
+  const isV9 = () => typeof document !== 'undefined' && document.body?.dataset?.v9Funnel === 'true';
   const esc = value => String(value ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const maskedWords = (words,className) => {
     if(!Array.isArray(words) || words.length<2 || words.length>3 || words.some(word=>typeof word!=='string' || !/^[a-z]{4,9}$/.test(word))) return '';
@@ -30,15 +31,18 @@
         <div class="masked-v7-bottom"><div class="masked-v7-employer"><span class="masked-v7-lock" aria-hidden="true">🔒</span><strong>Employer:</strong>${maskedWords(job.masked_lines?.employer,'masked-employer-fragment')}</div><button type="button" class="btn btn-primary masked-v7-cta" onclick="rookGoToCheckout('job_card')"><span aria-hidden="true">🔒</span> Unlock full details — 3 days free</button></div>
       </article>`;
     }
+    const unlockCopy=isV9()?'Membership unlocks the complete opportunity and direct application.':'Start your 3-day free trial to view the full opportunity details and apply directly.';
+    const unlockAction=isV9()?`onclick="rookV9UnlockFromCard()"`:`onclick="rookGoToCheckout('job_card')"`;
+    const unlockLabel=isV9()?'Unlock with membership':'Unlock Job';
     return `<article class="job-row masked-job" aria-label="Locked personalized opportunity">
       <div class="masked-facts">${role?`<strong class="masked-role">${esc(role)}</strong>${maskedLines(job.masked_lines)}`:'<div class="masked-placeholder" aria-hidden="true"><i></i><i></i></div>'}
         <div class="masked-tags">${badge?`<span class="rec-badge">${esc(badge)}</span>`:''}${facts.length?`<span>${facts.map(esc).join(' · ')}</span>`:''}</div>
         ${geography?`<p class="masked-distance">${esc(geography)}</p>`:''}
         <p class="masked-freshness">${esc(job.freshness_label || '')}</p>
-        <div class="masked-lock"><span aria-hidden="true">🔒</span><div><strong>${isV7()?'Company &amp; full job details hidden':'Job title and employer hidden'}</strong><p>Start your 3-day free trial to view the full opportunity details and apply directly.</p></div></div>
+        <div class="masked-lock"><span aria-hidden="true">🔒</span><div><strong>${isV7()?'Company &amp; full job details hidden':'Job title and employer hidden'}</strong><p>${unlockCopy}</p></div></div>
       </div>
       <div class="masked-actions"><div class="masked-score"><div class="score-ring" style="--pct:${value ?? 0}" aria-label="${qualified?'Match':'Preference Match'}: ${value==null?'not scored':value+'%'}"><span>${value==null?'—':value+'%'}</span></div><div><strong>${qualified?'Match Score':'Preference Match'}</strong><small>${qualified?'Qualifications and preferences scored':'Qualifications not scored yet'}</small></div></div>
-      <button type="button" class="btn btn-primary" onclick="rookGoToCheckout('job_card')"><span aria-hidden="true">🔒</span> ${isV7()?'Unlock my matches — 3 days free':'Unlock Job'}</button></div>
+      <button type="button" class="btn btn-primary" ${unlockAction}><span aria-hidden="true">🔒</span> ${isV7()?'Unlock my matches — 3 days free':unlockLabel}</button></div>
     </article>`;
   };
   window.rookUpdateV7MatchCount = function(count) {
