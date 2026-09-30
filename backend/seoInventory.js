@@ -102,7 +102,7 @@ function buildCollections(rows) {
 // The short server-only cache exposes allowlisted projection getters and counts.
 // Public previews are evaluated only for displayed cards, once per source row.
 // Source rows remain private in the loader closure; never serialize raw records.
-function createInventoryLoader(db,{ttl=60000}={}) {
+function createInventoryLoader(db,{ttl=60000,build=buildCollections}={}) {
   let cached,expires=0,pending;
   return async function load() {
     if(cached&&Date.now()<expires)return cached;
@@ -115,7 +115,7 @@ function createInventoryLoader(db,{ttl=60000}={}) {
         if(error||!Array.isArray(data))throw new Error('SEO inventory unavailable');
         if(!data.length)break;rows.push(...data);offset+=data.length;
       }
-      cached=buildCollections(rows);expires=Date.now()+ttl;return cached;
+      cached=build(rows);expires=Date.now()+ttl;return cached;
     })();
     try{return await pending;}finally{pending=null;}
   };
