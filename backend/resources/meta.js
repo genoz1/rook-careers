@@ -39,8 +39,7 @@ async function resolve(deps={}){
 }
 async function check(deps={}){return (await resolve(deps)).report;}
 function captionFor(a,channel){
- const articleUrl=new URL(urlFor(a.slug));
- articleUrl.search=new URLSearchParams({utm_source:channel,utm_medium:'social',utm_campaign:'organic',utm_content:'resource_article'}).toString();
+ const articleUrl=require('../socialShortLinks').shortSocialUrl(urlFor(a.slug),channel);
  if(channel==='instagram')return a.social_copy.instagram.replace(/https?:\/\/\S+|www\.\S+/gi,'').replace(/(?:read the full guide\s*[—–-]?\s*)?link in bio[.!]?/gi,'').trim()+'\n\nRead the full guide: '+articleUrl;
  return a.social_copy[channel]+'\n\n'+articleUrl;
 }

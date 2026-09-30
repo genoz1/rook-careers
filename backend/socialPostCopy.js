@@ -25,7 +25,8 @@ function buildPostCopy(candidate, platform = "linkedin") {
 
   lines.push("");
   lines.push(candidate.employer_display ? "Explore the complete job details on ROOK." : "See the employer and complete job details on ROOK.");
-  lines.push(platform === "facebook" ? (candidate.public_url_facebook || candidate.public_url) : (candidate.public_url_linkedin || candidate.public_url));
+  const target = platform === "facebook" ? (candidate.public_url_facebook || candidate.public_url) : (candidate.public_url_linkedin || candidate.public_url);
+  lines.push(require('./socialShortLinks').shortSocialUrl(target, platform, candidate.job_id));
 
   return lines.join("\n");
 }

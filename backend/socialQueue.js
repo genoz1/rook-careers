@@ -224,7 +224,7 @@ async function replenish(config, deps = {}) {
           const resourceSlug=source.payload.mediaEvidence?.resourceSlug;
           if (!isPersonalLinkedinSlot(slot) && !resourceSlug) continue;
           const generated = resourceSlug ? {text:source.payload.mediaEvidence.editorial.personal} : await generatePersonal({theme:slot.kind,slot:slot.slot,industry:slot.industry,recent:[source.payload.text,...personalRecent]});
-          const text = source.payload.personalTemplate.replace(PERSONAL_COPY_TOKEN,generated.text);
+          const text = require('./socialShortLinks').trackSocialText(source.payload.personalTemplate.replace(PERSONAL_COPY_TOKEN,generated.text), 'gene-linkedin');
           const current = await read();
           if (representedPost(current.posts,personalChannel.id,target)) continue;
           if (!availableCapacity(current.posts,personalChannel.id,current.limit)) { personalDeferred++; continue; }

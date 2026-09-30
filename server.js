@@ -5,6 +5,7 @@ const path = require("path");
 const app = express();
 const publicSeo = require("./backend/publicSeo");
 app.use(publicSeo.headers);
+app.use(require('./backend/socialShortLinks').createRouter());
 app.get("/index.html", (req,res) => res.redirect(301,"/" + (req.originalUrl.includes("?") ? req.originalUrl.slice(req.originalUrl.indexOf("?")) : "")));
 const PORT = process.env.PORT || 8080;
 

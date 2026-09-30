@@ -6,8 +6,8 @@ const {renderResourceGraphic}=require('./resources/socialGraphic');
 const {createRouter}=require('./resources/routes');
 test('Facebook and Instagram resource posts lead to the article with channel attribution',()=>{
  const a={slug:'sales-guide',social_copy:{instagram:'Plan your next career move. https://rookcareers.com/resources/sales-guide/ Link in bio.',facebook:'Facebook original copy.'}};
- const ig=captionFor(a,'instagram');assert.ok(!/link in bio/i.test(ig));assert.match(ig,/resources\/sales-guide\/\?utm_source=instagram&utm_medium=social&utm_campaign=organic&utm_content=resource_article/);
- assert.equal(captionFor(a,'facebook'),'Facebook original copy.\n\nhttps://rookcareers.com/resources/sales-guide/?utm_source=facebook&utm_medium=social&utm_campaign=organic&utm_content=resource_article');
+ const ig=captionFor(a,'instagram');assert.ok(!/link in bio/i.test(ig));assert.match(ig,/go\/instagram\/resources\/sales-guide/);
+ assert.equal(captionFor(a,'facebook'),'Facebook original copy.\n\nhttps://rookcareers.com/go/facebook/resources/sales-guide');
 });
 test('Resources social endpoint returns a square JPEG and rejects missing articles',async()=>{
  let found=true;

@@ -154,15 +154,16 @@ test('validation-only fallback is logged but does not send an urgent alert',asyn
  }));
  assert.equal(r.ok,true);assert.equal(r.aiFallbacks,1);assert.equal(r.aiFallbackDetails[0].unavailable,false);assert.equal(emails,0);
 });
-test('channel UTM links are deterministic and Reddit remains generation-only',()=>{
+test('channel short links are deterministic and Reddit remains generation-only',()=>{
  const slot={kind:'industry',industry:'Medical Device'};
- for(const channel of ['linkedin','facebook','reddit']){const text=regularPost(slot,channel,copy);assert.match(text,new RegExp('utm_source='+channel));assert.match(text,/utm_medium=social/);}
- assert.match(regularPost(slot,'facebook',copy),/rook-onboarding-v8\.html\?utm_source=facebook/);
+ for(const channel of ['linkedin','facebook']){const text=regularPost(slot,channel,copy);assert.match(text,new RegExp('/go/'+channel+'/'));assert.doesNotMatch(text,/utm_/);}
+ assert.match(regularPost(slot,'reddit',copy),/utm_source=reddit&utm_medium=social/);
+ assert.match(regularPost(slot,'facebook',copy),/go\/facebook\/matches\/industry/);
  const resourceCopy={...copy,resource_url:'https://rookcareers.com/resources/sales-guide/'};
  for(const channel of ['facebook','linkedin','instagram']){
   const text=regularPost(slot,channel,resourceCopy);
-  assert.match(text,/\/resources\/sales-guide\/\?/);
-  assert.match(text,new RegExp('utm_source='+channel));
+  assert.match(text,new RegExp('/go/'+channel+'/resources/sales-guide'));
+  assert.doesNotMatch(text,/utm_/);
   assert.doesNotMatch(text,/rook-onboarding-v8\.html/);
  }
 });
@@ -190,13 +191,15 @@ test('regular posts fill only missing slots, keep existing content and respect c
 test('selected company source is adapted and scheduled to Gene without changing company posts',async()=>{
  const db=memoryDb(),slots=futureSlots(new Date('2030-06-01T00:00:00Z')),selected=slots.find(isPersonalLinkedinSlot);
  const runKey=require('./socialAutomation').computeRunKey(selected.dateStr,selected.slot);
- const template=`Featured Job\n${PERSONAL_COPY_TOKEN}\nEmployer\nTerritory Sales Manager\n\nExplore details.`;
+ const template=`Featured Job\n${PERSONAL_COPY_TOKEN}\nEmployer\nTerritory Sales Manager\n\nExplore details.\nhttps://rookcareers.com/go/linkedin/jobs/job-123`;
  db.rows.push({run_key:runKey,channel_id:'li',state:'scheduled',payload:{channelId:'li',text:'Featured Job\nCompany wording\nEmployer\nTerritory Sales Manager\n\nExplore details.',personalTemplate:template,photoUrl:'https://example.com/job.png',dueAt:selected.dueAt},post:{id:'company'}});
  const posts=channels.slice(0,2).flatMap(c=>Array.from({length:10},(_,i)=>({id:c.id+i,channelId:c.id,status:'scheduled',dueAt:'2031-01-01',text:'Existing company post'})));
  let personalPayload;
  const r=await replenish(config,deps({supabaseAdmin:db,readQueue:async()=>({posts,limit:10}),createPost:async(_,payload)=>{personalPayload=payload;const post={...payload,id:'gene-post',status:'scheduled'};posts.push(post);return post;},generatePersonalLinkedin:async context=>{assert.match(context.recent.join(' '),/Company wording/);return {text:personalCopy};}}));
  assert.equal(r.ok,true);assert.equal(personalPayload.channelId,'gene');assert.equal(personalPayload.photoUrl,'https://example.com/job.png');
  assert.match(personalPayload.text,/I think a careful career search/);assert.equal(new Date(personalPayload.dueAt)-selected.dueAt,45*60000);
+ assert.match(personalPayload.text,/https:\/\/rookcareers.com\/go\/gene-linkedin\/jobs\/job-123/);
+ assert.equal(db.rows.find(row=>row.channel_id==='li').payload.personalTemplate,template);
  assert.equal(posts.filter(p=>p.channelId==='li').length,10);assert.equal(posts.filter(p=>p.channelId==='fb').length,10);
  assert.equal(r.personal.created,1);assert.equal(r.created,0);
 });

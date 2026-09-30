@@ -311,7 +311,7 @@ async function run() {
     const candidate = { title: "Territory Sales Manager", location_display: "Atlanta, GA", category: "Medical Device", compensation_display: "$90,000 - $120,000", public_url: "https://rookcareers.com/jobs/job-1" };
     const copy = buildPostCopy(candidate);
     assert.ok(copy.includes("complete job details on ROOK."));
-    assert.ok(copy.includes("https://rookcareers.com/jobs/job-1"));
+    assert.ok(copy.includes("https://rookcareers.com/go/linkedin/jobs/job-1"));
     assert.ok(!copy.toLowerCase().includes("acme"));
     assert.ok(!/\$\d+\/month/.test(copy), "must never include a price");
   });

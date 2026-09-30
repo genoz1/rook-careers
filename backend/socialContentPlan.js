@@ -55,11 +55,13 @@ function regularPost(slot, platform, copy) {
     : platform === 'facebook'
       ? new URL(socialV8Destination('facebook', content))
       : new URL('https://rookcareers.com/');
-  if (copy.resource_url || platform !== 'facebook') url.search = new URLSearchParams({ utm_source: platform, utm_medium: 'social', utm_campaign: 'organic', utm_content: content }).toString();
+  // Reddit is generation-only and has no publishing destination in this worker.
+  if (platform === 'reddit') url.search = new URLSearchParams({ utm_source: platform, utm_medium: 'social', utm_campaign: 'organic', utm_content: content }).toString();
+  const shortUrl = platform === 'reddit' ? url.toString() : require('./socialShortLinks').shortSocialUrl(url, platform, slot.slot || slot.kind);
   const headline = copy.headline || 'Medical & veterinary sales careers';
   const body = copy[platform] || copy.text;
   // Advice stands on its own. Product posts retain the existing attribution.
-  const cta = slot.kind === 'value' ? `\n\nExplore matching opportunities on ROOK: ${url}` : `\n\n${url}`;
+  const cta = slot.kind === 'value' ? `\n\nExplore matching opportunities on ROOK: ${shortUrl}` : `\n\n${shortUrl}`;
   return `${headline}\n\n${body}${cta}`;
 }
 module.exports = { DAILY_SLOTS, PERSONAL_COPY_TOKEN, futureSlots, representedPost, availableCapacity, isPersonalLinkedinSlot, personalLinkedinSlot, regularPost };
