@@ -25,8 +25,8 @@ const supabaseAnon = isConfigured
   : null;
 
 const APP_BASE_URL = (process.env.PUBLIC_APP_URL || "https://rookcareers.com").replace(/\/$/, "");
-const {CATEGORIES: SEO_CATEGORIES, createInventoryLoader} = require("../seoInventory");
-const {createCollectionHandler, hasFilters} = require("../seoCollections");
+const {createInventoryLoader} = require("../seoInventory");
+const {createCollectionHandler, createRelatedArticleLoader, hasFilters} = require("../seoCollections");
 const loadSeoInventory = createInventoryLoader(supabaseAnon);
 
 function escapeHtml(str) {
@@ -222,121 +222,12 @@ router.get("/jobs/:id", async (req, res, next) => {
 
 });
 
-// Real, curated set of job categories for server-rendered landing
-// pages — the actual SEO purpose of this whole route. Each one targets
-// a specific, meaningfully-searched phrase with its own genuinely
-// unique title, meta description, and real filtered job content —
-// deliberately NOT the same shared page with a query-string filter,
-// since a client-rendered page whose title/meta never change per
-// filter would likely be seen by search engines as one page, not many,
-// defeating the point. searchTerms are matched against title and
-// description text (case-insensitive, OR'd together) to decide which
-// real jobs appear on each category page.
-// Category definitions — each category maps to a description and a list
-// of company slugs pulled from the employers table. Companies grouped by
-// the industry they primarily serve. Update companySlugs as new employers
-// are added to the DB.
-const CATEGORIES = {
-  "territory-sales-manager-jobs": { longContent: `<p>Territory sales manager roles exist across every segment of medical and veterinary sales — medical device, diagnostics, pharma, and animal health. The title indicates a geography-based book of business, typically covering multiple accounts within a defined region, and often reporting to a regional or district sales manager.</p>
-<p><strong>Compensation:</strong> TSM compensation varies widely by industry and company. Device and specialty pharma TSMs typically earn $75,000–$110,000 base with total compensation of $110,000–$180,000. Diagnostics and primary care pharma roles tend toward the lower end of that range.</p>
-<p><strong>What employers look for:</strong> Consistent quota attainment (typically 100%+ for 2+ years), the ability to manage a pipeline independently, and strong CRM discipline. Companies want reps who can work without daily supervision and have demonstrated growth within their existing accounts.</p>
-<p>ROOK matches territory sales manager openings to your specific geography — so you only see roles that fit your location and background.</p>`,
-
-    label: "Territory Sales Manager Jobs",
-    description: "ROOK matches territory sales manager openings directly from employer career sites across medical, pharma, and veterinary companies.",
-    companySlugs: [], // show all companies — no specific subset
-  },
-  "key-account-manager-jobs": { longContent: `<p>Key account manager roles in medical and veterinary sales involve managing strategic relationships with large health systems, GPOs, IDNs, or national accounts. Unlike territory reps, KAMs focus on contract negotiation, formulary positioning, and executive-level relationship management across multiple sites or divisions of a single account.</p>
-<p><strong>Compensation:</strong> KAM roles are among the highest-paying in the industry, reflecting the complexity and revenue impact of the accounts managed. Base salaries typically range from $90,000–$130,000 with total compensation of $140,000–$220,000+. National account roles at large device or pharma companies often exceed this range.</p>
-<p><strong>What employers look for:</strong> A track record of managing complex, multi-stakeholder accounts; experience with GPO contracting and IDN navigation; and the ability to build relationships at the C-suite and VP level. Most employers require 5+ years of field sales success before considering candidates for KAM roles.</p>
-<p>ROOK sources KAM openings directly from employer career sites and scores them against your experience and location preferences.</p>`,
-
-    label: "Key Account Manager Jobs",
-    description: "ROOK sources key account manager jobs from employer career sites across the medical, pharma, and healthcare industry.",
-    companySlugs: [],
-  }
-};
-
-// GET /jobs/category/:slug — a real, server-rendered landing page per
-// category, listing genuinely matching real jobs (title, location,
-// compensation only — no description snippet here at all, since
-// scrubbing a company name out of raw description text has already
-// proven to miss abbreviated/shortened forms of a company's name once
-// already; a plain list of real title/location/comp carries zero of
-// that risk while still being genuinely useful).
-const collectionHandler = createCollectionHandler({loadInventory:loadSeoInventory,pageShell,escapeHtml,baseUrl:APP_BASE_URL});
+// All existing industry and role categories reuse the active eligible inventory.
+// Employer identity and full descriptions remain behind the existing preview boundary.
+const collectionHandler = createCollectionHandler({loadInventory:loadSeoInventory,loadRelatedArticles:createRelatedArticleLoader(supabaseAnon),pageShell,escapeHtml,baseUrl:APP_BASE_URL});
 router.get("/jobs/category/animal-health-sales-jobs", (req,res) => res.redirect(301,"/jobs/category/veterinary-sales-jobs"));
 router.get("/jobs/category/:slug/:state", collectionHandler);
-router.get("/jobs/category/:slug", (req,res,next) => SEO_CATEGORIES[req.params.slug] ? collectionHandler(req,res) : next());
-
-router.get("/jobs/category/:slug", async (req, res, next) => {
-  const category = CATEGORIES[req.params.slug];
-  if (!category) return res.status(404).send("Page not found.");
-  if (!isConfigured) return res.status(503).set("Retry-After","60").send("Page temporarily unavailable.");
-
-  // Query active employers matching this category's company slug list.
-  // If the category has no specific slugs (e.g. territory-manager), show
-  // all active employers sorted by name.
-  let employerQuery = supabaseAnon
-    .from("employers")
-    .select("company_name, company_slug, active")
-    .eq("active", true)
-    .order("company_name", { ascending: true });
-
-  if (category.companySlugs && category.companySlugs.length > 0) {
-    employerQuery = employerQuery.in("company_slug", category.companySlugs);
-  }
-
-  const { data: employers } = await employerQuery;
-  const companyList = employers || [];
-
-  const canonicalUrl = `${APP_BASE_URL}/jobs/category/${req.params.slug}`;
-  const metaDescription = `ROOK sources ${category.label.toLowerCase()} directly from ${companyList.length}+ employer career sites — scored against your real background. Sign up to see your matches.`.slice(0, 300);
-  const otherCategories = Object.entries({...CATEGORIES,...SEO_CATEGORIES}).filter(([slug]) => slug !== req.params.slug);
-
-  const trialDays = getTrialPeriodDays();
-  const ctaBlock = trialDays > 0
-    ? `<div style="color:#fff;font-size:15px;font-weight:700;margin-bottom:2px;">${trialDays} days free, then $19.99/month</div>
-      <div style="color:#B9C4DB;font-size:13px;font-weight:600;margin-bottom:18px;">Cancel anytime.</div>
-      <a href="/rook-onboarding-v8.html" class="btn btn-primary">Start Your ${trialDays}-Day Free Trial</a>
-      <div style="color:#8B96AB;font-size:12px;margin-top:10px;">$0 today. Full ROOK access during your trial.</div>`
-    : `<div style="color:#fff;font-size:15px;font-weight:700;margin-bottom:18px;">$19.99/month · Cancel anytime</div>
-      <a href="/rook-onboarding-v8.html" class="btn btn-primary">Get Started</a>
-      <div style="color:#8B96AB;font-size:12px;margin-top:10px;">One membership. Full ROOK access.</div>`;
-
-  const companyGrid = companyList.length > 0
-    ? `<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:32px;">
-        ${companyList.map(c => `<div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px 18px;font-size:14px;font-weight:600;color:var(--navy);">${escapeHtml(c.company_name)}</div>`).join("")}
-      </div>`
-    : `<p style="color:var(--muted);font-size:14px;margin-bottom:32px;">We're actively adding more employers in this category — check back soon.</p>`;
-
-  const bodyHtml = `
-    <h1 style="font-size:28px;margin-bottom:10px;">${escapeHtml(category.label)}</h1>
-    <p style="color:var(--muted);font-size:14.5px;margin-bottom:24px;">${escapeHtml(category.description)}</p>
-
-    ${category.longContent ? `<div style="background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:24px;margin-bottom:28px;font-size:14.5px;line-height:1.8;color:var(--navy);">${category.longContent}</div>` : ""}
-
-    <div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:14px;">
-      ${companyList.length} Companies We Source From
-    </div>
-    ${companyGrid}
-
-    <div style="background:var(--navy);border-radius:var(--radius);padding:28px 24px;text-align:center;margin-bottom:36px;">
-      <h3 style="color:#fff;font-size:19px;margin-bottom:8px;">See which roles match your background</h3>
-      <p style="color:#B9C4DB;font-size:13.5px;margin-bottom:14px;">ROOK scores every open role at these companies against your experience, location, and preferences — so you see your best matches first.</p>
-      ${ctaBlock}
-    </div>
-
-    <div>
-      <div style="font-size:12.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.02em;margin-bottom:12px;">Browse other categories</div>
-      <div style="display:flex;flex-wrap:wrap;gap:8px;">
-        ${otherCategories.map(([slug, c]) => `<a href="/jobs/category/${slug}" style="font-size:13px;color:var(--royal);background:rgba(20,99,255,0.08);padding:7px 14px;border-radius:99px;font-weight:600;">${escapeHtml(c.label)}</a>`).join("")}
-      </div>
-    </div>
-  `;
-
-  res.send(pageShell({ title: `${category.label} — ROOK`, description: metaDescription, canonicalUrl, bodyHtml }));
-});
+router.get("/jobs/category/:slug", collectionHandler);
 
 // A crawlable directory with ordinary links and pagination in the first HTML
 // response. Select only fields already visible in anonymous job previews.
@@ -386,7 +277,6 @@ router.get("/sitemap.xml", async (req, res) => {
     `${APP_BASE_URL}/rook-about.html`,
     `${APP_BASE_URL}/rook-pricing.html`,
     `${APP_BASE_URL}/rook-employers.html`,
-    ...Object.keys(CATEGORIES).map((slug) => `${APP_BASE_URL}/jobs/category/${slug}`),
   ];
 
   if (!isConfigured) return res.status(503).set("Retry-After", "300").send("Sitemap temporarily unavailable.");

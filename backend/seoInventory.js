@@ -18,7 +18,27 @@ const CATEGORIES = {
   'capital-equipment-sales-jobs': {label:'Capital Equipment Sales Jobs', labels:['Capital Equipment'], human:true,
     intro:'Browse medical capital equipment sales opportunities. These roles focus on equipment purchases and account relationships; consult the full listing during your trial for each role’s product, territory and experience requirements.'},
 };
-const FLORIDA = Object.keys(CATEGORIES).slice(0,4);
+// Existing role pages use the same inventory boundary as industry pages.
+CATEGORIES['territory-sales-manager-jobs'] = {
+  label:'Territory Sales Manager Jobs', labels:[], rolePattern:/\bterritory[ -]+sales[ -]+manager\b/i,
+  intro:'Territory sales managers develop accounts and manage sales activity within an assigned geography. Compare current opportunities across medical and animal health markets; territory size, travel and account responsibilities vary by employer.'
+};
+CATEGORIES['key-account-manager-jobs'] = {
+  label:'Key Account Manager Jobs', labels:[], rolePattern:/\bkey[ -]+account[ -]+manager\b/i,
+  intro:'Key account managers manage strategic customer relationships and account growth. Healthcare and animal health roles may involve multi-site customers, contracting and coordination with field teams. Review each listing for its customer scope and requirements.'
+};
+const GUIDANCE = {
+  'medical-sales-jobs':['Territory representatives, account managers and sales specialists may work across the medical product and service categories in this collection.','career-advice'],
+  'medical-device-sales-jobs':['Common roles include associate sales representative, territory manager and clinical sales specialist. Responsibilities may combine account development, product demonstrations and clinical support.','medical-device'],
+  'pharmaceutical-sales-jobs':['Common titles include pharmaceutical sales representative, specialty sales representative and account manager. The customer group and therapeutic area depend on the listing.','pharmaceutical-biotech'],
+  'diagnostics-sales-jobs':['Common roles include laboratory account executive, diagnostics sales specialist and territory manager. Products and services can include laboratory testing, diagnostic instruments and testing supplies.','diagnostics-laboratory'],
+  'veterinary-sales-jobs':['Common roles include animal health territory representative, veterinary account manager and equipment sales specialist. Customers may include veterinary practices and animal health organizations.','veterinary-animal-health'],
+  'capital-equipment-sales-jobs':['Common roles include equipment sales specialist, territory manager and account executive. Responsibilities may include demonstrations, evaluations and coordination with procurement and service teams.','medical-device'],
+  'territory-sales-manager-jobs':['This collection matches territory sales manager titles, rather than listing every field sales opening. Compare travel, account development and territory ownership in the full listing.','career-advice'],
+  'key-account-manager-jobs':['This collection matches key account manager titles, rather than every account management role. Compare the named account responsibilities and contracting requirements in the full listing.','career-advice']
+};
+for(const [slug,[roles,resourceCategory]] of Object.entries(GUIDANCE)) Object.assign(CATEGORIES[slug],{roles,resourceCategory});
+const FLORIDA = ['medical-sales-jobs','medical-device-sales-jobs','pharmaceutical-sales-jobs','diagnostics-sales-jobs'];
 const clean = value => String(value || '').trim().replace(/\s+/g,' ');
 function floridaKind(job) {
   const e=job.location_evidence;
@@ -60,7 +80,7 @@ function buildCollections(rows) {
     if(florida&&!FLORIDA.includes(slug))continue;
     const entries=[],employers=new Set();
     for(const group of groups) {
-      const matching=group.filter(job=>{const labels=labelsFor(job); return (!category.human||!labels.includes('Veterinary')) && labels.some(l=>category.labels.includes(l)) && (!florida||floridaFor(job));});
+      const matching=group.filter(job=>{const labels=labelsFor(job); return (!category.human||!labels.includes('Veterinary')) && (category.rolePattern ? labels.length>0 && category.rolePattern.test(job.title_original || job.title_normalized || '') : labels.some(l=>category.labels.includes(l))) && (!florida||floridaFor(job));});
       if(!matching.length)continue;
       // Prefer newest posted row, then stable ID, for deterministic pagination.
       matching.sort((a,b)=>(Date.parse(b.date_posted)||0)-(Date.parse(a.date_posted)||0)||String(a.id).localeCompare(String(b.id)));
@@ -74,7 +94,7 @@ function buildCollections(rows) {
     entries.sort((a,b)=>b.sortDate-a.sortDate||a.url.localeCompare(b.url));
     entries.forEach(e=>delete e.sortDate);
     const path='/jobs/category/'+slug+(florida?'/florida':'');
-    collections[path]={slug,path,florida,label:category.label+(florida?' in Florida':''),intro:category.intro,entries,count:entries.length,employerCount:employers.size,
+    collections[path]={slug,path,florida,label:category.label+(florida?' in Florida':''),intro:category.intro,roles:category.roles,resourceCategory:category.resourceCategory,entries,count:entries.length,employerCount:employers.size,
       qualified:entries.length>=20&&employers.size>=3};
   }
   return collections;
