@@ -1,6 +1,6 @@
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
-const {INDUSTRIES,TERRITORIES,profileFrom,availabilityProfile,territoryPreference}=require('./routes/onboardingV9')._test;
+const {INDUSTRIES,TERRITORIES,profileFrom,availabilityProfile,territoryPreference,storedSummary}=require('./routes/onboardingV9')._test;
 const stripe=require('./routes/stripe');
 
 assert.deepEqual(INDUSTRIES,['Diagnostics','Medical Device','Pharmaceutical','Veterinary','Biotech/Life Sciences','Healthcare SaaS','Dental','Distribution','Capital Equipment']);
@@ -19,6 +19,9 @@ assert.deepEqual(availabilityProfile(profile).territory_size_preferences,TERRITO
 assert.equal(territoryPreference({geographic_eligibility:{kind:'local',distance_miles:30}},profile),1);
 assert.equal(territoryPreference({geographic_eligibility:{kind:'local',distance_miles:120}},profile),0);
 assert.equal(territoryPreference({geographic_eligibility:{kind:'remote_us'}},{territory_size_preferences:['remote']}),1);
+const persisted=storedSummary({...profile,v9_opportunity_count:327,v9_best_match_count:32});
+assert.equal(persisted.opportunity_count,327);assert.equal(persisted.best_match_count,32);
+assert.equal(storedSummary(profile),null);
 
 assert(stripe.validateV9Coupon({valid:true,duration:'once',amount_off:1000,currency:'usd'}));
 for(const bad of [
@@ -56,6 +59,11 @@ assert(!routeSource.includes('prioritized_match_count'));
 const checkout=fs.readFileSync('public/rook-checkout-v9.html','utf8');
 assert(checkout.includes('$9.99')&&checkout.includes('$19.99/month')&&checkout.includes('No free trial'));
 assert(checkout.includes('create-v9-subscription-from-setup'));
+const signup=fs.readFileSync('public/rook-onboarding-v9-signup.html','utf8');
+for(const page of [signup,checkout]){assert(page.includes('opportunities available from your area'));assert(page.includes('p.opportunity_count.toLocaleString()'));assert(!page.includes('p.best_match_count.toLocaleString()'));}
+assert(routeSource.includes('v9_opportunity_count:calculated.opportunities.length'));
+assert(routeSource.includes('v9_best_match_count:calculated.jobs.length'));
+assert(routeSource.includes('delete profile.v9_opportunity_count'));assert(routeSource.includes('delete profile.v9_best_match_count'));
 const server=fs.readFileSync('server.js','utf8');assert(server.includes("app.get('/meta/v9'"));
 
 console.log('PASS V9 isolated taxonomy, stable geographic pool, illustrative samples, no-trial coupon, copy, route and handoff.');
