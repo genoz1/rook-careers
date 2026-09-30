@@ -46,6 +46,7 @@
     "test-industry-location": "node backend/testIndustryLocation.js && node backend/testV7Location.js",
     "test-job-search": "node --test backend/testJobSearch.js",
     "test-pretrial-security": "node --test backend/testPretrialSecurity.js && node backend/testPretrialRoutes.js && node --test backend/testPublicIndexing.js",
+    "test-v9": "node backend/testOnboardingV9.js",
     "test-territory-containment": "node --test backend/testTerritoryContainment.js",
     "test-ingestion-repairs": "node --test backend/testNewJerseyEvidence.js backend/testIndustryRepair.js backend/testSourceRepairs.js backend/testUkgRepair.js backend/testAdpRepair.js backend/testKulaRepair.js backend/testAdditionalSources.js backend/testDataQualityRepair.js backend/testIngestDeadline.js backend/testIngestionRecovery.js backend/testIngestionAiRecovery.js backend/testIngestionWatchdog.js",
     "test-resources": "node --test backend/testResources.js",
