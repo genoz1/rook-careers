@@ -59,6 +59,7 @@ test('production routing: existing industry, role and Florida pages, privacy, pa
   }
   for(const p of ['/jobs/category/no-such-category','/jobs/category/medical-sales-jobs/florida/orlando','/jobs/category/medical-sales-jobs/texas','/jobs/category/veterinary-sales-jobs/florida','/not-a-rook-page','/jobs/category/medical-sales-jobs?page=0','/jobs/category/medical-sales-jobs?page=999'])assert.equal((await get(p)).status,404,p);
   const alias=await get('/jobs/category/animal-health-sales-jobs');assert.equal(alias.status,301);assert.equal(alias.headers.get('location'),'/jobs/category/veterinary-sales-jobs');
+  const oldCompanies=await get('/rook-companies.html');assert.equal(oldCompanies.status,301);assert.equal(oldCompanies.headers.get('location'),'/companies');
   const home=await get('/index.html?utm_source=test');assert.equal(home.status,301);assert.equal(home.headers.get('location'),'/?utm_source=test');
   for(const file of ['rook-dashboard-v7.html','rook-dashboard.html','rook-onboarding-v7-signup.html','rook-checkout-v7.html','rook-login.html','rook-search.html']){const r=await get('/'+file);assert.equal(r.status,200,file);assert.equal(r.headers.get('x-robots-tag'),'noindex, follow');}
   for(const file of ['rook-onboarding.html',...[2,3,4,5,6,7].map(v=>`rook-onboarding-v${v}.html`)]){
@@ -70,7 +71,7 @@ test('production routing: existing industry, role and Florida pages, privacy, pa
     const r=await get(from);assert.equal(r.status,302);assert.equal(r.headers.get('location'),to);
   }
   const ad=await get('/medical-sales/free-trial?utm_source=google');assert.equal(ad.status,302);assert.equal(ad.headers.get('location'),'/rook-onboarding-v8.html?utm_source=google');
-  for(const file of ['','rook-browse.html','rook-about.html','rook-employers.html','rook-companies.html']){const r=await get('/'+file);assert.equal(r.status,200);assert((await r.text()).includes(`rel="canonical" href="${PUBLIC}/${file}"`));}
+  for(const file of ['','rook-browse.html','rook-about.html','rook-employers.html']){const r=await get('/'+file);assert.equal(r.status,200);assert((await r.text()).includes(`rel="canonical" href="${PUBLIC}/${file}"`));}
   const map=await(await get('/sitemap.xml')).text();for(const slug of Object.keys(CATEGORIES)){assert.equal(map.includes(PUBLIC+'/jobs/category/'+slug+'</loc>'),buildCollections(rows)['/jobs/category/'+slug].qualified);if(FLORIDA.includes(slug))assert(map.includes(PUBLIC+'/jobs/category/'+slug+'/florida</loc>'));}assert(!map.includes('/animal-health-sales-jobs'));assert(map.includes('/jobs/'+rows[0].id));noSecrets(map);
   for(const p of ['/jobs/'+rows[0].id,'/api/jobs/'+rows[0].id]){if(p.startsWith('/api'))continue;const r=await get(p);assert.equal(r.status,200);noSecrets(await r.text());}
   assert.equal((await get('/jobs/00000000-0000-0000-0000-000000000000')).status,404);

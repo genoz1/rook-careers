@@ -279,7 +279,9 @@ router.get("/public-geocode-zip", requireConfig, async (req, res) => {
 // the personalized Dashboard and may geographically prefilter and score a
 // candidate pool. Job Search always starts from every active, approved job.
 router.get("/job-search", requireConfig, requireAuth, requireFullAccess, async (req, res) => {
-  const { keyword = "", industries = "all", near_lat, near_lng } = req.query;
+  const { keyword = "", industries = "all", near_lat, near_lng, company } = req.query;
+  const selectedCompany=company==null?null:Object.values(require("../companySeo").COMPANIES).find(c=>require("../companySeo").nameKey(c.name)===require("../companySeo").nameKey(company));
+  if(company!=null&&!selectedCompany)return res.status(400).json({error:"Unknown company filter"});
   const selectionInput = String(industries || "all");
   const selection = normalizeSelection(selectionInput.split(","));
   const industryPass = job => selectionInput === "all" || matchesIndustry(job, selection);
@@ -298,6 +300,7 @@ router.get("/job-search", requireConfig, requireAuth, requireFullAccess, async (
     .eq("status", "active")
     .eq("moderation_status", "approved");
 
+  if(selectedCompany)query=query.ilike("company_name",selectedCompany.name);
   const cleanKeyword = String(keyword).trim().replace(/[,%()]/g, " ").replace(/\s+/g, " ");
   if (cleanKeyword) {
     // Partial, case-insensitive matching of the canonical company field and
