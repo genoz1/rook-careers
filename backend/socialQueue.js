@@ -7,6 +7,16 @@ const { identifyRookChannels, identifyOptionalPersonalLinkedin } = require('./so
 const { PERSONAL_COPY_TOKEN, futureSlots, representedPost, availableCapacity, isPersonalLinkedinSlot, personalLinkedinSlot, regularPost } = require('./socialContentPlan');
 const { prepareMarketingGraphic } = require('./socialBrandedCard');
 const { sendEmail } = require('./email/resend');
+async function morningInventoryReady(db, now) {
+  const day = getEasternParts(now).dateStr;
+  const start = require('./socialAutomation').nyWallClockToUtc(day, 0, 0).toISOString();
+  const { data, error } = await db.from('ingestion_runs').select('started_at,ended_at,status,summary')
+    .gte('started_at', start).lte('started_at', now.toISOString()).order('started_at', { ascending: false }).limit(100);
+  if (error) return false;
+  const run = (data || []).find(r => !r.summary?.manual && getEasternParts(new Date(r.started_at)).dateStr === day && getEasternParts(new Date(r.started_at)).hour < 12);
+  return Boolean(run?.ended_at && new Date(run.ended_at) <= now &&
+    ['completed','completed_with_errors','budget_exhausted'].includes(run.status));
+}
 async function durableCreate(db, runKey, token, payload, send = createPost) {
   const table = () => db.from('social_queue_sends');
   const key = q => q.eq('run_key', runKey).eq('channel_id', payload.channelId);
@@ -37,7 +47,7 @@ async function durableCreate(db, runKey, token, payload, send = createPost) {
     } catch (err) {
       // Only an explicit MutationError proves Buffer rejected the mutation.
       // Network/HTTP/parse/timeouts remain 'sending' and require reconciliation.
-      if (err.isMutationError && attempt < 2) continue;
+      if (err.isMutationError && !err.jobInactive && attempt < 2) continue;
       if (err.isMutationError) {
         const { error: saveError } = await key(table().update({ state: 'rejected' }));
         if (saveError) throw Error('Cannot save Buffer rejection');
@@ -115,13 +125,19 @@ async function replenish(config, deps = {}) {
       return result;
     };
     const runJob = deps.runScheduledSlot || require('./socialPublishWorker').runScheduledSlot;
-    for (const slot of futureSlots(now)) {
+    const planned = futureSlots(now);
+    const todayJobs = planned.filter(s => ['am','pm'].includes(s.slot) && s.dateStr === day);
+    const ready = todayJobs.length && await (deps.morningInventoryReady || morningInventoryReady)(db, now);
+    const slots = planned.filter(s => !['am','pm'].includes(s.slot) || (s.dateStr === day && ready));
+    for (const slot of slots) {
       const renewal = await db.rpc('claim_social_queue', { lock_owner: owner });
       if (renewal.error || !renewal.data) throw Error('Lost social queue lock');
       queue = await read(); limit = queue.limit;
       const missing = channels.filter(c => !representedPost(queue.posts, c.id, slot));
       if (!missing.length) { outcomes.push({slot:slot.slot,date:slot.dateStr,state:'represented'}); continue; }
-      const allowed = new Set(missing.filter(c => availableCapacity(queue.posts,c.id,limit)>0).map(c=>c.id));
+      const isJob = ['am','pm'].includes(slot.slot);
+      const reserved = id => todayJobs.filter(s => !representedPost(queue.posts,id,s)).length;
+      const allowed = new Set(missing.filter(c => availableCapacity(queue.posts,c.id,limit) > (isJob ? 0 : reserved(c.id))).map(c=>c.id));
       if (!allowed.size) { capacityDeferred += missing.length; continue; }
       const runKey = computeRunKey(slot.dateStr,slot.slot);
       const send = async (token,payload) => {
@@ -130,24 +146,40 @@ async function replenish(config, deps = {}) {
         const current = await read();
         const existing = representedPost(current.posts,payload.channelId,slot);
         if (existing) return existing;
-        if (!availableCapacity(current.posts,payload.channelId,current.limit)) throw Object.assign(Error('Buffer capacity is full'),{capacity:true});
+        if (availableCapacity(current.posts,payload.channelId,current.limit) <= (isJob ? 0 : reserved(payload.channelId))) throw Object.assign(Error('Buffer capacity is full'),{capacity:true});
         if (new Date(payload.dueAt) <= new Date()) throw Error('Slot became due before enqueueing');
         if (!payload.photoUrl) throw Error('Graphic required; refusing a text-only company post');
-        const post = await durableCreate(db,runKey,token,{...payload,requireMedia:true},deps.createPost || createPost);
+        const mutation = async (accessToken, value) => {
+          if (value.jobEvidence) {
+            const evidence = value.jobEvidence;
+            const check = await require('./socialPublishWorker').validateJobFresh(db,db,evidence.id,config,evidence.version);
+            if (!check.eligible || (check.job.expires_at && new Date(check.job.expires_at) <= new Date(value.dueAt))) {
+              throw Object.assign(Error('Job inactive before Buffer submission'), { jobInactive:true, isMutationError:true });
+            }
+          }
+          return (deps.createPost || createPost)(accessToken,value);
+        };
+        const post = await durableCreate(db,runKey,token,{...payload,requireMedia:true},mutation);
         created++; return post;
       };
       if (['am','pm'].includes(slot.slot)) {
         let result;
-        for (let attempt=0;attempt<2;attempt++) {
+        const excludedJobIds = new Set();
+        for (let attempt=0;attempt<3;attempt++) {
           try {
             result = await runJob(slot.slot,slot.dateStr,config,{
-              ...deps,supabaseAdmin:db,supabaseAnon:db,generateMarketing:makeCopy,
+              ...deps,supabaseAdmin:db,supabaseAnon:db,generateMarketing:makeCopy,excludedJobIds,
               channelAllowed:id => allowed.has(id) || Boolean(representedPost(queue.posts,id,slot)),
               verifyExistingRun:row => ['facebook','linkedin'].every(platform => queue.posts.some(p=>p.id===row[platform+'_buffer_post_id'])),
               createPost:send,
             });
           } catch (error) { result={ok:false,stage:error.message}; }
           if (result.ok || result.capacityDeferred) break;
+          if (result.jobId && ['no_valid_candidate','final_pre_publish_check','pre_buffer_validation','inactive_before_submission'].includes(result.stage)) excludedJobIds.add(result.jobId);
+          else if (attempt >= 1) break;
+        }
+        if (['no_valid_candidate','no_eligible_jobs','final_pre_publish_check','pre_buffer_validation','inactive_before_submission'].includes(result.stage)) {
+          outcomes.push({slot:slot.slot,date:slot.dateStr,state:'no_active_job'}); continue;
         }
         if (!result.ok && !result.capacityDeferred) { failures.push({runKey,stage:result.stage || 'job_replenishment',reason:result.reason}); continue; }
         if (result.capacityDeferred) capacityDeferred++;
@@ -179,8 +211,8 @@ async function replenish(config, deps = {}) {
           if (directResourceFacebook && channel.service==='facebook') continue;
           if (!allowed.has(channel.id)) {capacityDeferred++;continue;}
           try {
-            const resourcePost = await send(config.bufferAccessToken,{channelId:channel.id,text:regularPost(slot,channel.service,copy),photoUrl:media.photoUrl,mediaEvidence:media,mode:'customScheduled',dueAt:slot.dueAt,
-              ...(channel.id===channels[0].id?{personalTemplate:regularPost(slot,'linkedin',{...copy,linkedin:PERSONAL_COPY_TOKEN})}:{}),
+            const resourcePost = await send(config.bufferAccessToken,{channelId:channel.id,text:regularPost(slot,channel.service,copy,media.resourceSlug),photoUrl:media.photoUrl,mediaEvidence:media,mode:'customScheduled',dueAt:slot.dueAt,
+              ...(channel.id===channels[0].id?{personalTemplate:regularPost(slot,'linkedin',{...copy,linkedin:PERSONAL_COPY_TOKEN},media.resourceSlug)}:{}),
               ...(channel.service==='facebook'?{metadata:{facebook:{type:'post'}}}:{})});
             await require('./resources/bufferInventory').record(db,media.resourceSlug,channel.service,resourcePost);
           } catch (error) {
@@ -208,7 +240,7 @@ async function replenish(config, deps = {}) {
         const personalRecent = [...queue.posts, ...recentPosts].filter(p => p.channelId === personalChannel.id)
           .sort((a,b) => new Date(b.dueAt || b.sentAt) - new Date(a.dueAt || a.sentAt)).slice(0,36).map(p => p.text);
         const generatePersonal = deps.generatePersonalLinkedin || require('./socialMarketingCopy').generatePersonalLinkedin;
-        for (const slot of futureSlots(now).filter(slot => isPersonalLinkedinSlot(slot) || (process.env.RESOURCES_BUFFER_ENABLED==='true' && ['marketing-1','marketing-2'].includes(slot.slot)))) {
+        for (const slot of slots.filter(slot => isPersonalLinkedinSlot(slot) || (process.env.RESOURCES_BUFFER_ENABLED==='true' && ['marketing-1','marketing-2'].includes(slot.slot)))) {
           const renewal = await db.rpc('claim_social_queue', { lock_owner: owner });
           if (renewal.error || !renewal.data) throw Error('Lost social queue lock during Gene phase');
           const target = personalLinkedinSlot(slot), runKey = computeRunKey(slot.dateStr,slot.slot);
@@ -223,13 +255,31 @@ async function replenish(config, deps = {}) {
           }
           const resourceSlug=source.payload.mediaEvidence?.resourceSlug;
           if (!isPersonalLinkedinSlot(slot) && !resourceSlug) continue;
+          const jobSlot = ['am','pm'].includes(slot.slot);
+          if (jobSlot && !source.payload.jobEvidence) { personalDeferred++; continue; }
+          const links = require('./socialShortLinks');
+          const template = source.payload.personalTemplate.replace(/https:\/\/rookcareers\.com\/[^\s<>"']*/g, raw => {
+            const url = new URL(raw.includes('/go/') ? links.resolveShortLink(raw) : raw);
+            if (resourceSlug && url.pathname !== `/resources/${resourceSlug}/`) throw Error('Invalid personal article destination');
+            if (jobSlot && url.pathname !== `/jobs/${source.payload.jobEvidence.id}`) throw Error('Invalid personal job destination');
+            return !resourceSlug && !jobSlot ? links.shortSocialUrl('https://rookcareers.com/rook-onboarding-v8.html','gene-linkedin',slot.slot) : raw;
+          });
+          if ((resourceSlug || jobSlot) && !template.includes('https://rookcareers.com/')) throw Error('Missing personal destination');
           const generated = resourceSlug ? {text:source.payload.mediaEvidence.editorial.personal} : await generatePersonal({theme:slot.kind,slot:slot.slot,industry:slot.industry,recent:[source.payload.text,...personalRecent]});
-          const text = require('./socialShortLinks').trackSocialText(source.payload.personalTemplate.replace(PERSONAL_COPY_TOKEN,generated.text), 'gene-linkedin');
+          const text = links.trackSocialText(template.replace(PERSONAL_COPY_TOKEN,generated.text), 'gene-linkedin');
           const current = await read();
           if (representedPost(current.posts,personalChannel.id,target)) continue;
           if (!availableCapacity(current.posts,personalChannel.id,current.limit)) { personalDeferred++; continue; }
           if (target.dueAt <= new Date()) { personalDeferred++; continue; }
-          const personalPost=await durableCreate(db,runKey,config.bufferAccessToken,{channelId:personalChannel.id,text,photoUrl:source.payload.photoUrl,mode:'customScheduled',dueAt:target.dueAt},deps.createPost || createPost);
+          const personalSend = async (token,payload) => {
+            if (source.payload.jobEvidence) {
+              const e = source.payload.jobEvidence;
+              const check = await require('./socialPublishWorker').validateJobFresh(db,db,e.id,config,e.version);
+              if (!check.eligible || (check.job.expires_at && new Date(check.job.expires_at) <= target.dueAt)) throw Object.assign(Error('Job inactive before personal Buffer submission'),{isMutationError:true});
+            }
+            return (deps.createPost || createPost)(token,payload);
+          };
+          const personalPost=await durableCreate(db,runKey,config.bufferAccessToken,{channelId:personalChannel.id,text,photoUrl:source.payload.photoUrl,mode:'customScheduled',dueAt:target.dueAt},personalSend);
           await require('./resources/bufferInventory').record(db,resourceSlug,'personal',personalPost);
           personalCreated++; personalRecent.unshift(text); personalRecent.splice(36);
           personalOutcomes.push({slot:slot.slot,date:slot.dateStr,state:'scheduled'});
@@ -254,4 +304,4 @@ async function replenish(config, deps = {}) {
   return {ok:!failures.length,created,generated,aiFallbacks,aiFallbackDetails,capacityDeferred,limit,outcomes,failures,
     personal:{enabled:Boolean(personalChannel),created:personalCreated,deferred:personalDeferred,outcomes:personalOutcomes,failures:personalFailures}};
 }
-module.exports={futureSlots,durableCreate,replenish};
+module.exports={futureSlots,durableCreate,replenish,morningInventoryReady};

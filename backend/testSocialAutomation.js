@@ -240,7 +240,7 @@ async function run() {
     assert.ok(!keys.includes("employer_id"));
     assert.ok(!keys.includes("ai_analysis"), "the raw AI analysis blob itself must not leak, only the normalized category derived from it");
     assert.ok(!JSON.stringify(response).includes("Acme"));
-    assert.match(response.public_url_facebook, /^https:\/\/rookcareers\.com\/rook-onboarding-v8\.html\?utm_source=facebook/);
+    assert.match(response.public_url_facebook, /^https:\/\/rookcareers\.com\/jobs\/[^?]+\?utm_source=facebook/);
     assert.match(response.public_url_linkedin, /\/jobs\//);
   });
 
@@ -758,7 +758,7 @@ async function run() {
     assert.ok(!svg.includes("Healthcare SaaS opportunity"), "the old, incorrect generic sentence must never appear");
   });
   test("the same real hook also appears in the Buffer post copy, not a different sentence", () => {
-    const candidate = { title: "Associate Territory Manager", location_display: "Cleveland, OH", category: "Healthcare SaaS", social_safe_hook: "Focus on Clinical Operations", public_url: "https://rookcareers.com/jobs/abc" };
+    const candidate = { title: "Associate Territory Manager", location_display: "Cleveland, OH", category: "Healthcare SaaS", social_safe_hook: "Focus on Clinical Operations", job_id: "abc", public_url: "https://rookcareers.com/jobs/abc" };
     const copy = buildPostCopy(candidate);
     assert.ok(copy.includes("Focus on Clinical Operations"), "post copy must include the same verified hook shown in the graphic");
   });

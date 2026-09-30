@@ -17,6 +17,15 @@ const article = { slug: 'sales-guide', title: 'Sales Guide', category: 'career-a
 const slot = { slot: 'marketing-1', kind: 'education' };
 const copy = { headline: article.title, resource_url: urlFor(article.slug), ...article.social_copy };
 const extract = text => text.match(/https:\/\/rookcareers\.com\/\S+/)[0];
+test('specific article and job destinations fail closed instead of falling back',()=>{
+ for(const resource_url of [undefined,'https://rookcareers.com/','https://rookcareers.com/resources/','https://rookcareers.com/rook-onboarding-v8.html','https://rookcareers.com/resources/other/']){
+  assert.throws(()=>regularPost(slot,'linkedin',{text:'Article',resource_url},'sales-guide'));
+ }
+ assert.throws(()=>regularPost(slot,'facebook',{text:'Article'},'sales-guide'));
+ for(const public_url of [undefined,'https://rookcareers.com/','https://rookcareers.com/jobs/other','https://rookcareers.com/rook-onboarding-v8.html']){
+  assert.throws(()=>buildPostCopy({job_id:'job-123',public_url}));
+ }
+});
 
 function resourceDb() {
   return { from() {
@@ -164,12 +173,12 @@ test('all actual article destinations redirect and load the existing article wit
   }
 });
 
-test('featured and general posts retain the actual job, V8 and homepage destinations', () => {
+test('featured and general posts retain exact job and V8 destinations', () => {
   const job = { id: 'job-123', title_original: 'Sales Representative', location_raw: 'Tampa, FL', company_name: 'Example', employer_id: 'e1' };
   const candidate = buildCandidateResponse(job, 'local-test-secret');
   for (const destination of ['facebook', 'linkedin']) {
     const target = new URL(resolveShortLink(extract(buildPostCopy(candidate, destination))));
-    assert.equal(target.pathname, destination === 'facebook' ? '/rook-onboarding-v8.html' : '/jobs/job-123');
+    assert.equal(target.pathname, '/jobs/job-123');
     assert.equal(target.searchParams.get('utm_campaign'), 'rook_jobs');
     assert.equal(target.searchParams.get('utm_content'), 'job-123');
   }
@@ -178,7 +187,7 @@ test('featured and general posts retain the actual job, V8 and homepage destinat
   assert.equal(gene.searchParams.get('utm_source_platform'), 'gene_linkedin');
   for (const destination of ['facebook', 'linkedin']) {
     const target = new URL(resolveShortLink(extract(regularPost(slot, destination, { headline: 'Careers', text: 'Explore opportunities' }))));
-    assert.equal(target.pathname, destination === 'facebook' ? '/rook-onboarding-v8.html' : '/');
+    assert.equal(target.pathname, '/rook-onboarding-v8.html');
     assert.equal(target.searchParams.get('utm_content'), 'marketing-1');
   }
 });
