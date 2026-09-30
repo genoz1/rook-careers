@@ -69,6 +69,53 @@ test('SocialChamp rotation redirects to V8 with per-post Facebook and Instagram 
   }
 });
 
+test('SocialChamp crawlers receive branded metadata on the tracked short URL', async t => {
+  const app = express();
+  app.use(createRouter());
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise(resolve => server.once('listening', resolve));
+  t.after(() => new Promise(resolve => { server.close(resolve); server.closeAllConnections(); }));
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  for (const platform of ['facebook', 'instagram']) {
+    const short = `/go/socialchamp/${platform}/medical_sales_jobs_only`;
+    for (const agent of ['facebookexternalhit/1.1', 'Meta-ExternalAgent/1.1', 'SocialChampBot/1.0']) {
+      const response = await fetch(origin + short, { headers: { 'User-Agent': agent }, redirect: 'manual' });
+      assert.equal(response.status, 200);
+      assert.match(response.headers.get('content-type'), /^text\/html/);
+      assert.match(response.headers.get('vary'), /User-Agent/i);
+      assert.equal(response.headers.get('x-robots-tag'), 'noindex, nofollow');
+      assert.equal(response.headers.get('cache-control'), 'no-store');
+      const html = await response.text();
+      assert.match(html, /property="og:title" content="Medical Sales Jobs \| ROOK"/);
+      assert.match(html, /property="og:description" content="Medical and veterinary sales opportunities matched from employer career sites\."/);
+      assert.match(html, /property="og:type" content="website"/);
+      assert.ok(html.includes(`property="og:url" content="https://rookcareers.com${short}"`));
+      assert.match(html, /property="og:image" content="https:\/\/rookcareers\.com\/assets\/rook-social-share\.png"/);
+      assert.match(html, /name="twitter:card" content="summary_large_image"/);
+      assert.doesNotMatch(html, /rook-onboarding-v8\.html|utm_source=/);
+    }
+    for (const agent of ['Mozilla/5.0', 'Mozilla/5.0 (iPhone) Instagram 350.0.0']) {
+      const normal = await fetch(origin + short, { headers: { 'User-Agent': agent }, redirect: 'manual' });
+      assert.equal(normal.status, 302);
+      assert.equal(normal.headers.get('location'),
+        `https://rookcareers.com/rook-onboarding-v8.html?utm_source=${platform}&utm_medium=organic_social&utm_campaign=socialchamp_rotation&utm_content=medical_sales_jobs_only`);
+    }
+  }
+  const second = '/go/socialchamp/facebook/territory_sales_preview?ref=rotation&topic=jobs&utm_source=stale&utm_source=duplicate';
+  const preview = await (await fetch(origin + second, { headers: { 'User-Agent': 'facebookexternalhit/1.1' } })).text();
+  assert.ok(preview.includes('property="og:url" content="https://rookcareers.com/go/socialchamp/facebook/territory_sales_preview?ref=rotation&amp;topic=jobs"'));
+  const normal = await fetch(origin + second, { headers: { 'User-Agent': 'Mozilla/5.0' }, redirect: 'manual' });
+  assert.equal(new URL(normal.headers.get('location')).searchParams.get('utm_content'), 'territory_sales_preview');
+  assert.ok(fs.existsSync(path.join(__dirname, '../public/assets/rook-social-share.png')));
+  const malformed = await fetch(origin + '/go/socialchamp/facebook/invalid%20id', { headers: { 'User-Agent': 'facebookexternalhit/1.1' } });
+  assert.equal(malformed.status, 404);
+  for (const channel of ['facebook','instagram','linkedin','gene-linkedin']) {
+    const response = await fetch(origin + `/go/${channel}/resources/sales-guide`, { headers: { 'User-Agent': 'facebookexternalhit/1.1' }, redirect: 'manual' });
+    assert.equal(response.status, 302);
+    assert.equal(response.headers.get('location'), resolveShortLink(`https://rookcareers.com/go/${channel}/resources/sales-guide`));
+  }
+});
+
 test('all actual article destinations redirect and load the existing article with distinct attribution', async t => {
   const app = express();
   app.use(createRouter());
