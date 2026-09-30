@@ -3,7 +3,7 @@
   const workflowCss=document.createElement('link');workflowCss.rel='stylesheet';workflowCss.href='rook-v9-workflow.css?v=1';document.head.appendChild(workflowCss);
   const $=id=>document.getElementById(id),screens=[...document.querySelectorAll('.screen')],button=$('continueButton');
   const taxonomy=[['Diagnostics','Diagnostics / Laboratory'],['Medical Device','Medical Device'],['Pharmaceutical','Pharmaceutical'],['Veterinary','Veterinary / Animal Health'],['Biotech/Life Sciences','Biotech / Life Sciences'],['Healthcare SaaS','Healthcare Technology'],['Dental','Dental'],['Distribution','Distribution'],['Capital Equipment','Capital Equipment']];
-  const state={screen:'welcome',location:null,industries:[],years:null,territories:[],count:0,preview:null,busy:false};
+  const state={screen:'welcome',location:null,industries:[],years:null,territories:[],count:0,preview:null,busy:false,countRequest:0};
   const order=['welcome','location','industry','trust','experience','territory','searching','results','workflow','offer'];
   const art={
     search:`<svg class="floaty" viewBox="0 0 180 130" aria-hidden="true"><g fill="#eaf4ff" stroke="#c8def4"><rect x="14" y="31" width="53" height="68" rx="7"/><rect x="111" y="35" width="52" height="65" rx="7"/></g><g fill="#8fc4ff"><rect x="23" y="43" width="31" height="5" rx="3"/><rect x="120" y="47" width="29" height="5" rx="3"/><rect x="23" y="55" width="21" height="5" rx="3"/></g><circle cx="87" cy="61" r="31" fill="#50a3ff" stroke="#0877ff" stroke-width="7"/><circle cx="87" cy="61" r="19" fill="#d8efff"/><path d="M108 84l25 25" stroke="#075dd2" stroke-width="12" stroke-linecap="round"/></svg>`,
@@ -29,40 +29,59 @@
     setButton(labels[name]||'Continue',!ready(name),name==='offer');
     if(['location','industry','experience','territory'].includes(name))track('v9_question_viewed',{stage:name});
     if(name==='trust')track('v9_value_viewed',{stage:'founder_history'});
-    if(name==='results')track('v9_masked_dashboard_reveal',{best_match_count:state.preview.best_match_count,opportunities:state.preview.opportunity_count});
+    if(name==='results')track('v9_masked_dashboard_reveal',{best_match_count:state.preview.best_match_count,prioritized_match_count:state.preview.prioritized_match_count,opportunities:state.preview.opportunity_count});
     if(name==='workflow')track('v9_value_viewed',{stage:'member_workflow'});
     if(name==='offer')track('v9_offer_view',{best_match_count:state.preview.best_match_count});
   }
   function ready(name){return name==='welcome'||name==='trust'||name==='results'||name==='workflow'||name==='offer'||name==='location'&&!!state.location||name==='industry'&&state.industries.length>0||name==='experience'&&state.years!=null||name==='territory'&&state.territories.length>0}
-  function animateCount(next,label){
+  function animateCount(next,label,stage=state.screen){
     next=Math.max(0,Number(next)||0);const from=state.count||next,start=performance.now(),duration=650;state.count=next;$('counterLabel').textContent=label||'current opportunities';
     function frame(now){const p=Math.min(1,(now-start)/duration),ease=1-Math.pow(1-p,3),value=Math.round(from+(next-from)*ease);$('counterNumber').textContent=value.toLocaleString();if(p<1)requestAnimationFrame(frame)}requestAnimationFrame(frame);
-    track('v9_counter_refined',{stage:state.screen,count:next});
+    track('v9_counter_refined',{stage,count:next});
   }
   async function request(path,options={}){const response=await fetch('/api/v9'+path,{...options,headers:{'Content-Type':'application/json','X-ROOK-V9':sessionStorage.getItem('rook_v9_token')||'',...options.headers},cache:'no-store'});const json=await response.json();if(!response.ok)throw Error(json.error||'Please try again.');return json}
   function payload(stage){return {stage,location:state.location,industries:state.industries,years:state.years,territories:state.territories,attribution:typeof rookGetStoredAttribution==='function'?rookGetStoredAttribution():Object.fromEntries(new URLSearchParams(location.search))}}
-  async function refine(stage){const result=await request('/refine',{method:'POST',body:JSON.stringify(payload(stage))});animateCount(result.count,result.label);track('v9_question_answered',{stage,count:result.count});return result}
+  function refine(stage){
+    const requestId=++state.countRequest;track('v9_question_answered',{stage});
+    request('/refine',{method:'POST',body:JSON.stringify(payload(stage))}).then(result=>{
+      if(requestId!==state.countRequest)return;
+      animateCount(result.count,result.label,stage);
+    }).catch(()=>{if(requestId===state.countRequest)$('formError').textContent='Your count is still updating. You can continue.';});
+  }
   const widget=RookLocationWidget.init({inputEl:$('locationInput'),listEl:$('locationList'),statusEl:$('locationStatus'),onSelect:location=>{state.location=location;setButton('Continue',false);},onClear:()=>{state.location=null;setButton('Continue',true);}});
   document.querySelectorAll('#industryChoices .choice').forEach(el=>el.onclick=()=>{el.classList.toggle('selected');state.industries=[...document.querySelectorAll('#industryChoices .selected')].map(x=>x.dataset.value);setButton('Continue',!ready('industry'));});
   document.querySelectorAll('#experienceChoices .choice').forEach(el=>el.onclick=()=>{document.querySelectorAll('#experienceChoices .choice').forEach(x=>x.classList.remove('selected'));el.classList.add('selected');state.years=Number(el.dataset.value);setButton('Continue',false);});
   document.querySelectorAll('#territoryChoices .choice').forEach(el=>el.onclick=()=>{el.classList.toggle('selected');state.territories=[...document.querySelectorAll('#territoryChoices .selected')].map(x=>x.dataset.value);setButton('Find My Matches',!ready('territory'));});
-  function renderResults(preview){
-    const cards=preview.jobs.slice(0,2).map(job=>`<article class="result-card"><span class="match-pill">${Math.round(job.match?.overall_score||0)}% Match</span><strong>${String(job.title_original||'Sales opportunity').replace(/[&<>]/g,'')}</strong><span>${String(job.location_raw||job.city||'Location varies').replace(/[&<>]/g,'')}</span></article>`).join('');
-    const hidden=Math.max(0,preview.best_match_count-2);$('resultCards').innerHTML=cards+(hidden?`<div class="masked-row" aria-hidden="true"></div><div class="masked-note">🔒 +${hidden} more matching opportunities</div>`:'');$('widenedNote').hidden=!preview.widened;
+  const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  function visibleCard(job){
+    const prioritized=job.preference_tier==='prioritized';
+    const badge=prioritized&&Number.isFinite(job.match?.overall_score)?`${Math.round(job.match.overall_score)}% Match`:'Broader opportunity';
+    return `<article class="result-card ${prioritized?'':'broader-card'}"><span class="match-pill ${prioritized?'':'broader-pill'}">${badge}</span><strong>${esc(job.title_original||'Sales opportunity')}</strong><span>${esc(job.location_raw||job.city||'Location varies')}</span></article>`;
   }
+  function resultGroup(label,jobs){return jobs.length?`<div class="result-group"><h3>${esc(label)}</h3>${jobs.map(visibleCard).join('')}</div>`:'';}
+  function renderResults(preview){
+    const visible=preview.jobs.slice(0,2),prioritized=visible.filter(job=>job.preference_tier==='prioritized'),broader=visible.filter(job=>job.preference_tier!=='prioritized');
+    const selected=preview.profile?.desired_industries||[],industryLabel=selected.length===1?(selected[0]==='Veterinary'?'Veterinary / Animal Health':selected[0]):'Preferred-industry';
+    const locked=preview.jobs.slice(2,5).map(job=>typeof rookRenderMaskedJob==='function'?rookRenderMaskedJob(job):'').join('');
+    const remaining=Math.max(0,preview.best_match_count-2-Math.min(3,Math.max(0,preview.jobs.length-2)));
+    $('resultSummary').textContent=`${preview.prioritized_match_count} prioritized ${preview.prioritized_match_count===1?'match':'matches'} and ${preview.broader_opportunity_count} broader eligible ${preview.broader_opportunity_count===1?'opportunity':'opportunities'} from ${preview.opportunity_count.toLocaleString()} current opportunities.`;
+    $('resultCards').innerHTML=resultGroup(`${industryLabel} prioritized matches`,prioritized)+resultGroup('Broader eligible opportunities',broader)+(locked?`<div class="masked-dashboard-preview"><h3>More opportunities in your masked dashboard</h3>${locked}${remaining?`<p class="masked-note">🔒 +${remaining} additional opportunities</p>`:''}</div>`:'');
+    $('widenedNote').hidden=!preview.broader_opportunity_count;
+  }
+  window.rookV9UnlockFromCard=()=>show('workflow');
   async function finish(){
     show('searching');
-    try{const result=await request('/session',{method:'POST',body:JSON.stringify(payload('territory'))});sessionStorage.setItem('rook_v9_token',result.token);state.preview=result.preview;animateCount(result.preview.best_match_count,'best available matches');renderResults(result.preview);setTimeout(()=>show('results'),650)}
+    try{const result=await request('/session',{method:'POST',body:JSON.stringify(payload('territory'))});sessionStorage.setItem('rook_v9_token',result.token);state.preview=result.preview;++state.countRequest;animateCount(result.preview.best_match_count,'selected opportunities','results');renderResults(result.preview);show('results')}
     catch(error){show('territory');$('formError').textContent=error.message;track('v9_checkout_failure',{stage:'search'});}
   }
   button.onclick=async()=>{
     if(state.busy||!ready(state.screen))return;state.busy=true;button.disabled=true;
     try{
       if(state.screen==='welcome')show('location');
-      else if(state.screen==='location'){await refine('location');show('industry')}
-      else if(state.screen==='industry'){await refine('industry');show('trust')}
+      else if(state.screen==='location'){show('industry');refine('location')}
+      else if(state.screen==='industry'){show('trust');refine('industry')}
       else if(state.screen==='trust')show('experience');
-      else if(state.screen==='experience'){await refine('experience');show('territory')}
+      else if(state.screen==='experience'){show('territory');refine('experience')}
       else if(state.screen==='territory')await finish();
       else if(state.screen==='results')show('workflow');
       else if(state.screen==='workflow')show('offer');
@@ -71,5 +90,5 @@
     finally{state.busy=false;if(state.screen!=='searching')button.disabled=!ready(state.screen)}
   };
   addEventListener('pagehide',()=>{if(!['offer'].includes(state.screen))track('v9_abandonment',{stage:state.screen})});
-  (async()=>{track('v9_landing',{source:'meta_paid_video'});try{const pool=await request('/pool');animateCount(pool.opportunities,'current opportunities')}catch(_){$('counterNumber').textContent='—'}})();
+  (async()=>{track('v9_landing',{source:'meta_paid_video'});const requestId=++state.countRequest;try{const pool=await request('/pool');if(requestId===state.countRequest)animateCount(pool.opportunities,'current opportunities','landing')}catch(_){if(requestId===state.countRequest)$('counterNumber').textContent='—'}})();
 })();
