@@ -103,6 +103,11 @@ function safeSummary(profile,result){
     territory_size_preferences:profile.territory_size_preferences,subscription_status:profile.subscription_status},
     opportunity_count:result.opportunities.length,best_match_count:result.jobs.length};
 }
+function storedSummary(profile){
+  const opportunityCount=Number(profile.v9_opportunity_count),bestMatchCount=Number(profile.v9_best_match_count);
+  return Number.isInteger(opportunityCount)&&opportunityCount>=0&&Number.isInteger(bestMatchCount)&&bestMatchCount>=0
+    ?safeSummary(profile,{opportunities:{length:opportunityCount},jobs:{length:bestMatchCount}}):null;
+}
 async function session(req){
   const token=req.get('X-ROOK-V9')||'';
   if(!/^[a-f0-9]{64}$/.test(token))return null;
@@ -133,7 +138,8 @@ router.post('/session',wrap(async(req,res)=>{
   const profile=profileFrom(req.body),timing={validate_with_session:true},started=performance.now();
   const calculated=await calculate(profile,timing);
   const token=crypto.randomBytes(32).toString('hex');
-  const record={token_hash:crypto.createHash('sha256').update(token).digest('hex'),profile,jobs:[],expires_at:new Date(Date.now()+24*60*60*1000).toISOString()};
+  const storedProfile={...profile,v9_opportunity_count:calculated.opportunities.length,v9_best_match_count:calculated.jobs.length};
+  const record={token_hash:crypto.createHash('sha256').update(token).digest('hex'),profile:storedProfile,jobs:[],expires_at:new Date(Date.now()+24*60*60*1000).toISOString()};
   const saved=await db.from(table).insert(record);if(saved.error)throw saved.error;
   timing.total_ms=performance.now()-started;
   res.json({token,preview:safeSummary(profile,calculated),timing});
@@ -143,6 +149,7 @@ router.get('/session',wrap(async(req,res)=>{
   const account=await user(req);if(saved.user_id&&saved.user_id!==account?.id)return res.status(403).json({error:'Sign in to your account.'});
   let profile={...saved.profile};
   if(account&&saved.user_id===account.id){const row=await db.from('candidate_profiles').select('*').eq('user_id',account.id).maybeSingle();if(row.error)throw row.error;profile={...profile,...row.data,...saved.profile};}
+  const persisted=storedSummary(profile);if(persisted)return res.json(persisted);
   res.json(safeSummary(profile,await calculate(profile)));
 }));
 router.post('/claim',wrap(async(req,res)=>{
@@ -151,7 +158,7 @@ router.post('/claim',wrap(async(req,res)=>{
   if(saved.user_id!==account.id)return res.status(403).json({error:'These matches belong to another account.'});
   if(!saved.transferred_at){
     const existing=await db.from('candidate_profiles').select('utm_source').eq('user_id',account.id).maybeSingle();if(existing.error)throw existing.error;
-    const profile={...saved.profile};delete profile.onboarding_version;
+    const profile={...saved.profile};delete profile.onboarding_version;delete profile.v9_opportunity_count;delete profile.v9_best_match_count;
     if(existing.data?.utm_source)for(const key of ['utm_source','utm_medium','utm_campaign','utm_term','utm_content'])delete profile[key];
     const name=[account.user_metadata?.first_name,account.user_metadata?.last_name].filter(Boolean).join(' ');
     const written=await db.from('candidate_profiles').upsert({...profile,user_id:account.id,email:account.email,...(name?{name}:{})},{onConflict:'user_id'});if(written.error)throw written.error;
@@ -161,4 +168,4 @@ router.post('/claim',wrap(async(req,res)=>{
 }));
 
 module.exports=router;
-module.exports._test={INDUSTRIES,TERRITORIES,profileFrom,availabilityProfile,geographicPool,territoryPreference};
+module.exports._test={INDUSTRIES,TERRITORIES,profileFrom,availabilityProfile,geographicPool,territoryPreference,storedSummary};
