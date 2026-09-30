@@ -1,5 +1,18 @@
 (()=>{
   'use strict';
+  const V9_BUILD='4';
+  const coreCss=[...document.querySelectorAll('link[rel="stylesheet"]')].find(link=>/rook-v9\.css(?:\?|$)/.test(link.href));
+  if(coreCss)coreCss.href=`rook-v9.css?v=${V9_BUILD}`;
+  function ensureFlowDom(){
+    const locationScreen=document.querySelector('[data-screen="location"]');
+    const searchingScreen=document.querySelector('[data-screen="searching"]');
+    if(!document.querySelector('[data-screen="matching-intro"]')&&locationScreen)locationScreen.insertAdjacentHTML('afterend','<section class="screen" data-screen="matching-intro"><div class="question-wrap"><div class="illustration" data-art="search"></div><h2>Now let’s find your<br>best matches.</h2><p class="lead">Your next answers help ROOK prioritize the opportunities that best match your interests and experience.</p></div></section>');
+    if(!document.querySelector('[data-screen="samples"]')&&searchingScreen)searchingScreen.insertAdjacentHTML('afterend','<section class="screen compact" data-screen="samples"><div class="question-wrap"><p class="sample-kicker">EXAMPLE ROOK DISPLAY</p><h2>See how ROOK organizes<br>your opportunities.</h2><p class="subtle">Your real search will use current opportunities and your actual preferences.</p><div class="sample-notice"><strong>EXAMPLE DISPLAY ONLY</strong><span>These are not current job listings. Sample match scores are not calculated from your profile.</span></div><div class="sample-jobs" id="sampleJobs"></div></div></section>');
+    const required=['matching-intro','samples'].map(name=>document.querySelector(`[data-screen="${name}"]`));
+    if(required.some(screen=>!screen)||!document.getElementById('sampleJobs'))throw Error('V9 flow document is incomplete.');
+    document.body.dataset.v9Build=V9_BUILD;
+  }
+  ensureFlowDom();
   const workflowCss=document.createElement('link');workflowCss.rel='stylesheet';workflowCss.href='rook-v9-workflow.css?v=1';document.head.appendChild(workflowCss);
   const $=id=>document.getElementById(id),screens=[...document.querySelectorAll('.screen')],button=$('continueButton');
   const taxonomy=[['Diagnostics','Diagnostics / Laboratory'],['Medical Device','Medical Device'],['Pharmaceutical','Pharmaceutical'],['Veterinary','Veterinary / Animal Health'],['Biotech/Life Sciences','Biotech / Life Sciences'],['Healthcare SaaS','Healthcare Technology'],['Dental','Dental'],['Distribution','Distribution'],['Capital Equipment','Capital Equipment']];
