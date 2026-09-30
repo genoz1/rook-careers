@@ -1,6 +1,5 @@
 const { nyWallClockToUtc } = require('./socialAutomation');
 const { getEasternParts } = require('./socialScheduler');
-const { socialV8Destination } = require('./socialV8Destination');
 // Preserve the four custom marketing times observed in the live Sept 23 queue.
 const DAILY_SLOTS = [
   { slot: 'am', hour: 8, minute: 30, kind: 'featured' },
@@ -48,13 +47,13 @@ function isPersonalLinkedinSlot(slot) {
 function personalLinkedinSlot(slot) {
   return { ...slot, dueAt: new Date(slot.dueAt.getTime() + 45 * 60000) };
 }
-function regularPost(slot, platform, copy) {
-  const content = copy.resource_url ? 'resource_article' : slot.kind;
-  const url = copy.resource_url
-    ? new URL(copy.resource_url)
-    : platform === 'facebook'
-      ? new URL(socialV8Destination('facebook', content))
-      : new URL('https://rookcareers.com/');
+function regularPost(slot, platform, copy, resourceSlug) {
+  const article = resourceSlug || Object.hasOwn(copy, 'resource_url');
+  const content = article ? 'resource_article' : slot.kind;
+  const url = new URL(article ? copy.resource_url : platform === 'reddit' ? 'https://rookcareers.com/' : 'https://rookcareers.com/rook-onboarding-v8.html');
+  if (article && (url.origin !== 'https://rookcareers.com' ||
+      !/^\/resources\/[a-z0-9-]{1,110}\/$/.test(url.pathname) ||
+      (resourceSlug && url.pathname !== `/resources/${resourceSlug}/`))) throw Error('Invalid article destination');
   // Reddit is generation-only and has no publishing destination in this worker.
   if (platform === 'reddit') url.search = new URLSearchParams({ utm_source: platform, utm_medium: 'social', utm_campaign: 'organic', utm_content: content }).toString();
   const shortUrl = platform === 'reddit' ? url.toString() : require('./socialShortLinks').shortSocialUrl(url, platform, slot.slot || slot.kind);

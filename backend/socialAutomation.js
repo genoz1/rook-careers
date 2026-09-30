@@ -647,7 +647,7 @@ function buildCandidateResponse(job, spacingSecret) {
     public_url: `${baseUrl}?utm_source=linkedin&utm_medium=social&utm_campaign=organic`,
     // Per-platform URLs with UTM tracking
     public_url_linkedin: `${baseUrl}?utm_source=linkedin&utm_medium=social&utm_campaign=organic`,
-    public_url_facebook: require('./socialV8Destination').socialV8Destination('facebook', 'featured_job'),
+    public_url_facebook: `${baseUrl}?utm_source=facebook&utm_medium=social&utm_campaign=organic`,
     title: sanitizedTitle, // public social display only — job.title_original and the real job page are never altered
     location_display: dedupedLocation,
     territory_display: job.territory || null,

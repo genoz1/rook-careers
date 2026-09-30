@@ -464,7 +464,7 @@ async function runScheduledSlot(slot, dateStr, config, deps = {}) {
   }
 
   // Each later slot must differ from jobs already selected today.
-  let excludedJobIds = new Set();
+  let excludedJobIds = new Set(deps.excludedJobIds || []);
   for (const earlier of slot === "pm" ? ["am"] : []) {
     const { data: rows, error: earlierError } = await supabaseAdmin.from("social_post_history")
       .select("job_id").eq("run_key", computeRunKey(dateStr, earlier));
@@ -475,11 +475,17 @@ async function runScheduledSlot(slot, dateStr, config, deps = {}) {
 
   // Keep a partial run tied to the same job on both channels.
   let rankedJobs;
-  if (existingRun?.job_id) {
+  const accepted = existingRun && [existingRun.facebook_status,existingRun.linkedin_status].some(isDone);
+  if (existingRun?.job_id && (accepted || !excludedJobIds.has(existingRun.job_id))) {
     const pinned = await fetchFreshJob(supabaseAdmin, existingRun.job_id);
     rankedJobs = pinned ? [pinned] : [];
   } else {
-    ({ rankedJobs } = await selectTopCandidate(supabaseAdmin, config, { excludedJobIds, neverFeaturedOnly: true }));
+    try {
+      ({ rankedJobs } = await selectTopCandidate(supabaseAdmin, config, { excludedJobIds, neverFeaturedOnly: true }));
+    } catch (error) {
+      if (error.message.startsWith('No eligible jobs found')) return {ok:false,stage:'no_eligible_jobs',runKey};
+      throw error;
+    }
   }
   const scheduledForUtc = computeScheduledForUtc(dateStr, slot);
 
@@ -489,7 +495,7 @@ async function runScheduledSlot(slot, dateStr, config, deps = {}) {
   let candidate = null;
   let topJob = null;
   const skippedCandidates = [];
-  for (const job of rankedJobs) {
+  for (const job of rankedJobs.slice(0, 10)) {
     if (slot === "am" && !String(job.company_name || "").trim()) continue;
     const attemptCandidate = buildCandidateResponse(job, config.spacingSecret);
     const attemptValidation = await validateJobFresh(supabaseAdmin, supabaseAnon, job.id, config, attemptCandidate.content_version);
@@ -501,7 +507,7 @@ async function runScheduledSlot(slot, dateStr, config, deps = {}) {
     skippedCandidates.push({ jobId: job.id, reasonCodes: attemptValidation.reason_codes });
   }
   if (!candidate) {
-    return { ok: false, stage: "no_valid_candidate", slot, dateStr, runKey, skippedCandidates };
+    return { ok: false, stage: "no_valid_candidate", slot, dateStr, runKey, skippedCandidates, jobId:existingRun?.job_id };
   }
 
   // Final pre-publish re-check — a second, independent validation
@@ -584,13 +590,22 @@ async function runScheduledSlot(slot, dateStr, config, deps = {}) {
   const recheck = await validateJobFresh(supabaseAdmin, supabaseAnon, topJob.id, config, candidate.content_version);
   if (!recheck.eligible || (slot === "am" && recheck.job.company_name !== candidate.employer_display) ||
       (recheck.job.expires_at && new Date(recheck.job.expires_at) <= scheduledForUtc)) {
-    return { ok: false, stage: "pre_buffer_validation", runKey };
+    return { ok: false, stage: "pre_buffer_validation", runKey, jobId:topJob.id };
   }
   const postCopyLinkedIn = buildPostCopy(candidate, "linkedin");
   const personalTemplate = buildPostCopy({ ...candidate, marketingVariants: { linkedin: PERSONAL_COPY_TOKEN } }, "linkedin");
   const postCopyFacebook = buildPostCopy(candidate, "facebook");
   const postCopy = postCopyLinkedIn; // default
   const results = { facebook: null, linkedin: null };
+  let inactiveBeforeSubmission = false;
+  const submit = async (token, payload) => {
+    const check = await validateJobFresh(supabaseAdmin,supabaseAnon,topJob.id,config,candidate.content_version);
+    if (!check.eligible || (slot === 'am' && check.job.company_name !== candidate.employer_display) ||
+        (check.job.expires_at && new Date(check.job.expires_at) <= scheduledForUtc)) {
+      throw Object.assign(Error('Job inactive before Buffer submission'),{jobInactive:true});
+    }
+    return createPostFn(token,{...payload,jobEvidence:{id:topJob.id,version:candidate.content_version}});
+  };
 
   // Direct instruction: if one platform succeeds and the other fails,
   // retry only the failed platform on any subsequent invocation of
@@ -601,13 +616,14 @@ async function runScheduledSlot(slot, dateStr, config, deps = {}) {
     results.facebook = { status: "deferred_capacity", channelId: channels.facebook.id };
   } else if (!alreadyDoneThisRun.facebook && !alreadyPostedElsewhere.facebook) {
     try {
-      const post = await createPostFn(config.bufferAccessToken, {
+      const post = await submit(config.bufferAccessToken, {
         channelId: channels.facebook.id, text: postCopyFacebook, photoUrl: uploaded.publicUrl,
         mode: "customScheduled", dueAt: scheduledForUtc,
         metadata: { facebook: { type: "post" } },
       });
       results.facebook = { status: "scheduled", bufferPostId: post?.id || null, channelId: channels.facebook.id };
     } catch (err) {
+      inactiveBeforeSubmission ||= Boolean(err.jobInactive);
       console.error(`[Buffer] Facebook post failed for run_key=${runKey}: ${err.message}`);
       results.facebook = { status: err.capacity ? "deferred_capacity" : "failed", error: err.capacity ? null : err.message, channelId: channels.facebook.id };
     }
@@ -619,12 +635,13 @@ async function runScheduledSlot(slot, dateStr, config, deps = {}) {
     results.linkedin = { status: "deferred_capacity", channelId: channels.linkedin.id };
   } else if (!alreadyDoneThisRun.linkedin && !alreadyPostedElsewhere.linkedin) {
     try {
-      const post = await createPostFn(config.bufferAccessToken, {
+      const post = await submit(config.bufferAccessToken, {
         channelId: channels.linkedin.id, text: postCopyLinkedIn, photoUrl: uploaded.publicUrl,
         mode: "customScheduled", dueAt: scheduledForUtc, personalTemplate,
       });
       results.linkedin = { status: "scheduled", bufferPostId: post?.id || null, channelId: channels.linkedin.id };
     } catch (err) {
+      inactiveBeforeSubmission ||= Boolean(err.jobInactive);
       console.error(`[Buffer] LinkedIn post failed for run_key=${runKey}: ${err.message}`);
       results.linkedin = { status: err.capacity ? "deferred_capacity" : "failed", error: err.capacity ? null : err.message, channelId: channels.linkedin.id };
     }
@@ -652,6 +669,7 @@ async function runScheduledSlot(slot, dateStr, config, deps = {}) {
   const capacityDeferred = Object.values(results).some(r => r.status === "deferred_capacity") && !Object.values(results).some(r => r.status === "failed");
   return {
     ok: bothSucceeded && !historyError,
+    ...(inactiveBeforeSubmission ? {stage:'inactive_before_submission'} : {}),
     aiFallback: marketing.fallback, capacityDeferred,
     slot, dateStr, runKey, jobId: topJob.id,
     scheduledForUtc, results, historyRecorded: !historyError, skippedCandidates,

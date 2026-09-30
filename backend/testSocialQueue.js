@@ -4,6 +4,7 @@ const {futureSlots,durableCreate,replenish}=require('./socialQueue');
 const {DAILY_SLOTS,PERSONAL_COPY_TOKEN,availableCapacity,representedPost,isPersonalLinkedinSlot,personalLinkedinSlot,regularPost}=require('./socialContentPlan');
 const {generateMarketing,generatePersonalLinkedin,validatePersonalText,similarity}=require('./socialMarketingCopy');
 const {readQueue}=require('./socialBuffer');
+const {morningInventoryReady}=require('./socialQueue');
 function memoryDb() {
   const rows = [];
   let owner = null;
@@ -83,9 +84,44 @@ const channels=[{id:'li',service:'linkedin',name:'ROOK Careers',organizationId:'
 const config={automationEnabled:'true',bufferAccessToken:'fake',linkedinChannelId:'li',facebookChannelId:'fb',personalLinkedinChannelId:'gene'};
 const copy={linkedin:'Which responsibilities would you prioritize in a possible role? Consider comparing your decisions and responsibilities.',facebook:'What makes a workday satisfying for you? Think about the conversations you enjoy.',reddit:'How would you assess a possible career direction? Reflect on your questions before applying.',fallback:false};
 const personalCopy='I think a careful career search starts with a clear story about your strengths. Which examples would you choose to share?';
-function deps(extra={}) {return {supabaseAdmin:memoryDb(),now:new Date('2030-06-01T00:00:00Z'),listAllChannels:async()=>channels,readQueue:async(token,org)=>{assert.equal(org,"org");return {limit:10,posts:[]};},readRecentPosts:async(token,org)=>{assert.equal(org,"org");return [];},prepareMarketingGraphic:async()=>({photoUrl:"https://example.com/card.jpg"}),preflightCheckMedia:async()=>({ok:true}),generateMarketing:async()=>copy,generatePersonalLinkedin:async()=>({text:personalCopy}),sendEmail:async()=>{},...extra};}
+function deps(extra={}) {return {supabaseAdmin:memoryDb(),now:new Date('2030-06-01T10:00:00Z'),morningInventoryReady:async()=>true,listAllChannels:async()=>channels,readQueue:async(token,org)=>{assert.equal(org,"org");return {limit:10,posts:[]};},readRecentPosts:async(token,org)=>{assert.equal(org,"org");return [];},prepareMarketingGraphic:async()=>({photoUrl:"https://example.com/card.jpg"}),preflightCheckMedia:async()=>({ok:true}),generateMarketing:async()=>copy,generatePersonalLinkedin:async()=>({text:personalCopy}),sendEmail:async()=>{},...extra};}
 function response(value){return {status:'completed',output:[{type:'function_call',name:'write_social_marketing',arguments:JSON.stringify(value)}]};}
 function personalResponse(text){return {status:'completed',output:[{type:'function_call',name:'write_personal_linkedin',arguments:JSON.stringify({text})}]};}
+test('morning inventory gate uses existing completed normal ingestion, never manual/running/failed runs',async()=>{
+ const now=new Date('2030-06-01T10:00:00Z');
+ const run={started_at:'2030-06-01T08:00:00Z',ended_at:'2030-06-01T09:00:00Z',status:'completed',summary:{manual:false}};
+ const db=data=>({from:table=>{assert.equal(table,'ingestion_runs');const q={select:()=>q,gte:()=>q,lte:()=>q,order:()=>q,limit:async()=>({data})};return q;}});
+ assert.equal(await morningInventoryReady(db([run]),now),true);
+ for(const status of ['running','failed'])assert.equal(await morningInventoryReady(db([{...run,status}]),now),false);
+ assert.equal(await morningInventoryReady(db([{...run,summary:{manual:true}}]),now),false);
+ assert.equal(await morningInventoryReady(db([]),now),false);
+});
+test('advance refill leaves job slots open; completed morning inventory enables only today jobs',async()=>{
+ for(const ready of [false,true]){
+  const called=[];
+  const r=await replenish(config,deps({morningInventoryReady:async()=>ready,runScheduledSlot:async(slot,date)=>{called.push({slot,date});return {ok:true};},
+   createPost:async(_,p)=>({id:'mock',assets:[{mimeType:'image/jpeg',source:p.photoUrl}]})}));
+  assert.equal(r.ok,true);
+  assert.equal(called.length,ready?2:0);
+  assert.ok(called.every(c=>c.date==='2030-06-01'));
+ }
+});
+test('inactive job replacement is bounded and exhaustion leaves existing slots empty',async()=>{
+ let calls=0;const excluded=[];
+ const r=await replenish(config,deps({runScheduledSlot:async(_,__,___,d)=>{excluded.push([...d.excludedJobIds]);return {ok:false,stage:'pre_buffer_validation',jobId:`closed-${++calls}`};},
+  createPost:async(_,p)=>({id:'mock',assets:[{mimeType:'image/jpeg',source:p.photoUrl}]})}));
+ assert.equal(calls,6);assert.equal(r.ok,true);
+ assert.equal(r.outcomes.filter(o=>o.state==='no_active_job').length,2);
+ assert.deepEqual(excluded.slice(0,3),[[],['closed-1'],['closed-1','closed-2']]);
+});
+test('advance marketing preserves Buffer capacity for existing same-day job slots',async()=>{
+ const posts=[];let jobs=0;
+ await replenish(config,deps({morningInventoryReady:async()=>false,readQueue:async()=>({posts,limit:10}),
+  runScheduledSlot:async()=>{jobs++;return {ok:true};},
+  createPost:async(_,p)=>{const post={...p,id:`mock-${posts.length}`,status:'scheduled',assets:[{mimeType:'image/jpeg',source:p.photoUrl}]};posts.push(post);return post;}}));
+ assert.equal(jobs,0);
+ for(const id of ['fb','li'])assert.equal(posts.filter(p=>p.channelId===id).length,8);
+});
 test('six daily slots have four regular posts and two additional job posts',()=>{
  assert.equal(DAILY_SLOTS.length,6);assert.equal(DAILY_SLOTS.filter(x=>x.slot.startsWith('marketing')).length,4);
  assert.deepEqual(DAILY_SLOTS.map(x=>[x.hour,x.minute]),[[8,30],[10,0],[13,0],[16,0],[16,30],[19,0]]);
@@ -189,22 +225,22 @@ test('regular posts fill only missing slots, keep existing content and respect c
  assert.equal(r.created,11);assert.ok(r.generated>0);
 });
 test('selected company source is adapted and scheduled to Gene without changing company posts',async()=>{
- const db=memoryDb(),slots=futureSlots(new Date('2030-06-01T00:00:00Z')),selected=slots.find(isPersonalLinkedinSlot);
+ const db=memoryDb(),slots=futureSlots(new Date('2030-06-01T00:00:00Z')),selected=slots.find(s=>s.slot==='marketing-1');
  const runKey=require('./socialAutomation').computeRunKey(selected.dateStr,selected.slot);
- const template=`Featured Job\n${PERSONAL_COPY_TOKEN}\nEmployer\nTerritory Sales Manager\n\nExplore details.\nhttps://rookcareers.com/go/linkedin/jobs/job-123`;
- db.rows.push({run_key:runKey,channel_id:'li',state:'scheduled',payload:{channelId:'li',text:'Featured Job\nCompany wording\nEmployer\nTerritory Sales Manager\n\nExplore details.',personalTemplate:template,photoUrl:'https://example.com/job.png',dueAt:selected.dueAt},post:{id:'company'}});
+ const template=`ROOK Careers\n${PERSONAL_COPY_TOKEN}\nCareer advice\n\nExplore details.\nhttps://rookcareers.com/go/linkedin/home/marketing-1`;
+ db.rows.push({run_key:runKey,channel_id:'li',state:'scheduled',payload:{channelId:'li',text:'ROOK Careers\nCompany wording\nCareer advice\n\nExplore details.',personalTemplate:template,photoUrl:'https://example.com/job.png',dueAt:selected.dueAt},post:{id:'company'}});
  const posts=channels.slice(0,2).flatMap(c=>Array.from({length:10},(_,i)=>({id:c.id+i,channelId:c.id,status:'scheduled',dueAt:'2031-01-01',text:'Existing company post'})));
  let personalPayload;
  const r=await replenish(config,deps({supabaseAdmin:db,readQueue:async()=>({posts,limit:10}),createPost:async(_,payload)=>{personalPayload=payload;const post={...payload,id:'gene-post',status:'scheduled'};posts.push(post);return post;},generatePersonalLinkedin:async context=>{assert.match(context.recent.join(' '),/Company wording/);return {text:personalCopy};}}));
  assert.equal(r.ok,true);assert.equal(personalPayload.channelId,'gene');assert.equal(personalPayload.photoUrl,'https://example.com/job.png');
  assert.match(personalPayload.text,/I think a careful career search/);assert.equal(new Date(personalPayload.dueAt)-selected.dueAt,45*60000);
- assert.match(personalPayload.text,/https:\/\/rookcareers.com\/go\/gene-linkedin\/jobs\/job-123/);
+ assert.match(personalPayload.text,/https:\/\/rookcareers.com\/go\/gene-linkedin\/matches\/marketing-1/);
  assert.equal(db.rows.find(row=>row.channel_id==='li').payload.personalTemplate,template);
  assert.equal(posts.filter(p=>p.channelId==='li').length,10);assert.equal(posts.filter(p=>p.channelId==='fb').length,10);
  assert.equal(r.personal.created,1);assert.equal(r.created,0);
 });
 test('personal Buffer capacity defers safely without an extra mutation',async()=>{
- const db=memoryDb(),slots=futureSlots(new Date('2030-06-01T00:00:00Z')),selected=slots.find(isPersonalLinkedinSlot);
+ const db=memoryDb(),slots=futureSlots(new Date('2030-06-01T00:00:00Z')),selected=slots.find(s=>s.slot==='marketing-1');
  const runKey=require('./socialAutomation').computeRunKey(selected.dateStr,selected.slot);
  db.rows.push({run_key:runKey,channel_id:'li',state:'scheduled',payload:{channelId:'li',text:'Company',personalTemplate:`Featured Job\n${PERSONAL_COPY_TOKEN}\nFacts`,dueAt:selected.dueAt},post:{id:'company'}});
  const posts=channels.flatMap(c=>Array.from({length:10},(_,i)=>({id:c.id+i,channelId:c.id,status:'scheduled',dueAt:'2031-01-01',text:'Existing'})));
@@ -218,7 +254,7 @@ test('Gene channel misconfiguration alerts only Gene and leaves company result h
  assert.equal(r.ok,true);assert.deepEqual(r.failures,[]);assert.equal(r.personal.enabled,false);assert.match(alert.subject,/Gene LinkedIn/);
 });
 test('personal OpenAI failure cannot fail, delay, or force fallback in company pipeline',async()=>{
- const db=memoryDb(),slots=futureSlots(new Date('2030-06-01T00:00:00Z')),selected=slots.find(isPersonalLinkedinSlot),runKey=require('./socialAutomation').computeRunKey(selected.dateStr,selected.slot);
+ const db=memoryDb(),slots=futureSlots(new Date('2030-06-01T00:00:00Z')),selected=slots.find(s=>s.slot==='marketing-1'),runKey=require('./socialAutomation').computeRunKey(selected.dateStr,selected.slot);
  db.rows.push({run_key:runKey,channel_id:'li',state:'scheduled',payload:{channelId:'li',text:'Company source',personalTemplate:`Featured Job\n${PERSONAL_COPY_TOKEN}\nFacts`,dueAt:selected.dueAt},post:{id:'company'}});
  const posts=channels.slice(0,2).flatMap(c=>Array.from({length:10},(_,i)=>({id:c.id+i,channelId:c.id,status:'scheduled',dueAt:'2031-01-01'})));
  let alert;

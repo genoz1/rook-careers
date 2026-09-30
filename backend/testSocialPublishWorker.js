@@ -308,7 +308,7 @@ async function run() {
 
 
   test("post copy never includes the employer name and always includes the natural CTA + link", () => {
-    const candidate = { title: "Territory Sales Manager", location_display: "Atlanta, GA", category: "Medical Device", compensation_display: "$90,000 - $120,000", public_url: "https://rookcareers.com/jobs/job-1" };
+    const candidate = { title: "Territory Sales Manager", location_display: "Atlanta, GA", category: "Medical Device", compensation_display: "$90,000 - $120,000", job_id: "job-1", public_url: "https://rookcareers.com/jobs/job-1" };
     const copy = buildPostCopy(candidate);
     assert.ok(copy.includes("complete job details on ROOK."));
     assert.ok(copy.includes("https://rookcareers.com/go/linkedin/jobs/job-1"));
@@ -1006,6 +1006,34 @@ async function run() {
       createPost: async () => assert.fail("closed job must not be posted"),
     });
     assert.equal(result.stage, "pre_buffer_validation");
+  });
+
+  await asyncTest("job closing after Facebook submission is rechecked before LinkedIn submission", async () => {
+    const config = loadConfig({ SOCIAL_AUTOMATION_ENABLED: "true", SUPABASE_URL: "x", SUPABASE_SERVICE_ROLE_KEY: "x", SUPABASE_ANON_KEY: "x", SOCIAL_SPACING_HMAC_SECRET: SECRET,
+      BUFFER_ACCESS_TOKEN: "x", BUFFER_ROOK_LINKEDIN_CHANNEL_ID: "li-page-1", BUFFER_ROOK_FACEBOOK_CHANNEL_ID: "fb-page-1" });
+    const job=baseJob(),db=makeMockSupabase({jobs:[job]}),posts=[];
+    const result=await runScheduledSlot('am','2026-09-25',config,{
+      supabaseAdmin:db,supabaseAnon:db,listAllChannels:async()=>[LINKEDIN_PAGE,FACEBOOK_PAGE],
+      generateMarketing:async()=>({text:'',fallback:false}),renderFeaturedJobGraphic:async()=>Buffer.from('fake'),
+      uploadGraphicToStorage:async()=>({publicUrl:'https://x/fake.jpg'}),preflightCheckMedia:async()=>({ok:true}),
+      createPost:async(_,payload)=>{posts.push(payload);job.status='closed';return {id:'fb-accepted'};},
+    });
+    assert.equal(posts.length,1);assert.equal(result.results.facebook.status,'scheduled');
+    assert.equal(result.results.linkedin.status,'failed');assert.equal(result.stage,'inactive_before_submission');
+  });
+  await asyncTest("an unsent job closing during preparation can be replaced without duplicating a successful channel", async () => {
+    const config = loadConfig({ SOCIAL_AUTOMATION_ENABLED: "true", SUPABASE_URL: "x", SUPABASE_SERVICE_ROLE_KEY: "x", SUPABASE_ANON_KEY: "x", SOCIAL_SPACING_HMAC_SECRET: SECRET,
+      BUFFER_ACCESS_TOKEN: "x", BUFFER_ROOK_LINKEDIN_CHANNEL_ID: "li-page-1", BUFFER_ROOK_FACEBOOK_CHANNEL_ID: "fb-page-1" });
+    const jobs=[baseJob(),baseJob({id:'replacement',employer_id:'e2'})],history=[],db=makeMockSupabase({jobs,history}),posts=[];
+    let closedId;
+    const deps={supabaseAdmin:db,supabaseAnon:db,listAllChannels:async()=>[LINKEDIN_PAGE,FACEBOOK_PAGE],
+      generateMarketing:async()=>({text:'',fallback:false}),renderFeaturedJobGraphic:async c=>{if(!closedId){closedId=c.job_id;jobs.find(j=>j.id===closedId).status='closed';}return Buffer.from('fake');},
+      uploadGraphicToStorage:async()=>({publicUrl:'https://x/fake.jpg'}),preflightCheckMedia:async()=>({ok:true}),
+      createPost:async(_,p)=>{posts.push(p);return {id:`accepted-${posts.length}`};}};
+    const first=await runScheduledSlot('am','2026-09-25',config,deps);
+    assert.equal(first.stage,'pre_buffer_validation');assert.equal(posts.length,0);
+    const second=await runScheduledSlot('am','2026-09-25',config,{...deps,excludedJobIds:new Set([first.jobId])});
+    assert.equal(second.ok,true);assert.notEqual(second.jobId,first.jobId);assert.equal(posts.length,2);
   });
 
   console.log("\n=== Recurring automation: scheduler status reporting ===");
