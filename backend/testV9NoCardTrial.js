@@ -9,6 +9,7 @@ const tables={
   onboarding_v7_sessions:[{token_hash:tokenHash,user_id:null,transferred_at:null,expires_at:'2099-01-01T00:00:00Z',profile:{onboarding_version:'v9',home_zip:'10001',utm_source:'facebook',v9_opportunity_count:40,v9_best_match_count:32}}],
   candidate_profiles:[],ad_conversion_events:[],
 };
+const accountPushes=[];
 class Query{
   constructor(name){this.name=name;this.filters=[];this.mode=null;this.value=null;this.single=false;}
   select(){return this;}eq(k,v){this.filters.push(row=>row[k]===v);return this;}gt(k,v){this.filters.push(row=>row[k]>v);return this;}
@@ -41,18 +42,21 @@ require.cache[require.resolve('@supabase/supabase-js')]={exports:{createClient:(
 require.cache[require.resolve('./v8Matching')]={exports:{readCandidates:async()=>[],indexFor:()=>({current:async()=>[]}),startIndex:()=>{}}};
 require.cache[require.resolve('./v7Matching')]={exports:{rankPool:()=>[]}};
 require.cache[require.resolve('./v7Location')]={exports:{prepareJob:job=>job}};
+require.cache[require.resolve('./adminPush')]={exports:{notifyNewAccount:async payload=>{accountPushes.push(payload);return {sent:true};}}};
 
 const router=require('./routes/onboardingV9');
 const claimHandler=router.stack.find(layer=>layer.route?.path==='/claim').route.stack[0].handle;
 (async()=>{
-  const claim=async consent=>{let status=200,data;const req={body:{marketing_consent:consent},get:name=>name==='X-ROOK-V9'?rawToken:name==='Authorization'?'Bearer valid':''};const res={status(code){status=code;return this},json(value){data=value;return this}};await claimHandler(req,res);return {status,data};};
+  const claim=async(consent,valid=true)=>{let status=200,data;const req={body:{marketing_consent:consent},get:name=>name==='X-ROOK-V9'?rawToken:name==='Authorization'?valid?'Bearer valid':'Bearer unverified':''};const res={status(code){status=code;return this},json(value){data=value;return this}};await claimHandler(req,res);return {status,data};};
   try{
+    assert.equal((await claim(false,false)).status,401);assert.equal(accountPushes.length,0);
     const first=await claim(true);assert.equal(first.status,200);assert.equal(first.data.outcome,'started');
     assert.equal(tables.candidate_profiles[0].email,'verified@example.test');assert.equal(tables.candidate_profiles[0].trial_source,'v9');
     assert.equal(new Date(first.data.trial_ends_at)-new Date(first.data.trial_started_at),86400000);
     assert.equal(tables.candidate_profiles[0].digest_enabled,true);assert(tables.candidate_profiles[0].marketing_consent_at);
     assert.equal(tables.ad_conversion_events.length,1);assert.equal(tables.ad_conversion_events[0].event_type,'trial_started');
-    const startedAt=first.data.trial_started_at,second=await claim(false);assert.equal(second.data.outcome,'trial_active');assert.equal(second.data.trial_started_at,startedAt);assert.equal(tables.ad_conversion_events.length,1);
+    assert.equal(accountPushes.length,1);assert.equal(accountPushes[0].version,'V9');assert.equal(accountPushes[0].profile.utm_source,'facebook');
+    const startedAt=first.data.trial_started_at,second=await claim(false);assert.equal(second.data.outcome,'trial_active');assert.equal(second.data.trial_started_at,startedAt);assert.equal(tables.ad_conversion_events.length,1);assert.equal(accountPushes.length,1);
     tables.candidate_profiles[0].trial_ends_at='2020-01-01T00:00:00Z';
     const expired=await claim(false);assert.equal(expired.data.outcome,'trial_used');assert.equal(expired.data.trial_started_at,startedAt);
     console.log('PASS V9 verified-email activation starts one 24-hour no-card trial and never resets it.');

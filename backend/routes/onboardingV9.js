@@ -6,6 +6,7 @@ const {performance} = require('node:perf_hooks');
 const {readCandidates,indexFor,startIndex} = require('../v8Matching');
 const {rankPool} = require('../v7Matching');
 const {prepareJob} = require('../v7Location');
+const {notifyNewAccount} = require('../adminPush');
 
 const router=express.Router();
 const db=process.env.SUPABASE_URL&&process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -182,6 +183,10 @@ router.post('/claim',wrap(async(req,res)=>{
         platform_inferred:p.utm_source||'unknown',occurred_at:entitlement.trial_started_at,
       });
       if(event.error&&event.error.code!=='23505')console.error('V9 trial analytics write failed:',event.error.message);
+      if(!event.error){
+        try{await notifyNewAccount({version:'V9',profile:p,occurredAt:entitlement.trial_started_at});}
+        catch(_){console.warn('[admin push] account notification failed');}
+      }
     }
   }
   res.json({ok:true,...entitlement});
