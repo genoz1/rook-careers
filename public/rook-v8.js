@@ -59,7 +59,7 @@
     $('trialActivationLogin').onclick=()=>{try{sessionStorage.setItem('rook_login_return',location.href);}catch(_){}};
     activate();return;
   }
-  function goSignup(source,maskedInteraction=true) {if(maskedInteraction)track('v8_masked_unlock_interaction',{source});track('v8_signup_reached');location.href='rook-onboarding-v8-signup.html';}
+  function goSignup(source,maskedInteraction=true) {if(maskedInteraction)track('v8_masked_unlock_interaction',{source});track('v8_signup_reached');window.location.assign(new URL('/rook-onboarding-v8-signup.html',window.location.origin).href);}
   $('startTrial').onclick=()=>{if(token()&&sessionStorage.getItem('rook_v8_active')===token())goSignup('header');else{$('overlay').hidden=false;$('locationInput').focus();}};
   $('unlockButton').onclick=()=>goSignup('banner');
   let preparation=null;

@@ -95,6 +95,28 @@
 }
 @media(max-width:380px){.modal h2{font-size:31px}}
 
+/* Keep the complete first V8 question card visible at normal laptop heights.
+   These desktop-only proportions preserve the existing artwork and mobile UI. */
+@media(min-width:701px){
+  .overlay{padding:12px}
+  .modal{width:min(650px,100%);padding:10px 30px 14px;border-radius:21px}
+  .modal-brand img{width:140px;height:46px}
+  .modal h2{font-size:42px;line-height:.96;margin:7px 0 5px}
+  .modal-intro{font-size:14.5px;line-height:1.3;margin-bottom:7px}
+  .field{max-width:420px;margin:4px auto}
+  .field-input{height:46px;padding-inline:14px}
+  .field-input input{font-size:15px}
+  .field-input select{font-size:13.5px}
+  .privacy{max-width:420px;margin:7px auto 6px;padding:8px 12px;gap:10px;font-size:12px;line-height:1.3}
+  .privacy strong{font-size:14px}
+  .lock{font-size:21px}
+  #formError{min-height:14px;font-size:12px;margin:0 0 2px}
+  .submit{width:min(480px,100%);font-size:17px;padding:11px}
+  .reassure{font-size:11px;line-height:1.35;margin-top:6px}
+  .modal .left-note{top:218px;font-size:17px}
+  .modal .right-note{top:270px;font-size:17px;width:165px}
+}
+
 /* V8 overlay: keep the interactive location suggestions over later fields. */
 .modal .location-field{z-index:3}
 .modal .location-field #locationList{z-index:4}
