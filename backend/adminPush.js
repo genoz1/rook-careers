@@ -31,7 +31,10 @@ function eventTime(value) {
 }
 
 function attributionLines({ version, profile = {}, occurredAt }) {
-  const lines = [`${clean(version).toUpperCase()} • ${channelLabel(profile)}`];
+  const lines = [];
+  const name = clean(profile.name);
+  if (name) lines.push(`Name: ${name}`);
+  lines.push(`${clean(version).toUpperCase()} • ${channelLabel(profile)}`);
   const campaign = clean(profile.utm_campaign);
   if (campaign) lines.push(`Campaign: ${campaign}`);
   const time = eventTime(occurredAt);
