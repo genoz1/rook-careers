@@ -140,6 +140,11 @@ function rookGoToCheckout(source) {
 // instead of fetching it a second time.
 function rookApplySidebarProfile(profile) {
   if (!profile) return; // fetch failed or no profile row at all — leave the neutral fallback markup in place
+  if (profile.trial_source === 'v9' && profile.trial_started_at && !profile.subscription_started_at && !rookHasFullAccess(profile) &&
+      !/\/rook-checkout-v9\.html$/.test(window.location.pathname)) {
+    window.location.replace('rook-checkout-v9.html');
+    return;
+  }
   // Name and plan status are independent of each other — a candidate
   // whose profile has no name filled in yet should still see their
   // real plan status, not have the whole card stuck on the neutral
@@ -199,7 +204,10 @@ async function rookRouteAfterLogin() {
   try {
     const r=await rookApiFetch('/profile');
     const profile=r.ok ? await r.json() : null;
-    if(profile && !rookHasFullAccess(profile)) {window.location.href='rook-dashboard-v8.html';return;}
+    if(profile && !rookHasFullAccess(profile)) {
+      window.location.href=profile.trial_source==='v9'&&profile.trial_started_at&&!profile.subscription_started_at?'rook-checkout-v9.html':'rook-dashboard-v8.html';
+      return;
+    }
   } catch(_) {}
   // Restore the page the user was trying to reach before being sent to login
   try {

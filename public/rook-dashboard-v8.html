@@ -627,6 +627,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="rook-config.js"></script>
 <script src="rook-auth-v8.js"></script>
+<script src="rook-v9-trial.js?v=1"></script>
 <script src="rook-access.js"></script>
 <script src="rook-pretrial.js"></script>
 <script src="rook-job-classification.js"></script>
@@ -756,6 +757,10 @@
           sessionEmail = session?.user?.email || '';
         } catch(_) {}
         rookApplySidebarProfile(profile, sessionEmail);
+        // V9's no-card trial uses the existing full member dashboard. This
+        // adds only its status banner and redirects an expired V9 entitlement
+        // to the existing V9 upgrade screen before any locked preview renders.
+        if (rookApplyV9TrialState(profile)) return;
         // Primary unlock banner: shown only when this candidate does not
         // currently have full access. Purely a display decision — the
         // banner being hidden/shown has no bearing on what data the
