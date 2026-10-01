@@ -80,7 +80,7 @@ for(const file of ['rook-dashboard.html','rook-dashboard-v7.html']) {
   assert(locked.includes('class="masked-employer-fragment" aria-hidden="true">raveni dofanu</span>'));
   assert(locked.indexOf('Strong Match')<locked.indexOf('masked-role'));
   assert(locked.indexOf('Preference Match')<locked.indexOf('48 miles away'));
-  assert(locked.includes('Unlock full details — 3 days free'));
+  assert(locked.includes('Try ROOK Today for Free'));
   assert(locked.includes('Employer:'));
   const css=fs.readFileSync(require('node:path').join(__dirname,'../public/rook-pretrial.css'),'utf8');
   assert(css.includes('.masked-job-v7 .masked-role{')&&css.includes('filter:blur(1.7px)'));
@@ -122,11 +122,11 @@ module.exports={renderer};
   if(version==='v7') vm.runInContext(fs.readFileSync(root+'/rook-v7.js','utf8'),ctx);
   await vm.runInContext("rookGoToCheckout('job_card')",ctx);
   assert(events.some(e=>e[0]==='event'&&e[1]===(version==='v7'?'v7_unlock_clicked':'job_unlock_clicked')));
-  assert.equal(win.location.href,version==='v7'?'rook-onboarding-v7-signup.html':'rook-checkout.html');
+  assert.equal(win.location.href,'rook-onboarding-v8.html');
   vm.runInContext(fs.readFileSync(root+'/rook-tracking.js','utf8'),ctx);
   win.rookTrackFunnelEvent('v7_checkout_started',{email:'private@example.invalid',source:'job'});
   assert(meta.some(e=>e[0]==='trackSingle'&&e[2]==='InitiateCheckout'));
   assert(!JSON.stringify([...events,...meta]).includes('private@example.invalid'));
  }
- console.log('PASS existing V6/V7 unlock analytics, checkout destinations, GA4/Meta checkout mapping, and PII filtering.');
+ console.log('PASS existing V6/V7 unlock analytics, current V8 acquisition destination, GA4/Meta checkout mapping, and PII filtering.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

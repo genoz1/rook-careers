@@ -23,7 +23,7 @@ test('each CTA preserves campaign values and creates one event on click', async 
   const events = [], storage = new Map();
   const links = ['hero','comparison','alongside','final'].map(cta => ({dataset:{cta},href:'',handler:null,getAttribute(){return '/rook-onboarding-v8.html'},addEventListener(name,handler){assert.equal(name,'click');this.handler=handler}}));
   const offer = {hidden:true,textContent:''};
-  const context = {URL,URLSearchParams,location:{origin:'https://rookcareers.com',search:'?utm_source=google&utm_campaign=medreps_search&gclid=abc123'},sessionStorage:{setItem:(k,v)=>storage.set(k,v)},document:{querySelectorAll:()=>links,getElementById:()=>offer},gtag:(...args)=>events.push(args),fetch:async()=>({ok:true,json:async()=>({trialDays:3})})};
+  const context = {URL,URLSearchParams,location:{origin:'https://rookcareers.com',search:'?utm_source=google&utm_campaign=medreps_search&gclid=abc123'},sessionStorage:{setItem:(k,v)=>storage.set(k,v)},document:{querySelectorAll:()=>links,getElementById:()=>offer},gtag:(...args)=>events.push(args)};
   vm.runInNewContext(script,context);
   await new Promise(setImmediate);
   assert.equal(storage.get('rook_acquisition_origin'),'medreps-alternative');
@@ -33,7 +33,7 @@ test('each CTA preserves campaign values and creates one event on click', async 
     link.handler();
   }
   assert.equal(events.filter(e=>e[1]==='medreps_alternative_cta_click').length,4);
-  assert.equal(offer.textContent,'Try ROOK free for 3 days.');
+  assert.equal(offer.textContent,'24 hours of full access. No credit card required.');
   assert.equal(offer.hidden,false);
 });
 

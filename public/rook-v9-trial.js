@@ -14,6 +14,7 @@
     return `${String(hours).padStart(2,'0')}:${String(minutes).padStart(2,'0')}:${String(seconds).padStart(2,'0')}`;
   }
   function goToUpgrade(){window.location.replace('rook-checkout-v9.html');}
+  function goToPostTrial(){window.location.replace('rook-keep-access.html');}
   window.rookApplyV9TrialState=function(profile){
     if(profile?.trial_source!=='v9')return false;
     const key=profile.trial_started_at||'v9';
@@ -28,7 +29,7 @@
     const end=profile.trial_ends_at?new Date(profile.trial_ends_at).getTime():0;
     if(profile.subscription_status!=='trialing'||!Number.isFinite(end)||end<=Date.now()){
       once('v9_trial_expired',key,{status:'expired'});
-      goToUpgrade();
+      goToPostTrial();
       return true;
     }
     once('v9_dashboard_accessed',key,{status:'trialing'});
@@ -44,7 +45,7 @@
     }
     const render=()=>{
       const remaining=end-Date.now();
-      if(remaining<=0){once('v9_trial_expired',key,{status:'expired'});goToUpgrade();return false;}
+      if(remaining<=0){once('v9_trial_expired',key,{status:'expired'});goToPostTrial();return false;}
       const value=document.getElementById('v9TrialRemaining');if(value)value.textContent=formatRemaining(remaining);return true;
     };
     if(render()){

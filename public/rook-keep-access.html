@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex">
+  <title>Keep Your ROOK Access</title>
+  <link rel="icon" href="assets/favicon.ico" sizes="any">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="rook-attribution.js"></script>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=AW-18428232873"></script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config','AW-18428232873');gtag('config','G-LDG2CL5Z8R');</script>
+  <script>(function(){if(window.fbq)return;var q=window.fbq=function(){q.callMethod?q.callMethod.apply(q,arguments):q.queue.push(arguments)};window._fbq=q;q.push=q;q.loaded=true;q.version='2.0';q.queue=[];var s=document.createElement('script');s.async=true;s.src='https://connect.facebook.net/en_US/fbevents.js';document.head.appendChild(s);q('set','autoConfig',false,'1597398388509281');q('init','1597398388509281');q('trackSingle','1597398388509281','PageView')})();</script>
+  <script src="https://js.stripe.com/v3/"></script>
+  <script src="rook-config.js"></script>
+  <script src="rook-keep-access.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{--navy:#062d55;--blue:#0877d1;--teal:#12b8a6;--muted:#587283;--line:#dbe8f0;--ink:#0d2035;--bg:#f4f9fd;--paper:#fff;--radius:14px;--font:Inter,system-ui,sans-serif}
+    body{font-family:var(--font);background:var(--bg);color:var(--ink);min-height:100vh;display:flex;flex-direction:column;align-items:center}
+    nav{width:100%;background:var(--navy);padding:14px 24px;display:flex;align-items:center;justify-content:space-between}
+    .brand img{display:block;width:142px;max-height:40px;object-fit:contain}.secure{display:flex;align-items:center;gap:6px;color:#ffffff99;font-size:12px;font-weight:600}
+    main{width:100%;max-width:480px;padding:32px 20px 64px;display:flex;flex-direction:column;gap:20px}
+    .header{text-align:center}.badge{display:inline-flex;align-items:center;background:#12b8a61f;color:#0d7a6e;font-size:12px;font-weight:800;padding:6px 12px;border-radius:99px;margin-bottom:14px;text-transform:uppercase;letter-spacing:.05em}
+    h1{font-size:28px;font-weight:800;color:var(--navy);line-height:1.16;margin-bottom:10px}.lead{font-size:14.5px;color:var(--muted);line-height:1.62}.lead+.lead{margin-top:7px}
+    .price,.card{background:var(--paper);border:1.5px solid var(--line);border-radius:var(--radius);padding:19px 20px;box-shadow:0 7px 20px #17395f0d}
+    .price-row{display:flex;justify-content:space-between;align-items:center;font-size:14px;margin-bottom:11px}.price-row:last-child{margin-bottom:0}.price-label{color:var(--muted)}.price-value{font-weight:800;color:var(--ink)}.price-value.intro{color:#147257;font-size:19px}.divider{height:1px;background:var(--line);margin:13px 0}.total{font-weight:800}.total strong{font-size:22px}
+    .card-label{font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:15px}.field-label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin:0 0 6px}.stripe-field{background:var(--bg);border:1.5px solid var(--line);border-radius:8px;padding:12px 14px;transition:border-color .15s}.stripe-field.StripeElement--focus{border-color:var(--blue)}.stripe-field.StripeElement--invalid{border-color:#e03131}.card-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+    .error{color:#c0392b;font-size:13px;font-weight:600;text-align:center;min-height:18px}.pay{width:100%;background:var(--blue);color:#fff;font:800 15px var(--font);border:0;border-radius:99px;padding:16px 24px;cursor:pointer;transition:opacity .15s,transform .1s}.pay:hover{opacity:.92}.pay:active{transform:scale(.98)}.pay:disabled{opacity:.55;cursor:not-allowed;transform:none}
+    .support{text-align:center;color:var(--muted);font-size:12px;font-weight:600}.terms{text-align:center;color:var(--muted);font-size:11px;line-height:1.58}.terms a{color:var(--blue)}
+    .success{display:none;text-align:center;background:var(--paper);border:1.5px solid var(--line);border-radius:var(--radius);padding:38px 22px}.success-mark{width:52px;height:52px;border-radius:50%;display:grid;place-items:center;margin:0 auto 14px;background:#e5f7ef;color:#147257;font-size:27px;font-weight:900}.success h2{color:var(--navy);margin-bottom:8px}.success p{color:var(--muted);font-size:14px}
+    @media(max-width:420px){nav{padding:12px 16px}.brand img{width:124px}.secure{font-size:11px}main{padding:25px 16px 48px;gap:16px}h1{font-size:25px}.price,.card{padding:17px}.card-row{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <nav><a class="brand" href="/"><img src="assets/rook-full-logo-900.png" alt="ROOK — Smarter Careers. Better Matches."></a><div class="secure">🔒 Secured by Stripe</div></nav>
+  <main>
+    <section id="checkout">
+      <div class="header"><div class="badge">Membership</div><h1>KEEP YOUR ROOK ACCESS</h1><p class="lead">Your free access has ended — but your ROOK account is still here.</p><p class="lead">Your matches, saved jobs, profile, and personalized job search are waiting for you.</p></div>
+      <div class="price" style="margin-top:20px"><div class="price-row"><span class="price-label">First 30 paid days</span><strong class="price-value intro">$9.99</strong></div><div class="price-row"><span class="price-label">Thereafter</span><strong class="price-value">$19.99/month</strong></div><div class="divider"></div><div class="price-row total"><span>Charged today</span><strong>$9.99</strong></div></div>
+      <div class="card" style="margin-top:20px"><div class="card-label">Payment details</div><label class="field-label">Card number</label><div id="cardNumber" class="stripe-field"></div><div class="card-row"><div><label class="field-label">Expiry date</label><div id="cardExpiry" class="stripe-field"></div></div><div><label class="field-label">Security code</label><div id="cardCvc" class="stripe-field"></div></div></div></div>
+      <div class="error" id="error" role="alert" style="margin-top:14px"></div>
+      <button class="pay" id="pay" type="button" disabled>KEEP MY ROOK ACCESS →</button>
+      <p class="support" style="margin-top:12px">Secure checkout • Cancel anytime</p>
+      <p class="terms" style="margin-top:10px">$9.99 for your first 30 paid days, then $19.99/month. Cancel anytime. By continuing, you agree to ROOK’s <a href="rook-terms.html" target="_blank" rel="noopener">Terms</a> and acknowledge the <a href="rook-privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.</p>
+    </section>
+    <section class="success" id="success"><div class="success-mark">✓</div><h2>Your ROOK access is restored.</h2><p>Taking you back to your dashboard…</p></section>
+  </main>
+  <script>
+  (async()=>{
+    const $=id=>document.getElementById(id),pay=$('pay'),error=$('error');
+    const sb=window.supabase.createClient(ROOK_CONFIG.SUPABASE_URL,ROOK_CONFIG.SUPABASE_ANON_KEY);
+    const session=(await sb.auth.getSession()).data.session;
+    if(!session){try{sessionStorage.setItem('rook_login_return',location.href)}catch(_){}location.replace('rook-login-v8.html');return}
+    async function api(path,options={}){const response=await fetch(path,{...options,headers:{'Content-Type':'application/json',Authorization:'Bearer '+session.access_token,...options.headers}});const data=await response.json();if(!response.ok)throw Error(data.error||'Please try again.');return data}
+    function track(name,stage){
+      try{
+        const key=`rook_keep_access:${name}:${state.trialKey}`,prior=`rook_${state.source}_analytics:${name}:${state.trialKey}`;
+        if(sessionStorage.getItem(key)||sessionStorage.getItem(prior))return;sessionStorage.setItem(key,'1');sessionStorage.setItem(prior,'1');
+        const params={onboarding_version:state.source,stage:stage||'post_trial'};
+        if(typeof rookGetStoredAttribution==='function'){const a=rookGetStoredAttribution();['source','medium','campaign','content','term'].forEach(k=>{const v=a['utm_'+k];if(typeof v==='string'&&!/@|https?:\/\//i.test(v))params['first_touch_'+k]=v.slice(0,100)})}
+        if(typeof gtag==='function')gtag('event',name,params);
+        if(typeof fbq==='function'&&name===`${state.source}_checkout_started`)fbq('trackSingle','1597398388509281','InitiateCheckout');
+        if(typeof fbq==='function'&&state.source==='v9'&&name==='v9_first_month_subscription_purchased')fbq('trackSingle','1597398388509281','Subscribe');
+      }catch(_){}
+    }
+    let state;
+    try{
+      const profile=await api('/api/profile');state=RookKeepAccess.resolve(profile);
+      if(state.redirect){location.replace(state.redirect);return}
+      if(state.error)throw Error(state.error);
+    }catch(e){error.textContent=e.message;return}
+    track(`${state.source}_trial_expired`,'expired');track(`${state.source}_upgrade_paywall_viewed`,'expired');
+    if(!ROOK_CONFIG.STRIPE_PUBLISHABLE_KEY){error.textContent='Payment is temporarily unavailable.';return}
+    const stripe=Stripe(ROOK_CONFIG.STRIPE_PUBLISHABLE_KEY),elements=stripe.elements(),style={base:{fontFamily:'Inter, sans-serif',fontSize:'15px',color:'#0d2035',fontWeight:'500','::placeholder':{color:'#a0b4c4'}},invalid:{color:'#c0392b'}};
+    const number=elements.create('cardNumber',{style}),expiry=elements.create('cardExpiry',{style}),cvc=elements.create('cardCvc',{style});number.mount('#cardNumber');expiry.mount('#cardExpiry');cvc.mount('#cardCvc');pay.disabled=false;
+    pay.onclick=async()=>{pay.disabled=true;pay.textContent='PROCESSING SECURE PAYMENT…';error.textContent='';track(`${state.source}_checkout_started`,'payment');try{const setup=await api('/api/stripe/create-setup-intent',{method:'POST'});const confirmed=await stripe.confirmCardSetup(setup.client_secret,{payment_method:{card:number}});if(confirmed.error)throw Error(confirmed.error.message);const subscription=await api(state.endpoint,{method:'POST',body:JSON.stringify({payment_method_id:confirmed.setupIntent.payment_method,customer_id:setup.customer_id})});if(subscription.status!=='active')throw Error('Payment was not completed.');track(`${state.source}_first_month_subscription_purchased`,'active');$('checkout').style.display='none';$('success').style.display='block';setTimeout(()=>location.replace('rook-dashboard-v8.html?rook_v8=1'),1100)}catch(e){error.textContent=e.message;track(`${state.source}_checkout_failure`,'payment');pay.disabled=false;pay.textContent='KEEP MY ROOK ACCESS →'}};
+  })();
+  </script>
+</body>
+</html>

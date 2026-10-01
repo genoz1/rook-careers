@@ -21,5 +21,5 @@ for(const secret of ['Exact Veterinary Title','Veterinary Employer','https://sec
 for(const file of ['rook-onboarding-v7.html','rook-dashboard-v7.html','rook-v7.js','rook-pretrial.css'])assert(fs.existsSync('public/'+file));
 const v8=fs.readFileSync('public/rook-onboarding-v8.html','utf8');assert(v8.includes('rook-v8.css')&&v8.includes('rook-v8.js')&&!v8.includes('rook-v7.js'));
 const js=fs.readFileSync('public/rook-v8.js','utf8');assert(js.includes('rook-onboarding-v8-signup.html')&&js.includes('data-locked')&&js.includes('onboarding_version:\'v8\''));
-const checkout=fs.readFileSync('public/rook-checkout-v8.html','utf8');assert(checkout.includes('rook-onboarding-v8.html?trial=started'));
+const checkout=fs.readFileSync('public/rook-checkout-v8.html','utf8');assert(checkout.includes('rook-dashboard-v8.html')&&checkout.includes('create-v8-subscription-from-setup'));
 console.log('PASS V8 profile validation, preference ranking retains all industries, two-job reveal, sanitized locked projection, isolated routes and handoff.');

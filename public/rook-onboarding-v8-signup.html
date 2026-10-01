@@ -84,9 +84,9 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
   </div>
 
   <div class="screen">
-    <div class="eyebrow">Account → verify email → start trial</div>
+    <div class="eyebrow">Try ROOK Today for Free</div>
     <h2>Unlock your matches.</h2>
-    <p class="lead">Save your matches with a verified account. Add your card next to unlock job titles, employers and application links.</p>
+    <p class="lead">Save your matches with a verified account. Includes 24 hours of full access. No credit card required.</p>
 
     <div class="form-section" id="createSection">
       <div class="form-section-label">Create your account</div>
@@ -116,7 +116,7 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
     <div id="createActions">
       <div class="err" id="formErr" role="alert"></div>
       <button class="btn-primary" id="btnCreateAccount">Email my verification code</button>
-      <p class="fine">3 days free, then $19.99/month. Cancel anytime.<br>Card required at checkout. Cancel before your trial ends to avoid being charged.</p>
+      <p class="fine">24 hours of full access. No credit card required.<br>Continue for $9.99 for your first 30 days, then $19.99/month. Cancel anytime.</p>
     </div>
     <div id="verifySection" style="display:none">
       <div class="form-section">
@@ -125,7 +125,7 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
         <label class="field-label" for="codeInput" style="margin-top:18px">Verification code</label>
         <input class="field-input" id="codeInput" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="10" pattern="[0-9]{6,10}" placeholder="Code from email">
         <div class="err" id="codeErr" role="alert"></div>
-        <button class="btn-primary" id="btnVerifyCode">Continue to secure checkout</button>
+        <button class="btn-primary" id="btnVerifyCode">Verify and start my 24 hours</button>
         <div class="verify-actions">
           <button type="button" id="btnResendCode" disabled>Resend code (60s)</button>
           <button type="button" id="btnChangeEmail">Change email</button>
@@ -150,13 +150,27 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
   const sb = window.supabase.createClient(window.ROOK_CONFIG.SUPABASE_URL, window.ROOK_CONFIG.SUPABASE_ANON_KEY);
 
   try { document.getElementById('emailInput').value = sessionStorage.getItem('rook_alert_email') || ''; sessionStorage.setItem('rook_alert_trial_clicked','1'); } catch (_) {}
-  const existingSession = await sb.auth.getSession();
-  if (existingSession.data?.session && sessionStorage.getItem('rook_v7_token')) {
-    window.location.href = 'rook-checkout-v8.html';
-    return;
+  if (typeof rookTrackFunnelEvent === 'function') rookTrackFunnelEvent('v8_signup_started');
+
+  async function claimAndRoute(session) {
+    const claim = await fetch('/api/v8/claim', {
+      method:'POST', headers:{Authorization:`Bearer ${session.access_token}`, 'X-ROOK-V7':sessionStorage.getItem('rook_v7_token') || ''}
+    });
+    const result=await claim.json().catch(()=>({}));
+    if (!claim.ok) throw new Error(result.error || 'Return to your V8 dashboard to retry transferring your matches.');
+    const accountId=session.user?.id;
+    if(result.outcome==='started' && typeof rookTrackFunnelEvent==='function')rookTrackFunnelEvent('v8_trial_started',{},accountId);
+    if(result.outcome==='started'||result.outcome==='trial_active')window.location.href='rook-onboarding-v8.html?trial=started';
+    else if(result.outcome==='trial_used')window.location.href='rook-keep-access.html';
+    else window.location.href='rook-dashboard-v8.html';
   }
 
-  if (typeof rookTrackFunnelEvent === 'function') rookTrackFunnelEvent('v8_signup_started');
+  const existingSession = await sb.auth.getSession();
+  if (existingSession.data?.session && sessionStorage.getItem('rook_v7_token')) {
+    try { await claimAndRoute(existingSession.data.session); }
+    catch (error) { showErr(error.message); }
+    return;
+  }
 
   function updateResend() {
     const remaining = Math.ceil((resendAvailableAt - Date.now()) / 1000);
@@ -209,6 +223,7 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
         throw new Error('Email verification is temporarily unavailable. Please try again later.');
       }
       if (!signUpData.user?.id) throw new Error('Could not send a code. Please try again.');
+      if (typeof rookTrackFunnelEvent === 'function') rookTrackFunnelEvent('v8_email_submitted');
       showCodeStep({ email, firstName, lastName });
     } catch (err) {
       showErr(err.message);
@@ -267,21 +282,15 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
         throw new Error('Could not verify your email. Please try again.');
       }
       const userId = data.user.id;
-      const { firstName, lastName } = pending;
-
-      const claim = await fetch('/api/v8/claim', {
-        method:'POST', headers:{Authorization:`Bearer ${data.session.access_token}`, 'X-ROOK-V7':sessionStorage.getItem('rook_v7_token') || ''}
-      });
-      if (!claim.ok) throw new Error('Your email is verified. Return to your V8 dashboard to retry transferring your matches.');
       sessionStorage.removeItem('rook_v7_pending_email');
-      // Emit only after the verified account and profile transfer succeed.
+      if (typeof rookTrackFunnelEvent === 'function') rookTrackFunnelEvent('v8_email_verified', {}, userId);
       if (typeof rookTrackFunnelEvent === 'function') rookTrackFunnelEvent('sign_up', { method: 'email' }, userId);
       if (typeof rookTrackFunnelEvent === 'function') rookTrackFunnelEvent('v8_account_created', {}, userId);
-      window.location.href = 'rook-checkout-v8.html';
+      await claimAndRoute(data.session);
     } catch (err) {
       codeErr.textContent = err.message;
       verifyBtn.disabled = false;
-      verifyBtn.textContent = 'Continue to secure checkout';
+      verifyBtn.textContent = 'Verify and start my 24 hours';
     }
   });
 })();

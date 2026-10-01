@@ -45,7 +45,8 @@ function element(tag = 'input') {
   vm.runInNewContext(read('rook-v8-context.js'),{window:{},document:{readyState:'complete',querySelectorAll:()=>[untouched],addEventListener(){}},location:{search:'',href:'https://rookcareers.com/rook-saved.html',origin:'https://rookcareers.com'},URL,URLSearchParams});
   assert.equal(untouched.href,'rook-dashboard.html');
   for(const file of ['rook-search.html','rook-saved.html','rook-tracker.html','rook-settings.html','rook-resume.html','rook-intelligence.html','rook-recruiter-jobs.html','rook-apply.html','rook-mobile-menu.html'])assert.match(read(file),/rook-v8-context\.js/);
-  assert.match(read('rook-auth-v8.js'),/window\.location\.href = 'rook-checkout-v8\.html'/);
+  assert.match(read('rook-auth-v8.js'),/rook-keep-access\.html/);
+  assert.match(read('rook-auth-v8.js'),/rook-checkout-v8\.html/);
   assert.match(read('rook-access-context.js'),/v8Context\?'rook-dashboard-v8\.html'/);
   assert.match(read('rook-auth-v8.js'),/profile \? 'rook-dashboard-v8\.html' : 'rook-onboarding-v8\.html'/);
   for (const file of ['index.html','rook-about.html','rook-pricing.html','rook-browse.html','rook-companies.html','rook-mobile-menu.html']) {

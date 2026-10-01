@@ -6,7 +6,7 @@ const {escapeHtml}=require('./dailyDigest');
 function renderPretrialDigest(jobs,base,token) {
   // Project raw records first. No titles, employers, job IDs, prose or URLs escape.
   const rows=jobs.map(project).map(j=>`<li style="margin:20px 0"><strong>${escapeHtml(j.role_type || 'Sales opportunity')}</strong><br>${escapeHtml(j.industry_classification.labels.join(' · '))}${j.territory_type?'<br>'+escapeHtml(j.territory_type):''}<br>A new opportunity matches your ROOK search.</li>`).join('');
-  return `<div style="font:16px system-ui;max-width:600px;margin:auto;color:#062d55"><h1>New ROOK matches</h1><ul>${rows}</ul><p><a href="${escapeHtml(base)}/rook-dashboard-v7.html?from=job_alert">View My Matches</a></p><p style="font-size:12px">You requested ROOK job-match emails. <a href="${escapeHtml(base)}/api/v7/alerts/unsubscribe?token=${encodeURIComponent(token)}">Unsubscribe</a></p></div>`;
+  return `<div style="font:16px system-ui;max-width:600px;margin:auto;color:#062d55"><h1>New ROOK matches</h1><ul>${rows}</ul><p><a href="${escapeHtml(base)}/rook-onboarding-v8.html?from=job_alert">View My Matches</a></p><p style="font-size:12px">You requested ROOK job-match emails. <a href="${escapeHtml(base)}/api/v7/alerts/unsubscribe?token=${encodeURIComponent(token)}">Unsubscribe</a></p></div>`;
 }
 async function sendPretrialDigest(db,lead,base,deps={}) {
   if(!lead.digest_enabled) return {sent:false,reason:'opted_out'};

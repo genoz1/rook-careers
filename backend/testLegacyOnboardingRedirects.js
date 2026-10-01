@@ -18,6 +18,7 @@ test('all old onboarding entries reach V8 in one redirect and retain attribution
       if (name === 'path') return path;
       if (name === 'fs') return fs;
       if (name === './backend/publicSeo') return seo;
+      if (name === './backend/socialShortLinks') return { createRouter: () => express.Router() };
       if (name === './backend/resources/routes') return { createRouter: () => express.Router() };
       return express.Router();
     },
@@ -32,6 +33,12 @@ test('all old onboarding entries reach V8 in one redirect and retain attribution
       const response = await get(`/${name}?utm_source=google&gclid=a%2Bb`);
       assert.equal(response.status, 302, name);
       assert.equal(response.headers.get('location'), '/rook-onboarding-v8.html?utm_source=google&gclid=a%2Bb', name);
+    }
+    for (const name of ['rook-checkout.html', 'rook-checkout-v7.html', 'rook-onboarding-v6-signup.html', 'rook-onboarding-v7-signup.html']) {
+      const response = await get(`/${name}?utm_source=email&utm_campaign=reactivation`);
+      assert.equal(response.status, 302, name);
+      assert.equal(response.headers.get('location'), '/rook-onboarding-v8.html?utm_source=email&utm_campaign=reactivation', name);
+      assert.equal(response.headers.get('cache-control'), 'no-store', name);
     }
     for (const [from, to] of [
       ['/rook-onboarding-v2.html?ob=resume_upload', '/rook-resume.html?ob=resume_upload&rook_v8=1'],

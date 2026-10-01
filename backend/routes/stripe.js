@@ -1,7 +1,7 @@
 // Stripe billing routes.
 //
 // Setup required before this works (see the PDF setup guide):
-//   1. Create a Stripe account and a Product + Price for the $29/mo plan.
+//   1. Create a Stripe account and a Product + Price for the $19.99/mo plan.
 //   2. Put that Price ID in STRIPE_PRICE_ID_MONTHLY in your .env.
 //   3. Put your Stripe secret key in STRIPE_SECRET_KEY.
 //   4. Create a webhook endpoint in the Stripe dashboard pointing at
@@ -11,10 +11,8 @@
 //      customer.subscription.updated, customer.subscription.deleted,
 //      invoice.payment_failed, and invoice.payment_succeeded (or invoice.paid).
 //
-// Free trial (2026-09): TRIAL_PERIOD_DAYS controls the trial length
-// in days. Set it to 0 or remove it entirely to go back to charging
-// $29 immediately at signup — no code change needed either way, this
-// is the single switch.
+// The legacy Stripe payment-method trial is retired. V8/V9 free access is an
+// application entitlement activated after verified email, never a Stripe trial.
 
 const express = require("express");
 const Stripe = require("stripe");
@@ -38,12 +36,8 @@ const supabaseAdmin = (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_
   ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
   : null;
 
-// The trial-length switch. TRIAL_PERIOD_DAYS unset, empty, "0", or any
-// non-positive value all mean "no trial" — checkout behaves exactly as
-// it did before this feature existed (card charged immediately).
 function getTrialPeriodDays() {
-  const raw = Number(process.env.TRIAL_PERIOD_DAYS);
-  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 0;
+  return 0;
 }
 
 // Trial-abuse guard, factored out as its own pure function (same reason
@@ -100,6 +94,17 @@ function canPurchaseV9Intro(profile) {
   return profile.trial_source === "v9" && Boolean(profile.trial_started_at) && !profile.subscription_started_at;
 }
 
+function buildV8SubscriptionParams(args) {
+  const params=buildV9SubscriptionParams(args);
+  params.metadata.onboarding_version="v8";
+  return params;
+}
+
+function canPurchaseV8Intro(profile) {
+  if (!profile || profile.subscription_status === "active") return false;
+  return profile.trial_source === "v8" && Boolean(profile.trial_started_at) && !profile.subscription_started_at;
+}
+
 function requireConfig(req, res, next) {
   if (!isConfigured || !stripe || !supabaseAnon || !supabaseAdmin) {
     return res.status(503).json({
@@ -118,18 +123,10 @@ async function requireAuth(req, res, next) {
   next();
 }
 
-// GET /api/stripe/trial-config — public, no auth required (just a
-// yes/no on whether a trial is currently offered, nothing sensitive).
-// Direct instruction: disabling the trial via TRIAL_PERIOD_DAYS must be
-// a true one-setting rollback with no copy change required anywhere —
-// the pricing page calls this on load and switches its own CTA/
-// messaging automatically, rather than having the trial-on/trial-off
-// wording hardcoded on the frontend where flipping the env var alone
-// wouldn't be enough to revert it. Deliberately not gated behind
-// requireConfig — this is a plain env var read, unrelated to whether
-// Stripe/Supabase credentials happen to be configured yet.
+// Historical compatibility response. Current acquisition pages do not consume
+// this endpoint; it can never enable the retired card-first Stripe trial.
 router.get("/stripe/trial-config", (req, res) => {
-  res.json({ trialDays: getTrialPeriodDays() });
+  res.json({ trialDays: 0, deprecated: true });
 });
 
 // Only these five keys are ever trusted from the client for attribution —
@@ -149,7 +146,10 @@ function pickUtmFields(body) {
 // checkout.sessions.create() params, so the trial-on vs trial-off
 // (TRIAL_PERIOD_DAYS=0) branching can be verified directly in a test
 // without a real HTTP request or a real Stripe account.
-function buildCheckoutSessionParams({ trialDays, utm, userEmail, userId, publicAppUrl, priceId }) {
+function buildCheckoutSessionParams({ trialDays: _legacyTrialDays, utm, userEmail, userId, publicAppUrl, priceId }) {
+  // Deliberately ignore any historical caller-provided duration. No Stripe
+  // Checkout Session created by ROOK may start the retired card-first trial.
+  const trialDays = 0;
   const sessionParams = {
     mode: "subscription",
     payment_method_types: ["card"],
@@ -197,16 +197,13 @@ function buildCheckoutSessionParams({ trialDays, utm, userEmail, userId, publicA
   return sessionParams;
 }
 
-// Called from the Pricing page's "Start Your N-Day Free Trial" button (N is dynamic, from TRIAL_PERIOD_DAYS)
-// once the candidate is signed in. Redirects them to Stripe-hosted
-// checkout.
+// Historical compatibility endpoint for a Stripe-hosted, immediately paid
+// subscription. No current public acquisition page calls this route, and the
+// builder above cannot attach a Stripe trial even if an old caller asks for one.
 router.post("/stripe/create-checkout-session", requireConfig, requireAuth, async (req, res) => {
   try {
-    // Same trial-abuse guard as create-subscription-from-setup below —
-    // this is a second, separate entry point into checkout (Stripe-hosted
-    // redirect, used by rook-pricing.html) that reaches the same Stripe
-    // price, so it needs the same protection against granting a second
-    // free trial to an account that already had one.
+    // Keep reading existing history for backward-compatible attribution and
+    // request shape; computeTrialDaysForCheckout always returns zero.
     const { data: profileForTrialCheck } = await supabaseAdmin
       .from("candidate_profiles")
       .select("trial_started_at")
@@ -373,8 +370,8 @@ router.post("/stripe/create-subscription-from-setup", requireConfig, requireAuth
     // subscription later lapsed/was cancelled and they're re-entering
     // checkout from the free dashboard. Everything else about checkout
     // stays identical — same price, same product, same card flow — the
-    // subscription is just created without a trial period this time, so
-    // Stripe charges the card immediately instead of after 3 days.
+    // subscription is created without a trial period, so Stripe charges the
+    // configured monthly price immediately.
     const alreadyUsedTrial = Boolean(profile?.trial_started_at);
     const trialDays = computeTrialDaysForCheckout(profile);
 
@@ -386,7 +383,7 @@ router.post("/stripe/create-subscription-from-setup", requireConfig, requireAuth
       invoice_settings: { default_payment_method: payment_method_id },
     });
 
-    // Create subscription with trial
+    // Create an immediately paid subscription; trialDays is always zero.
     const subParams = {
       customer: customerId,
       items: [{ price: process.env.STRIPE_PRICE_ID_MONTHLY }],
@@ -489,6 +486,55 @@ router.post("/stripe/create-v9-subscription-from-setup", requireConfig, requireA
     res.json({ok:true,subscription_id:subscription.id,status:subscription.status});
   } catch (error) {
     console.error("create-v9-subscription-from-setup failed:",error.message);
+    res.status(500).json({error:"Payment could not be completed. Please verify your card or try another card."});
+  }
+});
+
+// POST /api/stripe/create-v8-subscription-from-setup
+// The V8 no-card trial uses the same verified $19.99 monthly Price and
+// one-time $10 coupon as V9, but keeps its eligibility source-specific.
+router.post("/stripe/create-v8-subscription-from-setup", requireConfig, requireAuth, async (req, res) => {
+  try {
+    const paymentMethodId = req.body?.payment_method_id;
+    const customerId = req.body?.customer_id;
+    const couponId = process.env.STRIPE_V9_FIRST_MONTH_COUPON_ID;
+    if (!/^pm_/.test(String(paymentMethodId || "")) || !/^cus_/.test(String(customerId || "")))
+      return res.status(400).json({ error: "Invalid payment setup. Please restart checkout." });
+    if (!couponId) return res.status(503).json({ error: "The introductory offer is not configured yet." });
+
+    const profileResult = await supabaseAdmin.from("candidate_profiles")
+      .select("stripe_customer_id,subscription_status,subscription_started_at,trial_started_at,trial_ends_at,trial_source,utm_source,utm_medium,utm_campaign,utm_term,utm_content")
+      .eq("user_id", req.user.id).maybeSingle();
+    if (profileResult.error) throw profileResult.error;
+    const profile = profileResult.data || {};
+    if (!canPurchaseV8Intro(profile))
+      return res.status(403).json({ error: "This introductory offer is available once, after a verified V8 trial." });
+    if (profile.stripe_customer_id && profile.stripe_customer_id !== customerId)
+      return res.status(400).json({ error: "Payment customer mismatch. Please restart checkout." });
+
+    const [coupon,price] = await Promise.all([
+      stripe.coupons.retrieve(couponId),
+      stripe.prices.retrieve(process.env.STRIPE_PRICE_ID_MONTHLY),
+    ]);
+    validateV9Coupon(coupon);validateV9MonthlyPrice(price);
+    await stripe.paymentMethods.attach(paymentMethodId, { customer: customerId });
+    await stripe.customers.update(customerId, { invoice_settings: { default_payment_method: paymentMethodId } });
+    const subscription = await stripe.subscriptions.create(buildV8SubscriptionParams({
+      customerId, paymentMethodId, userId: req.user.id, priceId: process.env.STRIPE_PRICE_ID_MONTHLY,
+      couponId, utm: pickUtmFields(profile),
+    }));
+    if (subscription.status !== "active") throw new Error("Payment was not completed. No access was granted.");
+
+    const paidAt=new Date().toISOString();
+    const update = await supabaseAdmin.from("candidate_profiles").upsert({
+      user_id:req.user.id,stripe_customer_id:customerId,subscription_status:subscription.status,
+      subscription_started_at:profile.subscription_started_at||paidAt,updated_at:paidAt,
+    },{onConflict:"user_id"});
+    if (update.error) console.error("V8 subscription profile update failed:",update.error.message);
+    console.log(`[checkout-v8] uid=${req.user.id.slice(0,8)} subscription=${subscription.id} status=${subscription.status}`);
+    res.json({ok:true,subscription_id:subscription.id,status:subscription.status});
+  } catch (error) {
+    console.error("create-v8-subscription-from-setup failed:",error.message);
     res.status(500).json({error:"Payment could not be completed. Please verify your card or try another card."});
   }
 });
@@ -783,9 +829,8 @@ async function handleStripeWebhookEvent(event, { stripe, supabaseAdmin }) {
       // actually applied — retrieve the real subscription object so
       // the status written here is authoritative (Stripe's own
       // 'trialing' or 'active'), not assumed from what this server
-      // requested at checkout-creation time. Keeps this correct even
-      // if TRIAL_PERIOD_DAYS changes between when checkout was created
-      // and when this webhook is processed.
+      // requested at checkout-creation time. This also preserves accurate
+      // handling of historical Stripe subscriptions created before retirement.
       const sub = await stripe.subscriptions.retrieve(session.subscription);
 
       return applyGuardedSubscriptionUpdate(supabaseAdmin, {
@@ -808,8 +853,8 @@ async function handleStripeWebhookEvent(event, { stripe, supabaseAdmin }) {
           if (sub.status === "trialing") {
             groups.push({ gate: "trial_started_at", fields: { trial_started_at: new Date().toISOString() } });
           } else if (sub.status === "active") {
-            // Trial disabled (TRIAL_PERIOD_DAYS=0) or somehow already
-            // past trial by the time this webhook is processed — this
+            // An immediately paid subscription, or one already past a
+            // historical trial by the time this webhook is processed — this
             // is the real "started paying" moment in that case.
             groups.push({ gate: "subscription_started_at", fields: { subscription_started_at: new Date().toISOString() } });
           }
@@ -979,5 +1024,7 @@ module.exports.validateV9Coupon = validateV9Coupon;
 module.exports.validateV9MonthlyPrice = validateV9MonthlyPrice;
 module.exports.buildV9SubscriptionParams = buildV9SubscriptionParams;
 module.exports.canPurchaseV9Intro = canPurchaseV9Intro;
+module.exports.buildV8SubscriptionParams = buildV8SubscriptionParams;
+module.exports.canPurchaseV8Intro = canPurchaseV8Intro;
 module.exports.warnIfPortalCancellationModeIsWrong = warnIfPortalCancellationModeIsWrong;
 module.exports._resetPortalConfigCheckForTests = _resetPortalConfigCheckForTests;

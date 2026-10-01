@@ -144,5 +144,5 @@ async function rookGoToCheckout(source) {
   if(typeof rookTrackFunnelEvent === 'function') rookTrackFunnelEvent('v7_unlock_clicked',{source:source==='banner'?'banner':'job'});
   else if(typeof rookTrackEvent === 'function') rookTrackEvent('v7_unlock_clicked',{source:source==='banner'?'banner':'job'});
   const {data:{session}}=await rookV7Auth().auth.getSession();
-  window.location.href=session ? 'rook-checkout-v7.html' : 'rook-onboarding-v7-signup.html';
+  window.location.href='rook-onboarding-v8.html';
 }

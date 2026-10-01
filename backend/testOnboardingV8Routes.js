@@ -5,7 +5,7 @@ const jobs=[
  {id:'b',title_original:'Exact Diagnostics Title',company_name:'Diagnostics Employer',source_url:'https://secret.example/b',ai_analysis:{product_categories:['Diagnostics']},match:{overall_score:75}},
  {id:'c',title_original:'Exact Veterinary Title',company_name:'Veterinary Employer',source_url:'https://secret.example/c',ai_analysis:{product_categories:['Veterinary']},match:{overall_score:70}}
 ];
-const tables={jobs:jobs.map(j=>({...j,status:'active',moderation_status:'approved'})),onboarding_v7_sessions:[],candidate_profiles:[]};
+const tables={jobs:jobs.map(j=>({...j,status:'active',moderation_status:'approved'})),onboarding_v7_sessions:[],candidate_profiles:[],ad_conversion_events:[]};
 class Query{
  constructor(name){this.name=name;this.filters=[];this.value=null;this.one=false;}
  select(){return this;}eq(k,v){this.filters.push(r=>r[k]===v);return this;}
@@ -25,7 +25,14 @@ class Query{
 const db={from:name=>new Query(name),auth:{getUser:async token=>({data:{user:token==='valid'?{id:'user',email:'verified@example.test',email_confirmed_at:'yes'}:null}})}};
 require.cache[require.resolve('@supabase/supabase-js')]={exports:{createClient:()=>db}};
 let rankCalls=0,useRpc=false,rejectOnce=false,refreshes=0,rpcCalls=0;
-db.rpc=async(name,args)=>{assert.equal(name,'create_v8_preview_session');rpcCalls++;if(rejectOnce){rejectOnce=false;return {data:{accepted:false}};}tables.onboarding_v7_sessions.push({token_hash:args.p_token_hash,profile:args.p_profile,jobs:[],expires_at:args.p_expires_at});return {data:{accepted:true,jobs:tables.jobs.filter(j=>args.p_job_ids.includes(j.id)),details_ms:1}};};
+db.rpc=async(name,args)=>{
+ if(name==='activate_v8_trial'){
+  const p=tables.candidate_profiles.find(row=>row.user_id===args.p_user_id),now=new Date();
+  Object.assign(p,{subscription_status:'trialing',trial_started_at:now.toISOString(),trial_ends_at:new Date(now.getTime()+86400000).toISOString(),trial_source:'v8'});
+  return {data:[{outcome:'started',subscription_status:p.subscription_status,trial_started_at:p.trial_started_at,trial_ends_at:p.trial_ends_at,trial_source:p.trial_source}],error:null};
+ }
+ assert.equal(name,'create_v8_preview_session');rpcCalls++;if(rejectOnce){rejectOnce=false;return {data:{accepted:false}};}tables.onboarding_v7_sessions.push({token_hash:args.p_token_hash,profile:args.p_profile,jobs:[],expires_at:args.p_expires_at});return {data:{accepted:true,jobs:tables.jobs.filter(j=>args.p_job_ids.includes(j.id)),details_ms:1}};
+};
 require.cache[require.resolve('./v8Matching')]={exports:{rank:async(_db,_profile,_unused,timing={})=>{rankCalls++;if(useRpc){timing.index_revision='1';timing.local_index=1;}return jobs;},readCandidates:async()=>jobs,startIndex:()=>{},indexFor:()=>({refresh:async()=>{refreshes++;}})}};
 const originalMatching=require('./v7Matching');
 require.cache[require.resolve('./v7Matching')].exports={...originalMatching,rankPool:()=>{rankCalls++;return jobs;}};
@@ -57,7 +64,7 @@ const app=express();app.use(express.json());app.use('/api/v8',require('./routes/
 
   assert.equal((await call('/preference','PUT',{industry:'Veterinary'},token)).status,200);
   page=await call('/session','GET',null,token);assert.equal(page.data.count,3);assert.equal(page.data.jobs[0].company_name,'Veterinary Employer');
-  assert.equal((await call('/claim','POST',null,token,true)).status,200);assert.equal(tables.candidate_profiles.length,1);
+  const claimed=await call('/claim','POST',null,token,true);assert.equal(claimed.status,200);assert.equal(claimed.data.outcome,'started');assert.equal(tables.candidate_profiles.length,1);
   assert.equal(tables.candidate_profiles[0].email,'verified@example.test');
   tables.candidate_profiles[0].subscription_status='trialing';tables.candidate_profiles[0].trial_ends_at='2099-01-01T00:00:00Z';
   assert.equal((await call('/session','GET',null,token)).status,403);

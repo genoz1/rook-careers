@@ -415,7 +415,7 @@
       <div id="jobListLoadingText">Loading jobs…</div>
     </div>
 
-    <div class="job-list" id="jobList" data-demo="true" style="display:none;">
+    <div class="job-list" id="jobList" data-demo="false" style="display:none;">
       <div class="job-row">
         <div class="score-ring" style="--pct:96;"><span>96%</span></div>
         <div class="job-info">
@@ -500,9 +500,9 @@
 <script src="rook-job-classification.js"></script>
 <script src="rook-territory-location.js"></script>
 <script>
-  // Same live-data pattern as rook-dashboard.html: try to replace the demo
-  // rows with real, scored jobs; leave demo data in place (with a banner
-  // explaining why) if there's no session, no data yet, or a fetch error.
+  // Same live-data pattern as rook-dashboard.html: only live API results may
+  // populate this member page. Static design rows are removed before requests,
+  // and failures render a safe retry state.
   //
   // Filtering happens entirely client-side against the full fetched list.
   // This isn't a stylistic choice — jobs.industry, jobs.state, and
@@ -649,11 +649,22 @@
     rookPopulateSidebar();
 
     const jobList = document.getElementById('jobList');
-    jobList.innerHTML = '';
+    jobList.replaceChildren();
     const loading = document.getElementById('jobListLoading');
     function revealDemo() {
       loading.style.display = 'none';
       jobList.style.display = '';
+    }
+    function showJobsLoadError() {
+      loading.style.display = 'none';
+      jobList.style.display = '';
+      jobList.dataset.demo = 'false';
+      jobList.innerHTML = '<div role="alert" style="text-align:center;padding:44px 20px;border:1px solid #E4E9F2;border-radius:14px;background:#fff;color:#3D4A63;"><p style="margin:0 0 16px;font-size:15px;">We’re having trouble loading your matches right now. Please try again.</p><button type="button" class="btn btn-primary" id="retryJobsButton">Retry</button></div>';
+      document.getElementById('retryJobsButton')?.addEventListener('click', () => {
+        jobList.style.display = 'none';
+        loading.style.display = '';
+        loadJobs(document.getElementById('filterKeyword').value.trim());
+      });
     }
 
       // Wire up every filter control to re-filter on change.
@@ -724,8 +735,8 @@
       } catch {}
 
     } catch (err) {
-      showBanner('Could not load Job Search (' + err.message + '). Please try again.');
-      revealDemo();
+      showBanner('We’re having trouble loading your matches right now. Please try again.');
+      showJobsLoadError();
     }
     }
 

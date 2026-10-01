@@ -49,36 +49,8 @@ async function rookSignOut(loginPage = "rook-login.html") {
   window.location.href = loginPage;
 }
 
-// Cached trial-day lookup shared by every page that needs to decide
-// between "Subscribe to Unlock" and a trial CTA for a locked job —
-// one fetch per page load, reused by every job card render rather
-// than one request per card. Resolves to 0 (the safe "no trial"
-// default) if the request fails, same reasoning as every other
-// trial-config consumer in the app: never show a trial claim that
-// might not be real.
-let rookTrialDaysCache = null;
-async function rookGetTrialDays() {
-  if (rookTrialDaysCache !== null) return rookTrialDaysCache;
-  try {
-    const res = await fetch(`${window.ROOK_CONFIG.API_BASE}/stripe/trial-config`);
-    const data = res.ok ? await res.json() : {};
-    rookTrialDaysCache = Number(data.trialDays) || 0;
-  } catch {
-    rookTrialDaysCache = 0;
-  }
-  return rookTrialDaysCache;
-}
-
-// The actual locked-job CTA label, shared everywhere a candidate sees
-// one, so the wording can't drift between pages. While a trial is
-// active, this replaces the friction of "Subscribe to Unlock" (asking
-// for money) with a trial-framed CTA — access rules are unchanged,
-// this is copy only. Falls back to the original wording the instant
-// TRIAL_PERIOD_DAYS is 0, with no separate code path to keep in sync.
 async function rookLockedJobCtaLabel() {
-  const days = await rookGetTrialDays();
-  if (days <= 0) return "Subscribe to Unlock";
-  return `Start ${days}-Day Free Trial`;
+  return "Try ROOK Today for Free";
 }
 
 // Client-side mirror of backend/matching.js's hasFullAccess(). This is
@@ -119,12 +91,12 @@ function rookTrackEvent(name, params = {}) {
 // banner, gated Apply button, and gated Application Package link across
 // the app (dashboard, search, job analysis). Fires job_unlock_clicked
 // with a `source` label identifying which surface was clicked, then
-// sends the candidate to the existing rook-checkout.html flow — the
-// same authenticated Setup-Intent-based checkout used everywhere else,
-// never a separate/parallel payment path.
+// sends new prospects to the canonical V8 acquisition flow. Expired V8/V9
+// no-card trials use the shared post-trial screen instead of onboarding.
 function rookGoToCheckout(source) {
   rookTrackEvent('job_unlock_clicked', { event_category: 'engagement', source: String(source || 'unknown') });
-  window.location.href = 'rook-checkout.html';
+  const profile=window.rookCurrentProfile;
+  window.location.href=profile?.trial_started_at&&!profile?.subscription_started_at&&!rookHasFullAccess(profile)?'rook-keep-access.html':'rook-onboarding-v8.html';
 }
 
 // Fills in the sidebar's name/avatar/plan card (the ".side-foot" block
@@ -140,6 +112,7 @@ function rookGoToCheckout(source) {
 // instead of fetching it a second time.
 function rookApplySidebarProfile(profile) {
   if (!profile) return; // fetch failed or no profile row at all — leave the neutral fallback markup in place
+  window.rookCurrentProfile=profile;
   // Name and plan status are independent of each other — a candidate
   // whose profile has no name filled in yet should still see their
   // real plan status, not have the whole card stuck on the neutral
@@ -199,7 +172,7 @@ async function rookRouteAfterLogin() {
   try {
     const r=await rookApiFetch('/profile');
     const profile=r.ok ? await r.json() : null;
-    if(profile && !rookHasFullAccess(profile)) {window.location.href='rook-dashboard-v8.html';return;}
+    if(profile && !rookHasFullAccess(profile)) {window.location.href=['v8','v9'].includes(profile.trial_source)&&profile.trial_started_at&&!profile.subscription_started_at?'rook-keep-access.html':'rook-dashboard-v8.html';return;}
   } catch(_) {}
   // Restore the page the user was trying to reach before being sent to login
   try {
@@ -218,12 +191,12 @@ async function rookRouteAfterLogin() {
   try {
     const res = await rookApiFetch('/profile');
     const profile = res.ok ? await res.json() : null;
-    window.location.href = profile ? 'rook-dashboard-v8.html' : 'rook-onboarding-v2.html';
+    window.location.href = profile ? 'rook-dashboard-v8.html' : 'rook-onboarding-v8.html';
   } catch {
     // Fall back to onboarding, not the dashboard, when the check itself
     // fails (network blip, backend not configured, etc.) — the safe
     // default on an uncertain check is to route toward setup, not away
     // from it.
-    window.location.href = 'rook-onboarding-v2.html';
+    window.location.href = 'rook-onboarding-v8.html';
   }
 }

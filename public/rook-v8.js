@@ -42,7 +42,7 @@
         // Keep the existing trial conversion guard; analytics cannot block navigation.
         try{
           if(profile.subscription_status==='trialing' && sessionStorage.getItem('rook_trial_activated_fired')!=='1'){
-            if(typeof rookTrackFunnelEvent==='function')rookTrackFunnelEvent('v8_trial_started');
+            if(typeof rookTrackFunnelEvent==='function')rookTrackFunnelEvent('v8_trial_started',{},profile.user_id);
             gtag('event','conversion',{send_to:'AW-18428232873',event_category:'conversion',event_label:'trial_started_dashboard',value:0,currency:'USD'});
             gtag('event','trial_activated',{event_category:'conversion',onboarding_version:'v8'});
             sessionStorage.setItem('rook_trial_activated_fired','1');

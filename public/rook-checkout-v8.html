@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex">
-  <title>Start Your Free Trial — ROOK</title>
+  <title>Continue with ROOK</title>
   <link rel="icon" href="assets/favicon.ico" sizes="any">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -301,10 +301,8 @@
      runtime/IDs as every other ROOK page (rook-dashboard.html,
      rook-onboarding-v6*.html) — one gtag.js instance, both the Ads
      conversion ID and the GA4 measurement ID configured on it. No
-     conversion events added here — trial_activated/the AW conversion
-     still only fire from rook-dashboard.html, after the webhook-backed
-     redirect, per direct instruction that free/checkout-start events
-     must never be confused with a confirmed paid-trial conversion. -->
+     The checkout-start event fires on entry; the first-month purchase
+     event fires only after Stripe returns an active subscription. -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=AW-18428232873"></script>
 <script>
   window.dataLayer = window.dataLayer || [];
@@ -331,26 +329,26 @@
   <div class="checkout-header">
     <div class="trial-badge">
       <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="5.5" r="4.5" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 3v2.5l1.5 1" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
-      3-Day Free Trial
+      Membership
     </div>
-    <h1>Unlock your matches</h1>
-    <p>Unlock employer names, direct application links, and personalized match scores — free for 3 days.</p>
+    <h1>Keep your ROOK access</h1>
+    <p>Continue with employer names, direct application links, and personalized match scores.</p>
   </div>
 
   <!-- Price summary -->
   <div class="price-summary">
     <div class="price-row">
-      <span class="price-label">Today</span>
-      <span class="price-value free">$0.00</span>
+      <span class="price-label">First 30 paid days</span>
+      <span class="price-value free">$9.99</span>
     </div>
     <div class="price-row">
-      <span class="price-label">After 3-day trial</span>
+      <span class="price-label">Thereafter</span>
       <span class="price-value">$19.99 / month</span>
     </div>
     <div class="price-divider"></div>
     <div class="price-row">
       <span class="price-total-label">Charged today</span>
-      <span class="price-total-value">$0</span>
+      <span class="price-total-value">$9.99</span>
     </div>
   </div>
 
@@ -378,11 +376,11 @@
   <div class="err" id="formErr"></div>
 
   <button class="submit-btn" id="submitBtn">
-    Unlock my matches — 3 days free
+    Continue for $9.99
   </button>
 
   <p class="fine">
-    3 days free, then $19.99/month. <span class="v7-mobile-copy">That’s less than $5 a week. </span>Cancel anytime before your trial ends to avoid being charged. Card required. By continuing you agree to <a href="rook-terms.html" target="_blank" rel="noopener">ROOK’s Terms</a>. <a href="rook-privacy.html" target="_blank" rel="noopener">Privacy</a>.
+    $9.99 for your first 30 days, then $19.99/month. Cancel anytime. By continuing you agree to <a href="rook-terms.html" target="_blank" rel="noopener">ROOK’s Terms</a>. <a href="rook-privacy.html" target="_blank" rel="noopener">Privacy</a>.
   </p>
 
   <div class="trust-row">
@@ -403,7 +401,7 @@
   <!-- Success state -->
   <div class="success-screen" id="successScreen">
     <div class="success-icon">✓</div>
-    <h2>Trial started!</h2>
+    <h2>Membership started!</h2>
     <p>You're all set. Taking you to your matches now…</p>
   </div>
 
@@ -421,13 +419,6 @@
   if (!session) {
     window.location.href = 'rook-login-v8.html?return=' + encodeURIComponent(window.location.href);
     return;
-  }
-
-  // checkout_started — fires once, only for an already-authenticated
-  // candidate who actually reached this page (not on the login bounce
-  // above). No PII in params.
-  if (typeof gtag !== 'undefined') {
-    gtag('event', 'checkout_started', { event_category: 'conversion' });
   }
 
   // ── Init Stripe Elements ───────────────────────────────────────────────
@@ -477,9 +468,20 @@
 
   btn.disabled = true;
   try {
-    await rookV7PrepareAccount();
+    const profileResponse=await rookApiFetch('/profile');
+    const profile=profileResponse.ok?await profileResponse.json():null;
+    if(profile?.subscription_status==='active'){
+      window.location.replace('rook-dashboard-v8.html');
+      return;
+    }
+    if(profile?.trial_source!=='v8'||!profile.trial_started_at||profile.subscription_started_at){
+      throw new Error('This introductory offer is not available for this account.');
+    }
+    if (typeof rookTrackFunnelEvent === 'function') {
+      if(profile.trial_ends_at&&new Date(profile.trial_ends_at).getTime()<=Date.now())rookTrackFunnelEvent('v8_trial_expired', {stage:'expired'}, profile.trial_started_at);
+      rookTrackFunnelEvent('v8_upgrade_paywall_viewed', {}, profile.trial_started_at);
+    }
     btn.disabled = false;
-    if (typeof rookTrackFunnelEvent === 'function') rookTrackFunnelEvent('v8_checkout_started');
   } catch (error) {
     showErr(error.message);
     const retry = document.createElement('button');
@@ -493,6 +495,8 @@
     showErr('');
     btn.disabled = true;
     btn.innerHTML = '<div class="spinner"></div> Processing…';
+    if (typeof gtag !== 'undefined') gtag('event', 'checkout_started', { event_category: 'conversion' });
+    if (typeof rookTrackFunnelEvent === 'function') rookTrackFunnelEvent('v8_checkout_started');
 
     try {
       // 1. Get setup intent client secret from server
@@ -514,9 +518,9 @@
 
       if (error) throw new Error(error.message);
 
-      // 3. Tell server to create the trial subscription — pass customer_id
+      // 3. Tell the server to create the paid introductory subscription.
       // so the server never needs a second DB lookup (which was failing silently)
-      const subRes = await fetch('/api/stripe/create-subscription-from-setup', {
+      const subRes = await fetch('/api/stripe/create-v8-subscription-from-setup', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -525,7 +529,7 @@
         body: JSON.stringify({ payment_method_id: setupIntent.payment_method, customer_id: customerId }),
       });
       const subData = await subRes.json();
-      if (!subRes.ok) throw new Error(subData.error || 'Could not start trial.');
+      if (!subRes.ok) throw new Error(subData.error || 'Could not start membership.');
 
       // 4. Success
       document.getElementById('cardSection').style.display = 'none';
@@ -533,9 +537,10 @@
       btn.style.display = 'none';
       document.querySelector('.fine').style.display = 'none';
       document.querySelector('.trust-row').style.display = 'none';
+      if (typeof rookTrackFunnelEvent === 'function') rookTrackFunnelEvent('v8_first_month_subscription_purchased');
 
       setTimeout(() => {
-        window.location.href = 'rook-onboarding-v8.html?trial=started';
+        window.location.href = 'rook-dashboard-v8.html';
       }, 1800);
 
     } catch (err) {

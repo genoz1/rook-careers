@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
 
-for(const page of ['rook-dashboard.html','rook-dashboard-v7.html']){
+for(const page of ['rook-dashboard.html','rook-dashboard-v7.html','rook-dashboard-v8.html']){
   test(`${page} confirms résumé analysis and persisted rescore before reloading`,()=>{
     const html=fs.readFileSync(path.join(__dirname,'../public',page),'utf8');
     const uploadFlow=html.slice(html.indexOf("fileInput.onchange = async () =>"),html.indexOf("} else if (missingResume"));

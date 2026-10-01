@@ -104,6 +104,16 @@ app.get(["/rook-onboarding.html", ...[2, 3, 4, 5, 6, 7].map(v => `/rook-onboardi
   return res.redirect(302, "/rook-onboarding-v8.html" + query);
 });
 
+// Retire the legacy card-first acquisition endpoints. Existing members use
+// member pages; prospective users preserve attribution and enter the current
+// verified-email, no-card V8 flow instead.
+app.get(["/rook-checkout.html", "/rook-checkout-v7.html", "/rook-onboarding-v6-signup.html", "/rook-onboarding-v7-signup.html"], (req, res) => {
+  const queryStart = req.originalUrl.indexOf("?");
+  const query = queryStart === -1 ? "" : req.originalUrl.slice(queryStart);
+  res.set("Cache-Control", "no-store");
+  return res.redirect(302, "/rook-onboarding-v8.html" + query);
+});
+
 // Serve rook-config.js dynamically so STRIPE_PUBLISHABLE_KEY is injected
 // from env without being hardcoded in the static file.
 app.get("/rook-config.js", (req, res) => {

@@ -104,10 +104,9 @@ test("friendlySourceLabel maps a genuine ATS/employer-site source to a customer-
 });
 
 console.log("\n=== REGRESSION: homepage hero trial CTA ===");
-test("the homepage hero's primary CTA is the exact requested trial wording and opens signup mode directly", () => {
+test("the homepage hero uses the canonical no-card offer and opens V8 directly", () => {
   const src = readPublic("index.html");
-  assert.ok(src.includes(">START YOUR 3-DAY FREE TRIAL<"), "must use the exact requested CTA text");
-  // Primary acquisition now opens V8; V7 retains its direct rollback URL.
+  assert.ok(src.includes(">TRY ROOK TODAY FOR FREE<"), "must use the canonical CTA text");
   assert.ok(src.includes('href="rook-onboarding-v8.html" class="btn btn-primary"'), "the primary CTA must point to current V8 onboarding");
   assert.ok(src.includes("Medical sales jobs only") && src.includes("Cancel anytime"), "supporting line must be present in the hero");
 });
@@ -116,10 +115,13 @@ test("the old 'Find My Matches' hero CTA text and its plain (login-tab) destinat
   assert.ok(!src.includes('href="rook-login.html" class="btn btn-primary">Find My Matches'), "the old CTA text/destination pairing must no longer exist in the hero");
 });
 
-console.log("\n=== REGRESSION: trial banner strip CTA now opens signup mode ===");
-test("rook-trial-banner.js's 'Start Free Trial' CTA opens Create Account directly", () => {
+console.log("\n=== REGRESSION: trial banner strip uses current acquisition ===");
+test("rook-trial-banner.js presents the canonical offer and opens V8", () => {
   const src = fs.readFileSync(path.join(__dirname, "..", "public", "rook-trial-banner.js"), "utf8");
-  assert.ok(src.includes("cta.href = 'rook-login.html?mode=signup';"));
+  assert.ok(src.includes("Try ROOK Today for Free"));
+  assert.ok(src.includes("24 hours of full access. No credit card required."));
+  assert.ok(src.includes("cta.href = 'rook-onboarding-v8.html';"));
+  assert.ok(!src.includes("/api/stripe/trial-config"));
 });
 
 console.log("\n=== REGRESSION: stable signup-mode routing on the login page ===");
@@ -132,14 +134,14 @@ test("rook-login.html reads ?mode=signup and switches to the signup tab, without
 });
 test("existing Log In links (plain rook-login.html, no mode param) are unaffected — default tab is still Log In", () => {
   const src = readPublic("rook-login.html");
-  assert.ok(src.includes('<div class="tab active" id="tabSignin"'), "sign-in must remain the default active tab when no mode param is present");
+  assert.ok(src.includes('class="tab active" id="tabSignin"'), "sign-in must remain the default active tab when no mode param is present");
 });
 test("the Create Account panel uses the exact requested headline, description, and button copy", () => {
   const src = readPublic("rook-login.html");
-  assert.ok(src.includes("<h2>Start your 3-day free trial</h2>"));
-  assert.ok(src.includes("Create your profile to see employers, complete job details, and personalized ROOK matches."));
+  assert.ok(src.includes("<h2>Try ROOK Today for Free</h2>"));
+  assert.ok(src.includes("Create your profile for 24 hours of full access. No credit card required."));
   assert.ok(src.includes("Opportunities from hundreds of employer career sites"));
-  assert.ok(src.includes("Three days of full ROOK access"));
+  assert.ok(src.includes("24 hours of full ROOK access"));
   assert.ok(src.includes(">CREATE ACCOUNT &amp; START FREE TRIAL<"));
 });
 test("no price, trial duration, or Stripe-related text was introduced into the signup panel", () => {
