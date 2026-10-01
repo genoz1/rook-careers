@@ -592,7 +592,6 @@
         near_lng: data.lng,
         industries: selected.length ? selected.join(',') : 'all',
       });
-      if (selectedCompany) params.set('company', selectedCompany);
       if (keyword) params.set('keyword', keyword);
       const jobsRes = await rookApiFetch('/job-search?' + params.toString());
       const jobsData = await jobsRes.json();
@@ -642,15 +641,6 @@
     applyFiltersAndRender();
   }
 
-  let selectedCompany = new URLSearchParams(location.search).get('company') || '';
-  if(!selectedCompany){try{selectedCompany=sessionStorage.getItem('rook_company_search')||'';}catch{}}
-  // Keep the public-directory handoff through existing login/access redirects.
-  if(selectedCompany){try{sessionStorage.setItem('rook_company_search',selectedCompany);}catch{}}
-  function clearSelectedCompany(){
-    selectedCompany='';try{sessionStorage.removeItem('rook_company_search');}catch{}
-    const url=new URL(location.href);url.searchParams.delete('company');history.replaceState(null,'',url);
-    document.getElementById('companyFilter')?.remove();
-  }
   (async () => {
     const access = await window.rookAccessReady;
     if (access?.locked) return; // Access guard returns saved matches before login can race it.
@@ -692,7 +682,6 @@
       const params = new URLSearchParams();
       const selected = Array.from(document.querySelectorAll('.filter-industry:checked'), el => el.value);
       params.set('industries', selected.length ? selected.join(',') : 'all');
-      if (selectedCompany) params.set('company', selectedCompany);
       if (keyword) params.set('keyword', keyword);
       if (nearLocationCoords) { params.set('near_lat', nearLocationCoords.lat); params.set('near_lng', nearLocationCoords.lng); }
       const [jobsRes, profileRes] = await Promise.all([
@@ -741,13 +730,6 @@
     }
 
     window.reloadSearchJobs = loadJobs;
-    if(selectedCompany){
-      const group=document.createElement('div');group.className='filter-group';group.id='companyFilter';
-      const label=document.createElement('p');label.textContent='Company: '+selectedCompany;
-      const clear=document.createElement('button');clear.type='button';clear.textContent='Clear company filter';
-      clear.addEventListener('click',()=>{clearSelectedCompany();loadJobs(document.getElementById('filterKeyword').value.trim());});
-      group.append(label,clear);document.querySelector('.filters').prepend(group);
-    }
     await loadJobs();
   })();
 
@@ -785,7 +767,7 @@
   const RESULTS_PER_PAGE = 20;
 
   function activeFilterCount() {
-    let count = selectedCompany ? 1 : 0;
+    let count = 0;
     if (document.getElementById('filterKeyword').value.trim()) count++;
     if (!document.getElementById('showRecruiterFilter').checked) count++;
     if (document.getElementById('remoteOnlyFilter').checked) count++;
@@ -1111,7 +1093,6 @@
   }
 
   function clearAllFilters() {
-    clearSelectedCompany();
     document.getElementById('filterKeyword').value = '';
     document.getElementById('remoteOnlyFilter').checked = false;
     document.getElementById('radiusSelect').value = '0';
