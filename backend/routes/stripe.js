@@ -17,6 +17,7 @@
 const express = require("express");
 const Stripe = require("stripe");
 const { createClient } = require("@supabase/supabase-js");
+const { notifyNewSubscriber } = require("../adminPush");
 
 const router = express.Router();
 
@@ -818,7 +819,7 @@ function mapLiveSubscriptionToFields(sub) {
 // it can be exercised directly in a test with a hand-built event object
 // and a fake supabaseAdmin/stripe — no real HTTP request, no real Stripe
 // signature, no real database required to verify this logic is correct.
-async function handleStripeWebhookEvent(event, { stripe, supabaseAdmin }) {
+async function handleStripeWebhookEvent(event, { stripe, supabaseAdmin, subscriberNotifier = notifyNewSubscriber }) {
   switch (event.type) {
     case "checkout.session.completed": {
       const session = event.data.object;
@@ -923,7 +924,7 @@ async function handleStripeWebhookEvent(event, { stripe, supabaseAdmin }) {
         return { applied: false, reason: "not_a_positive_paid_subscription_invoice" };
       }
       const {data: profile, error: profileError} = await supabaseAdmin.from("candidate_profiles")
-        .select("user_id, utm_source, utm_medium, utm_campaign, utm_term, utm_content")
+        .select("user_id, trial_source, utm_source, utm_medium, utm_campaign, utm_term, utm_content")
         .eq("stripe_customer_id", invoice.customer).maybeSingle();
       if (profileError) throw profileError;
       if (!profile) throw new Error("Paid invoice has no matching candidate profile yet");
@@ -936,6 +937,17 @@ async function handleStripeWebhookEvent(event, { stripe, supabaseAdmin }) {
         occurred_at: new Date((invoice.status_transitions?.paid_at || event.created) * 1000).toISOString(),
       });
       if (error && error.code !== "23505") throw error;
+      if (!error) {
+        try {
+          await subscriberNotifier({
+            version: profile.trial_source === 'v9' ? 'V9' : 'V8', profile,
+            amountPaid: invoice.amount_paid, currency: invoice.currency,
+            occurredAt: new Date((invoice.status_transitions?.paid_at || event.created) * 1000).toISOString(),
+          });
+        } catch (_) {
+          console.warn('[admin push] subscriber notification failed');
+        }
+      }
       return {applied: !error, reason: error ? "duplicate_paid_conversion" : undefined};
     }
 

@@ -7,6 +7,7 @@ const {performance} = require('node:perf_hooks');
 const {project} = require('../pretrialProjection');
 const {classify,normalizeSelection} = require('../../public/rook-job-classification');
 const {hasFullAccess} = require('../matching');
+const {notifyNewAccount} = require('../adminPush');
 const router = express.Router();
 const db = process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
   ? createClient(process.env.SUPABASE_URL,process.env.SUPABASE_SERVICE_ROLE_KEY) : null;
@@ -217,6 +218,10 @@ router.post('/claim',wrap(async(req,res)=>{
         platform_inferred:p.utm_source||'unknown',occurred_at:entitlement.trial_started_at,
       });
       if(event.error&&event.error.code!=='23505')console.error('V8 trial analytics write failed:',event.error.message);
+      if(!event.error){
+        try{await notifyNewAccount({version:'V8',profile:p,occurredAt:entitlement.trial_started_at});}
+        catch(_){console.warn('[admin push] account notification failed');}
+      }
     }
   }
   res.json({ok:true,...entitlement});

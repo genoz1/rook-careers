@@ -11,6 +11,7 @@ const tables={
   onboarding_v7_sessions:[{token_hash:tokenHash,user_id:null,transferred_at:null,expires_at:'2099-01-01T00:00:00Z',profile:{onboarding_version:'v8',home_zip:'10001',desired_industries:['Diagnostics'],utm_source:'google'}}],
   candidate_profiles:[],ad_conversion_events:[],
 };
+const accountPushes=[];
 class Query{
   constructor(name){this.name=name;this.filters=[];this.mode=null;this.value=null;this.single=false;}
   select(){return this;}eq(k,v){this.filters.push(row=>row[k]===v);return this;}gt(k,v){this.filters.push(row=>row[k]>v);return this;}
@@ -41,19 +42,24 @@ const db={
 };
 require.cache[require.resolve('@supabase/supabase-js')]={exports:{createClient:()=>db}};
 require.cache[require.resolve('./v8Matching')]={exports:{rank:async()=>[],indexFor:()=>({refresh:async()=>{}}),startIndex:()=>{}}};
+require.cache[require.resolve('./adminPush')]={exports:{notifyNewAccount:async payload=>{accountPushes.push(payload);throw Error('simulated Pushover outage');},notifyNewSubscriber:async()=>({sent:false})}};
 
 const router=require('./routes/onboardingV8');
 const claimHandler=router.stack.find(layer=>layer.route?.path==='/claim').route.stack[0].handle;
 const stripeRoute=require('./routes/stripe');
 
 (async()=>{
-  const claim=async()=>{let status=200,data;const req={body:{},get:name=>name==='X-ROOK-V7'?rawToken:name==='Authorization'?'Bearer valid':''};const res={status(code){status=code;return this},json(value){data=value;return this}};await claimHandler(req,res);return {status,data};};
+  const claim=async(valid=true)=>{let status=200,data;const req={body:{},get:name=>name==='X-ROOK-V7'?rawToken:name==='Authorization'?valid?'Bearer valid':'Bearer unverified':''};const res={status(code){status=code;return this},json(value){data=value;return this}};await claimHandler(req,res);return {status,data};};
+  assert.equal((await claim(false)).status,401);assert.equal(accountPushes.length,0);
+  const originalWarn=console.warn;console.warn=()=>{};
   const first=await claim();
+  console.warn=originalWarn;
   assert.equal(first.status,200);assert.equal(first.data.outcome,'started');assert.equal(first.data.trial_source,'v8');
   assert.equal(new Date(first.data.trial_ends_at)-new Date(first.data.trial_started_at),86400000);
   assert.equal(tables.ad_conversion_events.length,1);assert.equal(tables.ad_conversion_events[0].event_key,'v8_trial_started_user-1');
+  assert.equal(accountPushes.length,1);assert.equal(accountPushes[0].version,'V8');assert.equal(accountPushes[0].profile.utm_source,'google');
   const startedAt=first.data.trial_started_at;
-  const repeat=await claim();assert.equal(repeat.data.outcome,'trial_active');assert.equal(repeat.data.trial_started_at,startedAt);assert.equal(tables.ad_conversion_events.length,1);
+  const repeat=await claim();assert.equal(repeat.data.outcome,'trial_active');assert.equal(repeat.data.trial_started_at,startedAt);assert.equal(tables.ad_conversion_events.length,1);assert.equal(accountPushes.length,1);
 
   Object.assign(tables.candidate_profiles[0],{subscription_status:'trialing',trial_source:'v9',trial_started_at:'2026-01-01T00:00:00Z',trial_ends_at:'2099-01-01T00:00:00Z'});
   assert.equal((await claim()).data.outcome,'existing_access');
