@@ -51,7 +51,7 @@ function shortLocation(raw) {
 
 // Shared page chrome (nav, footer, styles) so the job page and sitemap-
 // adjacent pages look like the rest of ROOK rather than a bare document.
-function pageShell({ title, description, canonicalUrl, ogImage, bodyHtml, jsonLd, jobId, noindex = false, publicCompany = false }) {
+function pageShell({ title, description, canonicalUrl, ogImage, bodyHtml, jsonLd, jobId, noindex = false }) {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -106,8 +106,7 @@ function pageShell({ title, description, canonicalUrl, ogImage, bodyHtml, jsonLd
   <script src="/rook-config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script src="/rook-auth.js"></script>
-  ${jobId || publicCompany ? '' : '<script src="/rook-access.js"></script>'}
-  ${publicCompany ? `<script>document.addEventListener('click',function(event){const link=event.target.closest('a[data-company-search]');if(link){try{sessionStorage.setItem('rook_company_search',link.dataset.companySearch);}catch{}}});</script>` : ''}
+  ${jobId ? '' : '<script src="/rook-access.js"></script>'}
   ${jobId ? `<script>
   (async () => {
     try {
@@ -223,13 +222,6 @@ router.get("/jobs/:id", async (req, res, next) => {
 
 });
 
-const {createCompanyLoader,createCompanyHandlers}=require('../companySeo');
-const loadCompanies=createCompanyLoader(supabaseAnon);
-const companyHandlers=createCompanyHandlers({loadCompanies,pageShell,escapeHtml,baseUrl:APP_BASE_URL});
-router.get('/companies',companyHandlers.directory);
-router.get('/companies/:slug',companyHandlers.employer);
-router.get('/rook-companies.html',(req,res)=>res.redirect(301,'/companies'));
-
 // All existing industry and role categories reuse the active eligible inventory.
 // Employer identity and full descriptions remain behind the existing preview boundary.
 const collectionHandler = createCollectionHandler({loadInventory:loadSeoInventory,loadRelatedArticles:createRelatedArticleLoader(supabaseAnon),pageShell,escapeHtml,baseUrl:APP_BASE_URL});
@@ -290,9 +282,6 @@ router.get("/sitemap.xml", async (req, res) => {
   if (!isConfigured) return res.status(503).set("Retry-After", "300").send("Sitemap temporarily unavailable.");
   const jobUrls = [];
   try {
-    const companies=Object.values(await loadCompanies());
-    if(companies.reduce((n,c)=>n+c.count,0)>=20&&companies.filter(c=>c.count>0).length>=3)staticUrls.push(APP_BASE_URL+'/companies');
-    staticUrls.push(...companies.filter(c=>c.qualified).map(c=>APP_BASE_URL+'/companies/'+c.slug));
     const collections = await loadSeoInventory();
     staticUrls.push(...Object.values(collections).filter(c=>c.qualified).map(c=>APP_BASE_URL+c.path));
     // PostgREST can cap a single response even when limit(5000) is requested.
