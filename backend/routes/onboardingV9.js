@@ -173,7 +173,7 @@ router.post('/claim',wrap(async(req,res)=>{
   const entitlement=Array.isArray(activated.data)?activated.data[0]:activated.data;
   if(!entitlement?.outcome)throw Error('Trial entitlement could not be confirmed.');
   if(entitlement.outcome==='started'){
-    const profileResult=await db.from('candidate_profiles').select('utm_source,utm_medium,utm_campaign,utm_term,utm_content').eq('user_id',account.id).maybeSingle();
+    const profileResult=await db.from('candidate_profiles').select('name,utm_source,utm_medium,utm_campaign,utm_term,utm_content').eq('user_id',account.id).maybeSingle();
     if(!profileResult.error){
       const p=profileResult.data||{};
       const event=await db.from('ad_conversion_events').insert({

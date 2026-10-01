@@ -924,7 +924,7 @@ async function handleStripeWebhookEvent(event, { stripe, supabaseAdmin, subscrib
         return { applied: false, reason: "not_a_positive_paid_subscription_invoice" };
       }
       const {data: profile, error: profileError} = await supabaseAdmin.from("candidate_profiles")
-        .select("user_id, trial_source, utm_source, utm_medium, utm_campaign, utm_term, utm_content")
+        .select("user_id, name, trial_source, utm_source, utm_medium, utm_campaign, utm_term, utm_content")
         .eq("stripe_customer_id", invoice.customer).maybeSingle();
       if (profileError) throw profileError;
       if (!profile) throw new Error("Paid invoice has no matching candidate profile yet");
