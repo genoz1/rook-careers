@@ -290,11 +290,44 @@
   </style>
 <script src="rook-attribution.js"></script>
 <script src="rook-v8-tracking.js"></script>
+<script src="rook-auth-v8.js"></script>
 <script src="rook-v8-checkout-bridge.js"></script>
 <link rel="stylesheet" href="rook-v8-conversion.css">
 <link rel="stylesheet" href="rook-v8-signup-desktop.css">
 <link rel="stylesheet" href="rook-v8-signup-mobile.css">
 <link rel="stylesheet" href="rook-v8-brand.css">
+<style>
+/* Checkout-only desktop compaction. The shared V8 artwork remains intact while
+   the payment action and renewal disclosure stay in a laptop's first viewport. */
+@media (min-width:768px) {
+  body.v8-checkout-page > nav{height:60px;padding:6px 32px}
+  body.v8-checkout-page .v8-brand-image{width:135px;height:44px}
+  body.v8-checkout-page .nav-secure{font-size:14px;gap:8px}
+  body.v8-checkout-page .nav-secure svg{width:16px;height:19px}
+  body.v8-checkout-page main{max-width:520px;padding:10px 18px 0;gap:9px}
+  body.v8-checkout-page .trial-badge{font-size:12px;padding:4px 10px;margin-bottom:6px}
+  body.v8-checkout-page .trial-badge svg{width:13px;height:13px}
+  body.v8-checkout-page .checkout-header h1{font-size:29px;line-height:1.15;margin-bottom:4px}
+  body.v8-checkout-page .checkout-header p{font-size:14.5px;line-height:1.35;margin:0 8px}
+  body.v8-checkout-page .price-summary{padding:11px 16px;margin-top:0}
+  body.v8-checkout-page .price-row{font-size:14px;margin-bottom:6px}
+  body.v8-checkout-page .price-divider{margin:8px 0}
+  body.v8-checkout-page .price-total-value{font-size:22px}
+  body.v8-checkout-page .card-section{padding:12px 16px}
+  body.v8-checkout-page .card-section-label{font-size:12px;margin-bottom:8px}
+  body.v8-checkout-page .field-group{gap:8px}
+  body.v8-checkout-page .field-label{font-size:12px;margin-bottom:4px}
+  body.v8-checkout-page .stripe-element{min-height:42px;padding:10px 12px}
+  body.v8-checkout-page .card-row{gap:9px}
+  body.v8-checkout-page .err{font-size:12px;min-height:15px}
+  body.v8-checkout-page .submit-btn{font-size:16px;min-height:46px;padding:11px 20px}
+  body.v8-checkout-page .fine{font-size:11.5px;line-height:1.35;margin-top:0}
+  body.v8-checkout-page .trust-row{margin-top:2px;gap:14px}
+  body.v8-checkout-page .trust-item{font-size:11.5px}
+  body.v8-checkout-page .trust-item svg{width:14px;height:14px}
+  body.v8-checkout-page:has(main) footer.conversion-trust{margin-top:16px!important}
+}
+</style>
 </head>
 <!-- Google tag — was missing from this page entirely before now, which
      is why checkout_started had nowhere to fire from. Same shared
@@ -311,7 +344,7 @@
   gtag('config', 'AW-18428232873');
   gtag('config', 'G-LDG2CL5Z8R');
 </script>
-<body>
+<body class="v8-checkout-page">
 
 <nav>
   <a href="/" class="nav-logo">
