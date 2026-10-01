@@ -193,6 +193,12 @@ create table if not exists candidate_profiles (
                                           -- frontend (Settings page) can show "Free
                                           -- trial — ends <date>" without a live
                                           -- Stripe API call on every page load.
+  trial_source text,                      -- immutable origin of the first trial;
+                                          -- V9 uses this to distinguish its no-card
+                                          -- entitlement from existing Stripe trials
+  marketing_consent_at timestamptz,       -- explicit V9 opt-in timestamp; the existing
+                                          -- digest_enabled flag remains unsubscribe state
+  subscription_started_at timestamptz,    -- set once after the first positive paid invoice
   subscription_status_synced_at timestamptz,
                                           -- the Stripe event `created` timestamp of
                                           -- the most recent webhook event that
@@ -438,6 +444,9 @@ alter table jobs add column if not exists recruiter_id uuid references recruiter
 -- actually applies these to it.
 alter table candidate_profiles add column if not exists trial_started_at timestamptz;
 alter table candidate_profiles add column if not exists trial_ends_at timestamptz;
+alter table candidate_profiles add column if not exists subscription_started_at timestamptz;
+alter table candidate_profiles add column if not exists trial_source text;
+alter table candidate_profiles add column if not exists marketing_consent_at timestamptz;
 alter table candidate_profiles add column if not exists subscription_status_synced_at timestamptz;
 alter table candidate_profiles add column if not exists utm_source text;
 alter table candidate_profiles add column if not exists utm_medium text;
