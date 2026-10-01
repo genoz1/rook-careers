@@ -3,12 +3,9 @@ const express = require('express');
 const crypto = require('crypto');
 const {createClient} = require('@supabase/supabase-js');
 const {performance} = require('node:perf_hooks');
-const {rank,readCandidates,indexFor,startIndex} = require('../v8Matching');
+const {readCandidates,indexFor,startIndex} = require('../v8Matching');
 const {rankPool} = require('../v7Matching');
 const {prepareJob} = require('../v7Location');
-const {project} = require('../pretrialProjection');
-const {classify,normalizeSelection,matches} = require('../../public/rook-job-classification');
-const {hasFullAccess} = require('../matching');
 
 const router=express.Router();
 const db=process.env.SUPABASE_URL&&process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -76,50 +73,40 @@ async function poolFor(profile,timing={}){
   const local=await indexFor(db).current(timing);
   return local||await readCandidates(db,{...profile,territory_size_preferences:TERRITORIES},timing);
 }
-function mergeFloor(preferred,widened,target=32){
-  const seen=new Set(),jobs=[];
-  for(const job of [...preferred,...widened])if(!seen.has(job.id)){seen.add(job.id);jobs.push(job);}
-  const preferredCount=preferred.length;
-  return {jobs:jobs.slice(0,target),widened:preferredCount<Math.min(target,jobs.length),preferredCount};
+function availabilityProfile(profile){return {...profile,territory_size_preferences:TERRITORIES,territory_size_preference:'local'};}
+function geographicPool(pool,profile){
+  return pool.map(job=>prepareJob(job,availabilityProfile(profile))).filter(job=>job&&
+    !(job.geographic_eligibility?.kind==='local'&&Number(job.geographic_eligibility.distance_miles)>250));
+}
+function territoryPreference(job,profile){
+  const selected=new Set(profile.territory_size_preferences||[]),kind=job.geographic_eligibility?.kind;
+  if(kind==='remote_us')return selected.has('remote')?1:0;
+  if(kind==='national_us')return selected.has('national')?1:0;
+  if(kind==='territory')return selected.has('regional')||selected.has('national')?1:0;
+  const distance=Number(job.distance_miles??job.geographic_eligibility?.distance_miles);
+  if(Number.isFinite(distance)&&distance<=50)return selected.has('local')?1:0;
+  if(Number.isFinite(distance)&&distance<=250)return selected.has('regional')?1:0;
+  return 0;
 }
 async function calculate(profile,timing={}){
   const pool=await poolFor(profile,timing);
-  const broadProfile={...profile,territory_size_preferences:TERRITORIES,territory_size_preference:'local'};
-  const opportunities=pool.map(job=>prepareJob(job,broadProfile)).filter(Boolean);
-  const industryAligned=profile.desired_industries.length?opportunities.filter(job=>matches(job,profile.desired_industries)):opportunities;
-  const preferred=rankPool(pool,scoringProfile(profile),[]);
-  const widened=rankPool(pool,scoringProfile(broadProfile),[]);
-  const floor=mergeFloor(preferred,widened,32);
-  return {pool,opportunities,industryAligned,preferred,widened,...floor};
+  const opportunities=geographicPool(pool,profile);
+  const rankingProfile=availabilityProfile(scoringProfile(profile));
+  const ranked=rankPool(opportunities,rankingProfile,[]).sort((a,b)=>
+    territoryPreference(b,profile)-territoryPreference(a,profile)||
+    (Number(b.match?.overall_score)||0)-(Number(a.match?.overall_score)||0)||String(a.id).localeCompare(String(b.id)));
+  return {pool,opportunities,jobs:ranked.slice(0,32)};
 }
-function prioritize(jobs,industries){
-  const selected=normalizeSelection(industries);
-  return [...jobs].sort((a,b)=>{
-    const ai=matches(a,selected)?1:0,bi=matches(b,selected)?1:0;
-    return bi-ai-(Number(a.match?.overall_score)||0)+(Number(b.match?.overall_score)||0)||String(a.id).localeCompare(String(b.id));
-  });
+function safeSummary(profile,result){
+  return {profile:{home_location_label:profile.home_location_label,home_city:profile.home_city,home_state:profile.home_state,
+    desired_industries:profile.desired_industries,total_sales_years:profile.total_sales_years,
+    territory_size_preferences:profile.territory_size_preferences,subscription_status:profile.subscription_status},
+    opportunity_count:result.opportunities.length,best_match_count:result.jobs.length};
 }
-function reveal(job){
-  return {id:job.id,subscription_required:false,preview_revealed:true,title_original:job.title_original,
-    company_name:job.company_name,location_raw:job.location_raw,city:job.city,state:job.state,distance_miles:job.distance_miles,
-    remote_status:job.remote_status,employment_type:job.employment_type,date_posted:job.date_posted,first_seen_at:job.first_seen_at,
-    industry_classification:classify(job),match:job.match,application_url:job.application_url,source_url:job.source_url};
-}
-function safePreview(profile,jobs,unlocked,widened,preferredCount,opportunityCount){
-  return {profile:{home_location_label:profile.home_location_label,desired_industries:profile.desired_industries,
-    total_sales_years:profile.total_sales_years,territory_size_preferences:profile.territory_size_preferences,
-    subscription_status:profile.subscription_status},unlocked,widened,preferred_count:preferredCount,
-    opportunity_count:opportunityCount,best_match_count:jobs.length,
-    jobs:jobs.map((job,index)=>unlocked?reveal(job):index<2?reveal(job):project(job,index,{dashboard:true}))};
-}
-async function details(jobs,unlocked=false){
-  const ids=jobs.slice(0,unlocked?jobs.length:2).map(job=>job.id);
-  if(!ids.length)return jobs;
-  const result=await db.from('jobs').select('id,company_name,city,application_url,source_url').eq('status','active')
-    .eq('moderation_status','approved').in('id',ids);
-  if(result.error||result.data?.length!==ids.length)throw Error('Preview details changed; retry search.');
-  const map=new Map(result.data.map(job=>[job.id,job]));
-  return jobs.map(job=>map.has(job.id)?{...job,...map.get(job.id)}:job);
+function storedSummary(profile){
+  const opportunityCount=Number(profile.v9_opportunity_count),bestMatchCount=Number(profile.v9_best_match_count);
+  return Number.isInteger(opportunityCount)&&opportunityCount>=0&&Number.isInteger(bestMatchCount)&&bestMatchCount>=0
+    ?safeSummary(profile,{opportunities:{length:opportunityCount},jobs:{length:bestMatchCount}}):null;
 }
 async function session(req){
   const token=req.get('X-ROOK-V9')||'';
@@ -141,37 +128,31 @@ router.get('/pool',wrap(async(req,res)=>{
 }));
 router.post('/refine',wrap(async(req,res)=>{
   const profile=profileFrom(req.body,{partial:true});
-  const result=await calculate(profile);
   const stage=String(req.body.stage||'location');
-  let count=result.opportunities.length,label='opportunities in your search area';
-  if(['industry','experience','territory'].includes(stage)){
-    count=Math.min(result.opportunities.length,Math.max(Math.min(32,result.opportunities.length),result.industryAligned.length));label='opportunities aligned with your industry preferences';
-  }
-  if(['experience','territory'].includes(stage)){
-    count=Math.min(result.opportunities.length,Math.max(Math.min(32,result.opportunities.length),Math.min(result.industryAligned.length,result.preferred.length)));label='best available matches';
-  }
-  if(stage==='territory'){count=result.jobs.length;label=result.widened?'best available matches':'best matches for your preferences';}
-  res.json({count,opportunities:result.opportunities.length,label,widened:stage==='territory'&&result.widened,preferred_count:result.preferredCount});
+  if(stage!=='location')return res.status(400).json({error:'Invalid refinement stage.'});
+  // ZIP establishes one stable availability pool. Later answers only rank it.
+  const pool=await poolFor(profile,{validate_with_session:true});
+  res.json({count:geographicPool(pool,profile).length,label:'opportunities available from your area'});
 }));
 router.post('/session',wrap(async(req,res)=>{
   const profile=profileFrom(req.body),timing={validate_with_session:true},started=performance.now();
   const calculated=await calculate(profile,timing);
-  let jobs=prioritize(calculated.jobs,profile.desired_industries);
   const token=crypto.randomBytes(32).toString('hex');
-  const record={token_hash:crypto.createHash('sha256').update(token).digest('hex'),profile,jobs:[],expires_at:new Date(Date.now()+24*60*60*1000).toISOString()};
+  const storedProfile={...profile,v9_opportunity_count:calculated.opportunities.length,v9_best_match_count:calculated.jobs.length};
+  // This is only an onboarding-draft lifetime, not the trial clock. The
+  // actual 24 hours starts in /claim after verified authentication succeeds.
+  const record={token_hash:crypto.createHash('sha256').update(token).digest('hex'),profile:storedProfile,jobs:[],expires_at:new Date(Date.now()+7*24*60*60*1000).toISOString()};
   const saved=await db.from(table).insert(record);if(saved.error)throw saved.error;
-  jobs=await details(jobs,false);
   timing.total_ms=performance.now()-started;
-  res.json({token,preview:safePreview(profile,jobs,false,calculated.widened,calculated.preferredCount,calculated.opportunities.length),timing});
+  res.json({token,preview:safeSummary(profile,calculated),timing});
 }));
 router.get('/session',wrap(async(req,res)=>{
   const saved=await session(req);if(!saved)return res.status(410).json({error:'Your search expired. Please start again.'});
   const account=await user(req);if(saved.user_id&&saved.user_id!==account?.id)return res.status(403).json({error:'Sign in to your account.'});
   let profile={...saved.profile};
   if(account&&saved.user_id===account.id){const row=await db.from('candidate_profiles').select('*').eq('user_id',account.id).maybeSingle();if(row.error)throw row.error;profile={...profile,...row.data,...saved.profile};}
-  const calculated=await calculate(profile);let jobs=prioritize(calculated.jobs,profile.desired_industries);
-  const unlocked=!!(saved.user_id&&account?.id===saved.user_id&&hasFullAccess(profile));jobs=await details(jobs,unlocked);
-  res.json(safePreview(profile,jobs,unlocked,calculated.widened,calculated.preferredCount,calculated.opportunities.length));
+  const persisted=storedSummary(profile);if(persisted)return res.json(persisted);
+  res.json(safeSummary(profile,await calculate(profile)));
 }));
 router.post('/claim',wrap(async(req,res)=>{
   let saved=await session(req);const account=await user(req);if(!saved||!account)return res.status(401).json({error:'Verify your email and sign in first.'});
@@ -179,14 +160,32 @@ router.post('/claim',wrap(async(req,res)=>{
   if(saved.user_id!==account.id)return res.status(403).json({error:'These matches belong to another account.'});
   if(!saved.transferred_at){
     const existing=await db.from('candidate_profiles').select('utm_source').eq('user_id',account.id).maybeSingle();if(existing.error)throw existing.error;
-    const profile={...saved.profile};delete profile.onboarding_version;
+    const profile={...saved.profile};delete profile.onboarding_version;delete profile.v9_opportunity_count;delete profile.v9_best_match_count;
     if(existing.data?.utm_source)for(const key of ['utm_source','utm_medium','utm_campaign','utm_term','utm_content'])delete profile[key];
     const name=[account.user_metadata?.first_name,account.user_metadata?.last_name].filter(Boolean).join(' ');
     const written=await db.from('candidate_profiles').upsert({...profile,user_id:account.id,email:account.email,...(name?{name}:{})},{onConflict:'user_id'});if(written.error)throw written.error;
     const done=await db.from(table).update({transferred_at:new Date().toISOString()}).eq('token_hash',saved.token_hash).eq('user_id',account.id);if(done.error)throw done.error;
   }
-  res.json({ok:true});
+  const marketingConsent=req.body?.marketing_consent===true;
+  const activated=await db.rpc('activate_v9_trial',{p_user_id:account.id,p_marketing_consent:marketingConsent});
+  if(activated.error)throw activated.error;
+  const entitlement=Array.isArray(activated.data)?activated.data[0]:activated.data;
+  if(!entitlement?.outcome)throw Error('Trial entitlement could not be confirmed.');
+  if(entitlement.outcome==='started'){
+    const profileResult=await db.from('candidate_profiles').select('utm_source,utm_medium,utm_campaign,utm_term,utm_content').eq('user_id',account.id).maybeSingle();
+    if(!profileResult.error){
+      const p=profileResult.data||{};
+      const event=await db.from('ad_conversion_events').insert({
+        event_key:`v9_trial_started_${account.id}`,event_type:'trial_started',user_id:account.id,
+        utm_source:p.utm_source||null,utm_medium:p.utm_medium||null,utm_campaign:p.utm_campaign||null,
+        utm_term:p.utm_term||null,utm_content:p.utm_content||null,
+        platform_inferred:p.utm_source||'unknown',occurred_at:entitlement.trial_started_at,
+      });
+      if(event.error&&event.error.code!=='23505')console.error('V9 trial analytics write failed:',event.error.message);
+    }
+  }
+  res.json({ok:true,...entitlement});
 }));
 
 module.exports=router;
-module.exports._test={INDUSTRIES,TERRITORIES,profileFrom,mergeFloor,prioritize};
+module.exports._test={INDUSTRIES,TERRITORIES,profileFrom,availabilityProfile,geographicPool,territoryPreference,storedSummary};

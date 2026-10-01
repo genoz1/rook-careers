@@ -18,7 +18,6 @@
 
 const express = require("express");
 const Stripe = require("stripe");
-const crypto = require("crypto");
 const { createClient } = require("@supabase/supabase-js");
 
 const router = express.Router();
@@ -94,6 +93,11 @@ function buildV9SubscriptionParams({ customerId, paymentMethodId, userId, priceI
     payment_behavior: "error_if_incomplete",
     metadata: { user_id: userId, onboarding_version: "v9", ...utm },
   };
+}
+
+function canPurchaseV9Intro(profile) {
+  if (!profile || profile.subscription_status === "active") return false;
+  return profile.trial_source === "v9" && Boolean(profile.trial_started_at) && !profile.subscription_started_at;
 }
 
 function requireConfig(req, res, next) {
@@ -442,24 +446,22 @@ router.post("/stripe/create-v9-subscription-from-setup", requireConfig, requireA
     const paymentMethodId = req.body?.payment_method_id;
     const customerId = req.body?.customer_id;
     const couponId = process.env.STRIPE_V9_FIRST_MONTH_COUPON_ID;
-    const sessionToken = req.get("X-ROOK-V9") || "";
     if (!/^pm_/.test(String(paymentMethodId || "")) || !/^cus_/.test(String(customerId || "")))
       return res.status(400).json({ error: "Invalid payment setup. Please restart checkout." });
     if (!couponId) return res.status(503).json({ error: "The V9 introductory offer is not configured yet." });
-    if (!/^[a-f0-9]{64}$/.test(sessionToken)) return res.status(403).json({ error: "Your V9 search is missing or expired." });
-
-    const tokenHash = crypto.createHash("sha256").update(sessionToken).digest("hex");
-    const saved = await supabaseAdmin.from("onboarding_v7_sessions").select("profile,user_id")
-      .eq("token_hash", tokenHash).gt("expires_at", new Date().toISOString()).maybeSingle();
-    if (saved.error || saved.data?.profile?.onboarding_version !== "v9" || saved.data?.user_id !== req.user.id)
-      return res.status(403).json({ error: "Sign in to the account that created these V9 matches." });
 
     const profileResult = await supabaseAdmin.from("candidate_profiles")
-      .select("stripe_customer_id,subscription_status,utm_source,utm_medium,utm_campaign,utm_term,utm_content")
+      .select("stripe_customer_id,subscription_status,subscription_started_at,trial_started_at,trial_ends_at,trial_source,utm_source,utm_medium,utm_campaign,utm_term,utm_content")
       .eq("user_id", req.user.id).maybeSingle();
     if (profileResult.error) throw profileResult.error;
     const profile = profileResult.data || {};
-    if (profile.subscription_status === "active" || profile.subscription_status === "trialing")
+    // A returning V9 trial user may no longer have the browser's onboarding
+    // token. The authenticated, durable profile history is sufficient and
+    // prevents either a second trial, a repeated introductory month, or
+    // another account claiming the offer.
+    if (!canPurchaseV9Intro(profile))
+      return res.status(403).json({ error: "This introductory offer is available once, after a verified V9 trial." });
+    if (profile.subscription_status === "active")
       return res.status(409).json({ error: "This account already has membership access." });
     if (profile.stripe_customer_id && profile.stripe_customer_id !== customerId)
       return res.status(400).json({ error: "Payment customer mismatch. Please restart checkout." });
@@ -477,9 +479,10 @@ router.post("/stripe/create-v9-subscription-from-setup", requireConfig, requireA
     }));
     if (subscription.status !== "active") throw new Error("Payment was not completed. No access was granted.");
 
+    const paidAt=new Date().toISOString();
     const update = await supabaseAdmin.from("candidate_profiles").upsert({
       user_id:req.user.id,stripe_customer_id:customerId,subscription_status:subscription.status,
-      updated_at:new Date().toISOString(),
+      subscription_started_at:profile.subscription_started_at||paidAt,updated_at:paidAt,
     },{onConflict:"user_id"});
     if (update.error) console.error("V9 subscription profile update failed:",update.error.message);
     console.log(`[checkout-v9] uid=${req.user.id.slice(0,8)} subscription=${subscription.id} status=${subscription.status}`);
@@ -975,5 +978,6 @@ module.exports.buildCheckoutSessionParams = buildCheckoutSessionParams;
 module.exports.validateV9Coupon = validateV9Coupon;
 module.exports.validateV9MonthlyPrice = validateV9MonthlyPrice;
 module.exports.buildV9SubscriptionParams = buildV9SubscriptionParams;
+module.exports.canPurchaseV9Intro = canPurchaseV9Intro;
 module.exports.warnIfPortalCancellationModeIsWrong = warnIfPortalCancellationModeIsWrong;
 module.exports._resetPortalConfigCheckForTests = _resetPortalConfigCheckForTests;
