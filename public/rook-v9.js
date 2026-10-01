@@ -37,7 +37,7 @@
   function setButton(label,disabled=false,green=false){button.textContent=label+'  →';button.disabled=disabled;button.classList.toggle('green',green);}
   function show(name){
     state.screen=name;screens.forEach(el=>el.classList.toggle('active',el.dataset.screen===name));progress();$('formError').textContent='';
-    const labels={welcome:'Get Started',location:'Continue','matching-intro':'Continue',industry:'Continue',trust:'Continue',experience:'Continue',territory:'Find My Matches',samples:'See What Membership Includes',workflow:'See Membership Offer',offer:'Continue to Membership'};
+    const labels={welcome:'Try ROOK Today for Free',location:'Continue','matching-intro':'Continue',industry:'Continue',trust:'Continue',experience:'Continue',territory:'Find My Matches',samples:'See What Membership Includes',workflow:'See Free Access',offer:'Try ROOK Today for Free'};
     const hide=['searching'].includes(name);document.querySelector('.bottom').hidden=hide;
     setButton(labels[name]||'Continue',!ready(name),name==='offer');
     if(['location','industry','experience','territory'].includes(name))track('v9_question_viewed',{stage:name});

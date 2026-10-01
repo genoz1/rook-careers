@@ -139,7 +139,9 @@ router.post('/session',wrap(async(req,res)=>{
   const calculated=await calculate(profile,timing);
   const token=crypto.randomBytes(32).toString('hex');
   const storedProfile={...profile,v9_opportunity_count:calculated.opportunities.length,v9_best_match_count:calculated.jobs.length};
-  const record={token_hash:crypto.createHash('sha256').update(token).digest('hex'),profile:storedProfile,jobs:[],expires_at:new Date(Date.now()+24*60*60*1000).toISOString()};
+  // This is only an onboarding-draft lifetime, not the trial clock. The
+  // actual 24 hours starts in /claim after verified authentication succeeds.
+  const record={token_hash:crypto.createHash('sha256').update(token).digest('hex'),profile:storedProfile,jobs:[],expires_at:new Date(Date.now()+7*24*60*60*1000).toISOString()};
   const saved=await db.from(table).insert(record);if(saved.error)throw saved.error;
   timing.total_ms=performance.now()-started;
   res.json({token,preview:safeSummary(profile,calculated),timing});
@@ -164,7 +166,25 @@ router.post('/claim',wrap(async(req,res)=>{
     const written=await db.from('candidate_profiles').upsert({...profile,user_id:account.id,email:account.email,...(name?{name}:{})},{onConflict:'user_id'});if(written.error)throw written.error;
     const done=await db.from(table).update({transferred_at:new Date().toISOString()}).eq('token_hash',saved.token_hash).eq('user_id',account.id);if(done.error)throw done.error;
   }
-  res.json({ok:true});
+  const marketingConsent=req.body?.marketing_consent===true;
+  const activated=await db.rpc('activate_v9_trial',{p_user_id:account.id,p_marketing_consent:marketingConsent});
+  if(activated.error)throw activated.error;
+  const entitlement=Array.isArray(activated.data)?activated.data[0]:activated.data;
+  if(!entitlement?.outcome)throw Error('Trial entitlement could not be confirmed.');
+  if(entitlement.outcome==='started'){
+    const profileResult=await db.from('candidate_profiles').select('utm_source,utm_medium,utm_campaign,utm_term,utm_content').eq('user_id',account.id).maybeSingle();
+    if(!profileResult.error){
+      const p=profileResult.data||{};
+      const event=await db.from('ad_conversion_events').insert({
+        event_key:`v9_trial_started_${account.id}`,event_type:'trial_started',user_id:account.id,
+        utm_source:p.utm_source||null,utm_medium:p.utm_medium||null,utm_campaign:p.utm_campaign||null,
+        utm_term:p.utm_term||null,utm_content:p.utm_content||null,
+        platform_inferred:p.utm_source||'unknown',occurred_at:entitlement.trial_started_at,
+      });
+      if(event.error&&event.error.code!=='23505')console.error('V9 trial analytics write failed:',event.error.message);
+    }
+  }
+  res.json({ok:true,...entitlement});
 }));
 
 module.exports=router;

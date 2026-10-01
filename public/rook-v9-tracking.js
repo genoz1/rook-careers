@@ -11,7 +11,7 @@
     ['count','opportunities','best_match_count'].forEach(function(k){var v=params&&params[k];if(Number.isFinite(v))safe[k]=v});
     if(typeof rookGetStoredAttribution==='function'){var a=rookGetStoredAttribution();['source','medium','campaign','content','term'].forEach(function(k){var v=a['utm_'+k];if(typeof v==='string'&&!/@|https?:\/\//i.test(v))safe['first_touch_'+k]=v.slice(0,100)})}
     if(typeof gtag==='function')gtag('event',name,safe);
-    var meta={v9_landing:'ViewContent',v9_checkout_started:'InitiateCheckout',v9_paid_subscription_created:'Subscribe'}[name];
+    var meta={v9_landing:'ViewContent',v9_free_trial_started:'StartTrial',v9_checkout_started:'InitiateCheckout',v9_first_month_subscription_purchased:'Subscribe'}[name];
     if(meta)window.fbq('trackSingle',pixel,meta);
   }catch(_){}};
 })();
