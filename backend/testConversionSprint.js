@@ -60,8 +60,10 @@ vm.runInNewContext(source,ctx);
  vm.runInNewContext(fs.readFileSync('public/rook-pretrial.js','utf8'),render);
  render.rookUpdateV7MatchCount(12);assert.equal(heading.textContent,'12 matching opportunities');render.rookUpdateV7MatchCount(0);assert.equal(heading.textContent,'No matches for these selections');
  const card=render.rookRenderMaskedJob({company_name:'SECRETEMPLOYER',title_original:'SECRETTITLE',source_url:'https://secret.invalid',role_type:'Territory Sales',industry_classification:{labels:['Diagnostics']},territory_type:'Local territory',freshness_label:'Current opportunity',match:{candidate_fit:null,preference_fit:84}});
- assert(!/SECRET|secret.invalid/.test(card));assert(card.includes('84%'));assert(card.includes('Preference Match'));assert(card.includes('Unlock my matches — 3 days free'));
- for (const file of ['public/rook-onboarding-v7-signup.html','public/rook-checkout-v7.html']) {const h=fs.readFileSync(file,'utf8');assert(h.includes('$19.99/month'));assert(h.includes('rook-privacy.html'));assert(h.includes('rook-terms.html'));}
+ assert(!/SECRET|secret.invalid/.test(card));assert(card.includes('84%'));assert(card.includes('Preference Match'));assert(card.includes('Try ROOK Today for Free'));
+ const server=fs.readFileSync('server.js','utf8');
+ for (const retired of ['/rook-onboarding-v7-signup.html','/rook-checkout-v7.html']) assert(server.includes(retired));
+ assert(server.includes('res.redirect(302, "/rook-onboarding-v8.html" + query)'));
  const dashboard=fs.readFileSync('public/rook-dashboard-v7.html','utf8');assert(dashboard.includes('if (!rookV7Unlocked) return;'));
  console.log('PASS conversion: immediate question one, no invented claims, four unchanged inputs, retry recovery, truthful completion events, deduplicated transitions, safe count/score/CTA rendering, offer disclosures and optional pretrial résumé.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -15,6 +15,7 @@ const { generateEmbedding } = require("../ai/embeddings");
 const { suggestRoles } = require("../ai/roleSuggestions");
 const { scoreAndStoreForCandidate } = require("../scoring/precompute");
 const { geocodeZip } = require("../geocoding");
+const { performance } = require("node:perf_hooks");
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -340,58 +341,50 @@ router.put("/profile", requireConfig, requireAuth, async (req, res) => {
 // should never fail just because analysis had a hiccup.
 router.post("/resume", requireConfig, requireAuth, upload.single("resume"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+  const pipelineStarted = performance.now();
+  const timings = {};
+  const timed = async (name, work) => {
+    const started = performance.now();
+    try { return await work(); }
+    finally { timings[`${name}_ms`] = Math.round(performance.now() - started); }
+  };
 
   const filePath = `${req.user.id}/${Date.now()}-${req.file.originalname}`;
 
-  const { error: uploadError } = await supabaseAdmin.storage
+  const { error: uploadError } = await timed("storage", () => supabaseAdmin.storage
     .from("resumes")
-    .upload(filePath, req.file.buffer, { contentType: req.file.mimetype, upsert: false });
+    .upload(filePath, req.file.buffer, { contentType: req.file.mimetype, upsert: false }));
 
   if (uploadError) return res.status(500).json({ error: uploadError.message });
 
   let resumeText = null;
   let resumeStructured = null;
   let resumeEmbedding = null;
-  let suggestedRoles = null;
   let analysisStatus = "skipped";
 
   try {
-    resumeText = await extractResumeText(req.file.buffer, req.file.mimetype);
+    resumeText = await timed("extraction", () => extractResumeText(req.file.buffer, req.file.mimetype));
   } catch (err) {
     console.error(`Resume text extraction threw: ${err.message}`);
   }
 
   if (resumeText) {
-    try {
-      resumeStructured = await analyzeResume(resumeText);
+    // Structured analysis and embedding generation are independent. Running
+    // them together removes one full external-API wait from the upload's
+    // critical path without changing either result or matching behavior.
+    const [analysisResult, embeddingResult] = await Promise.allSettled([
+      timed("analysis", () => analyzeResume(resumeText)),
+      timed("embedding", () => generateEmbedding(resumeText)),
+    ]);
+    if (analysisResult.status === "fulfilled") {
+      resumeStructured = analysisResult.value;
       analysisStatus = "ok";
-    } catch (err) {
-      console.error(`Resume AI analysis failed: ${err.message}`);
+    } else {
+      console.error(`Resume AI analysis failed: ${analysisResult.reason?.message || analysisResult.reason}`);
       analysisStatus = "failed";
     }
-
-    // Embedding generation is independent of the structured analysis —
-    // one failing doesn't block the other, since they serve different
-    // parts of the matching engine (category matching vs. semantic
-    // similarity).
-    try {
-      resumeEmbedding = await generateEmbedding(resumeText);
-    } catch (err) {
-      console.error(`Resume embedding generation failed: ${err.message}`);
-    }
-
-    // Role suggestions computed once here, alongside the rest of the
-    // analysis, rather than live on every Career Intelligence page
-    // visit — same "analyze once, read many times" pattern as
-    // resume_structured itself. Needs resumeStructured to have
-    // succeeded first (it's the input), so this only runs if that did.
-    if (resumeStructured) {
-      try {
-        suggestedRoles = await suggestRoles(resumeStructured);
-      } catch (err) {
-        console.error(`Role suggestion failed: ${err.message}`);
-      }
-    }
+    if (embeddingResult.status === "fulfilled") resumeEmbedding = embeddingResult.value;
+    else console.error(`Resume embedding generation failed: ${embeddingResult.reason?.message || embeddingResult.reason}`);
   } else {
     analysisStatus = "no_text_extracted";
   }
@@ -403,7 +396,7 @@ router.post("/resume", requireConfig, requireAuth, upload.single("resume"), asyn
   // meaning the file path never actually saved.
   //
   // CRITICAL: only include resume_text/resume_structured/
-  // candidate_embedding/suggested_roles in the payload when THIS
+  // candidate_embedding in the payload when THIS
   // attempt actually produced a value. Earlier versions of this route
   // always included them — even as null when extraction or analysis
   // failed — which meant a failed re-upload silently wiped out
@@ -419,13 +412,12 @@ router.post("/resume", requireConfig, requireAuth, upload.single("resume"), asyn
   if (resumeText) updatePayload.resume_text = resumeText;
   if (resumeStructured) updatePayload.resume_structured = resumeStructured;
   if (resumeEmbedding) updatePayload.candidate_embedding = resumeEmbedding;
-  if (suggestedRoles) updatePayload.suggested_roles = suggestedRoles;
 
-  const { data: updatedProfile, error: dbError } = await supabaseAdmin
+  const { data: updatedProfile, error: dbError } = await timed("profile_write", () => supabaseAdmin
     .from("candidate_profiles")
     .upsert(updatePayload, { onConflict: "user_id" })
     .select()
-    .single();
+    .single());
 
   if (dbError) return res.status(500).json({ error: dbError.message });
 
@@ -442,6 +434,26 @@ router.post("/resume", requireConfig, requireAuth, upload.single("resume"), asyn
     // succeeded, since the field it was checking simply wasn't here.
     resume_structured: resumeStructured,
   });
+  timings.response_ms = Math.round(performance.now() - pipelineStarted);
+  console.log(`[resume] uid=${req.user.id.slice(0,8)} analysis=${analysisStatus} ${Object.entries(timings).map(([key,value]) => `${key}=${value}`).join(" ")}`);
+
+  // Suggested roles do not affect matching. Generate them after the upload
+  // response, then update only if this résumé is still current so a slow
+  // result can never overwrite a newer upload.
+  if (resumeStructured) {
+    const rolesStarted = performance.now();
+    suggestRoles(resumeStructured)
+      .then(async (suggestedRoles) => {
+        if (!suggestedRoles) return;
+        const result = await supabaseAdmin.from("candidate_profiles")
+          .update({ suggested_roles: suggestedRoles })
+          .eq("user_id", req.user.id)
+          .eq("resume_file_path", filePath);
+        if (result.error) throw result.error;
+        console.log(`[resume] uid=${req.user.id.slice(0,8)} role_suggestions_ms=${Math.round(performance.now()-rolesStarted)}`);
+      })
+      .catch((err) => console.error(`Role suggestion failed: ${err.message}`));
+  }
 
   // Fire-and-forget rescore — a new résumé changes candidate_fit
   // substantially (industries, product categories, seniority, the

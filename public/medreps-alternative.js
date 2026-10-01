@@ -14,15 +14,9 @@
     link.href = destination.pathname + destination.search;
     link.addEventListener('click', function () { track('medreps_alternative_cta_click', {cta_location:link.dataset.cta}); });
   });
-  // Trial length is controlled by the live billing configuration; omit the offer if unavailable.
-  fetch('/api/stripe/trial-config', {cache:'no-store'}).then(function (response) {
-    if (!response.ok) throw Error('Trial configuration unavailable');
-    return response.json();
-  }).then(function (config) {
-    if (Number.isInteger(config.trialDays) && config.trialDays > 0) {
-      var offer = document.getElementById('trialOffer');
-      offer.textContent = 'Try ROOK free for ' + config.trialDays + ' ' + (config.trialDays === 1 ? 'day' : 'days') + '.';
-      offer.hidden = false;
-    }
-  }).catch(function () {});
+  var offer = document.getElementById('trialOffer');
+  if (offer) {
+    offer.textContent = '24 hours of full access. No credit card required.';
+    offer.hidden = false;
+  }
 })();

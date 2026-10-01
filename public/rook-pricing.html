@@ -67,7 +67,6 @@
   .price-row{display:flex; align-items:baseline; justify-content:center; gap:6px; margin-bottom:6px;}
   .price{font-family:var(--font-display); font-size:52px; font-weight:700;}
   .period{font-size:15px; color:var(--muted);}
-  .annual-note{font-size:13px; color:var(--muted); margin-bottom:28px;}
   .plan-list{list-style:none; text-align:left; margin-bottom:32px;}
   .plan-list li{display:flex; align-items:flex-start; gap:10px; font-size:14.5px; margin-bottom:14px;}
   .plan-list svg{width:17px; height:17px; color:var(--teal); flex-shrink:0; margin-top:2px;}
@@ -149,28 +148,21 @@
 <div class="wrap">
   <div class="plan-card">
     <div class="plan-name">Professional</div>
-    <div style="font-size:18px;font-weight:700;color:#12B8A6;margin-bottom:4px;">3-Day Free Trial</div>
-    <div style="font-size:13px;color:#7a8fa6;margin-bottom:12px;">then</div>
+    <div style="font-size:18px;font-weight:700;color:#12B8A6;margin-bottom:4px;">Try ROOK Today for Free</div>
+    <div style="font-size:13px;color:#7a8fa6;margin-bottom:12px;">24 hours of full access. No credit card required.</div>
     <div class="price-row">
-      <span class="price">$19.99</span>
-      <span class="period">/ month</span>
+      <span class="price">$9.99</span>
+      <span class="period">first 30 paid days</span>
     </div>
     <!-- Mobile-only secondary context — always true for the $19.99/month plan.
          Hidden on desktop via .price-subtext{display:none} below;
          shown only at max-width:880px so the desktop card is unchanged. -->
     <div class="price-subtext">Less than $1 a day</div>
-    <div class="annual-note">or $249/year — save ~28%</div>
-    <!-- Empty by default (no banner) — matches the original $19.99-upfront
-         design exactly when the trial is off/unset. Only filled in by
-         JS below when the server reports a trial is actually active,
-         so a page that never gets this far (JS disabled, fetch fails)
-         still shows the correct, safe default: no trial claim. -->
-    <div id="trialBanner" style="display:none; background:#F0F7FF; border:1px solid #D6E7FF; border-radius:10px; padding:10px 16px; margin:14px 0; text-align:center; font-size:14px; font-weight:700; color:#1463FF;"></div>
     <!-- CTA is placed before the benefits list so it is visible in the
          first viewport at mobile sizes together with the price and terms.
          The pricing disclosure sits directly under the button as required. -->
-    <a href="#" class="btn btn-primary" id="subscribeBtn" onclick="handleSubscribe(event)">Get My Matches</a>
-    <div id="renewalDisclosure" style="display:none; font-size:12px; color:var(--muted, #5B6B85); text-align:center; margin-top:10px; line-height:1.5;"></div>
+    <a href="#" class="btn btn-primary" id="subscribeBtn" onclick="handleSubscribe(event)">Try ROOK Today for Free</a>
+    <div id="renewalDisclosure" style="font-size:12px; color:var(--muted, #5B6B85); text-align:center; margin-top:10px; line-height:1.5;">Then $19.99/month. Cancel anytime.</div>
     <div id="subscribeMsg" style="font-size:12.5px; color:#C23B3B; text-align:center; margin-top:10px;"></div>
     <ul class="plan-list" style="margin-top:18px;">
       <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>Unlimited AI-matched opportunities</li>
@@ -188,92 +180,9 @@
 <script src="rook-auth.js"></script>
 <script src="rook-access.js"></script>
 <script>
-  // Direct instruction: disabling the trial (TRIAL_PERIOD_DAYS=0) must
-  // be a true one-setting rollback — no copy change required anywhere,
-  // AND no hardcoded day count anywhere. Every piece of trial copy on
-  // this page is built from the actual number the server reports, so
-  // changing TRIAL_PERIOD_DAYS from 3 to 7 (or anything else) updates
-  // this page automatically on next load — nothing here to edit.
-  let subscribeBtnDefaultText = 'Get My Matches';
-  let trialActive = false;
-
-  async function applyTrialConfig() {
-    try {
-      const res = await fetch('/api/stripe/trial-config');
-      if (!res.ok) return; // fetch failed — keep the safe, no-trial default markup as-is
-      const data = await res.json();
-      const days = Number(data.trialDays) || 0;
-      trialActive = days > 0;
-      if (trialActive) {
-        subscribeBtnDefaultText = `Start Your ${days}-Day Free Trial`;
-        document.getElementById('subscribeBtn').textContent = subscribeBtnDefaultText;
-        // Correct singular for a one-day trial; compound-adjective form (N-day) is
-        // already correct English for any N and requires no change.
-        const dayWord = days === 1 ? 'day' : 'days';
-        const banner = document.getElementById('trialBanner');
-        banner.textContent = `${days} ${dayWord} free, then $19.99/month. Cancel anytime.`;
-        banner.style.display = 'block';
-        const disclosure = document.getElementById('renewalDisclosure');
-        disclosure.textContent = `$0 today. Then $19.99/month after your ${days}-day free trial. Cancel anytime.`;
-        disclosure.style.display = 'block';
-        // Update mobile sticky CTA to agree with the main subscribe button
-        const rmBtn = document.getElementById('rmStickyBtn');
-        const rmDisclose = document.getElementById('rmStickyDisclose');
-        if (rmBtn) rmBtn.textContent = `Start Your ${days}-Day Free Trial`;
-        if (rmDisclose) rmDisclose.textContent = `$0 today · Then $19.99/month after ${days} ${dayWord} · Cancel anytime`;
-        // Also show a no-trial fallback when trial is off
-        document.getElementById('faqTrialAnswer').textContent =
-          `Yes. ROOK includes a ${days}-day free trial with full access. After the trial, the subscription is $19.99/month unless you cancel before the trial ends.`;
-      } else {
-        // No trial — update mobile sticky to agree with paid-only wording
-        const rmBtn = document.getElementById('rmStickyBtn');
-        const rmDisclose = document.getElementById('rmStickyDisclose');
-        if (rmBtn) rmBtn.textContent = 'Get Full Access — $19.99/month';
-        if (rmDisclose) rmDisclose.textContent = 'Cancel anytime';
-      }
-      // trialDays === 0 (or the request fails): leave the page exactly
-      // as it was written above — "Get My Matches," no banner, no
-      // renewal disclosure, and the FAQ's original no-trial answer.
-      // That's the deliberate default, not a special case to branch
-      // into.
-    } catch {
-      // Network error — same reasoning as a non-ok response above:
-      // the markup already shows the correct no-trial default.
-    }
-  }
-  applyTrialConfig();
-
   async function handleSubscribe(e) {
     e.preventDefault();
-    const btn = document.getElementById('subscribeBtn');
-    const msg = document.getElementById('subscribeMsg');
-    msg.textContent = '';
-
-    const token = await rookGetAccessToken();
-    if (!token) {
-      window.location.href = 'rook-onboarding-v8.html';
-      return;
-    }
-
-    btn.textContent = trialActive ? 'Starting your free trial...' : 'Redirecting to checkout...';
-    try {
-      // Forward first-touch ad attribution (see rook-attribution.js) so
-      // it lands in Stripe metadata alongside the trial/subscription —
-      // this is what lets a trial start (and its eventual paid
-      // conversion) be traced back to Google, LinkedIn, Facebook,
-      // organic, etc. Harmless to send even when there's no trial.
-      const res = await rookApiFetch('/stripe/create-checkout-session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(rookGetStoredAttribution()),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Could not start checkout');
-      window.location.href = data.url;
-    } catch (err) {
-      msg.textContent = err.message;
-      btn.textContent = subscribeBtnDefaultText;
-    }
+    window.location.href = 'rook-onboarding-v8.html' + window.location.search;
   }
 </script>
 
@@ -285,7 +194,7 @@
     <h2>Questions</h2>
     <div class="faq-item">
       <h4>Is there a free trial?</h4>
-      <p id="faqTrialAnswer">There's no crippled free tier — every subscriber gets full access to matching, tailored résumés, and application tools from day one.</p>
+      <p id="faqTrialAnswer">Yes. Verify your email for 24 hours of full ROOK access with no credit card required. Continue afterward for $9.99 for your first 30 paid days, then $19.99/month.</p>
     </div>
     <div class="faq-item">
       <h4>Can I cancel anytime?</h4>
@@ -321,8 +230,8 @@ s.parentNode.insertBefore(b, s);})(window.lintrk);
 <img height="1" width="1" style="display:none;" alt="" src="https://px.ads.linkedin.com/collect/?pid=9629410&fmt=gif" />
 </noscript>
 <div class="rm-sticky-cta" id="rmPricingSticky">
-  <a href="#" class="rm-btn-primary" id="rmStickyBtn" onclick="handleSubscribe(event)">Get My Matches</a>
-  <div class="rm-trust" id="rmStickyDisclose"></div>
+  <a href="#" class="rm-btn-primary" id="rmStickyBtn" onclick="handleSubscribe(event)">Try ROOK Today for Free</a>
+  <div class="rm-trust" id="rmStickyDisclose">24 hours full access · No credit card required</div>
 </div>
 </body>
 </html>

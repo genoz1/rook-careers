@@ -1,6 +1,7 @@
 // Navigation only. Server projection and entitlement checks remain authoritative.
 (function () {
   if(window.rookAccessReady) return;
+  const v8Context=/-v8\.html$/.test(location.pathname);
   let snapshotValid=false;
   const preparingNewSearch=!!window.rookV7SessionReady;
   let originalSidebar=null;
@@ -21,7 +22,7 @@
     const links=[['My Job Matches',target],['Companies We Search','rook-companies.html'],['Pricing','rook-pricing.html'],['About ROOK','rook-about.html'],['For Employers','rook-employers.html']];
     const sidebar=document.querySelector('.side-nav');
     if(sidebar && originalSidebar===null) originalSidebar=sidebar.innerHTML;
-    if(sidebar) sidebar.innerHTML=links.map(([label,url])=>`<a href="${url}">${label}</a>`).join('')+'<a href="#" onclick="rookStartExistingTrial();return false;">Start 3-Day Free Trial</a>'+(!window.rookAccessState?.signedIn?'<a href="rook-login.html">Log In</a>':'');
+    if(sidebar) sidebar.innerHTML=links.map(([label,url])=>`<a href="${url}">${label}</a>`).join('')+'<a href="#" onclick="rookStartExistingTrial();return false;">Try ROOK Today for Free</a>'+(!window.rookAccessState?.signedIn?'<a href="rook-login.html">Log In</a>':'');
     document.querySelectorAll('a[href]').forEach(link=>{
       if(link.getAttribute('href')==='#') return;
       const path=new URL(link.href,location.href).pathname;
@@ -35,7 +36,7 @@
   window.rookStartExistingTrial=async function(){
     const state=await window.rookAccessReady;
     if(typeof rookTrackEvent==='function') rookTrackEvent('job_unlock_clicked',{source:'pretrial_navigation'});
-    location.href=snapshotValid ? (state.signedIn?'rook-checkout-v7.html':'rook-onboarding-v7-signup.html') : 'rook-checkout.html';
+    location.href=['v8','v9'].includes(state.trialSource)?'rook-keep-access.html':'rook-onboarding-v8.html';
   };
   // Wait for access resolution before following old marketing links. This
   // closes the brief loading race that could otherwise restart onboarding.
@@ -63,7 +64,7 @@
     }catch(_){}
     const full=typeof rookHasFullAccess==='function' && rookHasFullAccess(profile);
     const personalized=!!(snapshotValid || profile);
-    const state={signedIn:!!session,full,personalized,locked:personalized&&!full};
+    const state={signedIn:!!session,full,personalized,locked:personalized&&!full,trialSource:profile?.trial_source||null};
     window.rookAccessState=state;
     if(state.locked){
       rookApplyLimitedNavigation();

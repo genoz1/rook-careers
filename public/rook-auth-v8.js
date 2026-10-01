@@ -49,36 +49,8 @@ async function rookSignOut(loginPage = "rook-login-v8.html") {
   window.location.href = loginPage;
 }
 
-// Cached trial-day lookup shared by every page that needs to decide
-// between "Subscribe to Unlock" and a trial CTA for a locked job —
-// one fetch per page load, reused by every job card render rather
-// than one request per card. Resolves to 0 (the safe "no trial"
-// default) if the request fails, same reasoning as every other
-// trial-config consumer in the app: never show a trial claim that
-// might not be real.
-let rookTrialDaysCache = null;
-async function rookGetTrialDays() {
-  if (rookTrialDaysCache !== null) return rookTrialDaysCache;
-  try {
-    const res = await fetch(`${window.ROOK_CONFIG.API_BASE}/stripe/trial-config`);
-    const data = res.ok ? await res.json() : {};
-    rookTrialDaysCache = Number(data.trialDays) || 0;
-  } catch {
-    rookTrialDaysCache = 0;
-  }
-  return rookTrialDaysCache;
-}
-
-// The actual locked-job CTA label, shared everywhere a candidate sees
-// one, so the wording can't drift between pages. While a trial is
-// active, this replaces the friction of "Subscribe to Unlock" (asking
-// for money) with a trial-framed CTA — access rules are unchanged,
-// this is copy only. Falls back to the original wording the instant
-// TRIAL_PERIOD_DAYS is 0, with no separate code path to keep in sync.
 async function rookLockedJobCtaLabel() {
-  const days = await rookGetTrialDays();
-  if (days <= 0) return "Subscribe to Unlock";
-  return `Start ${days}-Day Free Trial`;
+  return "Try ROOK Today for Free";
 }
 
 // Client-side mirror of backend/matching.js's hasFullAccess(). This is
@@ -124,7 +96,8 @@ function rookTrackEvent(name, params = {}) {
 // never a separate/parallel payment path.
 function rookGoToCheckout(source) {
   rookTrackEvent('job_unlock_clicked', { event_category: 'engagement', source: String(source || 'unknown') });
-  window.location.href = 'rook-checkout-v8.html';
+  const profile=window.rookCurrentProfile;
+  window.location.href = profile?.trial_started_at&&!profile?.subscription_started_at&&!rookHasFullAccess(profile)?'rook-keep-access.html':profile?.trial_source==='v9'?'rook-checkout-v9.html':profile?.trial_source==='v8'?'rook-checkout-v8.html':'rook-onboarding-v8.html';
 }
 
 // Fills in the sidebar's name/avatar/plan card (the ".side-foot" block
@@ -140,9 +113,15 @@ function rookGoToCheckout(source) {
 // instead of fetching it a second time.
 function rookApplySidebarProfile(profile) {
   if (!profile) return; // fetch failed or no profile row at all — leave the neutral fallback markup in place
+  window.rookCurrentProfile=profile;
   if (profile.trial_source === 'v9' && profile.trial_started_at && !profile.subscription_started_at && !rookHasFullAccess(profile) &&
-      !/\/rook-checkout-v9\.html$/.test(window.location.pathname)) {
-    window.location.replace('rook-checkout-v9.html');
+      !/\/rook-keep-access\.html$/.test(window.location.pathname)) {
+    window.location.replace('rook-keep-access.html');
+    return;
+  }
+  if (profile.trial_source === 'v8' && profile.trial_started_at && !profile.subscription_started_at && !rookHasFullAccess(profile) &&
+      !/\/rook-keep-access\.html$/.test(window.location.pathname)) {
+    window.location.replace('rook-keep-access.html');
     return;
   }
   // Name and plan status are independent of each other — a candidate
@@ -205,7 +184,7 @@ async function rookRouteAfterLogin() {
     const r=await rookApiFetch('/profile');
     const profile=r.ok ? await r.json() : null;
     if(profile && !rookHasFullAccess(profile)) {
-      window.location.href=profile.trial_source==='v9'&&profile.trial_started_at&&!profile.subscription_started_at?'rook-checkout-v9.html':'rook-dashboard-v8.html';
+      window.location.href=['v8','v9'].includes(profile.trial_source)&&profile.trial_started_at&&!profile.subscription_started_at?'rook-keep-access.html':'rook-dashboard-v8.html';
       return;
     }
   } catch(_) {}
@@ -216,7 +195,7 @@ async function rookRouteAfterLogin() {
       sessionStorage.removeItem("rook_login_return");
       const url = new URL(returnUrl);
       // Only redirect back to safe ROOK pages — not login itself
-      if (url.origin === window.location.origin && (/^\/rook-(?:dashboard-v8|job-analysis-v8|onboarding-v8(?:-signup)?|checkout-v8)\.html$/.test(url.pathname) || (url.searchParams.get('rook_v8') === '1' && /^\/rook-(?:search|recruiter-jobs|tracker|saved|intelligence|settings|resume|apply|mobile-menu)\.html$/.test(url.pathname)))) {
+      if (url.origin === window.location.origin && (/^\/rook-(?:dashboard-v8|job-analysis-v8|onboarding-v8(?:-signup)?|checkout-v8|keep-access)\.html$/.test(url.pathname) || (url.searchParams.get('rook_v8') === '1' && /^\/rook-(?:search|recruiter-jobs|tracker|saved|intelligence|settings|resume|apply|mobile-menu)\.html$/.test(url.pathname)))) {
         window.location.href = returnUrl;
         return;
       }

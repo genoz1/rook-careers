@@ -425,7 +425,7 @@ try { if (sessionStorage.getItem('rook_v7_pending') || sessionStorage.getItem('r
          per-listing CTAs and route to the same place. -->
     <div id="unlockBanner" style="display:none; background:linear-gradient(135deg,#062d55,#0877d1); border-radius:18px; padding:22px 24px; margin-bottom:18px; color:#fff;">
       <div style="font-size:19px; font-weight:900; line-height:1.25; margin-bottom:8px;">Unlock My Matches</div>
-      <div style="font-size:13.5px; color:#dcedf8; line-height:1.55; margin-bottom:16px; max-width:520px;">Start your 3-day free trial to view employers, open complete job listings, and apply. Then $19.99/month. Cancel anytime.</div>
+      <div style="font-size:13.5px; color:#dcedf8; line-height:1.55; margin-bottom:16px; max-width:520px;">Try ROOK Today for Free. Get 24 hours of full access with no credit card required.</div>
       <button type="button" id="unlockBannerBtn" onclick="rookGoToCheckout('banner')" style="background:#fff; color:#062d55; border:0; border-radius:99px; padding:12px 22px; font:inherit; font-size:14px; font-weight:800; cursor:pointer;">Unlock My Matches</button>
     </div>
 
@@ -512,7 +512,7 @@ try { if (sessionStorage.getItem('rook_v7_pending') || sessionStorage.getItem('r
       </style>
     </div>
 
-    <div class="job-list" id="jobList" data-demo="true" style="display:none;">
+    <div class="job-list" id="jobList" data-demo="false" style="display:none;">
 
 
     </div>
@@ -538,18 +538,9 @@ if (sessionStorage.getItem('rook_v7_pending') || sessionStorage.getItem('rook_v7
 <script>
   // Every job row currently in the HTML is sample/demo data — clearly
   // marked as such per the "no fake functionality" principle in the
-  // architecture spec. This script tries to replace it with real jobs
-  // from the backend; if that fails (no auth, no data yet, backend not
-  // running), the demo rows stay, with a banner explaining why.
-  //
-  // The demo rows are hidden by default (see the #jobListLoading div
-  // above) rather than shown immediately — they used to render right
-  // away in the raw HTML and only get swapped out once the fetch
-  // finished, which meant real users briefly saw old sample data flash
-  // on screen every time the dashboard loaded. Now nothing but a
-  // loading message shows until we actually know whether real data
-  // exists; the demo rows only ever appear as a genuine fallback, not
-  // as a default first frame.
+  // architecture spec. The static rows remain as dormant design fixtures,
+  // but are removed from the DOM before any request begins. Only live API
+  // results may populate the member dashboard; failures render a retry state.
   let currentJobs = [];
   let industryFiltersInitialized = false;
   let showAllIndustries = true;
@@ -849,6 +840,21 @@ if (sessionStorage.getItem('rook_v7_pending') || sessionStorage.getItem('rook_v7
 
     const jobList = document.getElementById('jobList');
     const loading = document.getElementById('jobListLoading');
+    // The static rows are retained only as dormant design fixtures. They must
+    // never reach a member as substitutes for live ROOK data.
+    jobList.replaceChildren();
+
+    function showJobsLoadError() {
+      loading.style.display = 'none';
+      jobList.style.display = '';
+      jobList.dataset.demo = 'false';
+      jobList.innerHTML = '<div role="alert" style="text-align:center;padding:44px 20px;border:1px solid #E4E9F2;border-radius:14px;background:#fff;color:#3D4A63;"><p style="margin:0 0 16px;font-size:15px;">We’re having trouble loading your matches right now. Please try again.</p><button type="button" class="btn btn-primary" id="retryJobsButton">Retry</button></div>';
+      document.getElementById('retryJobsButton')?.addEventListener('click', () => {
+        jobList.style.display = 'none';
+        loading.style.display = '';
+        loadJobs();
+      });
+    }
 
     // ── Primary Job-Search Location display and change widget ─────────────────
     // updateLocationLabel: reads the profile and updates the location row text.
@@ -987,7 +993,8 @@ if (sessionStorage.getItem('rook_v7_pending') || sessionStorage.getItem('rook_v7
       // instead of adding to them sequentially.
       const ctaLabelPromise = Promise.resolve('Unlock Job');
       const profileRes = await rookV7Fetch('/profile');
-      const profileForLocation = profileRes.ok ? await profileRes.json() : null;
+      if (!profileRes.ok) throw new Error('Profile request failed');
+      const profileForLocation = await profileRes.json();
       initializeIndustryFilters(profileForLocation);
 
       // Update the Primary Job-Search Location label in the UI
@@ -1064,8 +1071,8 @@ if (sessionStorage.getItem('rook_v7_pending') || sessionStorage.getItem('rook_v7
       const _mse = document.getElementById('mobileJobSub');
       if (_mce) _mce.textContent = '—';
       if (_mse) _mse.textContent = 'Unable to load opportunities.';
-      showBanner('Unable to load your matches. Please reload to try again.');
-      revealDemo();
+      showBanner('We’re having trouble loading your matches right now. Please try again.');
+      showJobsLoadError();
     }
     }
 

@@ -53,7 +53,7 @@ function renderDigestHtml({ name, jobs, appBaseUrl, subscribed, hasNewJobs }) {
       const detailUrl = subscribed
         ? `${appBaseUrl}/rook-job-analysis.html?job=${encodeURIComponent(job.id)}`
         : job.subscription_required
-          ? `${appBaseUrl}/rook-pricing.html`
+          ? `${appBaseUrl}/rook-onboarding-v8.html`
           : `${appBaseUrl}/jobs/${encodeURIComponent(job.id)}`;
 
       const companyLine = job.subscription_required
@@ -83,7 +83,7 @@ function renderDigestHtml({ name, jobs, appBaseUrl, subscribed, hasNewJobs }) {
 
   const footerLine = subscribed
     ? `<a href="${appBaseUrl}/rook-dashboard.html" style="color:#1463FF; font-size:13px; font-weight:600; text-decoration:none;">See all your matches on ROOK →</a>`
-    : `<a href="${appBaseUrl}/rook-pricing.html" style="background:#1463FF; color:#fff; padding:12px 24px; border-radius:6px; font-size:14px; font-weight:700; text-decoration:none; display:inline-block;">Join ROOK to see who's hiring →</a>`;
+    : `<a href="${appBaseUrl}/rook-onboarding-v8.html" style="background:#1463FF; color:#fff; padding:12px 24px; border-radius:6px; font-size:14px; font-weight:700; text-decoration:none; display:inline-block;">Join ROOK to see who's hiring →</a>`;
 
   return `
     <div style="font-family:-apple-system,Helvetica,Arial,sans-serif; max-width:600px; margin:0 auto; background:#fff;">

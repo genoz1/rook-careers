@@ -37,7 +37,7 @@
       var storage = accountScope ? localStorage : sessionStorage;
       var scope = accountScope || sessionStorage.getItem('rook_v7_token') || 'visit';
       var key = 'rook_funnel_v1:' + name + ':' + scope;
-      if (mapping || name === 'sign_up') {
+      if (mapping || name === 'sign_up' || /^v8_/.test(name)) {
         if (seen[key]) return;
         try { if (storage.getItem(key)) return; } catch (_) {}
         seen[key] = true;

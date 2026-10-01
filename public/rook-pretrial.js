@@ -28,10 +28,10 @@
           <div class="masked-v7-score"><div class="score-ring" style="--pct:${value ?? 0}" aria-label="Preference Match: ${value==null?'not scored':value+'%'}"><span>${value==null?'—':value+'%'}</span></div><strong>Preference Match</strong></div>
         </div>
         <div class="masked-v7-meta">${geography?`<span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>${esc(geography)}</span>`:''}${separator}${freshness?`<span><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4m8-4v4M4 10h16m-11 4h2m3 0h2m-7 4h2"/></svg>${esc(freshness)}</span>`:''}</div>
-        <div class="masked-v7-bottom"><div class="masked-v7-employer"><span class="masked-v7-lock" aria-hidden="true">🔒</span><strong>Employer:</strong>${maskedWords(job.masked_lines?.employer,'masked-employer-fragment')}</div><button type="button" class="btn btn-primary masked-v7-cta" onclick="rookGoToCheckout('job_card')"><span aria-hidden="true">🔒</span> Unlock full details — 3 days free</button></div>
+        <div class="masked-v7-bottom"><div class="masked-v7-employer"><span class="masked-v7-lock" aria-hidden="true">🔒</span><strong>Employer:</strong>${maskedWords(job.masked_lines?.employer,'masked-employer-fragment')}</div><button type="button" class="btn btn-primary masked-v7-cta" onclick="rookGoToCheckout('job_card')"><span aria-hidden="true">🔒</span> Try ROOK Today for Free</button></div>
       </article>`;
     }
-    const unlockCopy=isV9()?'Membership unlocks the complete opportunity and direct application.':'Start your 3-day free trial to view the full opportunity details and apply directly.';
+    const unlockCopy=isV9()?'Membership unlocks the complete opportunity and direct application.':'Get 24 hours of full access. No credit card required.';
     const unlockAction=isV9()?`onclick="rookV9UnlockFromCard()"`:`onclick="rookGoToCheckout('job_card')"`;
     const unlockLabel=isV9()?'Unlock with membership':'Unlock Job';
     return `<article class="job-row masked-job" aria-label="Locked personalized opportunity">
@@ -42,7 +42,7 @@
         <div class="masked-lock"><span aria-hidden="true">🔒</span><div><strong>${isV7()?'Company &amp; full job details hidden':'Job title and employer hidden'}</strong><p>${unlockCopy}</p></div></div>
       </div>
       <div class="masked-actions"><div class="masked-score"><div class="score-ring" style="--pct:${value ?? 0}" aria-label="${qualified?'Match':'Preference Match'}: ${value==null?'not scored':value+'%'}"><span>${value==null?'—':value+'%'}</span></div><div><strong>${qualified?'Match Score':'Preference Match'}</strong><small>${qualified?'Qualifications and preferences scored':'Qualifications not scored yet'}</small></div></div>
-      <button type="button" class="btn btn-primary" ${unlockAction}><span aria-hidden="true">🔒</span> ${isV7()?'Unlock my matches — 3 days free':unlockLabel}</button></div>
+      <button type="button" class="btn btn-primary" ${unlockAction}><span aria-hidden="true">🔒</span> ${isV7()?'Try ROOK Today for Free':unlockLabel}</button></div>
     </article>`;
   };
   window.rookUpdateV7MatchCount = function(count) {
@@ -57,16 +57,16 @@
     const newest=document.querySelector('#sortSelect option[value="newest"]');if(newest)newest.hidden=true;
     const main=document.querySelector('main.main'); if(!main) return;
     const header=document.createElement('section');header.id='maskedValueHeader';header.className='masked-value';
-    header.innerHTML='<div><h1>Personalized Opportunities for You</h1><p>These real opportunities match your onboarding preferences. Start your 3-day free trial to see full job titles, employers and apply directly.</p></div><ul><li>✓ Real job opportunities</li><li>✓ Personalized to your preferences</li><li>✓ Employers stay hidden until unlock</li></ul>';
+    header.innerHTML='<div><h1>Personalized Opportunities for You</h1><p>These real opportunities match your onboarding preferences. Try ROOK Today for Free for full job titles, employers and direct applications.</p></div><ul><li>✓ Real job opportunities</li><li>✓ Personalized to your preferences</li><li>✓ Employers stay hidden until unlock</li></ul>';
     if(isV7()) header.innerHTML='<div><h1 id="v7MatchCount" aria-live="polite">Your personalized matches</h1><p>Based on your answers. Preview match scores, industry and territory below.</p><p class="conversion-private">Your search stays private. Employers and recruiters cannot see your activity.</p></div>';
     main.prepend(header);
     const banner=document.getElementById('unlockBanner');
-    if(banner){banner.className='masked-cta';banner.removeAttribute('style');banner.innerHTML='<div><h2>Ready to see the full details?</h2><p>Unlock job titles, employers, complete opportunity details and direct applications.</p><small>3 days free, then $19.99/month. Cancel anytime.</small></div><button type="button" id="unlockBannerBtn" class="btn btn-primary" onclick="rookGoToCheckout(\'banner\')">Start 3-Day Free Trial</button>';main.append(banner);}
+    if(banner){banner.className='masked-cta';banner.removeAttribute('style');banner.innerHTML='<div><h2>Ready to see the full details?</h2><p>Unlock job titles, employers, complete opportunity details and direct applications.</p><small>24 hours of full access. No credit card required.</small></div><button type="button" id="unlockBannerBtn" class="btn btn-primary" onclick="rookGoToCheckout(\'banner\')">Try ROOK Today for Free</button>';main.append(banner);}
     if(isV7() && banner) {
       banner.querySelector('h2').remove();
       banner.querySelector('p').remove();
-      banner.querySelector('small').textContent='3 days free, then $19.99/month. Cancel anytime. Card required.';
-      banner.querySelector('button').textContent='Unlock my matches — 3 days free';
+      banner.querySelector('small').textContent='24 hours of full access. No credit card required.';
+      banner.querySelector('button').textContent='Try ROOK Today for Free';
       header.after(banner);
       const trust=document.createElement('nav');trust.className='conversion-trust';trust.setAttribute('aria-label','ROOK information');
       trust.innerHTML='<a href="rook-about.html" target="_blank" rel="noopener">About ROOK</a><a href="mailto:hello@rookcareers.com">Contact</a><a href="rook-privacy.html" target="_blank" rel="noopener">Privacy</a><a href="rook-terms.html" target="_blank" rel="noopener">Terms</a>';

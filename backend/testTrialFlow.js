@@ -1,6 +1,5 @@
-// Standalone test script for the free trial subscription/entitlement
-// logic. Trial length is fully dynamic (TRIAL_PERIOD_DAYS) — nothing
-// here or in the code it tests hardcodes a day count.
+// Standalone test script for subscription/entitlement logic. The historical
+// Stripe trial is retired; V8/V9 free access is an application entitlement.
 //
 // No test framework — matches this project's existing convention of
 // plain `node X.js` scripts (see package.json). Run with:
@@ -227,7 +226,7 @@ async function run() {
     assert.strictEqual(listCallCount, 1, "should only check once per process, cached after that");
   });
 
-  console.log("\n=== Checkout session shape: TRIAL_PERIOD_DAYS=0 (disabled) must exactly match pre-trial behavior [16] ===");
+  console.log("\n=== Legacy Stripe checkout can never create a payment-method trial [16] ===");
 
   test("disabled trial + no UTM: session shape is byte-identical to the original pre-trial code", () => {
     const params = buildCheckoutSessionParams({
@@ -253,23 +252,23 @@ async function run() {
     assert.deepStrictEqual(params.subscription_data.metadata, { utm_source: "facebook" });
   });
 
-  test("trial enabled at 3 days: session requests exactly 3, not a hardcoded 7, and uses the trial=started signal", () => {
+  test("a historical three-day caller value is ignored and cannot create a Stripe trial", () => {
     const params = buildCheckoutSessionParams({
       trialDays: 3, utm: { utm_source: "google", utm_medium: "cpc" }, userEmail: "a@b.com", userId: "user1",
       publicAppUrl: "https://rookcareers.com", priceId: "price_123",
     });
-    assert.strictEqual(params.success_url, "https://rookcareers.com/rook-dashboard.html?trial=started");
-    assert.strictEqual(params.subscription_data.trial_period_days, 3, "must reflect whatever TRIAL_PERIOD_DAYS actually is, not a hardcoded number");
+    assert.strictEqual(params.success_url, "https://rookcareers.com/rook-dashboard.html?checkout=success");
+    assert.strictEqual(params.subscription_data.trial_period_days, undefined);
     assert.deepStrictEqual(params.subscription_data.metadata, { utm_source: "google", utm_medium: "cpc" });
-    assert.strictEqual(params.payment_method_collection, "always", "card must always be collected, trial or not");
   });
 
-  test("trial enabled at a different length (7): the same code path just reflects whatever the config says", () => {
+  test("any other historical caller value is also ignored", () => {
     const params = buildCheckoutSessionParams({
       trialDays: 7, utm: {}, userEmail: "a@b.com", userId: "user1",
       publicAppUrl: "https://rookcareers.com", priceId: "price_123",
     });
-    assert.strictEqual(params.subscription_data.trial_period_days, 7, "proves the length isn't hardcoded to 3 either — it's a pure passthrough of TRIAL_PERIOD_DAYS");
+    assert.strictEqual(params.success_url, "https://rookcareers.com/rook-dashboard.html?checkout=success");
+    assert.strictEqual(params.subscription_data, undefined);
   });
 
   console.log("\n=== hasFullAccess: basic status gate [1] ===");
@@ -907,18 +906,12 @@ async function run() {
     assert.strictEqual(shown.subscription_required, true);
   });
 
-  console.log("\n=== Trial-abuse guard: computeTrialDaysForCheckout (used by both checkout entry points) ===");
+  console.log("\n=== Retired Stripe trial guard: computeTrialDaysForCheckout ===");
 
-  test("a brand-new account (never trialed) gets the full configured trial length", () => {
-    const originalEnv = process.env.TRIAL_PERIOD_DAYS;
-    process.env.TRIAL_PERIOD_DAYS = "3";
-    try {
-      assert.strictEqual(computeTrialDaysForCheckout({ trial_started_at: null }), 3);
-      assert.strictEqual(computeTrialDaysForCheckout(null), 3, "no profile row at all is treated the same as never-trialed");
-      assert.strictEqual(computeTrialDaysForCheckout(undefined), 3);
-    } finally {
-      process.env.TRIAL_PERIOD_DAYS = originalEnv;
-    }
+  test("a brand-new account never receives the retired Stripe trial", () => {
+    assert.strictEqual(computeTrialDaysForCheckout({ trial_started_at: null }), 0);
+    assert.strictEqual(computeTrialDaysForCheckout(null), 0);
+    assert.strictEqual(computeTrialDaysForCheckout(undefined), 0);
   });
 
   test("an account that already has trial_started_at set gets ZERO trial days, regardless of current subscription_status", () => {
@@ -926,24 +919,12 @@ async function run() {
     // account. This is exactly the free-dashboard scenario — a
     // candidate trialed once, cancelled or lapsed back to no active
     // subscription, and clicks "Unlock" again from the free dashboard.
-    const originalEnv = process.env.TRIAL_PERIOD_DAYS;
-    process.env.TRIAL_PERIOD_DAYS = "3";
-    try {
-      assert.strictEqual(computeTrialDaysForCheckout({ trial_started_at: isoPast(30 * DAY), subscription_status: "cancelled" }), 0);
-      assert.strictEqual(computeTrialDaysForCheckout({ trial_started_at: isoPast(30 * DAY), subscription_status: null }), 0, "still zero even if subscription_status was later cleared entirely");
-    } finally {
-      process.env.TRIAL_PERIOD_DAYS = originalEnv;
-    }
+    assert.strictEqual(computeTrialDaysForCheckout({ trial_started_at: isoPast(30 * DAY), subscription_status: "cancelled" }), 0);
+    assert.strictEqual(computeTrialDaysForCheckout({ trial_started_at: isoPast(30 * DAY), subscription_status: null }), 0, "still zero even if subscription_status was later cleared entirely");
   });
 
-  test("trials disabled account-wide (TRIAL_PERIOD_DAYS=0) still returns 0 for a never-trialed account — unrelated to the abuse guard", () => {
-    const originalEnv = process.env.TRIAL_PERIOD_DAYS;
-    process.env.TRIAL_PERIOD_DAYS = "0";
-    try {
-      assert.strictEqual(computeTrialDaysForCheckout({ trial_started_at: null }), 0);
-    } finally {
-      process.env.TRIAL_PERIOD_DAYS = originalEnv;
-    }
+  test("the retired trial remains disabled regardless of account history", () => {
+    assert.strictEqual(computeTrialDaysForCheckout({ trial_started_at: null }), 0);
   });
 
   console.log(`\n${passCount} passed, ${failCount} failed\n`);

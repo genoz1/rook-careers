@@ -179,7 +179,8 @@ router.put('/preference',wrap(async(req,res)=>{
   res.json({ok:true});
 }));
 // V8's account handoff copies V7's ownership check and omits the V8-only
-// marker before writing to candidate_profiles, whose schema is fixed.
+// marker before writing to candidate_profiles. Trial activation happens only
+// after the server has confirmed the verified account and durable handoff.
 router.post('/claim',wrap(async(req,res)=>{
   let s=await session(req),u=await user(req);
   if(!s||!u)return res.status(401).json({error:'Verify your email and sign in first.'});
@@ -201,7 +202,24 @@ router.post('/claim',wrap(async(req,res)=>{
     const saved=await db.from(table).update({transferred_at:new Date().toISOString()}).eq('token_hash',s.token_hash).eq('user_id',u.id);
     if(saved.error)throw saved.error;
   }
-  res.json({ok:true});
+  const activated=await db.rpc('activate_v8_trial',{p_user_id:u.id});
+  if(activated.error)throw activated.error;
+  const entitlement=Array.isArray(activated.data)?activated.data[0]:activated.data;
+  if(!entitlement?.outcome)throw Error('Trial entitlement could not be confirmed.');
+  if(entitlement.outcome==='started'){
+    const profileResult=await db.from('candidate_profiles').select('utm_source,utm_medium,utm_campaign,utm_term,utm_content').eq('user_id',u.id).maybeSingle();
+    if(!profileResult.error){
+      const p=profileResult.data||{};
+      const event=await db.from('ad_conversion_events').insert({
+        event_key:`v8_trial_started_${u.id}`,event_type:'trial_started',user_id:u.id,
+        utm_source:p.utm_source||null,utm_medium:p.utm_medium||null,utm_campaign:p.utm_campaign||null,
+        utm_term:p.utm_term||null,utm_content:p.utm_content||null,
+        platform_inferred:p.utm_source||'unknown',occurred_at:entitlement.trial_started_at,
+      });
+      if(event.error&&event.error.code!=='23505')console.error('V8 trial analytics write failed:',event.error.message);
+    }
+  }
+  res.json({ok:true,...entitlement});
 }));
 module.exports=router;
 module.exports._test={validate,prioritize,reveal};
