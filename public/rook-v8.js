@@ -59,7 +59,7 @@
     $('trialActivationLogin').onclick=()=>{try{sessionStorage.setItem('rook_login_return',location.href);}catch(_){}};
     activate();return;
   }
-  function goSignup(source) {track('v8_masked_unlock_interaction',{source});track('v8_signup_reached');location.href='rook-onboarding-v8-signup.html';}
+  function goSignup(source,maskedInteraction=true) {if(maskedInteraction)track('v8_masked_unlock_interaction',{source});track('v8_signup_reached');location.href='rook-onboarding-v8-signup.html';}
   $('startTrial').onclick=()=>{if(token()&&sessionStorage.getItem('rook_v8_active')===token())goSignup('header');else{$('overlay').hidden=false;$('locationInput').focus();}};
   $('unlockButton').onclick=()=>goSignup('banner');
   let preparation=null;
@@ -130,19 +130,7 @@
       track('v8_initial_search_succeeded',{search_id:searchId,elapsed_ms:Math.round(performance.now()-searchStarted)});
       sessionStorage.setItem('rook_v7_token',result.token);sessionStorage.setItem('rook_v8_active',result.token);
       track('v8_overlay_submitted');
-      // Fallback supports a new browser asset reaching an older server during rollout.
-      const preview=result.preview || await api('/session?initial=1');
-      if(!Array.isArray(preview.jobs) || !preview.profile || preview.count!==preview.jobs.length)throw Error('Invalid preview response');
-      track('v8_preview_results_received',{search_id:searchId,elapsed_ms:Math.round(performance.now()-searchStarted),job_count:preview.count});
-      displayPreview(preview);
-      // Two frames allow the newly built cards to reach a browser paint.
-      requestAnimationFrame(()=>requestAnimationFrame(()=>{
-        const elapsed_ms=Math.round(performance.now()-searchStarted);
-        $('jobGrid').dataset.searchElapsedMs=String(elapsed_ms);
-        performance.measure?.('rook-v8-click-to-render',{start:searchStarted,end:performance.now()});
-        track('v8_preview_results_rendered',{search_id:searchId,elapsed_ms,job_count:preview.count});
-        track('v8_search_elapsed_time',{search_id:searchId,elapsed_ms});
-      }));
+      goSignup('initial_questions',false);
     }catch(err){track(initialSucceeded?'v8_preview_results_failed':'v8_initial_search_failed',{search_id:searchId,error_category:err.status===429?'rate_limited':err.status>=500?'server':err.status>=400?'request':'network_or_client',elapsed_ms:Math.round(performance.now()-searchStarted)});$('formError').textContent=err.message;}finally{clearInterval(timer);progress.hidden=true;busy=false;button.disabled=false;button.textContent='Show My Jobs →';}
   };
   async function init(){
