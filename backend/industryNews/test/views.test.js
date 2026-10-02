@@ -44,7 +44,7 @@ test('public news article uses the Resources shell while preserving NewsArticle 
     slug: 'approved-device', title: 'Approved device reaches the market',
     description: 'A commercially relevant medical device development.', category: 'medical-device',
     published_at: '2026-10-02T12:00:00Z', updated_at: '2026-10-02T13:00:00Z',
-    body_html: '<h2>What changed</h2><p>The product was approved.</p>',
+    body_html: '<h2>What changed</h2><p>The product was approved.</p>', image_alt: 'Approved device product illustration',
     sources: [{ publisher: 'FDA', url: 'https://www.fda.gov/example', published_at: '2026-10-02T10:00:00Z' }],
   };
   const html = article(item, [{ ...item, slug: 'related-story', title: 'Related development' }]);
@@ -52,6 +52,9 @@ test('public news article uses the Resources shell while preserving NewsArticle 
   assert.match(html, /class="logo"/);
   assert.match(html, /class="container article-layout news-article-layout"/);
   assert.match(html, /"@type":"NewsArticle"/);
+  assert.match(html, /"@type":"BreadcrumbList"/);
+  assert.match(html, /"name":"ROOK Industry News"/);
+  assert.match(html, /alt="Approved device product illustration"/);
   assert.match(html, /rel="canonical" href="https:\/\/rookcareers\.com\/news\/approved-device\/"/);
   assert.match(html, /href="https:\/\/www\.fda\.gov\/example"/);
   assert.match(html, /By ROOK Industry News/);
