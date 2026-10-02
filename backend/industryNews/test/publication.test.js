@@ -26,6 +26,8 @@ test('publication is capped, idempotent, and verifies before distribution', asyn
   const store = new MemoryNewsStore(); store.events = [event, { ...event, id: 'event-2', clusterKey: 'two' }, { ...event, id: 'event-3', clusterKey: 'three' }];
   const result = await tick({ allowFixtureRun: true, env: { INDUSTRY_NEWS_MAX_PUBLICATIONS_PER_RUN: '2' }, store, generateArticle: async e => ({ ...generated, slug: `story-${e.id}`, sources: event.items, category: e.category, event_type: e.eventType, event_id: e.id, word_count: 275, body_hash: e.id }), verifyPublic: async () => true });
   assert.equal(result.published.length, 2); assert.equal(store.articles.length, 2); assert.equal(store.articles.every(a => a.public_verified_at), true);
+  const secondWorker = await tick({ allowFixtureRun: true, env: { INDUSTRY_NEWS_MAX_PUBLICATIONS_PER_RUN: '2' }, store, generateArticle: async e => ({ ...generated, slug: `story-${e.id}`, sources: event.items, category: e.category, event_type: e.eventType, event_id: e.id, word_count: 275, body_hash: e.id }), verifyPublic: async () => true });
+  assert.equal(secondWorker.published.length, 0); assert.equal(store.articles.length, 2);
 });
 
 test('public article HTML includes SEO, sources, CTA, and noindex is absent', () => {
