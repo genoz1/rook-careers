@@ -18,8 +18,12 @@ test('article validation blocks unsupported numbers and accepts grounded structu
 
 test('generation preserves deterministic source attribution and passes separate review', async () => {
   let calls = 0;
-  const article = await generateArticle(event, { generate: async () => { calls += 1; return generated; }, review: async () => ({ approved: true, reason: 'grounded' }) });
+  let generationPrompt = '';
+  const article = await generateArticle(event, { generate: async prompt => { calls += 1; generationPrompt = prompt; return generated; }, review: async () => ({ approved: true, reason: 'grounded' }) });
   assert.equal(calls, 1); assert.equal(article.sources[0].publisher, 'Publisher One'); assert.match(article.slug, /-[a-f0-9]{8}$/);
+  assert.match(generationPrompt, /description must be 70-180 characters/i);
+  assert.match(generationPrompt, /body_html must be 300-700 words/i);
+  assert.match(generationPrompt, /at least two h2 section headings/i);
 });
 
 test('publication is capped, idempotent, and verifies before distribution', async () => {
