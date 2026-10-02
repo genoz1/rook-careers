@@ -4,6 +4,19 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { index, adminReport } = require('../views');
 const { CATEGORIES, BUCKETS, APPROVED_FEEDS, getSources } = require('../catalog');
+const { redirectNewsRoot } = require('../routes');
+
+test('news root redirects only the slashless URL and lets the canonical index render', () => {
+  let redirect = null;
+  let nextCalls = 0;
+  const res = { redirect: (status, location) => { redirect = { status, location }; } };
+  redirectNewsRoot({ path: '/news' }, res, () => { nextCalls += 1; });
+  assert.deepEqual(redirect, { status: 301, location: '/news/' });
+  redirect = null;
+  redirectNewsRoot({ path: '/news/' }, res, () => { nextCalls += 1; });
+  assert.equal(redirect, null);
+  assert.equal(nextCalls, 1);
+});
 
 test('public news index is indexable and renders only supplied published articles', () => {
   const html = index([{slug:'approved-device',title:'Approved device reaches the market',description:'A commercially relevant medical device development.',category:CATEGORIES[0].slug,published_at:'2026-10-02'}]);
