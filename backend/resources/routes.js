@@ -2,6 +2,7 @@ const express=require('express');
 const {db,result,articles}=require('./store');
 const {category,CATEGORIES,origin}=require('./catalog');
 const views=require('./views');
+function redirectLegacyIndustryNews(req,res){return res.redirect(301,'/news/');}
 function createRouter(deps={}){
  const router=express.Router();
  const client=()=>deps.db||db();
@@ -21,6 +22,7 @@ function createRouter(deps={}){
   res.type('html').send(views.index({...data,categorySlug,q,page,all:req.query.page!==undefined}));
  });
  router.get('/resources',list);
+ router.get('/resources/category/industry-news',redirectLegacyIndustryNews);
  router.get('/resources/category/:category',list);
  router.get('/resources/sitemap.xml',guard(async(req,res)=>{
   const urls=[{path:'/resources/'},...CATEGORIES.map(c=>({path:'/resources/category/'+c.slug+'/'}))];
@@ -50,4 +52,4 @@ function createRouter(deps={}){
  }));
  return router;
 }
-module.exports={createRouter};
+module.exports={createRouter,redirectLegacyIndustryNews};

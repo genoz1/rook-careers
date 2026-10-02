@@ -35,7 +35,7 @@ test('migration, idempotent claims, restart fencing, transaction and permissions
 });
 test('public routes return indexable HTML without authentication; missing articles are 404',async()=>{
  const express=require('express');const app=express();
- const client={from(){return {select(){return this;},eq(){return this;},maybeSingle(){return Promise.resolve({data:a});}};}};
+ const client={from(){return {select(){return this;},eq(){return this;},neq(){return this;},lte(){return this;},order(){return this;},limit(){return Promise.resolve({data:[]});},maybeSingle(){return Promise.resolve({data:a});}};}};
  app.use(createRouter({db:client,articles:async()=>({items:[a],count:1}),jobs:async()=>({})}));
  const router=app._router.stack.find(layer=>layer.name==='router').handle;
  const request=async(path,params={},query={})=>{
