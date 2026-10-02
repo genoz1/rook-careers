@@ -53,6 +53,18 @@ test('public routes return indexable HTML without authentication; missing articl
 test('article metadata escapes text and emits Article schema',()=>{
  const html=views.article({...a,title:'<script>alert(1)</script>'});assert.ok(html.includes('&lt;script&gt;'));assert.ok(!html.includes('<script>alert(1)</script>'));assert.ok(html.includes('"@type":"Article"'));assert.ok(html.includes('"@type":"BreadcrumbList"'));
 });
+test('resources sitemap excludes redirects and only emits published, non-future guides',async()=>{
+ const rows=[
+  {slug:'published-guide',updated_at:'2026-09-25T13:00:00Z',published_at:'2026-09-25T13:00:00Z',status:'published'},
+  {slug:'queued-guide',updated_at:'2026-09-25T13:00:00Z',published_at:'2026-09-25T13:00:00Z',status:'queued'},
+  {slug:'future-guide',updated_at:'2999-01-01T00:00:00Z',published_at:'2999-01-01T00:00:00Z',status:'published'},
+ ];
+ const client={from(){let filters=[];return {select(){return this;},eq(k,v){filters.push(r=>(k==='resource_topics.status'?r.status:r[k])===v);return this;},lte(k,v){filters.push(r=>r[k]<=v);return this;},order(){return this;},range(start,end){return Promise.resolve({data:rows.filter(r=>filters.every(f=>f(r))).slice(start,end+1)});}};}};
+ const route=createRouter({db:client}).stack.find(l=>l.route?.path==='/resources/sitemap.xml').route;
+ let body='';await route.stack[0].handle({},{type(){return this;},send(value){body=value;return this;},status(){throw Error('Unexpected failure');},set(){return this;}});
+ assert.match(body,/\/resources\/published-guide\//);
+ assert.doesNotMatch(body,/queued-guide|future-guide|\/resources\/category\/industry-news\//);
+});
 test('unsafe and malformed article output is rejected before storage',()=>{
  const value={description:a.description,body_html:'<p onclick="bad()">bad</p>',image_alt:'Equipment',sources:[{title:'Source',url:'https://example.com/'}],social_copy:{linkedin:'A'.repeat(40),personal:'B'.repeat(40),facebook:'C'.repeat(40),instagram:'D'.repeat(40)}};
  assert.throws(()=>validate(value,topics[0]),/Unsafe/);
