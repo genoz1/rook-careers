@@ -8,7 +8,7 @@ const { sendEmail } = require("./resend");
 const { hasFullAccess } = require("../matching");
 const { distanceMiles } = require("../geocoding");
 const { isUsEligibleJob, resolveUsStateCode } = require("../jobEligibility");
-const { scrubCompanyNameFromText, redactForNonSubscriber } = require("../redaction");
+const { publicPreview } = require("../pretrialProjection");
 
 const MIN_SCORE_TO_INCLUDE = 60;
 const MAX_JOBS_PER_EMAIL = 5;
@@ -23,6 +23,7 @@ function isUnrestrictedUsLocation(location) {
 }
 
 function isDigestLocationMatch(job, profile) {
+  if (!job || typeof job !== "object") return false;
   if (!isUsEligibleJob(job)) return false;
 
   // If a job names a place, that place wins over a generic "remote" tag.
@@ -42,10 +43,49 @@ function escapeHtml(str) {
   return String(str).replace(/[&<>'"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+// Email has its own display contract; locked dashboard projections deliberately
+// omit source titles/locations and must never be passed to this template.
+function validDisplayText(value) {
+  return typeof value === "string" && value.trim().length > 0 &&
+    !/\b(?:undefined|null|untitled|placeholder)\b|^(?:n\/?a|unknown|sales opportunity|current opportunity|employer hidden)$/i.test(value.trim());
+}
+
+function validDigestJob(job) {
+  return !!job && validDisplayText(job.id) && validDisplayText(job.title_original) &&
+    validDisplayText(job.location_raw) &&
+    (job.subscription_required === true || validDisplayText(job.company_name));
+}
+
+function prepareDigestJobs(jobs, subscribed) {
+  return jobs.flatMap(job => {
+    const title = validDisplayText(job?.title_original) ? job.title_original.trim() :
+      validDisplayText(job?.title_normalized) ? job.title_normalized.trim() : "";
+    const source = { ...job, title_original: title };
+    if (!validDigestJob(source)) return [];
+    if (subscribed) return [source];
+    // Reuse the existing public preview boundary: safe title vocabulary,
+    // validated city/state and numeric salary only. Never copy employers,
+    // descriptions, application links or raw compensation into locked email.
+    const safe = publicPreview(source);
+    const state = resolveUsStateCode(source.state);
+    const location = safe.location || state ||
+      (isUnrestrictedUsLocation(source.location_raw) ? "United States" : "");
+    const display = {
+      id: source.id, title_original: safe.title, location_raw: location,
+      compensation_text: safe.salary || "", first_seen_at: source.first_seen_at,
+      subscription_required: true,
+    };
+    return validDigestJob(display) ? [display] : [];
+  });
+}
+
 function renderDigestHtml({ name, jobs, appBaseUrl, subscribed, hasNewJobs }) {
+  jobs = (jobs || []).filter(validDigestJob);
+  if (!jobs.length) return null;
   const rows = jobs
     .map((job) => {
-      const comp = job.compensation_text || (job.salary_min ? `$${job.salary_min}${job.salary_max ? "–$" + job.salary_max : "+"}` : "");
+      const comp = validDisplayText(job.compensation_text) ? job.compensation_text :
+        (Number.isFinite(job.salary_min) && job.salary_min > 0 ? `$${job.salary_min}${Number.isFinite(job.salary_max) && job.salary_max > 0 ? "–$" + job.salary_max : "+"}` : "");
 
       // Subscribers always go straight to the full unmasked job analysis page.
       // Non-subscribers go to the public SSR job page with the trial CTA.
@@ -65,7 +105,7 @@ function renderDigestHtml({ name, jobs, appBaseUrl, subscribed, hasNewJobs }) {
       return `
         <tr>
           <td style="padding:18px 0; border-bottom:1px solid #E3E8F0;">
-            <a href="${detailUrl}" style="color:#1463FF; font-size:16px; font-weight:600; text-decoration:none;">${escapeHtml(job.title_original || "Untitled role")}${newBadge}</a>
+            <a href="${detailUrl}" style="color:#1463FF; font-size:16px; font-weight:600; text-decoration:none;">${escapeHtml(job.title_original)}${newBadge}</a>
             <div style="font-size:13px; color:#5B6B85; margin-top:5px;">${companyLine}</div>
           </td>
           <td width="110" style="padding:18px 0; border-bottom:1px solid #E3E8F0; text-align:right; vertical-align:top; white-space:nowrap;">
@@ -98,7 +138,7 @@ function renderDigestHtml({ name, jobs, appBaseUrl, subscribed, hasNewJobs }) {
 
       <!-- Intro -->
       <div style="background:#F5F7FA; padding:20px 24px; text-align:center; border-bottom:1px solid #E3E8F0;">
-        <p style="margin:0 0 6px; font-size:16px; font-weight:600; color:#071E41;">Hello ${escapeHtml(name || "there")},</p>
+        <p style="margin:0 0 6px; font-size:16px; font-weight:600; color:#071E41;">Hello ${escapeHtml(validDisplayText(name) ? name : "there")},</p>
         ${introLine}
       </div>
 
@@ -110,13 +150,14 @@ function renderDigestHtml({ name, jobs, appBaseUrl, subscribed, hasNewJobs }) {
       <!-- Footer -->
       <div style="padding:28px 24px; text-align:center; border-top:1px solid #E3E8F0; margin-top:4px;">
         ${footerLine}
-        <p style="margin:16px 0 0; font-size:11px; color:#9BAABB;">You're receiving this because you have an active ROOK account.<br>Manage preferences from your dashboard.</p>
+        <p style="margin:16px 0 0; font-size:11px; color:#9BAABB;">You're receiving ROOK daily job alerts. Receiving alerts does not require a paid subscription.<br>Manage email preferences from your dashboard.</p>
       </div>
 
     </div>`;
 }
 
 async function sendDigestForCandidate(supabase, profile, appBaseUrl) {
+  if (process.env.DAILY_JOB_ALERTS_PAUSED === "true") return { sent: false, reason: "daily_alerts_paused" };
   if (!profile.email) return { sent: false, reason: "no_email" };
   if (profile.digest_enabled === false) return { sent: false, reason: "opted_out" };
 
@@ -193,13 +234,17 @@ async function sendDigestForCandidate(supabase, profile, appBaseUrl) {
   }));
 
   const hasAccess = hasFullAccess(profile);
-  const emailJobs = hasAccess ? scored : scored.map(redactForNonSubscriber);
+  const emailJobs = prepareDigestJobs(scored, hasAccess);
+  if (!emailJobs.length) return { sent: false, reason: "no_valid_alert_jobs" };
+  const validFreshCount = emailJobs.filter(job => freshScored.some(row => row.jobs.id === job.id)).length;
+  hasNewJobs = validFreshCount > 0;
 
   const html = renderDigestHtml({ name: profile.name, jobs: emailJobs, appBaseUrl, subscribed: hasAccess, hasNewJobs });
 
-  const subjectNew = `🔥 ${freshScored.length} new medical sales job${freshScored.length === 1 ? "" : "s"} matching your location`;
-  const subjectFallback = `Your top ${scored.length} medical sales match${scored.length === 1 ? "" : "es"} on ROOK`;
-  const subjectNonSub = `${scored.length} job${scored.length === 1 ? "" : "s"} waiting for you on ROOK — see who's hiring`;
+  if (!html) return { sent: false, reason: "no_valid_alert_jobs" };
+  const subjectNew = `🔥 ${validFreshCount} new medical sales job${validFreshCount === 1 ? "" : "s"} matching your location`;
+  const subjectFallback = `Your top ${emailJobs.length} medical sales match${emailJobs.length === 1 ? "" : "es"} on ROOK`;
+  const subjectNonSub = `${emailJobs.length} job${emailJobs.length === 1 ? "" : "s"} waiting for you on ROOK — see who's hiring`;
 
   await sendEmail({
     to: profile.email,
@@ -207,7 +252,7 @@ async function sendDigestForCandidate(supabase, profile, appBaseUrl) {
     html,
   });
 
-  return { sent: true, jobCount: scored.length };
+  return { sent: true, jobCount: emailJobs.length, excludedJobCount: scored.length - emailJobs.length };
 }
 
-module.exports = { escapeHtml, sendDigestForCandidate, renderDigestHtml, isDigestLocationMatch };
+module.exports = { escapeHtml, sendDigestForCandidate, renderDigestHtml, isDigestLocationMatch, prepareDigestJobs, validDigestJob };

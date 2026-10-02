@@ -4,13 +4,14 @@ const { createClient } = require('@supabase/supabase-js');
 const sent = [];
 const sender = require.resolve('./email/resend');
 require.cache[sender] = { id: sender, filename: sender, loaded: true, exports: { sendEmail: async m => sent.push(m) } };
-const { sendDigestForCandidate, renderDigestHtml } = require('./email/dailyDigest');
+const { sendDigestForCandidate, renderDigestHtml, prepareDigestJobs } = require('./email/dailyDigest');
 const profile = { id: 'test', email: 'test@example.com', home_lat: 28.92, home_lng: -81.92, home_state: 'FL', subscription_status: 'active' };
 const row = (id, age = 0) => ({ overall_score: 80, jobs: { id, title_original: id, company_name: 'Employer', location_raw: 'Florida, United States', state: 'FL', job_lat: 28.92, job_lng: -81.92, first_seen_at: new Date(Date.now() - age * 86400000).toISOString() } });
 async function scenario(freshCount, fallbackCount, failure, access = "active") {
   const candidate = { ...profile, subscription_status: access };
   const fresh = Array.from({ length: freshCount }, (_, i) => row(`fresh-${i}`));
   const fallback = Array.from({ length: fallbackCount }, (_, i) => row(`recent-${i}`, i + 2));
+  if (access === null) for (const r of [...fresh, ...fallback]) r.jobs.title_original = 'Medical Sales Representative';
   let calls = 0;
   const client = createClient('https://example.supabase.co', 'test-key', { auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: async input => {
     const url = new URL(input); calls++;
@@ -53,7 +54,7 @@ async function scenario(freshCount, fallbackCount, failure, access = "active") {
   const selected = [...fresh, ...fallback].slice(0, 5);
   const full = selected.map(r => ({ ...r.jobs, match: { overall_score: r.overall_score, excellent_match: false, recommendation: r.recommendation } }));
   const subscribed = require('./matching').hasFullAccess(candidate);
-  const emailJobs = subscribed ? full : full.map(require('./redaction').redactForNonSubscriber);
+  const emailJobs = prepareDigestJobs(full, subscribed);
   assert.equal(html, renderDigestHtml({ name: candidate.name, jobs: emailJobs, appBaseUrl: 'https://rookcareers.com', subscribed, hasNewJobs: freshCount > 0 }));
   if (!subscribed) { assert(!html.includes('Employer')); return; }
   const expected = selected.map(r => r.jobs.id);
