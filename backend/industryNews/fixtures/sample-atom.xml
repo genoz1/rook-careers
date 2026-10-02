@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>ROOK Test Atom Feed</title>
+  <entry>
+    <id>urn:rook:test:stryker-acquisition</id>
+    <title>Stryker acquires Example Medical</title>
+    <link rel="alternate" href="https://publisher.test/stryker-example-medical" />
+    <summary>Stryker announced the acquisition of the medical device company.</summary>
+    <published>2026-09-16T12:00:00Z</published>
+    <updated>2026-09-16T13:00:00Z</updated>
+  </entry>
+</feed>

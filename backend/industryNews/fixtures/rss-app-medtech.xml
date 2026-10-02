@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:media="http://search.yahoo.com/mrss/">
+  <channel>
+    <title>ROOK — Medical Device / MedTech</title>
+    <link>https://rss.app/feeds/example-medtech.xml</link>
+    <item>
+      <title><![CDATA[Stryker acquires Example Medical in medtech deal]]></title>
+      <link>https://www.medtechdive.test/news/stryker-example-medical/?utm_source=rss.app</link>
+      <guid isPermaLink="false">rss-app-medtech-001</guid>
+      <dc:creator><![CDATA[MedTech Dive]]></dc:creator>
+      <source url="https://www.medtechdive.test/">MedTech Dive</source>
+      <description><![CDATA[<img src="https://images.medtechdive.test/stryker.jpg?utm_source=rss.app">The medical device company announced the acquisition.]]></description>
+      <pubDate>Wed, 16 Sep 2026 12:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title><![CDATA[Medtronic launches a new surgical robot]]></title>
+      <link>https://www.massdevice.test/medtronic-surgical-robot</link>
+      <guid isPermaLink="false">rss-app-medtech-002</guid>
+      <source url="https://www.massdevice.test/">MassDevice</source>
+      <description><![CDATA[Medtronic launched a new medical device platform for surgery.]]></description>
+      <media:content url="https://images.massdevice.test/robot.jpg" medium="image" />
+      <pubDate>Thu, 17 Sep 2026 10:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>

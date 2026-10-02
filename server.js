@@ -46,6 +46,19 @@ app.use("/api", require("./backend/routes/recruiterPostings"));
 app.use("/api", require("./backend/routes/automation"));
 app.use("/api", require("./backend/admanager/conversions"));
 
+// Industry News is entirely opt-in. With the master flag absent (the default),
+// no routes, database clients, polling, generation, publishing, or distribution
+// behavior is introduced.
+const industryNewsFlags = require('./backend/industryNews/config').getFlags(process.env);
+let industryNewsWorker = null;
+if (industryNewsFlags.industryNews) {
+  const { SupabaseNewsStore } = require('./backend/industryNews/store');
+  const newsStore = new SupabaseNewsStore(require('./backend/resources/store').db());
+  app.use(require('./backend/industryNews/routes').createRouter({ store: newsStore }));
+  app.use(require('./backend/industryNews/adminRoutes').createAdminRouter({ store: newsStore }));
+  industryNewsWorker = require('./backend/industryNews/worker');
+}
+
 // Keep legacy ad URLs and links opened under /medical-sales/ on real pages.
 // Preserve the original query string verbatim for Google Ads attribution.
 app.get("/medical-sales/free-trial", (req, res) => {
@@ -145,6 +158,7 @@ app.listen(PORT, () => {
   console.log(`ROOK server running on port ${PORT}`);
   require('./backend/ingestionWatchdog').startIngestionWatchdog();
   require('./backend/resources/worker').start();
+  if (industryNewsWorker) industryNewsWorker.start({ store: new (require('./backend/industryNews/store').SupabaseNewsStore)(require('./backend/resources/store').db()) });
   // Pre-warm the active-jobs cache 5 s after boot so the first onboarding
   // preview request hits the cache instead of waiting 40+ s for a cold fetch.
   const { fetchActiveJobs } = require("./backend/scoring/precompute");
