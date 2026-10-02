@@ -85,7 +85,10 @@ class MemoryNewsStore {
     return { run, events: this.events };
   }
 
-  async claimGenerationEvent(owner) {
+  async claimGenerationEvent(owner, freshnessHours, limit = 2) {
+    const windowStart = new Date();
+    windowStart.setUTCMinutes(windowStart.getUTCMinutes() < 30 ? 0 : 30, 0, 0);
+    if (this.articles.filter(article => new Date(article.published_at) >= windowStart).length >= limit) return null;
     const event = this.events.find(candidate => candidate.processingStatus !== 'published' && !this.articles.some(article => article.event_id === candidate.id));
     if (!event) return null;
     event.processingStatus = 'generating'; event.leaseOwner = owner;
@@ -223,8 +226,8 @@ class SupabaseNewsStore {
     return { run, events: rows.map(eventFromRow) };
   }
 
-  async claimGenerationEvent(owner, freshnessHours) {
-    return queryResult(this.client.rpc('claim_industry_news_event', { p_owner: owner, p_freshness_hours: freshnessHours }));
+  async claimGenerationEvent(owner, freshnessHours, limit) {
+    return queryResult(this.client.rpc('claim_industry_news_event', { p_owner: owner, p_freshness_hours: freshnessHours, p_publication_limit: limit }));
   }
 
   async loadEvent(id) {

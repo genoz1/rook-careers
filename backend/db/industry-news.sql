@@ -139,11 +139,18 @@ create table if not exists public.industry_news_distribution (
   primary key(article_slug,channel)
 );
 
-create or replace function public.claim_industry_news_event(p_owner uuid, p_freshness_hours integer)
+drop function if exists public.claim_industry_news_event(uuid,integer);
+create or replace function public.claim_industry_news_event(p_owner uuid, p_freshness_hours integer, p_publication_limit integer)
 returns uuid language plpgsql security definer set search_path = public as $$
 declare chosen uuid;
 begin
   perform pg_advisory_xact_lock(hashtext('rook-industry-news-publication'));
+  if (select count(*) from industry_news_articles
+      where published_at >= date_trunc('hour',now()) +
+        make_interval(mins => case when extract(minute from now()) >= 30 then 30 else 0 end))
+      >= greatest(1,least(p_publication_limit,20)) then
+    return null;
+  end if;
   update industry_news_events set processing_status='candidate',lease_owner=null,lease_until=null
     where processing_status='generating' and lease_until < now() and generation_attempts < 3;
   select e.id into chosen from industry_news_events e
@@ -192,5 +199,5 @@ grant all on public.industry_news_sources, public.industry_news_discovery_runs,
   public.industry_news_feed_items, public.industry_news_events,
   public.industry_news_event_sources to service_role;
 grant all on public.industry_news_articles, public.industry_news_distribution to service_role;
-revoke all on function public.claim_industry_news_event(uuid,integer), public.publish_industry_news_article(uuid,uuid,jsonb), public.fail_industry_news_generation(uuid,uuid,text) from public,anon,authenticated;
-grant execute on function public.claim_industry_news_event(uuid,integer), public.publish_industry_news_article(uuid,uuid,jsonb), public.fail_industry_news_generation(uuid,uuid,text) to service_role;
+revoke all on function public.claim_industry_news_event(uuid,integer,integer), public.publish_industry_news_article(uuid,uuid,jsonb), public.fail_industry_news_generation(uuid,uuid,text) from public,anon,authenticated;
+grant execute on function public.claim_industry_news_event(uuid,integer,integer), public.publish_industry_news_article(uuid,uuid,jsonb), public.fail_industry_news_generation(uuid,uuid,text) to service_role;

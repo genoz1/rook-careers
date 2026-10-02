@@ -18,8 +18,9 @@ async function tick(deps = {}) {
   if (!deps.store) throw new Error('Industry News publication requires an injected store');
   const owner = crypto.randomUUID();
   const published = [];
-  for (let index = 0; index < getPublicationLimit(env); index += 1) {
-    const eventId = await deps.store.claimGenerationEvent(owner, getFreshnessHours(env));
+  const publicationLimit = getPublicationLimit(env);
+  for (let index = 0; index < publicationLimit; index += 1) {
+    const eventId = await deps.store.claimGenerationEvent(owner, getFreshnessHours(env), publicationLimit);
     if (!eventId) break;
     try {
       const event = await deps.store.loadEvent(eventId);
