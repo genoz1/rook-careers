@@ -7,7 +7,6 @@ function createRouter(deps={}){
  const router=express.Router();
  const client=()=>deps.db||db();
  const listing=deps.articles||articles;
- let loadJobs;
  router.use('/resources',(req,res,next)=>{res.set('Cache-Control','public, max-age=60');next();});
  const guard=fn=>async(req,res,next)=>{try{await fn(req,res,next);}catch{res.status(503).set('Retry-After','300').set('Cache-Control','no-store').send('Career Resources are temporarily unavailable. Please try again shortly.');}};
  const list=guard(async(req,res)=>{
@@ -25,9 +24,10 @@ function createRouter(deps={}){
  router.get('/resources/category/industry-news',redirectLegacyIndustryNews);
  router.get('/resources/category/:category',list);
  router.get('/resources/sitemap.xml',guard(async(req,res)=>{
-  const urls=[{path:'/resources/'},...CATEGORIES.map(c=>({path:'/resources/category/'+c.slug+'/'}))];
+  const urls=[{path:'/resources/'},...CATEGORIES.filter(c=>c.slug!=='industry-news').map(c=>({path:'/resources/category/'+c.slug+'/'}))];
   let offset=0;
-  while(true){const rows=await result(client().from('resource_articles').select('slug,updated_at').order('slug').range(offset,offset+499));
+  const now=new Date().toISOString();
+  while(true){const rows=await result(client().from('resource_articles').select('slug,updated_at,published_at,resource_topics!inner(status)').eq('resource_topics.status','published').lte('published_at',now).order('slug').range(offset,offset+499));
    if(!rows.length)break;urls.push(...rows.map(a=>({path:'/resources/'+a.slug+'/',date:a.updated_at})));offset+=rows.length;if(offset>49000)throw Error('Sitemap split required');}
   res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls.map(u=>`<url><loc>${views.esc(origin()+u.path)}</loc>${u.date?`<lastmod>${views.esc(u.date)}</lastmod>`:''}</url>`).join('')}</urlset>`);
  }));
@@ -46,9 +46,10 @@ function createRouter(deps={}){
    .select('slug,title,resource_topics!inner(status)').eq('category',a.category)
    .eq('resource_topics.status','published').neq('slug',a.slug)
    .lte('published_at',new Date().toISOString()).order('published_at',{ascending:false}).order('slug').limit(3));
-  let jobs=[];
-  try{const inventory=await (deps.jobs||(loadJobs ||= require('../seoInventory').createInventoryLoader(client())))();jobs=inventory['/jobs/category/'+category(a.category).jobs]?.entries?.slice(0,3)||[];}catch{/* Job availability must not block a public article. */}
-  res.type('html').send(views.article(a,related,jobs));
+  // The complete SEO job inventory can take tens of seconds to rebuild. It is
+  // secondary content, so never hold the server-rendered guide behind it. The
+  // template retains its crawlable category and job-search entry points.
+  res.type('html').send(views.article(a,related));
  }));
  return router;
 }
