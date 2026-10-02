@@ -30,6 +30,24 @@ test('publication is capped, idempotent, and verifies before distribution', asyn
   assert.equal(secondWorker.published.length, 0); assert.equal(store.articles.length, 2);
 });
 
+test('exact slug is renderable for verification before discovery surfaces expose it', async () => {
+  const store = new MemoryNewsStore();
+  store.events = [{ ...event, leaseOwner: 'verification-owner' }];
+  const saved = await store.finishGeneration('event-1', 'verification-owner', {
+    ...generated, slug: 'verification-pending', sources: event.items,
+    category: event.category, event_type: event.eventType, event_id: event.id,
+  });
+
+  assert.equal(saved.public_verified_at, null);
+  assert.equal((await store.articleBySlug(saved.slug)).slug, saved.slug);
+  assert.deepEqual(await store.listArticles(), []);
+  assert.equal((await store.queuedDistributions()).length, 0);
+
+  await store.markPublicVerified(saved.slug);
+  assert.equal((await store.listArticles()).length, 1);
+  assert.equal((await store.queuedDistributions()).length, 2);
+});
+
 test('public article HTML includes SEO, sources, CTA, and noindex is absent', () => {
   const html = views.article({ ...generated, slug: 'story', category: 'medical-device', sources: [{ publisher: 'Publisher One', url: 'https://example.com/story', published_at: '2026-10-02' }], published_at: '2026-10-02', updated_at: '2026-10-02' });
   assert.match(html, /NewsArticle/); assert.match(html, /Publisher One/); assert.match(html, /rook-onboarding-v8\.html/); assert.doesNotMatch(html, /noindex/);
