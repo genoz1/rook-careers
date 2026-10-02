@@ -36,7 +36,8 @@ function validateArticle(article, event) {
   if (!article.description || article.description.length < 70 || article.description.length > 180) throw new Error('Article description length failed editorial validation');
   if (!/^(?:<(?:p|h2|h3|ul|ol|li|strong|em)>|<\/(?:p|h2|h3|ul|ol|li|strong|em)>|[^<>])*$/i.test(article.body_html || '')) throw new Error('Article HTML contains an unsupported element or attribute');
   const count = words(article.body_html).length;
-  if (count < 250 || count > 1000 || ((article.body_html || '').match(/<h2>/gi) || []).length < 2) throw new Error('Article body failed length or structure validation');
+  const headings = ((article.body_html || '').match(/<h2>/gi) || []).length;
+  if (count < 250 || count > 1000 || headings < 2) throw new Error(`Article body failed length or structure validation (${count} words, ${headings} h2 headings)`);
   if (/[“”"]/.test(article.body_html)) throw new Error('Article body contains unverified quotation marks');
   if (/\b(?:todo|lorem ipsum|as an ai|source \d+)\b/i.test(article.body_html)) throw new Error('Article body contains an editorial artifact');
   const evidence = JSON.stringify(evidenceFor(event));
@@ -54,11 +55,20 @@ async function generateArticle(event, deps = {}) {
   const evidence = evidenceFor(event);
   if (!evidence.length) throw new Error('Eligible event has no attributable source evidence');
   const generator = deps.generate || generateStructuredText;
-  const article = await generator(
-    'You are ROOK Careers editorial. Write an original, concise, event-centered industry news brief for medical and veterinary sales professionals. Use only the supplied RSS evidence. Never invent, infer, predict, quote, or add a number not present in the evidence. Attribute claims to the named publishers. Do not mention job openings. The title must be 20-110 characters. The description must be 70-180 characters. The body_html must be 300-700 words and contain at least two h2 section headings. Return body_html using only p, h2, h3, ul, ol, li, strong, and em tags, with no attributes or links. Each social_copy value must be 30-1200 characters and contain no URL.',
-    JSON.stringify({ category: event.category, event_type: event.eventType, evidence }), ARTICLE_SCHEMA, 1800,
-  );
-  const checked = validateArticle(article, event);
+  const generationPrompt = 'You are ROOK Careers editorial. Write an original, concise, event-centered industry news brief for medical and veterinary sales professionals. Use only the supplied RSS evidence. Never invent, infer, predict, quote, or add a number not present in the evidence. Attribute claims to the named publishers. Do not mention job openings. The title must be 20-110 characters. The description must be 70-180 characters. The body_html must be 300-700 words and contain at least two h2 section headings. Return body_html using only p, h2, h3, ul, ol, li, strong, and em tags, with no attributes or links. Each social_copy value must be 30-1200 characters and contain no URL.';
+  let article;
+  let checked;
+  let validationError;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    article = await generator(
+      `${generationPrompt}${attempt ? ' Correct the prior draft so it satisfies the stated format exactly; preserve the evidence-only factual boundary.' : ''}`,
+      JSON.stringify({ category: event.category, event_type: event.eventType, evidence,
+        ...(attempt ? { prior_draft: article, validation_error: validationError.message } : {}) }), ARTICLE_SCHEMA, 1800,
+    );
+    try { checked = validateArticle(article, event); break; }
+    catch (error) { validationError = error; }
+  }
+  if (!checked) throw validationError;
   const reviewer = deps.review || generateStructuredText;
   const review = await reviewer(
     'Act as a strict factual editor. Approve only if every factual and numeric claim is supported by the supplied evidence, attribution is clear, the copy is original rather than copied, and no prediction or job claim is made.',
