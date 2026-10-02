@@ -26,6 +26,22 @@ test('generation preserves deterministic source attribution and passes separate 
   assert.match(generationPrompt, /at least two h2 section headings/i);
 });
 
+test('generation gets one evidence-bound correction pass for a structurally invalid draft', async () => {
+  let calls = 0;
+  const article = await generateArticle(event, {
+    generate: async (prompt, input) => {
+      calls += 1;
+      if (calls === 1) return { ...generated, body_html: '<h2>Short</h2><p>Too short.</p>' };
+      assert.match(prompt, /Correct the prior draft/);
+      assert.match(input, /Article body failed length or structure validation/);
+      return generated;
+    },
+    review: async () => ({ approved: true, reason: 'grounded' }),
+  });
+  assert.equal(calls, 2);
+  assert.equal(article.word_count > 250, true);
+});
+
 test('publication is capped, idempotent, and verifies before distribution', async () => {
   const store = new MemoryNewsStore(); store.events = [event, { ...event, id: 'event-2', clusterKey: 'two' }, { ...event, id: 'event-3', clusterKey: 'three' }];
   const result = await tick({ allowFixtureRun: true, env: { INDUSTRY_NEWS_MAX_PUBLICATIONS_PER_RUN: '2' }, store, generateArticle: async e => ({ ...generated, slug: `story-${e.id}`, sources: event.items, category: e.category, event_type: e.eventType, event_id: e.id, word_count: 275, body_hash: e.id }), verifyPublic: async () => true });
