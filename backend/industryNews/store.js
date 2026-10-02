@@ -108,10 +108,12 @@ class MemoryNewsStore {
   async failGeneration(id, owner, message) { const event = this.events.find(candidate => candidate.id === id && candidate.leaseOwner === owner); if (event) Object.assign(event, { processingStatus: 'candidate', lastError: message }); }
   async markPublicVerified(slug) { const article = this.articles.find(candidate => candidate.slug === slug); if (article) article.public_verified_at = new Date().toISOString(); }
   async listArticles({ category: wanted, limit = 100 } = {}) { return this.articles.filter(a => a.public_verified_at && (!wanted || a.category === wanted)).slice(0, limit); }
-  async articleBySlug(slug) { return this.articles.find(a => a.slug === slug && a.public_verified_at) || null; }
+  // Exact-slug lookup must work during post-insert public verification. Listings,
+  // category pages, the sitemap, and social distribution remain verification-gated.
+  async articleBySlug(slug) { return this.articles.find(a => a.slug === slug) || null; }
   async claimDistribution(slug, channel) { const row = this.distributions.find(d => d.article_slug === slug && d.channel === channel && d.state === 'queued'); if (!row) return false; row.state = 'sending'; return true; }
   async finishDistribution(slug, channel, state, receipt) { const row = this.distributions.find(d => d.article_slug === slug && d.channel === channel); if (row) Object.assign(row, { state, receipt }); }
-  async queuedDistributions(limit = 2) { return this.distributions.filter(d => d.state === 'queued').slice(0, limit).map(d => ({ ...d, article: this.articles.find(a => a.slug === d.article_slug) })); }
+  async queuedDistributions(limit = 2) { return this.distributions.filter(d => d.state === 'queued' && this.articles.find(a => a.slug === d.article_slug)?.public_verified_at).slice(0, limit).map(d => ({ ...d, article: this.articles.find(a => a.slug === d.article_slug) })); }
 }
 
 class SupabaseNewsStore {
@@ -255,7 +257,9 @@ class SupabaseNewsStore {
   }
 
   async articleBySlug(slug) {
-    return queryResult(this.client.from('industry_news_articles').select('*').eq('slug', slug).not('public_verified_at', 'is', null).maybeSingle());
+    // The publication worker verifies this exact public URL before it marks the
+    // article public. Discovery surfaces continue to use listArticles().
+    return queryResult(this.client.from('industry_news_articles').select('*').eq('slug', slug).maybeSingle());
   }
 
   async claimDistribution(slug, channel) {
