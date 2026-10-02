@@ -95,4 +95,4 @@ if(require.main===module)(async()=>{
  }
  throw Error('Use check | test facebook|instagram SLUG --confirm-post');
 })().catch(e=>{console.error(e.message);process.exitCode=1;});
-module.exports={check,graph,sendArticle,dispatch,captionFor};
+module.exports={check,resolve,graph,sendArticle,dispatch,captionFor};

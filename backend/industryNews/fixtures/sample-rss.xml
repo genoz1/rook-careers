@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>ROOK Test Medical News</title>
+    <item>
+      <guid>device-recall-001</guid>
+      <title>Acme Medical recalls CardioFlow catheter after FDA safety notice</title>
+      <link>http://www.example.test/news/cardioflow?utm_source=rss&amp;b=2&amp;a=1</link>
+      <description><![CDATA[The medical device manufacturer began a recall after an FDA safety communication.]]></description>
+      <pubDate>Tue, 15 Sep 2026 14:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <guid>consumer-001</guid>
+      <title>Ten wellness tips for a better self-care routine</title>
+      <link>https://example.test/wellness/tips</link>
+      <description>Consumer advice about home workouts and beauty tips.</description>
+      <pubDate>Tue, 15 Sep 2026 15:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <guid>clinical-review-001</guid>
+      <title>Researchers study a new diagnostic assay</title>
+      <link>https://example.test/research/assay</link>
+      <description>A laboratory team reports preliminary results.</description>
+      <pubDate>Tue, 15 Sep 2026 16:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>

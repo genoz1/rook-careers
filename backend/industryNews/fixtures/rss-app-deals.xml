@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:media="http://search.yahoo.com/mrss/">
+  <channel>
+    <title>ROOK — M&amp;A / Funding / Partnerships</title>
+    <link>https://rss.app/feeds/example-deals.xml</link>
+    <item>
+      <title><![CDATA[Stryker to acquire Example Medical]]></title>
+      <link>https://www.fiercehealthcare.com/medtech/stryker-buys-example?utm_medium=feed</link>
+      <guid isPermaLink="false">rss-app-deals-901</guid>
+      <dc:creator><![CDATA[Fierce Healthcare]]></dc:creator>
+      <description><![CDATA[Stryker will acquire the medical device business in a newly announced deal.]]></description>
+      <media:thumbnail url="https://images.fierce.test/example-deal.jpg" />
+      <pubDate>Thu, 17 Sep 2026 09:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>
