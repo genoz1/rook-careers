@@ -64,6 +64,7 @@
         if(typeof gtag==='function')gtag('event',name,params);
         if(typeof fbq==='function'&&name===`${state.source}_checkout_started`)fbq('trackSingle','1597398388509281','InitiateCheckout');
         if(typeof fbq==='function'&&state.source==='v9'&&name==='v9_first_month_subscription_purchased')fbq('trackSingle','1597398388509281','Subscribe');
+        if(state.source==='v9'&&typeof window.rookLinkedInV9Track==='function')window.rookLinkedInV9Track(name);
       }catch(_){}
     }
     let state,acquisitionProfile;
