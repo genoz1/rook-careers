@@ -1,12 +1,12 @@
 (function(){
   'use strict';
-  function once(name,key,params){
+  function once(name,key,params,profile){
     try{
       const storageKey=`rook_v9_analytics:${name}:${key||'state'}`;
       if(sessionStorage.getItem(storageKey))return;
       sessionStorage.setItem(storageKey,'1');
     }catch(_){}
-    if(typeof rookTrackEvent==='function')rookTrackEvent(name,{onboarding_version:'v9',...params});
+    if(typeof rookTrackEvent==='function')rookTrackEvent(name,{...(typeof rookAttributionEventParams==='function'?rookAttributionEventParams(profile):{}),onboarding_version:'v9',...params});
   }
   function formatRemaining(ms){
     const total=Math.max(0,Math.ceil(ms/1000));
@@ -19,20 +19,20 @@
     if(profile?.trial_source!=='v9')return false;
     const key=profile.trial_started_at||'v9';
     if(profile.subscription_status==='active'){
-      once('v9_subscription_state',key,{status:'active'});
+      once('v9_subscription_state',key,{status:'active'},profile);
       return false;
     }
     if(profile.subscription_started_at){
-      once('v9_subscription_state',key,{status:profile.subscription_status||'inactive'});
+      once('v9_subscription_state',key,{status:profile.subscription_status||'inactive'},profile);
       return false;
     }
     const end=profile.trial_ends_at?new Date(profile.trial_ends_at).getTime():0;
     if(profile.subscription_status!=='trialing'||!Number.isFinite(end)||end<=Date.now()){
-      once('v9_trial_expired',key,{status:'expired'});
+      once('v9_trial_expired',key,{status:'expired'},profile);
       goToPostTrial();
       return true;
     }
-    once('v9_dashboard_accessed',key,{status:'trialing'});
+    once('v9_dashboard_accessed',key,{status:'trialing'},profile);
     document.body.dataset.v9Funnel='true';
     if(!document.getElementById('v9TrialStatus')){
       const style=document.createElement('style');
@@ -45,7 +45,7 @@
     }
     const render=()=>{
       const remaining=end-Date.now();
-      if(remaining<=0){once('v9_trial_expired',key,{status:'expired'});goToPostTrial();return false;}
+      if(remaining<=0){once('v9_trial_expired',key,{status:'expired'},profile);goToPostTrial();return false;}
       const value=document.getElementById('v9TrialRemaining');if(value)value.textContent=formatRemaining(remaining);return true;
     };
     if(render()){

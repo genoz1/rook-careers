@@ -9,7 +9,7 @@
     var safe={onboarding_version:'v9'};
     ['stage','source','label','status'].forEach(function(k){var v=params&&params[k];if(typeof v==='string'&&/^[a-z0-9_ -]{1,50}$/i.test(v))safe[k]=v});
     ['count','opportunities','best_match_count'].forEach(function(k){var v=params&&params[k];if(Number.isFinite(v))safe[k]=v});
-    if(typeof rookGetStoredAttribution==='function'){var a=rookGetStoredAttribution();['source','medium','campaign','content','term'].forEach(function(k){var v=a['utm_'+k];if(typeof v==='string'&&!/@|https?:\/\//i.test(v))safe['first_touch_'+k]=v.slice(0,100)})}
+    if(typeof rookAttributionEventParams==='function')Object.assign(safe,rookAttributionEventParams(params&&params.attribution));
     if(typeof gtag==='function')gtag('event',name,safe);
     var meta={v9_landing:'ViewContent',v9_free_trial_started:'StartTrial',v9_checkout_started:'InitiateCheckout',v9_first_month_subscription_purchased:'Subscribe'}[name];
     if(meta)window.fbq('trackSingle',pixel,meta);

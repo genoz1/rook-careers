@@ -1,4 +1,4 @@
-// V9 is an isolated paid-Meta mobile funnel. V8 routes and session semantics stay unchanged.
+// V9 is an isolated acquisition funnel. V8 routes and session semantics stay unchanged.
 const express = require('express');
 const crypto = require('crypto');
 const {createClient} = require('@supabase/supabase-js');
@@ -53,7 +53,7 @@ function validateTerritories(values){
   return selected;
 }
 function attribution(body){
-  return Object.fromEntries(['utm_source','utm_medium','utm_campaign','utm_term','utm_content']
+  return Object.fromEntries(['utm_source','utm_medium','utm_campaign','utm_term','utm_content','utm_id']
     .filter(key=>typeof body?.attribution?.[key]==='string'&&body.attribution[key].trim())
     .map(key=>[key,body.attribution[key].trim().slice(0,200)]));
 }
@@ -162,7 +162,7 @@ router.post('/claim',wrap(async(req,res)=>{
   if(!saved.transferred_at){
     const existing=await db.from('candidate_profiles').select('utm_source').eq('user_id',account.id).maybeSingle();if(existing.error)throw existing.error;
     const profile={...saved.profile};delete profile.onboarding_version;delete profile.v9_opportunity_count;delete profile.v9_best_match_count;
-    if(existing.data?.utm_source)for(const key of ['utm_source','utm_medium','utm_campaign','utm_term','utm_content'])delete profile[key];
+    if(existing.data?.utm_source)for(const key of ['utm_source','utm_medium','utm_campaign','utm_term','utm_content','utm_id'])delete profile[key];
     const name=[account.user_metadata?.first_name,account.user_metadata?.last_name].filter(Boolean).join(' ');
     const written=await db.from('candidate_profiles').upsert({...profile,user_id:account.id,email:account.email,...(name?{name}:{})},{onConflict:'user_id'});if(written.error)throw written.error;
     const done=await db.from(table).update({transferred_at:new Date().toISOString()}).eq('token_hash',saved.token_hash).eq('user_id',account.id);if(done.error)throw done.error;
@@ -173,13 +173,13 @@ router.post('/claim',wrap(async(req,res)=>{
   const entitlement=Array.isArray(activated.data)?activated.data[0]:activated.data;
   if(!entitlement?.outcome)throw Error('Trial entitlement could not be confirmed.');
   if(entitlement.outcome==='started'){
-    const profileResult=await db.from('candidate_profiles').select('name,utm_source,utm_medium,utm_campaign,utm_term,utm_content').eq('user_id',account.id).maybeSingle();
+    const profileResult=await db.from('candidate_profiles').select('name,utm_source,utm_medium,utm_campaign,utm_term,utm_content,utm_id').eq('user_id',account.id).maybeSingle();
     if(!profileResult.error){
       const p=profileResult.data||{};
       const event=await db.from('ad_conversion_events').insert({
         event_key:`v9_trial_started_${account.id}`,event_type:'trial_started',user_id:account.id,
         utm_source:p.utm_source||null,utm_medium:p.utm_medium||null,utm_campaign:p.utm_campaign||null,
-        utm_term:p.utm_term||null,utm_content:p.utm_content||null,
+        utm_term:p.utm_term||null,utm_content:p.utm_content||null,utm_id:p.utm_id||null,
         platform_inferred:p.utm_source||'unknown',occurred_at:entitlement.trial_started_at,
       });
       if(event.error&&event.error.code!=='23505')console.error('V9 trial analytics write failed:',event.error.message);

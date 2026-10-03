@@ -8,7 +8,7 @@
   <link rel="icon" href="assets/favicon.ico" sizes="any">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <script src="rook-attribution.js"></script>
+  <script src="rook-attribution.js"></script><script src="rook-linkedin.js"></script>
   <script async src="https://www.googletagmanager.com/gtag/js?id=AW-18428232873"></script>
   <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config','AW-18428232873');gtag('config','G-LDG2CL5Z8R');</script>
   <script>(function(){if(window.fbq)return;var q=window.fbq=function(){q.callMethod?q.callMethod.apply(q,arguments):q.queue.push(arguments)};window._fbq=q;q.push=q;q.loaded=true;q.version='2.0';q.queue=[];var s=document.createElement('script');s.async=true;s.src='https://connect.facebook.net/en_US/fbevents.js';document.head.appendChild(s);q('set','autoConfig',false,'1597398388509281');q('init','1597398388509281');q('trackSingle','1597398388509281','PageView')})();</script>
@@ -60,15 +60,15 @@
         const key=`rook_keep_access:${name}:${state.trialKey}`,prior=`rook_${state.source}_analytics:${name}:${state.trialKey}`;
         if(sessionStorage.getItem(key)||sessionStorage.getItem(prior))return;sessionStorage.setItem(key,'1');sessionStorage.setItem(prior,'1');
         const params={onboarding_version:state.source,stage:stage||'post_trial'};
-        if(typeof rookGetStoredAttribution==='function'){const a=rookGetStoredAttribution();['source','medium','campaign','content','term'].forEach(k=>{const v=a['utm_'+k];if(typeof v==='string'&&!/@|https?:\/\//i.test(v))params['first_touch_'+k]=v.slice(0,100)})}
+        if(typeof rookAttributionEventParams==='function')Object.assign(params,rookAttributionEventParams(acquisitionProfile));
         if(typeof gtag==='function')gtag('event',name,params);
         if(typeof fbq==='function'&&name===`${state.source}_checkout_started`)fbq('trackSingle','1597398388509281','InitiateCheckout');
         if(typeof fbq==='function'&&state.source==='v9'&&name==='v9_first_month_subscription_purchased')fbq('trackSingle','1597398388509281','Subscribe');
       }catch(_){}
     }
-    let state;
+    let state,acquisitionProfile;
     try{
-      const profile=await api('/api/profile');state=RookKeepAccess.resolve(profile);
+      const profile=await api('/api/profile');acquisitionProfile=profile;state=RookKeepAccess.resolve(profile);
       if(state.redirect){location.replace(state.redirect);return}
       if(state.error)throw Error(state.error);
     }catch(e){error.textContent=e.message;return}

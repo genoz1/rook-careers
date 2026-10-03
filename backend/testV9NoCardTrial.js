@@ -1,12 +1,13 @@
 const assert=require('node:assert/strict');
 const crypto=require('node:crypto');
+const acquisition=JSON.parse(process.env.ROOK_TEST_ATTRIBUTION||'{"utm_source":"facebook"}');
 
 process.env.SUPABASE_URL='https://test.invalid';
 process.env.SUPABASE_SERVICE_ROLE_KEY='server';
 
 const rawToken='a'.repeat(64),tokenHash=crypto.createHash('sha256').update(rawToken).digest('hex');
 const tables={
-  onboarding_v7_sessions:[{token_hash:tokenHash,user_id:null,transferred_at:null,expires_at:'2099-01-01T00:00:00Z',profile:{onboarding_version:'v9',home_zip:'10001',utm_source:'facebook',v9_opportunity_count:40,v9_best_match_count:32}}],
+  onboarding_v7_sessions:[{token_hash:tokenHash,user_id:null,transferred_at:null,expires_at:'2099-01-01T00:00:00Z',profile:{onboarding_version:'v9',home_zip:'10001',...acquisition,v9_opportunity_count:40,v9_best_match_count:32}}],
   candidate_profiles:[],ad_conversion_events:[],
 };
 const accountPushes=[];
@@ -42,7 +43,7 @@ require.cache[require.resolve('@supabase/supabase-js')]={exports:{createClient:(
 require.cache[require.resolve('./v8Matching')]={exports:{readCandidates:async()=>[],indexFor:()=>({current:async()=>[]}),startIndex:()=>{}}};
 require.cache[require.resolve('./v7Matching')]={exports:{rankPool:()=>[]}};
 require.cache[require.resolve('./v7Location')]={exports:{prepareJob:job=>job}};
-require.cache[require.resolve('./adminPush')]={exports:{notifyNewAccount:async payload=>{accountPushes.push(payload);return {sent:true};}}};
+require.cache[require.resolve('./adminPush')]={exports:{notifyNewAccount:async payload=>{accountPushes.push(payload);return {sent:true};},notifyNewSubscriber:async()=>({sent:true})}};
 
 const router=require('./routes/onboardingV9');
 const claimHandler=router.stack.find(layer=>layer.route?.path==='/claim').route.stack[0].handle;
@@ -55,10 +56,32 @@ const claimHandler=router.stack.find(layer=>layer.route?.path==='/claim').route.
     assert.equal(new Date(first.data.trial_ends_at)-new Date(first.data.trial_started_at),86400000);
     assert.equal(tables.candidate_profiles[0].digest_enabled,true);assert(tables.candidate_profiles[0].marketing_consent_at);
     assert.equal(tables.ad_conversion_events.length,1);assert.equal(tables.ad_conversion_events[0].event_type,'trial_started');
-    assert.equal(accountPushes.length,1);assert.equal(accountPushes[0].version,'V9');assert.equal(accountPushes[0].profile.utm_source,'facebook');
+    assert.equal(accountPushes.length,1);assert.equal(accountPushes[0].version,'V9');assert.equal(accountPushes[0].profile.utm_source,acquisition.utm_source);
+    for(const [key,value] of Object.entries(acquisition)){assert.equal(tables.candidate_profiles[0][key],value);assert.equal(tables.ad_conversion_events[0][key],value);}
     const startedAt=first.data.trial_started_at,second=await claim(false);assert.equal(second.data.outcome,'trial_active');assert.equal(second.data.trial_started_at,startedAt);assert.equal(tables.ad_conversion_events.length,1);assert.equal(accountPushes.length,1);
     tables.candidate_profiles[0].trial_ends_at='2020-01-01T00:00:00Z';
     const expired=await claim(false);assert.equal(expired.data.outcome,'trial_used');assert.equal(expired.data.trial_started_at,startedAt);
+    const stripe=require('./routes/stripe');
+    const params=stripe.buildV9SubscriptionParams({customerId:'cus_mock',paymentMethodId:'pm_mock',userId:'user-1',priceId:'price_mock',couponId:'coupon_mock',utm:acquisition});
+    for(const [key,value] of Object.entries(acquisition))assert.equal(params.metadata[key],value);
+    const paidRows=new Map();
+    const paidDb={from:table=>table==='candidate_profiles'?{select:()=>({eq:()=>({maybeSingle:async()=>({data:tables.candidate_profiles[0]})})})}:{insert:async row=>{if(paidRows.has(row.event_key))return {error:{code:'23505'}};paidRows.set(row.event_key,row);return {};}}};
+    const invoice=(type,amount,status='paid')=>({created:100,type,data:{object:{customer:'cus_mock',subscription:'sub_mock',status,amount_paid:amount}}});
+    const options={supabaseAdmin:paidDb,subscriberNotifier:async()=>{}};
+    assert.equal((await stripe.handleStripeWebhookEvent(invoice('invoice.paid',0),options)).applied,false);
+    assert.equal((await stripe.handleStripeWebhookEvent(invoice('invoice.paid',999,'open'),options)).applied,false);
+    assert.equal((await stripe.handleStripeWebhookEvent(invoice('invoice.paid',999),options)).applied,true);
+    assert.equal((await stripe.handleStripeWebhookEvent(invoice('invoice.payment_succeeded',999),options)).applied,false);
+    assert.equal((await stripe.handleStripeWebhookEvent(invoice('invoice.paid',1999),options)).applied,false);
+    assert.equal(paidRows.size,1);
+    for(const [key,value] of Object.entries(acquisition))assert.equal([...paidRows.values()][0][key],value);
+    assert.equal([...paidRows.values()][0].event_type,'paid_subscription_started');
+    // A later campaign/session must not overwrite an existing account's touch.
+    tables.onboarding_v7_sessions[0].transferred_at=null;
+    tables.onboarding_v7_sessions[0].profile={...tables.onboarding_v7_sessions[0].profile,utm_source:'later-channel',utm_id:'later-id'};
+    await claim(false);
+    for(const [key,value] of Object.entries(acquisition))assert.equal(tables.candidate_profiles[0][key],value);
+
     console.log('PASS V9 verified-email activation starts one 24-hour no-card trial and never resets it.');
   }finally{}
 })().catch(error=>{console.error(error);process.exitCode=1});
