@@ -130,10 +130,10 @@ router.get("/stripe/trial-config", (req, res) => {
   res.json({ trialDays: 0, deprecated: true });
 });
 
-// Only these five keys are ever trusted from the client for attribution —
+// Only these six keys are ever trusted from the client for attribution —
 // an allowlist, not a blind passthrough of req.body, so this endpoint
 // can't be used to write arbitrary metadata onto a Stripe object.
-const UTM_FIELDS = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"];
+const UTM_FIELDS = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "utm_id"];
 function pickUtmFields(body) {
   const out = {};
   for (const key of UTM_FIELDS) {
@@ -354,7 +354,7 @@ router.post("/stripe/create-subscription-from-setup", requireConfig, requireAuth
     // run, since we need trial_started_at regardless of that.
     const { data: profile } = await supabaseAdmin
       .from("candidate_profiles")
-      .select("stripe_customer_id, trial_started_at, utm_source, utm_medium, utm_campaign, utm_term, utm_content")
+      .select("stripe_customer_id, trial_started_at, utm_source, utm_medium, utm_campaign, utm_term, utm_content, utm_id")
       .eq("user_id", req.user.id)
       .maybeSingle();
 
@@ -449,7 +449,7 @@ router.post("/stripe/create-v9-subscription-from-setup", requireConfig, requireA
     if (!couponId) return res.status(503).json({ error: "The V9 introductory offer is not configured yet." });
 
     const profileResult = await supabaseAdmin.from("candidate_profiles")
-      .select("stripe_customer_id,subscription_status,subscription_started_at,trial_started_at,trial_ends_at,trial_source,utm_source,utm_medium,utm_campaign,utm_term,utm_content")
+      .select("stripe_customer_id,subscription_status,subscription_started_at,trial_started_at,trial_ends_at,trial_source,utm_source,utm_medium,utm_campaign,utm_term,utm_content,utm_id")
       .eq("user_id", req.user.id).maybeSingle();
     if (profileResult.error) throw profileResult.error;
     const profile = profileResult.data || {};
@@ -504,7 +504,7 @@ router.post("/stripe/create-v8-subscription-from-setup", requireConfig, requireA
     if (!couponId) return res.status(503).json({ error: "The introductory offer is not configured yet." });
 
     const profileResult = await supabaseAdmin.from("candidate_profiles")
-      .select("stripe_customer_id,subscription_status,subscription_started_at,trial_started_at,trial_ends_at,trial_source,utm_source,utm_medium,utm_campaign,utm_term,utm_content")
+      .select("stripe_customer_id,subscription_status,subscription_started_at,trial_started_at,trial_ends_at,trial_source,utm_source,utm_medium,utm_campaign,utm_term,utm_content,utm_id")
       .eq("user_id", req.user.id).maybeSingle();
     if (profileResult.error) throw profileResult.error;
     const profile = profileResult.data || {};
@@ -652,7 +652,7 @@ router.post("/stripe/create-portal-session", requireConfig, requireAuth, async (
 //
 // Each entry is { gate, fields }: `gate` is the one column whose
 // current NULL-ness decides whether this entire group gets written —
-// e.g. the 5 UTM columns are one group gated on utm_source alone, so
+// e.g. the 6 UTM columns are one group gated on utm_source alone, so
 // they're written together or not at all, rather than each column
 // independently deciding based on its own (possibly legitimately
 // empty) value.
@@ -861,7 +861,7 @@ async function handleStripeWebhookEvent(event, { stripe, supabaseAdmin, subscrib
           }
           // UTM fallback: only fill in if onboarding didn't already
           // capture it (see routes/profile.js) — gated as one group on
-          // utm_source alone, so all 5 columns are written together or
+          // utm_source alone, so all 6 columns are written together or
           // not at all, rather than each independently deciding based
           // on its own (possibly legitimately empty) value.
           const utm = pickUtmFields(session.metadata || {});
@@ -924,7 +924,7 @@ async function handleStripeWebhookEvent(event, { stripe, supabaseAdmin, subscrib
         return { applied: false, reason: "not_a_positive_paid_subscription_invoice" };
       }
       const {data: profile, error: profileError} = await supabaseAdmin.from("candidate_profiles")
-        .select("user_id, name, trial_source, utm_source, utm_medium, utm_campaign, utm_term, utm_content")
+        .select("user_id, name, trial_source, utm_source, utm_medium, utm_campaign, utm_term, utm_content, utm_id")
         .eq("stripe_customer_id", invoice.customer).maybeSingle();
       if (profileError) throw profileError;
       if (!profile) throw new Error("Paid invoice has no matching candidate profile yet");

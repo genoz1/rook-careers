@@ -269,7 +269,7 @@ router.put("/profile", requireConfig, requireAuth, async (req, res) => {
   // relying on the frontend to behave, and protects against a stale
   // browser-cached attribution value from a much earlier visit
   // clobbering a real one already on file.
-  const UTM_FIELDS = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"];
+  const UTM_FIELDS = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "utm_id"];
   const { data: existingRow } = await supabaseAdmin
     .from("candidate_profiles")
     .select("utm_source")

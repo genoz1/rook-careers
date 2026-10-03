@@ -1,6 +1,6 @@
 // ROOK first-touch ad attribution.
 //
-// Captures utm_source/utm_medium/utm_campaign/utm_term/utm_content from
+// Captures utm_source/utm_medium/utm_campaign/utm_term/utm_content/utm_id from
 // the landing URL (if present) and stores them in localStorage — once.
 // First-touch, not last-touch: if someone clicks a Google ad today,
 // browses around organically for a week, then signs up, this preserves
@@ -24,7 +24,7 @@
 
   function captureFromUrl() {
     var params = new URLSearchParams(window.location.search);
-    var fields = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];
+    var fields = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'utm_id'];
     var found = {};
     var any = false;
     fields.forEach(function (key) {
@@ -62,4 +62,28 @@ function rookGetStoredAttribution() {
   } catch {
     return {};
   }
+}
+
+// Shared event enrichment. Current visit source and original acquisition remain
+// separate: a returning LinkedIn visit must not rewrite an earlier Meta touch.
+function rookAttributionEventParams(profile) {
+  var a = profile && profile.utm_source ? profile : rookGetStoredAttribution();
+  var out = {};
+  ['source','medium','campaign','content','term','id'].forEach(function(k) {
+    var v = a['utm_'+k];
+    if (typeof v === 'string' && !/@|https?:\/\//i.test(v)) out['first_touch_'+k] = v.slice(0,100);
+  });
+  var query = new URLSearchParams(window.location.search);
+  var source = query.get('utm_source') ||
+    ((query.get('gclid') || query.get('gbraid') || query.get('wbraid')) ? 'google' : '') || a.utm_source;
+  if (!source) {
+    try {
+      var ref = new URL(document.referrer);
+      source = ref.hostname === window.location.hostname ? 'direct' :
+        /(^|\.)linkedin\.com$/.test(ref.hostname) ? 'linkedin' :
+        /(^|\.)google\.[a-z.]+$/.test(ref.hostname) ? 'google' : 'referral';
+    } catch (_) { source = 'direct'; }
+  }
+  if (typeof source === 'string' && /^[a-z0-9_ -]{1,50}$/i.test(source)) out.source = source;
+  return out;
 }

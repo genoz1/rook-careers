@@ -84,5 +84,5 @@
     finally{state.busy=false;if(state.screen!=='searching')button.disabled=!ready(state.screen)}
   };
   addEventListener('pagehide',()=>{if(!['offer'].includes(state.screen))track('v9_abandonment',{stage:state.screen})});
-  (async()=>{track('v9_landing',{source:'meta_paid_video'});const requestId=++state.countRequest;try{const pool=await request('/pool');if(requestId===state.countRequest)animateCount(pool.opportunities,'current opportunities','landing')}catch(_){if(requestId===state.countRequest)$('counterNumber').textContent='—'}})();
+  (async()=>{track('v9_landing',{});const requestId=++state.countRequest;try{const pool=await request('/pool');if(requestId===state.countRequest)animateCount(pool.opportunities,'current opportunities','landing')}catch(_){if(requestId===state.countRequest)$('counterNumber').textContent='—'}})();
 })();
