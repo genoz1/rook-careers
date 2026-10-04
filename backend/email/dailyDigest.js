@@ -9,6 +9,7 @@ const { hasFullAccess } = require("../matching");
 const { distanceMiles } = require("../geocoding");
 const { isUsEligibleJob, resolveUsStateCode } = require("../jobEligibility");
 const { publicPreview } = require("../pretrialProjection");
+const { generalizedRole } = require("../maskedPresentation");
 
 const MIN_SCORE_TO_INCLUDE = 60;
 const MAX_JOBS_PER_EMAIL = 5;
@@ -71,7 +72,10 @@ function prepareDigestJobs(jobs, subscribed) {
     const location = safe.location || state ||
       (isUnrestrictedUsLocation(source.location_raw) ? "United States" : "");
     const display = {
-      id: source.id, title_original: safe.title, location_raw: location,
+      // Keep the title on the locked dashboard's vetted generalized-role
+      // contract. publicPreview's descriptive title can retain distinctive
+      // specialty sequences that make the original posting searchable.
+      id: source.id, title_original: generalizedRole(source), location_raw: location,
       compensation_text: safe.salary || "", first_seen_at: source.first_seen_at,
       subscription_required: true,
     };
