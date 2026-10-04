@@ -11,12 +11,18 @@ const profile = {id:'fixture-candidate',email:'fixture@example.com',name:'Gene Z
   home_lat:28.92,home_lng:-81.92,home_state:'FL',subscription_status:null,digest_enabled:true};
 const titles = ['Medical Sales Representative','Territory Account Manager','Clinical Sales Specialist',
   'Veterinary Sales Representative','Laboratory Account Executive'];
+const safeTitles = ['Sales Representative','Account Manager','Clinical Sales Specialist',
+  'Veterinary Sales Representative','Laboratory Account Executive'];
 const jobs = titles.map((title,i) => ({id:`source-job-${i}`,title_original:title,
   company_name:`PRIVATEBRAND${i}`,city:'Orlando',state:'FL',location_raw:'Orlando, FL',
   job_lat:28.54,job_lng:-81.38,first_seen_at:new Date(Date.now()-3*86400000).toISOString(),
   salary_min:90000,salary_max:120000,compensation_text:'PRIVATE compensation text',
   description_text:'PRIVATE description',source_url:'https://private.example/apply',
   status:'active',moderation_status:'approved'}));
+const leakedTitle='Clinical Specialist Manager | Urology - Neuromodulation';
+const leakFixture={...jobs[0],id:'distinctive-title',title_original:leakedTitle,
+  company_name:'PRIVATE DISTINCTIVE EMPLOYER',description_text:'PRIVATE DISTINCTIVE DESCRIPTION',
+  source_url:'https://private.example/distinctive-apply'};
 function dbFor(fresh,recent) {
   let reads=0;
   const db=createClient('https://fixture.supabase.co','fixture-key',{auth:{persistSession:false,autoRefreshToken:false},
@@ -66,7 +72,7 @@ async function run() {
     assert.equal(result.jobCount,5);
     assert.equal(result.excludedJobCount,0);
     assert.match(message.subject,/^5 jobs/);
-    for(const title of titles) assert(message.html.includes(title));
+    for(const title of safeTitles) assert(message.html.includes(title));
     assert(message.html.includes('Orlando, FL'));
     assert(message.html.includes('$90,000–$120,000'));
     assert(message.html.includes('Receiving alerts does not require a paid subscription'));
@@ -97,6 +103,31 @@ async function run() {
   }
   const normalized=prepareDigestJobs([{...jobs[0],title_original:null,title_normalized:'Account Executive'}],false);
   assert.equal(normalized[0].title_original,'Account Executive');
+  const [safeLeak]=prepareDigestJobs([leakFixture],false);
+  assert.equal(safeLeak.title_original,'Clinical Manager');
+  assert.equal(safeLeak.location_raw,'Orlando, FL');
+  assert.notEqual(safeLeak.title_original,'Untitled role');
+  assert(!JSON.stringify(safeLeak).includes(leakedTitle));
+  assert(!JSON.stringify(safeLeak).includes(leakFixture.company_name));
+  assert(!JSON.stringify(safeLeak).includes(leakFixture.description_text));
+  assert(!JSON.stringify(safeLeak).includes(leakFixture.source_url));
+  const distinct=prepareDigestJobs([
+    leakFixture,
+    {...leakFixture,id:'territory-manager',title_original:'Territory Manager | Urology - Neuromodulation'},
+    {...leakFixture,id:'account-executive',title_original:'Oncology Account Executive | Urology - Neuromodulation'},
+  ],false).map(job=>job.title_original);
+  assert.deepEqual(distinct,['Clinical Manager','Territory Manager','Oncology Account Executive']);
+  const leakEmail=await send([],[leakFixture]);
+  assert.equal(leakEmail.result.jobCount,1);
+  assert(leakEmail.message.html.includes('Clinical Manager'));
+  assert(leakEmail.message.html.includes('Orlando, FL'));
+  for(const secret of [leakedTitle,leakFixture.company_name,leakFixture.description_text,leakFixture.source_url,'Untitled role']) {
+    assert(!leakEmail.message.html.includes(secret),`${secret} must stay out of locked email`);
+  }
+  const paidLeak=await send([],[leakFixture],{...profile,subscription_status:'active'});
+  assert(paidLeak.message.html.includes(leakedTitle));
+  assert(paidLeak.message.html.includes(leakFixture.company_name));
+  assert(paidLeak.message.html.includes('/rook-job-analysis.html?job=distinctive-title'));
   const escaped=await send([],[{...jobs[0],title_original:'Sales Representative <PRIVATE> & Account Manager',compensation_text:'null'}],{...profile,subscription_status:'active'});
   assert(escaped.message.html.includes('&lt;PRIVATE&gt; &amp;'));
   assert(!escaped.message.html.includes(' · null'));
