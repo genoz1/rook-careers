@@ -18,6 +18,7 @@ const express = require("express");
 const Stripe = require("stripe");
 const { createClient } = require("@supabase/supabase-js");
 const { notifyNewSubscriber } = require("../adminPush");
+const linkedinPaid = require("../linkedinPaidConversion");
 
 const router = express.Router();
 
@@ -819,7 +820,7 @@ function mapLiveSubscriptionToFields(sub) {
 // it can be exercised directly in a test with a hand-built event object
 // and a fake supabaseAdmin/stripe — no real HTTP request, no real Stripe
 // signature, no real database required to verify this logic is correct.
-async function handleStripeWebhookEvent(event, { stripe, supabaseAdmin, subscriberNotifier = notifyNewSubscriber }) {
+async function handleStripeWebhookEvent(event, { stripe, supabaseAdmin, subscriberNotifier = notifyNewSubscriber, linkedinDelivery = linkedinPaid.deliverPaidConversion }) {
   switch (event.type) {
     case "checkout.session.completed": {
       const session = event.data.object;
@@ -924,7 +925,7 @@ async function handleStripeWebhookEvent(event, { stripe, supabaseAdmin, subscrib
         return { applied: false, reason: "not_a_positive_paid_subscription_invoice" };
       }
       const {data: profile, error: profileError} = await supabaseAdmin.from("candidate_profiles")
-        .select("user_id, name, trial_source, utm_source, utm_medium, utm_campaign, utm_term, utm_content, utm_id")
+        .select("user_id, name, email, trial_source, utm_source, utm_medium, utm_campaign, utm_term, utm_content, utm_id")
         .eq("stripe_customer_id", invoice.customer).maybeSingle();
       if (profileError) throw profileError;
       if (!profile) throw new Error("Paid invoice has no matching candidate profile yet");
@@ -932,6 +933,7 @@ async function handleStripeWebhookEvent(event, { stripe, supabaseAdmin, subscrib
         event_key: `first_paid_${profile.user_id}`,
         event_type: "paid_subscription_started",
         user_id: profile.user_id,
+        ...linkedinPaid.receiptFields(profile, invoice),
         ...pickUtmFields(profile),
         platform_inferred: profile.utm_source || "unknown",
         occurred_at: new Date((invoice.status_transitions?.paid_at || event.created) * 1000).toISOString(),
@@ -947,6 +949,11 @@ async function handleStripeWebhookEvent(event, { stripe, supabaseAdmin, subscrib
         } catch (_) {
           console.warn('[admin push] subscriber notification failed');
         }
+      }
+      // A failed delivery throws for Stripe retry. The durable original invoice ID
+      // excludes renewals; the sent receipt and stable LinkedIn eventId deduplicate.
+      if (process.env.LINKEDIN_CONVERSIONS_ACCESS_TOKEN && linkedinPaid.eligible(profile)) {
+        await linkedinDelivery({db:supabaseAdmin,eventKey:`first_paid_${profile.user_id}`,invoice});
       }
       return {applied: !error, reason: error ? "duplicate_paid_conversion" : undefined};
     }
