@@ -1,13 +1,28 @@
-# ROOK Careers — Prototype + Live Backend Wiring
+# ROOK Careers
 
-A job-matching platform prototype for medical and veterinary sales
-professionals. The UI is fully built, and the **login/signup, résumé
-upload, and dashboard job feed are now wired to real backend API calls**
-— they just need your real Supabase/Stripe credentials (see
-`ROOK-Setup-Guide.pdf`) to actually work end to end. Everything else
-(match scoring, most of the onboarding fields, tailored résumés) is
-still sample data — see "What's deliberately NOT here yet" below for
-the precise line.
+Specialized job discovery for **medical, device, diagnostics, pharmaceutical/biotech, veterinary, and animal-health sales**.
+
+Permanent product contracts for agents and contributors live in:
+
+- `.cursor/rules/rook-product-contracts.mdc`
+- `docs/PRODUCT_CONTRACTS.md`
+
+Key regression commands:
+
+```bash
+npm run test-sales-admission
+npm run test-masked-presentation
+npm run test-pretrial-security
+npm run test-current-funnel
+npm run audit-nonsales-inventory   # requires Supabase service role
+```
+
+# Prototype + Live Backend Wiring
+
+The UI is fully built, and the **login/signup, résumé
+upload, and dashboard job feed are wired to real backend API calls**
+— they need your real Supabase/Stripe credentials (see
+`ROOK-Setup-Guide.pdf`) to work end to end.
 
 The full technical architecture for the real backend (job ingestion from
 Greenhouse/Lever/Ashby, the matching engine, database schema, etc.) is
