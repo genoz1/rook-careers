@@ -20,6 +20,7 @@ const adapters = {
   eightfold: require('../adapters/eightfold'),
   phenom: require('../adapters/phenom'),
   paylocity: require('../adapters/paylocity'),
+  paycor: require('../adapters/paycor'),
   jazzhr: require('../adapters/jazzhr'),
   successfactors: require('../adapters/successfactors'),
   kula: require('../adapters/kula'),
@@ -47,6 +48,7 @@ const methodNames = {
   eightfold: ['fetchEightfoldJobs', 'normalizeEightfoldJob'],
   phenom: ['fetchPhenomJobs', 'normalizePhenomJob'],
   paylocity: ['fetchPaylocityJobs', 'normalizePaylocityJob'],
+  paycor: ['fetchPaycorJobs', 'normalizePaycorJob'],
   jazzhr: ['fetchJazzHRJobs', null],
   successfactors: ['fetchSuccessFactorsJobs', 'normalizeSuccessFactorsJob'],
   kula: ['fetchKulaJobs', 'normalizeKulaJob'],
@@ -86,7 +88,13 @@ function sourceIsAnchored(job, configuration) {
     }
     if (configuration.ats_type === 'workday') {
       const site = configuration.ats_identifier.split('|')[2];
-      return jobUrl.hostname === configuredUrl.hostname && jobUrl.pathname.split('/').includes(site);
+      const [tenant, wdNumber] = configuration.ats_identifier.split('|');
+      const canonicalHost = `${tenant}.${wdNumber}.myworkdayjobs.com`.toLowerCase();
+      return jobUrl.hostname.toLowerCase() === canonicalHost && jobUrl.pathname.split('/').some((part) => part.toLowerCase() === String(site).toLowerCase());
+    }
+    if (configuration.ats_type === 'paycor') {
+      return jobUrl.hostname === 'recruitingbypaycor.com' && configuredUrl.hostname === 'recruitingbypaycor.com' &&
+        (jobUrl.searchParams.get('clientId') || '').toLowerCase() === configuration.ats_identifier.toLowerCase();
     }
     if (configuration.ats_type === 'oraclehcm') return jobUrl.hostname === configuredUrl.hostname;
     if (configuration.ats_type === 'ukg') {
@@ -100,7 +108,7 @@ function sourceIsAnchored(job, configuration) {
     const allowedPlatform = {
       greenhouse: 'greenhouse.io', lever: 'lever.co', ashby: 'ashbyhq.com', workable: 'workable.com',
       smartrecruiters: 'smartrecruiters.com', workday: 'myworkdayjobs.com', applicantpro: 'applicantpro.com',
-      jobvite: 'jobvite.com', paylocity: 'paylocity.com', jazzhr: 'applytojob.com', kula: 'kula.ai',
+      jobvite: 'jobvite.com', paylocity: 'paylocity.com', paycor: 'recruitingbypaycor.com', jazzhr: 'applytojob.com', kula: 'kula.ai',
       oraclehcm: 'oraclecloud.com', ukg: 'ultipro.com', adp: 'adp.com',
     }[configuration.ats_type];
     return Boolean(allowedPlatform && jobUrl.hostname.endsWith(allowedPlatform) && configuredUrl.hostname.endsWith(allowedPlatform));
