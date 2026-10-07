@@ -68,8 +68,10 @@ function publicPreview(job) {
   const state = stateValue.length === 2 ? stateValue : zipcodes.states.full[stateValue];
   const place = Object.values(zipcodes.codes).find(p => p.city.toLowerCase() === city.toLowerCase() && p.state === state);
   const location = place ? `${place.city}, ${place.state}` : null;
-  // Only validated geography may augment the shared title vocabulary.
-  const title = require('./maskedPresentation').maskedTitle({...job, city:place?.city || '', state:place?.state || '', location_raw:location || ''});
+  // Public SEO/detail previews use the same generalized role contract as the
+  // locked dashboard so distinctive product/brand title fragments cannot be
+  // Googled from free pages. Validated city/state remain visible.
+  const title = generalizedRole({...job, city:place?.city || '', state:place?.state || '', location_raw:location || ''});
   const employment = {'full-time':'Full-time','full time':'Full-time','part-time':'Part-time','part time':'Part-time',contract:'Contract',temporary:'Temporary',internship:'Internship','per diem':'Per diem'}[String(job.employment_type || '').toLowerCase()] || null;
   let min = number(job.salary_min), max = number(job.salary_max);
   if (min == null && max == null) {
