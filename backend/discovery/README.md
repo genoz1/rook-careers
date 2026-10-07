@@ -47,3 +47,22 @@ to the pipeline per run. A signal for an already-monitored employer is retained
 as investigation evidence instead of creating a duplicate. Missing official
 website evidence and unsupported sources remain unresolved/retryable; only the
 existing machine-validation gate can enroll an active employer.
+
+This job-market input is supplemental and is not the primary discovery
+schedule.
+
+## Company-first discovery
+
+`npm run discover-companies-shadow` starts from employer ecosystems rather than
+job-board results. Its primary live source is NAVC's public official VMX 2027
+exhibitor directory, complemented by ROOK's curated medical-device,
+diagnostics/lab, pharma/biotech, healthcare-technology, dental, and
+animal-health company catalog. It compares the full company universe with
+active ROOK employers before doing bounded enrichment work.
+
+Official websites come first from the exhibitor's public VMX profile, then from
+public Wikidata or a maximum of two deterministic domain checks that require
+the page itself to corroborate the company identity. Shadow mode resolves
+official careers pages, detects ATS configurations, and runs the same read-only
+machine validation used by Phase 2. Apply mode sends only the bounded unknown
+company batch through Phase 2; it never writes employers directly.
