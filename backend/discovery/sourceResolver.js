@@ -91,6 +91,13 @@ function unwrapSearchUrl(value) {
 async function searchOfficialCareerCandidates(companyName, { httpFetch = fetch, maxResults = 8, industry = '' } = {}) {
   const results = [];
   let lastSearchError = null;
+  const addResult = (result) => {
+    const url = cleanUrl(result.url);
+    if (!url || SEARCH_REJECT_HOST.test(new URL(url).hostname) || ATS_HOST.test(url)) return false;
+    if (results.some((item) => item.url.replace(/\/$/, '') === url.replace(/\/$/, ''))) return false;
+    results.push({ ...result, url });
+    return true;
+  };
   const suffixes = ['careers', 'jobs'];
   for (const suffix of suffixes) {
     const endpoint = new URL('https://html.duckduckgo.com/html/');
@@ -116,19 +123,49 @@ async function searchOfficialCareerCandidates(companyName, { httpFetch = fetch, 
       if (queryResultCount >= maxResults) return;
       const anchor = $(node).find('a.result__a').first();
       const url = unwrapSearchUrl(anchor.attr('href'));
-      if (!url || SEARCH_REJECT_HOST.test(new URL(url).hostname) || ATS_HOST.test(url)) return;
-      if (results.some((item) => item.url.replace(/\/$/, '') === url.replace(/\/$/, ''))) return;
-      queryResultCount++;
-      results.push({
+      if (addResult({
         url,
         title: anchor.text().replace(/\s+/g, ' ').trim(),
         snippet: $(node).find('.result__snippet').text().replace(/\s+/g, ' ').trim(),
         provider: 'duckduckgo-html',
         query,
-      });
+      })) queryResultCount++;
     });
+    if (!queryResultCount) lastSearchError = new Error('DuckDuckGo returned no parseable public search results');
   }
-  if (!results.length && lastSearchError) throw lastSearchError;
+  // Empty search pages are a common transient response during a bounded batch.
+  // A second public provider keeps that outage from becoming a permanent
+  // SEARCH_IDENTITY_NOT_VERIFIED decision. It never bypasses page identity or
+  // official-link provenance checks below.
+  if (results.length < Math.min(2, maxResults)) {
+    const query = `${companyName}${industry ? ` ${industry}` : ''} careers jobs`;
+    const endpoint = new URL('https://www.bing.com/search');
+    endpoint.searchParams.set('format', 'rss');
+    endpoint.searchParams.set('q', query);
+    try {
+      const response = await httpFetch(endpoint, {
+        signal: AbortSignal.timeout(15_000),
+        headers: { Accept: 'application/rss+xml,application/xml,text/xml', 'User-Agent': 'ROOK-Careers/1.0 (public employer-source discovery)' },
+      });
+      if (!response.ok) throw new Error(`Bing public careers search returned ${response.status}`);
+      const $ = cheerio.load(await response.text(), { xmlMode: true });
+      let count = 0;
+      $('item').each((_, node) => {
+        if (count >= maxResults) return;
+        if (addResult({
+          url: $(node).find('link').first().text().trim(),
+          title: $(node).find('title').first().text().replace(/\s+/g, ' ').trim(),
+          snippet: $(node).find('description').first().text().replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
+          provider: 'bing-rss',
+          query,
+        })) count++;
+      });
+      if (!count && !results.length) lastSearchError = new Error('Public search providers returned no parseable results');
+    } catch (error) {
+      if (!results.length) lastSearchError = error;
+    }
+  }
+  if (!results.length) throw lastSearchError || new Error('Public search providers returned no results');
   const compact = String(companyName || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
   return results.map((result, index) => {
     const label = registrableDomain(result.url).split('.')[0].replace(/[^a-z0-9]+/g, '');
