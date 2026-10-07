@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
-const { EmployerDiscoveryPipeline } = require('./discovery/pipeline');
+const { EmployerDiscoveryPipeline, identityKey } = require('./discovery/pipeline');
 const { resolveOfficialSource, detectFromUrl, detectSourceConfigurations, searchOfficialCareerCandidates } = require('./discovery/sourceResolver');
 const { plausibleJob, sourceIsAnchored, validateSource } = require('./discovery/sourceValidator');
 const { fetchCustomHtmlJobs } = require('./adapters/customHtml');
@@ -267,6 +267,33 @@ test('public search ranking uses the registrable company domain instead of a gen
   assert.equal(results[0].url, 'https://jobs.banfield.com/');
 });
 
+test('empty DuckDuckGo batch responses fall back to bounded Bing RSS results', async () => {
+  const calls = [];
+  const results = await searchOfficialCareerCandidates('AutoRemind', {
+    httpFetch: async (url) => {
+      calls.push(String(url));
+      if (String(url).includes('bing.com')) return {
+        ok: true,
+        text: async () => '<rss><channel><item><title>Careers | AutoRemind</title><link>https://www.autoremind.com/jobs</link><description>Official AutoRemind jobs</description></item></channel></rss>',
+      };
+      return { ok: true, text: async () => '<html><body>No results in this transient response.</body></html>' };
+    },
+  });
+  assert.equal(results[0].url, 'https://www.autoremind.com/jobs');
+  assert.equal(results[0].provider, 'bing-rss');
+  assert.equal(calls.filter((url) => url.includes('duckduckgo.com')).length, 2);
+  assert.equal(calls.filter((url) => url.includes('bing.com')).length, 1);
+});
+
+test('empty responses from every public provider remain retryable instead of an identity rejection', async () => {
+  await assert.rejects(
+    searchOfficialCareerCandidates('Temporary Search Outage', {
+      httpFetch: async () => ({ ok: true, text: async () => '<html><body>No parseable results.</body></html>' }),
+    }),
+    /no parseable results/i,
+  );
+});
+
 test('verified subsidiary site may lead to a parent shared careers system with a provenance chain', async () => {
   const pages = new Map([
     ['https://aesculap.example/', { url: 'https://aesculap.example/', html: '<title>Aesculap US</title><a href="https://careers.bbraun.example/jobs">Careers at our parent B. Braun</a>' }],
@@ -347,6 +374,37 @@ test('targeted force retry accepts explicit candidate UUIDs and bypasses schedul
   });
   assert.equal(results[0].candidate_id, id);
   assert.deepEqual(seen[0].options, { force: true, candidateId: id });
+});
+
+test('real force-reprocess CLI path recovers a minimal VMX signal through the fallback search provider', async () => {
+  const id = '9cbe0ae7-f8d0-4e2f-b97c-d5412e65a612';
+  const vmxSignal = { company_name: 'Example Vet', industry: 'animal health', signal_source: 'vmx-2027-exhibitor-list' };
+  const store = new MemoryStore();
+  store.candidates.push({
+    id, identity_key: identityKey(vmxSignal), company_name: vmxSignal.company_name,
+    normalized_company_name: 'example vet', signal_payload: vmxSignal, status: 'unresolved',
+    attempt_count: 1, next_attempt_at: '2099-01-01T00:00:00.000Z',
+  });
+  const pipeline = new EmployerDiscoveryPipeline({
+    store,
+    resolveSource: (input) => resolveOfficialSource(input, {
+      searchCareers: (name, options) => searchOfficialCareerCandidates(name, {
+        ...options,
+        httpFetch: async (url) => String(url).includes('bing.com')
+          ? { ok: true, text: async () => '<rss><channel><item><title>Example Vet Careers</title><link>https://examplevet.test/jobs</link><description>Official jobs</description></item></channel></rss>' }
+          : { ok: true, text: async () => '<html><body>Transient empty response</body></html>' },
+      }),
+      readPage: async (url) => {
+        if (url === 'https://examplevet.test/jobs') return { url, html: '<title>Example Vet Careers</title><h1>Technical Support Representative</h1><p>Please email your application to jobs@examplevet.test. Support veterinary customers and software.</p>' };
+        throw new Error(`fixture 404: ${url}`);
+      },
+    }),
+    validate: async () => ({ ok: true, status: 'PASS_VALIDATED_SOURCE_NO_RELEVANT_JOBS', plausible_job_count: 0, inventory_job_count: 1 }),
+  });
+  const results = await run(['--force-candidate-id', id, '--limit', '1'], { store, pipeline });
+  assert.equal(results[0].status, 'enrolled');
+  assert.equal(store.candidates[0].validation_status, 'PASS_VALIDATED_SOURCE_NO_RELEVANT_JOBS');
+  assert.equal(store.employers[0].careers_url, 'https://examplevet.test/jobs');
 });
 
 test('verified later careers search result is tried after the official homepage and conventional paths fail', async () => {
