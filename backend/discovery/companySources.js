@@ -86,7 +86,9 @@ async function discoverCompanyFirstSignals({
   const known = new Set(knownEmployers.map((employer) => normalizeCompanyName(employer.company_name)));
   const existing = catalog.filter((company) => known.has(normalizeCompanyName(company.company_name)));
   const unknown = catalog.filter((company) => !known.has(normalizeCompanyName(company.company_name)));
-  const selected = unknown.slice(offset, offset + limit);
+  const selected = unknown.length
+    ? Array.from({ length: Math.min(limit, unknown.length) }, (_, index) => unknown[(offset + index) % unknown.length])
+    : [];
   const signals = [];
   const resolution_failures = [];
   for (const company of selected) {
