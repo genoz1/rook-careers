@@ -1,6 +1,7 @@
-// Runnable script for autonomous employer discovery. Meant to run on a
-// schedule via a DigitalOcean Scheduled Job (npm run discover-employers),
-// same pattern as ingest.js, precomputeScores.js, and sendDigest.js.
+// LEGACY slug-guess discovery. Production scheduling uses
+// `npm run discover-employers` → backend/runScheduledDiscovery.js (Phase 2
+// public-job + company + retry pipeline). Keep this script for targeted
+// offline experiments only — do not re-schedule it in DigitalOcean.
 //
 // WHAT THIS DOES AND WHY IT EXISTS
 // ---------------------------------

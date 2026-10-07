@@ -73,17 +73,24 @@ async function fetchEightfoldJobs(identifier) {
   let start = 0;
   const rawJobs = [];
   const maxPages = 40; // safety cap for a very large employer
+  let incompleteSnapshot = false;
+  const snapshotWarnings = [];
 
   for (let page = 0; page < maxPages; page++) {
     const url = `${baseUrl}/api/apply/v2/jobs?domain=${encodeURIComponent(domain)}&hl=en&start=${start}`;
     let res;
     try {
       res = await fetchWithTimeout(url, { headers: { Accept: "application/json" } });
-    } catch {
+    } catch (error) {
+      if (page === 0) throw error;
+      incompleteSnapshot = true;
+      snapshotWarnings.push(`Page ${page} network failure`);
       break;
     }
     if (!res.ok) {
       if (page === 0) throw new Error(`Eightfold SmartApply fetch failed for "${identifier}": ${res.status} ${res.statusText} — this employer may be on the newer PCSX pattern instead, needs separate investigation`);
+      incompleteSnapshot = true;
+      snapshotWarnings.push(`Page ${page} returned ${res.status}`);
       break;
     }
     const data = await res.json();
@@ -92,11 +99,19 @@ async function fetchEightfoldJobs(identifier) {
     rawJobs.push(...pageJobs);
     console.log(`    ...listed ${rawJobs.length} posting(s) so far`);
     if (pageJobs.length < pageSize) break;
+    if (page === maxPages - 1) {
+      incompleteSnapshot = true;
+      snapshotWarnings.push('Pagination safety cap reached with a full final page');
+    }
     start += pageSize;
   }
 
   const relevant = rawJobs.filter((j) => titleLooksRelevant(j.name || j.title || "", j));
   console.log(`    ${relevant.length} / ${rawJobs.length} titles look relevant`);
+  if (incompleteSnapshot) {
+    relevant.incompleteSnapshot = true;
+    relevant.snapshotWarnings = snapshotWarnings;
+  }
   return relevant;
 }
 

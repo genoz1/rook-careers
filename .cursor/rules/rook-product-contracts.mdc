@@ -1,0 +1,60 @@
+---
+description: Non-negotiable ROOK Careers product contracts — read before changing ingestion, masking, discovery, pricing, or inventory
+alwaysApply: true
+---
+
+# ROOK Careers — Permanent Product Contracts
+
+ROOK is a specialized job-discovery platform for:
+
+- Medical Sales
+- Medical Device Sales
+- Diagnostics / Laboratory Sales
+- Pharmaceutical / Biotech Sales
+- Veterinary Sales
+- Animal Health Sales
+
+ROOK is NOT a general medical or veterinary clinical job board.
+
+## Sales admission (critical)
+
+1. Industry relevance decides which markets to search.
+2. A job must **independently** qualify as a sales/commercial role before entering customer-visible inventory.
+3. Shared gate: `backend/relevanceFilter.js` (`isSalesAdmissibleJob` / `titleLooksRelevant`).
+4. Never reintroduce ROLE∩DOMAIN admission using industry words (`veterinary`, `clinical`, `medical`, `diagnostic`) plus generic role words (`manager`, `specialist`).
+5. No employer-specific patches for BluePearl / Mars / similar hospital boards — fix the shared classifier.
+6. Incomplete source snapshots must never mass-close jobs (`incompleteSnapshot`).
+
+## Masked dashboard (critical)
+
+1. Masking is enforced server-side via allowlist projection (`backend/pretrialProjection.js`). Visual blur alone is insufficient.
+2. Locked cards show useful **generalized** titles (`generalizedRole`) with industry variety — not every card as bare "Territory Manager".
+3. Locked cards show truthful **city/state** or supported geography when known (`safeLocationLabel` / `location_label`). Never invent locations. Avoid vague "Opportunity near you" when a real place exists.
+4. Until purchase, never expose employer identity, exact Googleable titles with product/brand identifiers, career URLs, application URLs, or source IDs in JSON/HTML/JS/email.
+5. After payment, show real title, employer, description, location, and application link.
+
+## Discovery and ingestion
+
+1. Public LinkedIn (and similar) results are discovery signals only — final jobs come from verified official employer sources.
+2. Autonomous discovery must cover all six categories on a recurring schedule (`backend/runScheduledDiscovery.js` + `publicJobSignals.js`).
+3. Validated sources enroll without manual approval; unsupported ATS systems use fallback extraction, not terminal failure.
+4. Prefer systemic ingestion fixes over manually inserting individual missing jobs.
+
+## Pricing / entitlements
+
+Preserve:
+
+- 48-hour access: $5.99 one-time
+- Monthly: $9.99 first month, then $19.99/month
+- 90-day access: $39.99 one-time
+- No free trial / no free membership tier
+
+Do not create duplicate Stripe products/prices unnecessarily. Do not execute real charges in tests.
+
+## Regression protection
+
+Before declaring work complete:
+
+1. Run targeted tests for the changed contract (`test-sales-admission`, `test-masked-presentation`, `test-pretrial-security`, discovery/ingest tests as relevant).
+2. Verify the actual customer experience (anonymous masked cards + paid unlock), not only unit tests.
+3. Never silently regress previously fixed behavior (sales-only inventory, generalized titles, city/state visibility, incomplete-snapshot safeguards, email titles not "Untitled role").

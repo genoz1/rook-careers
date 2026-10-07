@@ -74,7 +74,10 @@ function scrubCompanyNameFromText(text, companyName) {
 }
 
 function redactForNonSubscriber(job, index) {
-  return require('./pretrialProjection').project(job, index);
+  // Free and anonymous job lists must use the same generalized-title +
+  // safe-location contract as the paid-acquisition preview. Dashboard
+  // visual mask fragments remain optional; identity still never crosses.
+  return require('./pretrialProjection').project(job, index, {dashboard: true});
 }
 
 // Stricter than redactForNonSubscriber: an anonymous visitor has no

@@ -123,20 +123,74 @@ const SAFE_ROLE_PREFIXES = new Set(`
 clinical veterinary oncology diagnostics diagnostic pharmaceutical pharma immunology
 dermatology cardiology cardiovascular neurology neuroscience orthopedic orthopaedic
 surgical molecular laboratory dental animal health women's health womens health
-specialty executive regional district
+medical device specialty executive regional district field inside
 senior sr junior jr
 `.trim().toLowerCase().split(/\s+/));
+// Business Development must precede bare "manager" or "Manager" wins.
 const ROLE_PATTERNS = [
+  /(?:business development|practice development) (?:manager|representative|director|executive)(?:\s+(?:i{1,3}|iv|v|[1-5]))?/i,
   /(?:key |strategic |national |clinical |territory |district |regional |area )?account executive(?:\s+(?:i{1,3}|iv|v|[1-5]))?/i,
-  /(?:key |strategic |national )?account manager(?:\s+(?:i{1,3}|iv|v|[1-5]))?/i,
-  /(?:veterinary |clinical |territory |district |regional |area |national )?sales manager(?:\s+(?:i{1,3}|iv|v|[1-5]))?/i,
-  /(?:area |regional |national )?sales director(?:\s+(?:i{1,3}|iv|v|[1-5]))?/i,
-  /(?:clinical |territory |district |regional |area |national )?sales representative(?:\s+(?:i{1,3}|iv|v|[1-5]))?/i,
-  /(?:clinical |territory |district |regional |area )?sales (?:specialist|consultant|associate)(?:\s+(?:i{1,3}|iv|v|[1-5]))?/i,
+  /(?:key |strategic |national |regional |area )?account manager(?:\s+(?:i{1,3}|iv|v|[1-5]))?/i,
+  /(?:veterinary |clinical |territory |district |regional |area |national |animal health )?sales manager(?:\s+(?:i{1,3}|iv|v|[1-5]))?/i,
+  /(?:area |regional |national |veterinary )?sales director(?:\s+(?:i{1,3}|iv|v|[1-5]))?/i,
+  /(?:clinical |territory |district |regional |area |national |field |medical )?sales representative(?:\s+(?:i{1,3}|iv|v|[1-5]))?/i,
+  /(?:clinical |territory |district |regional |area |field )?sales (?:specialist|consultant|associate|partner)(?:\s+(?:i{1,3}|iv|v|[1-5]))?/i,
+  /(?:field )?sales (?:representative|manager|director|specialist)(?:\s+(?:i{1,3}|iv|v|[1-5]))?/i,
   /(?:territory |district |regional |area )?manager(?:\s+(?:i{1,3}|iv|v|[1-5]))?/i,
-  /(?:business development|practice development) (?:manager|representative|director)(?:\s+(?:i{1,3}|iv|v|[1-5]))?/i,
-  /clinical specialist(?:\s+(?:i{1,3}|iv|v|[1-5]))?/i,
 ];
+const GENERIC_ROLES = new Set([
+  'territory manager', 'district manager', 'regional manager', 'area manager',
+  'account manager', 'account executive', 'sales representative', 'sales manager',
+  'sales specialist', 'manager', 'representative',
+]);
+function industryRolePrefix(job) {
+  const labels = require('../public/rook-job-classification').classify(job).labels;
+  if (labels.includes('Veterinary')) return 'Veterinary';
+  if (labels.includes('Diagnostics')) return 'Diagnostics';
+  if (labels.includes('Pharmaceutical') || labels.includes('Biotech/Life Sciences')) return 'Pharmaceutical';
+  if (labels.includes('Capital Equipment')) return 'Medical Device';
+  if (labels.includes('Medical Device')) return 'Medical Device';
+  if (labels.includes('Dental')) return 'Dental';
+  if (labels.includes('Animal Health')) return 'Animal Health';
+  const blob = [
+    job.title_original, job.title_normalized, job.industry,
+    ...(Array.isArray(job.ai_analysis?.product_categories) ? job.ai_analysis.product_categories : []),
+    ...(Array.isArray(job.ai_analysis?.market_industries) ? job.ai_analysis.market_industries : []),
+  ].filter(Boolean).join(' ');
+  if (/\b(?:veterinary|animal health|companion animal|pet care)\b/i.test(blob)) return 'Veterinary';
+  if (/\b(?:diagnostics?|laboratory|molecular)\b/i.test(blob)) return 'Diagnostics';
+  if (/\b(?:pharmaceutical|pharma|biotech|biologics)\b/i.test(blob)) return 'Pharmaceutical';
+  if (/\b(?:medical device|capital equipment|surgical)\b/i.test(blob)) return 'Medical Device';
+  if (/\bdental\b/i.test(blob)) return 'Dental';
+  return 'Medical';
+}
+function titleCaseRole(words) {
+  return words.map(word => /^(?:i{1,3}|iv|v|[1-5])$/i.test(word) ? word.toUpperCase() :
+    word[0].toUpperCase() + word.slice(1).toLowerCase()).join(' ');
+}
+function withIndustryVariety(role, job) {
+  const normalized = role.toLowerCase().replace(/\s+/g, ' ').trim();
+  const base = normalized.replace(/\s+(?:i{1,3}|iv|v|[1-5])$/i, '');
+  const level = normalized.slice(base.length).trim();
+  if (!GENERIC_ROLES.has(base) && !GENERIC_ROLES.has(normalized)) return role;
+  if (/\b(?:veterinary|diagnostics|diagnostic|pharmaceutical|pharma|medical device|animal health|dental|medical sales)\b/i.test(role)) {
+    return role;
+  }
+  const prefix = industryRolePrefix(job);
+  const suffix = level ? ` ${level.toUpperCase()}` : '';
+  if (base === 'territory manager') return `${prefix} Territory Manager${suffix}`;
+  if (base === 'account manager') return `${prefix} Account Manager${suffix}`;
+  if (base === 'account executive') return `${prefix} Account Executive${suffix}`;
+  if (base === 'sales representative') return `${prefix} Sales Representative${suffix}`;
+  if (base === 'sales manager') return `${prefix} Sales Manager${suffix}`;
+  if (base === 'sales specialist') return `${prefix} Sales Specialist${suffix}`;
+  if (base === 'district manager') return `${prefix} District Sales Manager${suffix}`;
+  if (base === 'regional manager') return `${prefix} Regional Sales Manager${suffix}`;
+  if (base === 'area manager') return `${prefix} Area Sales Manager${suffix}`;
+  if (base === 'manager') return `${prefix} Sales Manager${suffix}`;
+  if (base === 'representative') return `${prefix} Sales Representative${suffix}`;
+  return `${prefix} ${role}`;
+}
 function generalizedRole(job) {
   const raw = String(job.title_original || job.title_normalized || '')
     .replace(/<[^>]*>/g, ' ').replace(/&(?:amp|#38);/gi, '&')
@@ -156,19 +210,53 @@ function generalizedRole(job) {
       // vetted role modifiers and the recognized functional role itself.
       const safePrefix = prefix.filter(word => SAFE_ROLE_PREFIXES.has(word.toLowerCase().replace(/[^a-z']/g, ''))).slice(-2);
       const phrase = [...safePrefix, ...match[0].trim().split(/\s+/)];
-      return phrase.map(word => /^(?:i{1,3}|iv|v|[1-5])$/i.test(word) ? word.toUpperCase() :
-        word[0].toUpperCase()+word.slice(1).toLowerCase()).join(' ');
+      return withIndustryVariety(titleCaseRole(phrase), job);
     }
   }
   const labels = require('../public/rook-job-classification').classify(job).labels;
   const fallbacks = [
-    ['Veterinary', 'Veterinary Sales Role'],
-    ['Diagnostics', 'Diagnostics Sales Role'],
-    ['Pharmaceutical', 'Pharmaceutical Sales Role'],
-    ['Biotech/Life Sciences', 'Pharmaceutical Sales Role'],
-    ['Medical Device', 'Medical Device Sales Role'],
+    ['Veterinary', 'Veterinary Sales Representative'],
+    ['Diagnostics', 'Diagnostics Account Executive'],
+    ['Pharmaceutical', 'Pharmaceutical Account Manager'],
+    ['Biotech/Life Sciences', 'Pharmaceutical Account Manager'],
+    ['Capital Equipment', 'Medical Device Territory Manager'],
+    ['Medical Device', 'Medical Device Territory Manager'],
+    ['Dental', 'Dental Sales Representative'],
   ];
-  return fallbacks.find(([label]) => labels.includes(label))?.[1] || 'Sales Opportunity';
+  return fallbacks.find(([label]) => labels.includes(label))?.[1] || 'Medical Sales Representative';
+}
+function safeLocationLabel(job) {
+  const zipcodes = require('zipcodes');
+  const remote = String(job.remote_status || '').toLowerCase() === 'remote' ||
+    /\bremote\b/i.test(String(job.location_raw || ''));
+  const raw = String(job.location_raw || '').split(',').map(s => s.trim()).filter(Boolean);
+  const cityInput = String(job.city || raw[0] || '').trim();
+  const city = /^new york city$/i.test(cityInput) ? 'New York' : cityInput;
+  const stateValue = String(job.state || raw[1] || '').trim();
+  const stateUpper = stateValue.toUpperCase();
+  const state = stateUpper.length === 2 ? stateUpper : zipcodes.states.full[stateValue] ||
+    zipcodes.states.full[stateUpper];
+  if (city && state) {
+    const place = Object.values(zipcodes.codes).find(p =>
+      p.city.toLowerCase() === city.toLowerCase() && p.state === state);
+    if (place) {
+      const label = `${place.city}, ${place.state}`;
+      return remote ? `Remote – ${place.state}` : label;
+    }
+  }
+  if (remote && state) return `Remote – ${state}`;
+  if (state && !city) {
+    const territory = String(job.territory || '').toLowerCase();
+    if (territory === 'regional') return `Regional – ${state}`;
+    if (territory === 'national') return 'National Territory';
+    return state.length === 2 ? state : null;
+  }
+  if (String(job.territory || '').toLowerCase() === 'national' ||
+      job.geographic_eligibility?.kind === 'national_us') {
+    return 'National Territory';
+  }
+  if (remote || job.geographic_eligibility?.kind === 'remote_us') return 'Remote – United States';
+  return null;
 }
 function safeSpecialty(job) {
   const allowed = new Map([
@@ -201,4 +289,4 @@ function freshness(job, now = Date.now(), detailed = false) {
   const age = days === 0 ? 'today' : days === 1 ? 'yesterday' : `${days} days ago`;
   return `${posted ? 'Posted' : 'Added'} ${age}`;
 }
-module.exports = {maskedTitle, generalizedRole, safeSpecialty, freshness};
+module.exports = {maskedTitle, generalizedRole, safeSpecialty, freshness, safeLocationLabel};

@@ -112,6 +112,7 @@ test('ClinchTalent: a later page (page 2+) failing does not invalidate rows alre
     const jobs = await fetchClinchTalentJobs('careers.bio-rad.com');
     assert.equal(jobs.length, 1);
     assert.equal(jobs[0].title, 'Sales Account Manager');
+    assert.equal(jobs.incompleteSnapshot, true);
   } finally {
     global.fetch = real;
   }
