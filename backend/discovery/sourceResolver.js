@@ -219,7 +219,16 @@ async function resolveOfficialSource(signal, { readPage = fetchDocument, maxCare
   const homeIsCareersPage = CAREER_TEXT.test(new URL(home.url).pathname) || /"@type"\s*:\s*"jobposting"/i.test(home.html || '');
   const targets = [...new Set([...trustedExplicit, ...careerLinks])].slice(0, maxCareerPages);
   if (homeIsCareersPage) targets.unshift(home.url);
-  if (!targets.length) throw Object.assign(new Error('Official site did not expose a deterministic careers/jobs link'), { code: 'NO_OFFICIAL_CAREERS_LINK' });
+
+  // Some verified official sites do not expose Careers in server-rendered homepage HTML.
+  // Probe only a small set of conventional same-domain paths after company identity is proven.
+  if (!targets.length) {
+    const base = new URL(home.url);
+    for (const path of ['/careers', '/jobs', '/careers/', '/jobs/']) {
+      if (targets.length >= maxCareerPages) break;
+      targets.push(new URL(path, base.origin).href);
+    }
+  }
 
   const pages = [{ ...home, role: homeIsCareersPage ? 'careers' : 'official_home' }];
   const failures = [];
@@ -232,6 +241,9 @@ async function resolveOfficialSource(signal, { readPage = fetchDocument, maxCare
       failures.push({ url: target, error: error.message });
     }
   }
+  if (pages.length === 1 && !homeIsCareersPage) throw Object.assign(new Error('Official site did not expose or resolve a careers/jobs page'), {
+    code: 'NO_OFFICIAL_CAREERS_LINK', evidence: { official_url: home.url, attempted_pages: targets, failures },
+  });
   const configurations = detectSourceConfigurations(pages.filter((page) => page.role === 'careers'));
   const fallback = fallbackArtifacts(pages.filter((page) => page.role === 'careers'));
   if (!configurations.length) throw Object.assign(new Error('No supported or safely extractable source detected on official careers pages'), {
