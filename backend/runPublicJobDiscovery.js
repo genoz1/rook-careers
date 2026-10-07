@@ -41,6 +41,12 @@ async function run(argv = process.argv.slice(2), dependencies = {}) {
   }
   const pipeline = dependencies.pipeline || new EmployerDiscoveryPipeline({ store });
   const ingestEmployer = dependencies.ingestEmployer || (args.ingestEnrolled ? require('./ingest').ingestEmployer : null);
+  const countActiveJobs = dependencies.countActiveJobs || (client ? async (employerId) => {
+    const { count, error } = await client.from('jobs').select('id', { count: 'exact', head: true })
+      .eq('employer_id', employerId).eq('status', 'active');
+    if (error) throw error;
+    return count || 0;
+  } : null);
   const results = [];
   for (const signal of discovery.signals) {
     try {
@@ -48,13 +54,16 @@ async function run(argv = process.argv.slice(2), dependencies = {}) {
       const item = { company_name: signal.company_name, status: outcome.status, candidate_id: outcome.candidate?.id || null,
         employer_id: outcome.employer?.id || null, ats_type: outcome.employer?.ats_type || outcome.candidate?.detected_ats_type || null,
         validation_status: outcome.validation?.status || outcome.candidate?.validation_status || null,
-        plausible_job_count: outcome.validation?.plausible_job_count || 0 };
+        plausible_job_count: outcome.validation?.plausible_job_count || 0,
+        awakened_by_fresh_evidence: Boolean(outcome.awakened_by_fresh_evidence),
+        repair_condition_created: Boolean(outcome.repair_condition_created),
+      };
       if (args.ingestEnrolled && outcome.status === 'enrolled' && outcome.employer) {
+        const before = countActiveJobs ? await countActiveJobs(outcome.employer.id) : 0;
         item.ingestion_status = (await ingestEmployer(outcome.employer)).status;
-        if (client) {
-          const { count, error } = await client.from('jobs').select('id', { count: 'exact', head: true }).eq('employer_id', outcome.employer.id).eq('status', 'active');
-          if (error) throw error; item.active_relevant_jobs = count || 0;
-        }
+        const after = countActiveJobs ? await countActiveJobs(outcome.employer.id) : before;
+        item.active_relevant_jobs = after;
+        item.relevant_jobs_inserted = Math.max(0, after - before);
       }
       results.push(item);
     } catch (error) { results.push({ company_name: signal.company_name, status: 'error', reason: error.message }); }
@@ -64,7 +73,9 @@ async function run(argv = process.argv.slice(2), dependencies = {}) {
   const summary = { mode: 'apply', ...discovery.stats, processed: results.length, statuses,
     companies_machine_validated: results.filter((item) => isValidatedSourceStatus(item.validation_status)).length,
     automatically_enrolled: results.filter((item) => item.status === 'enrolled').length,
-    relevant_jobs_contributed: results.reduce((sum, item) => sum + (item.active_relevant_jobs || 0), 0), results };
+    old_candidates_awakened_by_fresh_evidence: results.filter((item) => item.awakened_by_fresh_evidence).length,
+    discrepancy_repair_records_created: results.filter((item) => item.repair_condition_created).length,
+    relevant_jobs_contributed: results.reduce((sum, item) => sum + (item.relevant_jobs_inserted || 0), 0), results };
   console.log('PUBLIC_JOB_DISCOVERY_RESULT', JSON.stringify(summary)); return summary;
 }
 

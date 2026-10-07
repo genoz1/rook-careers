@@ -1,3 +1,5 @@
+const { assessSignalFreshness, mergeSignalPayload } = require('./evidenceFreshness');
+
 class SupabaseDiscoveryStore {
   constructor(client) { this.client = client; }
 
@@ -16,10 +18,11 @@ class SupabaseDiscoveryStore {
       existing = data || null;
     }
     if (existing) {
+      const freshness = assessSignalFreshness(existing.signal_payload, row.signal_payload);
       const { data, error } = await this.client.from('employer_discovery_candidates')
         .update({
           last_signal_at: row.last_signal_at,
-          signal_payload: { ...(existing.signal_payload || {}), ...(row.signal_payload || {}) },
+          signal_payload: mergeSignalPayload(existing.signal_payload, row.signal_payload, row.last_signal_at),
           company_website: row.company_website || existing.company_website,
           careers_url: row.careers_url || existing.careers_url,
           job_url: row.job_url || existing.job_url,
@@ -28,14 +31,15 @@ class SupabaseDiscoveryStore {
         })
         .eq('id', existing.id).select('*').single();
       if (error) throw error;
-      return { candidate: data, duplicate: true };
+      return { candidate: data, duplicate: true, freshEvidence: freshness.fresh, evidenceFingerprint: freshness.fingerprint };
     }
-    const { data, error } = await this.client.from('employer_discovery_candidates').insert(row).select('*').single();
+    const prepared = { ...row, signal_payload: mergeSignalPayload(null, row.signal_payload, row.last_signal_at) };
+    const { data, error } = await this.client.from('employer_discovery_candidates').insert(prepared).select('*').single();
     if (error) {
-      if (error.code === '23505') return { candidate: await this.getCandidate(row.identity_key), duplicate: true };
+      if (error.code === '23505') return this.receiveCandidate(row);
       throw error;
     }
-    return { candidate: data, duplicate: false };
+    return { candidate: data, duplicate: false, freshEvidence: false, evidenceFingerprint: null };
   }
 
   async updateCandidate(id, patch) {

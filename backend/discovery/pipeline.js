@@ -1,6 +1,7 @@
 const { createHash } = require('node:crypto');
 const { detectFromUrl, registrableDomain, resolveOfficialSource } = require('./sourceResolver');
 const { validateSource } = require('./sourceValidator');
+const { currentJobEvidence } = require('./evidenceFreshness');
 
 function normalizeCompanyName(value) {
   return String(value || '')
@@ -50,6 +51,18 @@ function retryAt(now, days) {
   return new Date(now.getTime() + days * 24 * 60 * 60 * 1000).toISOString();
 }
 
+function coverageDiscrepancy(signal, now, reason, fingerprint) {
+  const evidence = currentJobEvidence(signal);
+  if (!evidence) return null;
+  return {
+    status: 'open',
+    reason,
+    observed_at: now.toISOString(),
+    signal_fingerprint: fingerprint || null,
+    ...evidence,
+  };
+}
+
 class EmployerDiscoveryPipeline {
   constructor({ store, resolveSource = resolveOfficialSource, validate = validateSource, now = () => new Date() }) {
     this.store = store;
@@ -81,7 +94,10 @@ class EmployerDiscoveryPipeline {
     let candidate = received.candidate;
     if (candidateId && candidate.id !== candidateId) throw new Error('Explicit force target did not match the signal candidate');
     if (['enrolled', 'existing'].includes(candidate.status)) return { status: candidate.status, candidate, duplicate: true };
-    if (!force && candidate.next_attempt_at && Date.parse(candidate.next_attempt_at) > +now) return { status: 'deferred', candidate, duplicate: received.duplicate };
+    const awakenedByFreshEvidence = Boolean(!force && received.duplicate && received.freshEvidence);
+    if (!force && !awakenedByFreshEvidence && candidate.next_attempt_at && Date.parse(candidate.next_attempt_at) > +now) {
+      return { status: 'deferred', candidate, duplicate: received.duplicate, awakened_by_fresh_evidence: false };
+    }
 
     const direct = directConfiguration(signal);
     const employers = await this.store.listEmployers();
@@ -100,12 +116,17 @@ class EmployerDiscoveryPipeline {
         evidence: externalJobEvidence ? { ...(candidate.evidence || {}), external_job_signal: externalJobEvidence } : (candidate.evidence || {}),
         ...(direct ? { detected_ats_type: direct.ats_type, detected_ats_identifier: direct.ats_identifier } : {}),
       });
-      return { status: 'existing', candidate, employer: known };
+      return { status: 'existing', candidate, employer: known, awakened_by_fresh_evidence: awakenedByFreshEvidence };
     }
 
     candidate = await this.store.updateCandidate(candidate.id, {
       status: 'resolving', attempt_count: (candidate.attempt_count || 0) + 1,
       last_attempt_at: now.toISOString(), updated_at: now.toISOString(), last_error: null,
+      next_attempt_at: null,
+      evidence: awakenedByFreshEvidence ? {
+        ...(candidate.evidence || {}),
+        fresh_signal_wake: { observed_at: now.toISOString(), signal_fingerprint: received.evidenceFingerprint || null },
+      } : (candidate.evidence || {}),
     });
 
     let resolved;
@@ -113,19 +134,24 @@ class EmployerDiscoveryPipeline {
       resolved = await this.resolveSource({ ...signal, company_website: candidate.company_website });
     } catch (error) {
       const transient = !['NEEDS_OFFICIAL_DOMAIN', 'BAD_OFFICIAL_URL', 'OFFICIAL_DOMAIN_MISMATCH', 'COMPANY_IDENTITY_MISMATCH', 'SEARCH_IDENTITY_NOT_VERIFIED', 'NO_OFFICIAL_CAREERS_LINK', 'UNSUPPORTED_SOURCE'].includes(error.code);
+      const discrepancy = coverageDiscrepancy(signal, now, error.code || 'RESOLUTION_FAILED', received.evidenceFingerprint);
       candidate = await this.store.updateCandidate(candidate.id, {
         status: transient ? 'retryable' : 'unresolved',
         last_error: error.message,
-        evidence: error.evidence || {},
+        evidence: {
+          ...(candidate.evidence || {}),
+          ...(error.evidence || {}),
+          ...(discrepancy ? { coverage_discrepancy: discrepancy } : {}),
+        },
         validation_status: error.code || 'RESOLUTION_FAILED',
         next_attempt_at: retryAt(now, transient ? 1 : 7),
         updated_at: now.toISOString(),
       });
-      return { status: candidate.status, candidate };
+      return { status: candidate.status, candidate, awakened_by_fresh_evidence: awakenedByFreshEvidence, repair_condition_created: Boolean(discrepancy) };
     }
 
     candidate = await this.store.updateCandidate(candidate.id, {
-      status: 'validating', evidence: resolved.evidence, company_domain: resolved.official_domain,
+      status: 'validating', evidence: { ...(candidate.evidence || {}), ...(resolved.evidence || {}) }, company_domain: resolved.official_domain,
       company_website: resolved.official_url, careers_url: resolved.careers_pages[0] || candidate.careers_url,
       updated_at: now.toISOString(),
     });
@@ -156,7 +182,7 @@ class EmployerDiscoveryPipeline {
           validation_status: result.status, validation_result: result, next_attempt_at: null, last_error: null,
           updated_at: now.toISOString(),
         });
-        return { status: 'existing', candidate, employer: duplicateEmployer, validation: result };
+        return { status: 'existing', candidate, employer: duplicateEmployer, validation: result, awakened_by_fresh_evidence: awakenedByFreshEvidence };
       }
 
       // This is the sole active-employer creation path. It is deliberately
@@ -169,16 +195,21 @@ class EmployerDiscoveryPipeline {
         validation_status: result.status, validation_result: result, next_attempt_at: null, last_error: null,
         updated_at: now.toISOString(),
       });
-      return { status: 'enrolled', candidate, employer, validation: result };
+      return { status: 'enrolled', candidate, employer, validation: result, awakened_by_fresh_evidence: awakenedByFreshEvidence };
     }
 
+    const discrepancy = coverageDiscrepancy(signal, now, 'VALIDATION_FAILED', received.evidenceFingerprint);
     candidate = await this.store.updateCandidate(candidate.id, {
       status: 'retryable',
       last_error: 'Detected source configurations did not pass machine validation',
       validation_status: 'VALIDATION_FAILED', validation_result: { attempts: validationAttempts },
+      evidence: {
+        ...(candidate.evidence || {}),
+        ...(discrepancy ? { coverage_discrepancy: discrepancy } : {}),
+      },
       next_attempt_at: retryAt(now, 1), updated_at: now.toISOString(),
     });
-    return { status: 'retryable', candidate, validation_attempts: validationAttempts };
+    return { status: 'retryable', candidate, validation_attempts: validationAttempts, awakened_by_fresh_evidence: awakenedByFreshEvidence, repair_condition_created: Boolean(discrepancy) };
   }
 }
 
