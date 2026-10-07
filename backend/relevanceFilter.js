@@ -39,6 +39,8 @@ const CLINICAL_CARE_EXCLUSIONS = [
   "veterinary resident", "associate veterinarian", "emergency veterinarian",
   "veterinary clinical", "veterinary practice manager", "veterinary hospital",
   "veterinary client", "hospital manager", "practice manager",
+  "veterinary relationship manager", "veterinary project manager",
+  "veterinary clinic specialist", "veterinary dermatology",
   "internal medicine", "soft tissue surgeon", "surgeon", "surgery specialist",
   "critical care", "emergency clinician", "staff veterinarian",
   "physician", "registered nurse", "nurse practitioner", "physician assistant",
@@ -49,6 +51,13 @@ const CLINICAL_CARE_EXCLUSIONS = [
   "human resources", "talent acquisition", "recruiter",
   "software developer", "devops", "system administrator",
   "controller", "bookkeeper", "payroll",
+  // Clinical research / care-delivery management — not quota-carrying sales.
+  "clinical study manager", "clinical study lead", "clinical study specialist",
+  "clinical study quality", "clinical study documentation",
+  "clinical manager", "clinical care transition", "clinical transition specialist",
+  "clinical healthcare operations", "clinical assessment specialist",
+  "clinical services group", "medical support specialist",
+  "client experience representative", "customer onboarding specialist",
 ];
 
 const STRONG_TITLE_SIGNALS = [
@@ -129,6 +138,10 @@ function isExcludedTitle(title = '') {
   if (CLINICAL_CARE_EXCLUSIONS.some((k) => t.includes(k))) return true;
   // Bare clinical-care specialist titles without commercial language.
   if (/\b(?:veterinary|clinical)\s+specialist\b/.test(t) && !/\b(?:sales|account|commercial|territory)\b/.test(t)) {
+    return true;
+  }
+  // RN / care-transition titles are care delivery even when "manager" appears.
+  if (/\brn\b/.test(t) && !/\b(?:sales|account|commercial|territory)\b/.test(t)) {
     return true;
   }
   return false;

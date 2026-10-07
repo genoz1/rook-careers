@@ -36,9 +36,11 @@ ROOK is NOT a general medical or veterinary clinical job board.
 ## Discovery and ingestion
 
 1. Public LinkedIn (and similar) results are discovery signals only — final jobs come from verified official employer sources.
-2. Autonomous discovery must cover all six categories on a recurring schedule (`backend/runScheduledDiscovery.js` + `publicJobSignals.js`).
+2. Autonomous discovery must cover all six categories each scheduled cycle (`runScheduledDiscovery.js` with `--query-limit 6`).
 3. Validated sources enroll without manual approval; unsupported ATS systems use fallback extraction, not terminal failure.
 4. Prefer systemic ingestion fixes over manually inserting individual missing jobs.
+5. Skipped employers (unsupported ATS / disabled custom_html) must advance `last_checked_at` via `markIngestSkip` — never park null `last_checked_at` at the head of the queue forever.
+6. Public signals for already-monitored employers must trigger official-source re-ingest (`discrepancy_repair_attempted`), not silent ignore.
 
 ## Pricing / entitlements
 

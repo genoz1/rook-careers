@@ -65,6 +65,18 @@ async function run(argv = process.argv.slice(2), dependencies = {}) {
         item.active_relevant_jobs = after;
         item.relevant_jobs_inserted = Math.max(0, after - before);
       }
+      // Public signal for an already-monitored employer: re-ingest the official
+      // source so missing current openings are repaired without importing the
+      // LinkedIn text as the permanent job record.
+      if (args.ingestEnrolled && outcome.status === 'existing' && outcome.employer &&
+          outcome.candidate?.evidence?.external_job_signal?.investigation_required) {
+        const before = countActiveJobs ? await countActiveJobs(outcome.employer.id) : 0;
+        item.discrepancy_reingest_status = (await ingestEmployer(outcome.employer)).status;
+        const after = countActiveJobs ? await countActiveJobs(outcome.employer.id) : before;
+        item.active_relevant_jobs = after;
+        item.relevant_jobs_inserted = Math.max(0, after - before);
+        item.discrepancy_repair_attempted = true;
+      }
       results.push(item);
     } catch (error) { results.push({ company_name: signal.company_name, status: 'error', reason: error.message }); }
   }
@@ -75,6 +87,7 @@ async function run(argv = process.argv.slice(2), dependencies = {}) {
     automatically_enrolled: results.filter((item) => item.status === 'enrolled').length,
     old_candidates_awakened_by_fresh_evidence: results.filter((item) => item.awakened_by_fresh_evidence).length,
     discrepancy_repair_records_created: results.filter((item) => item.repair_condition_created).length,
+    discrepancy_reingests_attempted: results.filter((item) => item.discrepancy_repair_attempted).length,
     relevant_jobs_contributed: results.reduce((sum, item) => sum + (item.relevant_jobs_inserted || 0), 0), results };
   console.log('PUBLIC_JOB_DISCOVERY_RESULT', JSON.stringify(summary)); return summary;
 }

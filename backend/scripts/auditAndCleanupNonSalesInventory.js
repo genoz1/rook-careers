@@ -21,7 +21,7 @@ function classifyRow(job) {
   if (isSalesAdmissibleJob({ title, description })) {
     return { bucket: 'A', reason: 'sales_admissible' };
   }
-  if (isExcludedTitle(title) || (!titleHasStrongSalesSignal(title) && /\b(?:veterinar|surgeon|physician|nurse|technician|scientist|clinical specialist|practice manager|hospital manager)\b/i.test(title))) {
+  if (isExcludedTitle(title) || (!titleHasStrongSalesSignal(title) && /\b(?:veterinar|surgeon|physician|nurse|technician|scientist|clinical specialist|practice manager|hospital manager|clinical study|clinical manager|\brn\b|clinical care transition|medical support specialist)\b/i.test(title))) {
     return { bucket: 'B', reason: 'confirmed_non_sales' };
   }
   return { bucket: 'C', reason: 'ambiguous' };
