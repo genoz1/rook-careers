@@ -3,10 +3,19 @@
 const cheerio = require('cheerio');
 const { createHash } = require('node:crypto');
 const { resolveUsStateCode } = require('../jobEligibility');
+const { titleLooksRelevant } = require('../relevanceFilter');
 const clean = value => String(value || '').replace(/[\u200b\u00a0]/g, ' ').replace(/\s+/g, ' ').trim();
 const hash = value => createHash('sha256').update(value).digest('hex');
 const text = html => clean(cheerio.load(String(html || '')).text());
 const canonical = value => { const u = new URL(value); u.hash = ''; for (const k of [...u.searchParams.keys()]) if (/^(utm_|fbclid|gclid)/i.test(k)) u.searchParams.delete(k); return u.href.replace(/\/$/, ''); };
+function findEmbeddedJobApi(html, baseUrl) {
+  const decoded = String(html || '').replace(/\\u002f/gi, '/').replace(/\\u003a/gi, ':').replace(/\\\//g, '/').replace(/&amp;/g, '&');
+  const absolute = decoded.match(/https:\/\/[a-z0-9.-]+\.joveo\.site\/jobs-api\/v\d+\/clients\/[a-z0-9_-]+\/jobs\/search/ig)?.[0];
+  if (absolute) return { provider: 'joveo', url: absolute };
+  const relative = decoded.match(/\/jobs-api\/v\d+\/clients\/[a-z0-9_-]+\/jobs\/search/i)?.[0];
+  if (!relative) return null;
+  try { return { provider: 'joveo', url: new URL(relative, baseUrl).href }; } catch { return null; }
+}
 function destination(value, base) {
   try { const u = new URL(value, base); return ['https:', 'http:', 'mailto:'].includes(u.protocol) ? u.href : null; } catch { return null; }
 }
@@ -26,7 +35,7 @@ function classify(body, { validThrough, datePosted, now = new Date(), structured
   if (/no (?:current |open |available )?(?:positions|vacancies|openings)|not (?:currently )?hiring/i.test(s)) return 'closed';
   if (datePosted && Date.parse(datePosted) > +now) return 'future';
   if (/currently (?:accepting|hiring|recruiting|seeking)|accepting applications|now hiring/i.test(s)) return 'current';
-  if (structured || /\bapply\b|submit (?:your |a )?(?:resume|application)|send (?:your |a )?(?:resume|cv)/i.test(s)) return 'likely_current';
+  if (structured || /\bapply\b|submit (?:your |a )?(?:resume|application)|send (?:your |a )?(?:resume|cv)|email (?:your |an? )?(?:resume|cv|application)/i.test(s)) return 'likely_current';
   return 'unknown';
 }
 function applications($, fragment, url) {
@@ -156,6 +165,74 @@ function splitTerritoryOpenings(jobs) {
     ? raw.locations.map(label => ({...raw, originalTitle:raw.title, title:`${raw.title} — ${label}`, locations:[label], identifier:`${canonical(raw.url)}#${raw.title.toLowerCase()}#territory:${label.toLowerCase()}`}))
     : [raw]);
 }
+async function fetchEmbeddedJobApi(api, pageUrl, postJson) {
+  if (api.provider !== 'joveo' || !/\.joveo\.site$/i.test(new URL(api.url).hostname)) throw new Error('Unsupported embedded job API');
+  const request = postJson || (async (target, body) => {
+    const res = await fetch(target, {
+      method: 'POST', signal: AbortSignal.timeout(20000),
+      headers: {'Content-Type':'application/json', Accept:'application/json', 'User-Agent':'ROOK-Careers/1.0'},
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`Embedded jobs fetch ${res.status}: ${target}`);
+    return res.json();
+  });
+  const body = (searchTerm, pageSize, pageNumber) => ({
+    searchTerm,
+    orderBy: [{key:'startDate', entity:'job', order:'DESC', type:'DATE'}],
+    searchFields: {title:10, country:9, category:8}, filters: [], facetFields: [],
+    pageSize, pageNumber, filterIds: [],
+  });
+  const inventory = await request(api.url, body('', 1, 0));
+  const inventoryCount = Number(inventory.totalRecords ?? inventory.total ?? inventory.count);
+  if (!Number.isInteger(inventoryCount) || inventoryCount < 0) throw new Error('Embedded jobs response did not report a valid inventory size');
+  const records = new Map();
+  const warnings = [];
+  const terms = ['sales', 'account', 'territory', 'business development', 'district manager', 'veterinary', 'medical', 'pharmaceutical', 'diagnostic', 'clinical'];
+  for (const term of terms) {
+    let pageNumber = 0;
+    let totalPages = 1;
+    do {
+      if (pageNumber >= 10) { warnings.push(`Embedded jobs query "${term}" exceeded the pagination safety limit.`); break; }
+      const payload = await request(api.url, body(term, 100, pageNumber));
+      const rows = payload.records || payload.jobs || payload.results;
+      if (!Array.isArray(rows)) throw new Error('Embedded jobs response did not contain a job array');
+      for (const row of rows) {
+        const id = clean(row.externalId || row.referenceNumber || row.id);
+        const title = clean(row.title || row.jobTitle);
+        if (!id || !title || !titleLooksRelevant(title)) continue;
+        records.set(id, row);
+      }
+      totalPages = Number(payload.totalPages || 1);
+      if (!Number.isInteger(totalPages) || totalPages < 1) throw new Error('Embedded jobs response reported invalid pagination');
+      pageNumber++;
+      if (totalPages > 10) { warnings.push(`Embedded jobs query "${term}" was sampled because it reported ${totalPages} pages.`); break; }
+    } while (pageNumber < totalPages);
+  }
+  if (!records.size && inventoryCount > 0) {
+    const sample = (inventory.records || inventory.jobs || inventory.results || [])[0];
+    const sampleId = sample && clean(sample.externalId || sample.referenceNumber || sample.id);
+    if (!sample || !sampleId) throw new Error('Embedded jobs inventory could not provide a verifiable sample posting');
+    records.set(sampleId, sample);
+  }
+  const jobs = [...records.values()].map((row) => {
+    const slug = clean(row.urlSlug) || encodeURIComponent(clean(row.externalId || row.referenceNumber || row.id));
+    const officialUrl = new URL(`/job/${slug}`, pageUrl).href;
+    return {
+      title: clean(row.title || row.jobTitle), html: row.description || row.descriptionHtml || '', url: officialUrl,
+      locations: [clean([row.city, row.state, row.country].filter(Boolean).join(', '))].filter(Boolean),
+      tier: 'embedded_job_api', confidence: 'high',
+      status: row.active === false || (row.status && !/^(?:open|active|published)$/i.test(row.status)) ? 'closed' : 'current',
+      applications: [row.externalApplyUrl || row.externalUrl || row.applyUrl || officialUrl],
+      identifier: clean(row.externalId || row.referenceNumber || row.id),
+      datePosted: row.startDate || row.datePosted || null, validThrough: row.endDate || null,
+    };
+  }).filter((row) => row.status === 'current');
+  jobs.inventoryCount = inventoryCount;
+  jobs.sourceRelevantCount = jobs.filter((row) => titleLooksRelevant(row.title)).length;
+  jobs.incompleteSnapshot = true;
+  jobs.snapshotWarnings = ['Embedded API was queried through bounded relevance searches; disappearance closures are suppressed.', ...warnings];
+  return jobs;
+}
 function normalizeCustomHtmlJob(raw, employer) {
   const verified = verifiedSource(raw.url,employer);
   const locs = [...new Set(raw.locations || [])];
@@ -181,7 +258,7 @@ function normalizeCustomHtmlJob(raw, employer) {
     extraction_evidence:{version:1, original_title:raw.originalTitle || raw.title, tier:raw.tier, confidence:raw.confidence, posting_status:raw.status, territories:groups, location_scope:regional ? 'state_or_region' : 'unspecified', application_destinations:raw.applications || [], content_hash:hash(text(raw.html)), page_hash:raw.pageHash || null}
   };
 }
-async function fetchCustomHtmlJobs(employer, { fetchPage, now = new Date() } = {}) {
+async function fetchCustomHtmlJobs(employer, { fetchPage, postJson, now = new Date() } = {}) {
   const url = employer.careers_url || employer.ats_identifier || employer.source_url;
   if (!url || !verifiedSource(url,employer)) throw new Error('custom_html needs a verified official careers URL');
   const origin = new URL(url).origin;
@@ -193,7 +270,10 @@ async function fetchCustomHtmlJobs(employer, { fetchPage, now = new Date() } = {
     if (body.length > 3000000) throw new Error('Careers page exceeds size limit');
     return body;
   });
-  const first = parseCareersPage(await read(url),url,{now});
+  const firstHtml = await read(url);
+  const embeddedApi = findEmbeddedJobApi(firstHtml, url);
+  if (embeddedApi) return fetchEmbeddedJobApi(embeddedApi, url, postJson);
+  const first = parseCareersPage(firstHtml,url,{now});
   const all = first.jobs.map(j=>({...j,pageHash:first.contentHash}));
   if (first.detailLinks.length > 30) throw new Error('Too many detail links; source needs review');
   for (const link of first.detailLinks) {
@@ -204,6 +284,11 @@ async function fetchCustomHtmlJobs(employer, { fetchPage, now = new Date() } = {
     all.push(...page.jobs.map(j=>({...j,tier:j.tier === 'json_ld' ? j.tier : 'job_link',pageHash:page.contentHash})));
   }
   if (!all.length && !first.emptyConfirmed) throw new Error('No recognizable jobs or explicit empty state; source needs review');
+  if (!all.length && first.emptyConfirmed) {
+    all.authoritativeEmpty = true;
+    all.inventoryCount = 0;
+    all.sourceRelevantCount = 0;
+  }
   const unique = new Map();
   for (const raw of all) {
     const titleKey = clean(raw.title).toLowerCase();
@@ -220,7 +305,12 @@ async function fetchCustomHtmlJobs(employer, { fetchPage, now = new Date() } = {
   }
   // Same-title separate postings require an explicit ID or location identity.
   const rows = [...unique.values()];
+  if (all.authoritativeEmpty) {
+    rows.authoritativeEmpty = true;
+    rows.inventoryCount = 0;
+    rows.sourceRelevantCount = 0;
+  }
   for (const raw of rows) if (!raw.identifier && rows.filter(j=>j.title.toLowerCase() === raw.title.toLowerCase()).length > 1) raw.identifier = `${canonical(raw.url)}#${raw.title.toLowerCase()}#${[...raw.locations].sort().join('|')}`;
   return rows;
 }
-module.exports = {splitTerritoryOpenings, parseCareersPage, fetchCustomHtmlJobs, normalizeCustomHtmlJob, classify, verifiedSource};
+module.exports = {splitTerritoryOpenings, parseCareersPage, fetchCustomHtmlJobs, normalizeCustomHtmlJob, classify, verifiedSource, findEmbeddedJobApi, fetchEmbeddedJobApi};

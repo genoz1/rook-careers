@@ -3,7 +3,7 @@ const { createClient } = require('@supabase/supabase-js');
 const { SupabaseDiscoveryStore } = require('./discovery/store');
 const { EmployerDiscoveryPipeline } = require('./discovery/pipeline');
 const { discoverPublicJobSignals } = require('./discovery/publicJobSignals');
-const { inspectSignals } = require('./runCompanyDiscovery');
+const { inspectSignals, isValidatedSourceStatus } = require('./runCompanyDiscovery');
 
 function parseArgs(argv) {
   const result = { mode: null, limit: 12, queryLimit: 2, ingestEnrolled: false };
@@ -62,7 +62,7 @@ async function run(argv = process.argv.slice(2), dependencies = {}) {
   const statuses = {};
   for (const result of results) statuses[result.status] = (statuses[result.status] || 0) + 1;
   const summary = { mode: 'apply', ...discovery.stats, processed: results.length, statuses,
-    companies_machine_validated: results.filter((item) => item.validation_status === 'PASS_VALIDATED_SOURCE').length,
+    companies_machine_validated: results.filter((item) => isValidatedSourceStatus(item.validation_status)).length,
     automatically_enrolled: results.filter((item) => item.status === 'enrolled').length,
     relevant_jobs_contributed: results.reduce((sum, item) => sum + (item.active_relevant_jobs || 0), 0), results };
   console.log('PUBLIC_JOB_DISCOVERY_RESULT', JSON.stringify(summary)); return summary;

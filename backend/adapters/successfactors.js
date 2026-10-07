@@ -209,6 +209,7 @@ async function fetchSuccessFactorsJobs(identifier, { maxPages = MAX_PAGES } = {}
     `${configured.origin}${configured.pathname.replace(/\/$/, '')}/search/?q=sales`;
   const allRows = [];
   const seenUrls = new Set();
+  let authoritativeEmpty = false;
 
   const visited = new Set();
   for (let page = 0; url; page++) {
@@ -242,7 +243,7 @@ async function fetchSuccessFactorsJobs(identifier, { maxPages = MAX_PAGES } = {}
       const explicitlyEmpty = /no (?:current |open |available )?(?:positions|jobs|openings|vacancies|results) (?:found|available|matching)?|0 results/i.test(
         pageText
       );
-      if (explicitlyEmpty && page === 0 && !nextUrl) break;
+      if (explicitlyEmpty && page === 0 && !nextUrl) { authoritativeEmpty = true; break; }
       throw new Error(
         `SuccessFactors "${host}" returned no job rows and no explicit empty-results text — likely blocked, JS-rendered, or a cookie-consent wall, not a genuine zero-job result`
       );
@@ -254,8 +255,25 @@ async function fetchSuccessFactorsJobs(identifier, { maxPages = MAX_PAGES } = {}
 
   const relevant = allRows.filter((r) => titleLooksRelevant(r.title, r));
 
-  if (!relevant.length) return [];
+  if (!relevant.length && authoritativeEmpty) {
+    const empty = [];
+    empty.authoritativeEmpty = true;
+    empty.inventoryCount = 0;
+    empty.sourceRelevantCount = 0;
+    return empty;
+  }
+  if (!relevant.length && allRows.length) {
+    const fields = await fetchDetailDescription(allRows[0].detailUrl);
+    const proof = [{ ...allRows[0], description: plain(fields.description), description_html: fields.description, location: fields.location || allRows[0].location, date: fields.date }];
+    proof.inventoryCount = allRows.length;
+    proof.sourceRelevantCount = 0;
+    proof.incompleteSnapshot = true;
+    proof.snapshotWarnings = ['Only a non-relevant proof posting was fetched; disappearance closures are suppressed.'];
+    return proof;
+  }
   const withDescriptions = [];
+  withDescriptions.inventoryCount = allRows.length;
+  withDescriptions.sourceRelevantCount = relevant.length;
   withDescriptions.incompleteSnapshot = false;
   withDescriptions.snapshotWarnings = [];
   for (let i = 0; i < relevant.length; i++) {

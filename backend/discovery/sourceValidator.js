@@ -117,13 +117,18 @@ function sourceIsAnchored(job, configuration) {
   }
 }
 
-function plausibleJob(job, configuration) {
+function verifiedJob(job, configuration) {
   const title = String(job.title_original || job.title || '').trim();
   const description = String(job.description_text || job.description_html || '').trim();
   return Boolean(
     job && job.source_verified === true && job.status === 'active' && job.source_job_id &&
-    title && description && titleLooksRelevant(title) && sourceIsAnchored(job, configuration)
+    title && description && sourceIsAnchored(job, configuration)
   );
+}
+
+function plausibleJob(job, configuration) {
+  const title = String(job?.title_original || job?.title || '').trim();
+  return verifiedJob(job, configuration) && titleLooksRelevant(title);
 }
 
 async function validateSource(configuration, candidate, { dispatchSource = dispatch } = {}) {
@@ -140,6 +145,12 @@ async function validateSource(configuration, candidate, { dispatchSource = dispa
   try {
     const { rawJobs, normalize } = await dispatchSource(configuration, employer);
     if (!Array.isArray(rawJobs) || rawJobs.length === 0) {
+      const explicitEmpty = Array.isArray(rawJobs) && rawJobs.authoritativeEmpty === true && ['custom_html', 'successfactors'].includes(configuration.ats_type);
+      if (explicitEmpty) return {
+        ok: true, status: 'PASS_VALIDATED_SOURCE_EMPTY_INVENTORY', raw_job_count: 0, inventory_job_count: 0,
+        normalized_job_count: 0, verified_job_count: 0, plausible_job_count: 0, sample_jobs: [], sample_inventory_jobs: [],
+        normalization_errors: [], elapsed_ms: Date.now() - started,
+      };
       return { ok: false, status: 'NO_PLAUSIBLE_JOBS', raw_job_count: Array.isArray(rawJobs) ? rawJobs.length : null, elapsed_ms: Date.now() - started };
     }
     const jobs = [];
@@ -147,14 +158,18 @@ async function validateSource(configuration, candidate, { dispatchSource = dispa
     for (const raw of rawJobs) {
       try { jobs.push(normalize(raw)); } catch (error) { normalization_errors.push(error.message); }
     }
-    const plausible = jobs.filter((job) => plausibleJob(job, configuration));
+    const verified = jobs.filter((job) => verifiedJob(job, configuration));
+    const plausible = verified.filter((job) => titleLooksRelevant(String(job.title_original || job.title || '')));
     return {
-      ok: plausible.length > 0,
-      status: plausible.length ? 'PASS_VALIDATED_SOURCE' : 'NO_PLAUSIBLE_JOBS',
+      ok: verified.length > 0,
+      status: plausible.length ? 'PASS_VALIDATED_SOURCE' : verified.length ? 'PASS_VALIDATED_SOURCE_NO_RELEVANT_JOBS' : 'NO_PLAUSIBLE_JOBS',
       raw_job_count: rawJobs.length,
+      inventory_job_count: Number.isInteger(rawJobs.inventoryCount) ? rawJobs.inventoryCount : rawJobs.length,
       normalized_job_count: jobs.length,
+      verified_job_count: verified.length,
       plausible_job_count: plausible.length,
       sample_jobs: plausible.slice(0, 3).map((job) => ({ source_job_id: job.source_job_id, title: job.title_original, source_url: job.source_url })),
+      sample_inventory_jobs: verified.slice(0, 3).map((job) => ({ source_job_id: job.source_job_id, title: job.title_original, source_url: job.source_url })),
       normalization_errors: normalization_errors.slice(0, 5),
       elapsed_ms: Date.now() - started,
     };
@@ -163,4 +178,4 @@ async function validateSource(configuration, candidate, { dispatchSource = dispa
   }
 }
 
-module.exports = { dispatch, plausibleJob, sourceIsAnchored, validateSource, SUPPORTED_ATS_TYPES: Object.keys(methodNames) };
+module.exports = { dispatch, verifiedJob, plausibleJob, sourceIsAnchored, validateSource, SUPPORTED_ATS_TYPES: Object.keys(methodNames) };

@@ -62,6 +62,9 @@ test('current, closed, future, expired and unknown stay distinct',()=>{
  assert.equal(classify('Apply now',{datePosted:'2099-01-01'}),'future');
  assert.equal(classify(detail),'unknown');
 });
+test('an official job page inviting an emailed application is likely current',()=>{
+ assert.equal(classify('<p>Please email your application to jobs@example.test.</p>'),'likely_current');
+});
 test('JSON-LD graph/arrays preserve description, applications, multiple locations and expiry',async()=>{
  const j={'@type':'JobPosting',title:'Sales Representative',description:detail,url:'https://forms.office.com/example',jobLocation:[{address:{addressLocality:'Boston',addressRegion:'MA',addressCountry:'US'}},{address:{addressLocality:'Dallas',addressRegion:'TX',addressCountry:'US'}}],validThrough:'2027-01-01'};
  const raw=await fetchHtml(`<script type="application/ld+json">${JSON.stringify({'@graph':[j]})}</script>`);
@@ -88,7 +91,8 @@ test('one multi-territory job does not fan out; content edits do not change sour
 });
 test('empty, blocked and malformed pages cannot trigger successful disappearance closures',async()=>{
  for(const html of ['<h1>Verify you are human</h1>','<div id="app"></div>','<script type="application/ld+json">bad json</script>']) await assert.rejects(fetchHtml(html),/No recognizable/);
- assert.deepEqual(await fetchHtml('<main>No current openings</main>'),[]);
+ const empty=await fetchHtml('<main>No current openings</main>');
+ assert.equal(empty.length,0);assert.equal(empty.authoritativeEmpty,true);assert.equal(empty.inventoryCount,0);
 });
 test('existing ATS normalizers retain their contracts',()=>{
  for(const [moduleName,fn,raw] of [

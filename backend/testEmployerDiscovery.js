@@ -1,8 +1,9 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const { EmployerDiscoveryPipeline } = require('./discovery/pipeline');
-const { resolveOfficialSource, detectFromUrl, detectSourceConfigurations } = require('./discovery/sourceResolver');
+const { resolveOfficialSource, detectFromUrl, detectSourceConfigurations, searchOfficialCareerCandidates } = require('./discovery/sourceResolver');
 const { plausibleJob, sourceIsAnchored, validateSource } = require('./discovery/sourceValidator');
+const { fetchCustomHtmlJobs } = require('./adapters/customHtml');
 const { parseInput, parseArgs, run } = require('./runEmployerDiscovery');
 
 class MemoryStore {
@@ -108,7 +109,7 @@ test('official-page ATS detection plus successful machine validation auto-enroll
         const page = pages.get(url) || pages.get(url.replace(/\/$/, '') + '/');
         if (!page) throw new Error(`unexpected fixture URL ${url}`);
         return page;
-      } }),
+      }, searchCareers: async () => [] }),
       validate: validateSource,
     });
     const first = await pipeline.processSignal(signal);
@@ -142,13 +143,13 @@ test('unsupported official careers source is retained as unresolved with retry e
     ['https://acmemedical.example/careers', { url: 'https://acmemedical.example/careers', html: '<main><h1>Careers</h1><p>Openings load in an unsupported widget.</p></main>' }],
   ]);
   const store = new MemoryStore();
-  const pipeline = new EmployerDiscoveryPipeline({ store, resolveSource: (input) => resolveOfficialSource(input, { readPage: async (url) => pages.get(url) }), validate: passValidation });
+  const pipeline = new EmployerDiscoveryPipeline({ store, resolveSource: (input) => resolveOfficialSource(input, { readPage: async (url) => pages.get(url), searchCareers: async () => [] }), validate: passValidation });
   const result = await pipeline.processSignal({ ...signal, careers_url: 'https://acmemedical.example/careers', job_url: null });
   assert.equal(result.status, 'unresolved');
   assert.equal(store.enrollCalls, 0);
   assert.equal(store.candidates[0].validation_status, 'UNSUPPORTED_SOURCE');
   assert.ok(store.candidates[0].next_attempt_at);
-  assert.deepEqual(store.candidates[0].evidence.attempted_pages, ['https://acmemedical.example/careers']);
+  assert.ok(store.candidates[0].evidence.attempted_pages.includes('https://acmemedical.example/careers'));
 });
 
 test('a supplied website that does not corroborate the company identity is not treated as official', async () => {
@@ -257,6 +258,15 @@ test('public careers search resolves companies without a supplied or guessed dom
   assert.equal(result.evidence.selected_candidate.kind, 'public_search_result');
 });
 
+test('public search ranking uses the registrable company domain instead of a generic subdomain', async () => {
+  const html = '<div class="result"><a class="result__a" href="https://banfield.mycareerhs.com/careers">Banfield Pet Hospital careers</a><span class="result__snippet">Banfield employee education</span></div>' +
+    '<div class="result"><a class="result__a" href="https://jobs.banfield.com/">Banfield Pet Hospital jobs</a><span class="result__snippet">Official jobs</span></div>';
+  const results = await searchOfficialCareerCandidates('Banfield Pet Hospital', {
+    httpFetch: async () => ({ ok: true, text: async () => html }),
+  });
+  assert.equal(results[0].url, 'https://jobs.banfield.com/');
+});
+
 test('verified subsidiary site may lead to a parent shared careers system with a provenance chain', async () => {
   const pages = new Map([
     ['https://aesculap.example/', { url: 'https://aesculap.example/', html: '<title>Aesculap US</title><a href="https://careers.bbraun.example/jobs">Careers at our parent B. Braun</a>' }],
@@ -264,6 +274,7 @@ test('verified subsidiary site may lead to a parent shared careers system with a
     ['https://bbraun.wd5.myworkdayjobs.com/en-US/External/job/1', { url: 'https://bbraun.wd5.myworkdayjobs.com/en-US/External/job/1', html: '<h1>Aesculap opportunity</h1>' }],
   ]);
   const result = await resolveOfficialSource({ company_name: 'Aesculap (US)', company_website: 'https://aesculap.example/' }, {
+    searchCareers: async () => [],
     readPage: async (url) => { const page = pages.get(url); if (!page) throw new Error(`unexpected ${url}`); return page; },
   });
   assert.equal(result.configurations[0].ats_type, 'workday');
@@ -273,6 +284,7 @@ test('verified subsidiary site may lead to a parent shared careers system with a
 
 test('embedded Paycor destination is detected from a verified official careers page', async () => {
   const result = await resolveOfficialSource({ company_name: 'Zomedica', company_website: 'https://zomedica.example/careers/' }, {
+    searchCareers: async () => [],
     readPage: async () => ({ url: 'https://zomedica.example/careers/', html: '<title>Careers - Zomedica</title><h1>Open positions</h1><script src="https://recruitingbypaycor.com/career/iframe.action?clientId=8a7883d08145828d0181914c5b7a2fa1"></script>' }),
   });
   assert.deepEqual(result.configurations.map((item) => [item.ats_type, item.ats_identifier]), [['paycor', '8a7883d08145828d0181914c5b7a2fa1']]);
@@ -287,6 +299,7 @@ test('unknown source falls through to verified official sitemap and structured j
     ['https://spire.example/jobs/sales-manager', { url: 'https://spire.example/jobs/sales-manager', html: '<script type="application/ld+json">{"@type":"JobPosting","title":"Territory Sales Manager","description":"Sell healthcare products throughout the assigned territory and support customers.","url":"https://spire.example/jobs/sales-manager"}</script>' }],
   ]);
   const result = await resolveOfficialSource({ company_name: 'Spire', company_website: 'https://spire.example/' }, {
+    searchCareers: async () => [],
     readPage: async (url) => { const page = pages.get(url); if (!page) throw new Error(`unexpected ${url}`); return page; },
   });
   assert.equal(result.configurations[0].ats_type, 'custom_html');
@@ -300,6 +313,7 @@ test('career hostnames are followed even when the link path is a locale root', a
     ['https://jj.wd5.myworkdayjobs.com/en-US/JJ/jobs', { url: 'https://jj.wd5.myworkdayjobs.com/en-US/JJ/jobs', html: '<h1>J&J jobs</h1>' }],
   ]);
   const result = await resolveOfficialSource({ company_name: 'Johnson & Johnson Innovative Medicine', company_website: 'https://jnj.example/innovativemedicine' }, {
+    searchCareers: async () => [],
     readPage: async (url) => { const page = pages.get(url); if (!page) throw new Error(`unexpected ${url}`); return page; },
   });
   assert.ok(result.careers_pages.includes('https://careers.jnj.example/en/'));
@@ -333,4 +347,124 @@ test('targeted force retry accepts explicit candidate UUIDs and bypasses schedul
   });
   assert.equal(results[0].candidate_id, id);
   assert.deepEqual(seen[0].options, { force: true, candidateId: id });
+});
+
+test('verified later careers search result is tried after the official homepage and conventional paths fail', async () => {
+  const pages = new Map([
+    ['https://acmevetsystems.example/', { url: 'https://acmevetsystems.example/', html: '<title>Acme Vet Systems</title><script>window.parentSite="https://acme.example/"</script>' }],
+    ['https://careers.acme.example/jobs', { url: 'https://careers.acme.example/jobs', html: '<title>Acme Careers</title><a href="https://boards.greenhouse.io/acme">View open positions</a>' }],
+    ['https://boards.greenhouse.io/acme', { url: 'https://boards.greenhouse.io/acme', html: '<h1>Acme jobs</h1>' }],
+  ]);
+  const result = await resolveOfficialSource({ company_name: 'Acme Vet Systems' }, {
+    searchCareers: async () => [
+      { url: 'https://acmevetsystems.example/', title: 'Acme Vet Systems', snippet: 'Official site', provider: 'fixture-search' },
+      { url: 'https://careers.acme.example/jobs', title: 'Acme Careers and Jobs', snippet: 'Corporate careers', provider: 'fixture-search' },
+    ],
+    readPage: async (url) => {
+      const page = pages.get(url);
+      if (!page) throw new Error(`fixture 404: ${url}`);
+      return page;
+    },
+  });
+  assert.equal(result.official_url, 'https://acmevetsystems.example/');
+  assert.equal(result.configurations[0].ats_type, 'greenhouse');
+  assert.ok(result.evidence.provenance_chains.some((chain) => chain.kind === 'verified_public_search_career_result'));
+});
+
+test('a supplied verified homepage still runs public careers discovery', async () => {
+  const pages = new Map([
+    ['https://acmevetsystems.example/', { url: 'https://acmevetsystems.example/', html: '<title>Acme Vet Systems</title><a href="https://acme.example/">Part of Acme</a>' }],
+    ['https://careers.acme.example/jobs', { url: 'https://careers.acme.example/jobs', html: '<title>Acme Careers</title><a href="https://boards.greenhouse.io/acme">View jobs</a>' }],
+    ['https://boards.greenhouse.io/acme', { url: 'https://boards.greenhouse.io/acme', html: '<h1>Acme jobs</h1>' }],
+  ]);
+  let searches = 0;
+  const result = await resolveOfficialSource({ company_name: 'Acme Vet Systems', company_website: 'https://acmevetsystems.example/' }, {
+    searchCareers: async () => {
+      searches++;
+      return [{ url: 'https://careers.acme.example/jobs', title: 'Acme Careers and Jobs', snippet: 'Corporate careers', provider: 'fixture-search' }];
+    },
+    readPage: async (url) => {
+      const page = pages.get(url);
+      if (!page) throw new Error(`fixture 404: ${url}`);
+      return page;
+    },
+  });
+  assert.equal(searches, 1);
+  assert.equal(result.configurations[0].ats_type, 'greenhouse');
+  assert.equal(result.evidence.provenance_chains[0].kind, 'verified_public_search_career_result');
+});
+
+test('verified source inventory with zero relevant sales jobs remains a valid source', async () => {
+  const configuration = { ats_type: 'custom_html', ats_identifier: 'https://pets.example/careers', source_url: 'https://pets.example/careers' };
+  const result = await validateSource(configuration, { id: 'pets', company_name: 'Pets Example', company_website: 'https://pets.example', industry: 'veterinary' }, {
+    dispatchSource: async () => ({
+      rawJobs: [{ id: 'vet-1' }],
+      normalize: () => ({
+        source_job_id: 'vet-1', title_original: 'Veterinarian', description_text: 'Provide preventive veterinary care and treatment for companion animals.',
+        source_url: 'https://pets.example/careers/veterinarian', status: 'active', source_verified: true,
+      }),
+    }),
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.status, 'PASS_VALIDATED_SOURCE_NO_RELEVANT_JOBS');
+  assert.equal(result.verified_job_count, 1);
+  assert.equal(result.plausible_job_count, 0);
+});
+
+test('pipeline prefers a later validated source with relevant jobs over an earlier valid zero-relevant source', async () => {
+  const store = new MemoryStore();
+  const configurations = [
+    { ats_type: 'custom_html', ats_identifier: 'https://pets.example/vet', source_url: 'https://pets.example/vet' },
+    { ats_type: 'custom_html', ats_identifier: 'https://pets.example/jobs', source_url: 'https://pets.example/jobs' },
+  ];
+  const pipeline = new EmployerDiscoveryPipeline({
+    store,
+    resolveSource: async () => ({ ...resolved(configurations[0]), configurations, careers_pages: configurations.map((item) => item.source_url) }),
+    validate: async (configuration) => configuration === configurations[0]
+      ? { ok: true, status: 'PASS_VALIDATED_SOURCE_NO_RELEVANT_JOBS', plausible_job_count: 0 }
+      : { ok: true, status: 'PASS_VALIDATED_SOURCE', plausible_job_count: 2 },
+  });
+  const result = await pipeline.processSignal(signal);
+  assert.equal(result.status, 'enrolled');
+  assert.equal(result.employer.ats_identifier, 'https://pets.example/jobs');
+  assert.equal(result.validation.plausible_job_count, 2);
+});
+
+test('verified official source with an explicit empty inventory remains a valid source', async () => {
+  const rawJobs = [];
+  rawJobs.authoritativeEmpty = true;
+  const result = await validateSource(
+    { ats_type: 'custom_html', ats_identifier: 'https://pets.example/careers', source_url: 'https://pets.example/careers' },
+    { id: 'pets-empty', company_name: 'Pets Example', company_website: 'https://pets.example', industry: 'veterinary' },
+    { dispatchSource: async () => ({ rawJobs, normalize: () => { throw new Error('must not normalize an empty inventory'); } }) },
+  );
+  assert.equal(result.ok, true);
+  assert.equal(result.status, 'PASS_VALIDATED_SOURCE_EMPTY_INVENTORY');
+  assert.equal(result.inventory_job_count, 0);
+  assert.equal(result.plausible_job_count, 0);
+});
+
+test('embedded public job API is a bounded custom-html fallback and never enables disappearance closures', async () => {
+  const apiUrl = 'https://tenant.joveo.site/jobs-api/v2/clients/client1/jobs/search';
+  const calls = [];
+  const jobs = await fetchCustomHtmlJobs({
+    id: 'banfield-like', company_name: 'Banfield-like', company_website: 'https://jobs.example',
+    careers_url: 'https://jobs.example/jobs', ats_type: 'custom_html', ats_identifier: 'https://jobs.example/jobs',
+  }, {
+    fetchPage: async () => `<script>fetch("${apiUrl}")</script>`,
+    postJson: async (_url, body) => {
+      calls.push(body.searchTerm);
+      if (!body.searchTerm) return { totalRecords: 25, totalPages: 25, records: [{ id: 'vet-1', title: 'Veterinarian', description: 'A'.repeat(150), status: 'OPEN', active: true, urlSlug: 'veterinarian' }] };
+      if (body.searchTerm === 'sales') return { totalRecords: 1, totalPages: 1, records: [{ id: 'sales-1', title: 'Territory Sales Manager', description: 'B'.repeat(150), status: 'OPEN', active: true, urlSlug: 'territory-sales-manager' }] };
+      if (body.searchTerm === 'veterinary') return { totalRecords: 1200, totalPages: 12, records: [{ id: 'vet-2', title: 'Veterinarian', description: 'C'.repeat(150), status: 'OPEN', active: true, urlSlug: 'veterinarian-2' }] };
+      return { totalRecords: 0, totalPages: 1, records: [] };
+    },
+  });
+  assert.equal(jobs.inventoryCount, 25);
+  assert.equal(jobs.sourceRelevantCount, 1);
+  assert.equal(jobs[0].title, 'Territory Sales Manager');
+  assert.equal(jobs.incompleteSnapshot, true);
+  assert.ok(jobs.snapshotWarnings.length);
+  assert.ok(jobs.snapshotWarnings.some((warning) => warning.includes('sampled')));
+  assert.ok(calls.includes(''));
 });

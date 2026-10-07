@@ -1,8 +1,7 @@
 const cheerio = require('cheerio');
 const net = require('node:net');
 const dns = require('node:dns').promises;
-const { parseCareersPage } = require('../adapters/customHtml');
-const { titleLooksRelevant } = require('../relevanceFilter');
+const { parseCareersPage, findEmbeddedJobApi } = require('../adapters/customHtml');
 
 const ATS_HOST = /greenhouse\.io|lever\.co|ashbyhq\.com|myworkdayjobs\.com|workable\.com|smartrecruiters\.com|icims\.com|applicantpro\.com|jobvite\.com|pinpointhq\.com|paylocity\.com|recruitingbypaycor\.com|applytojob\.com|oraclecloud\.com|ultipro\.com|adp\.com|kula\.ai/i;
 const CAREER_TEXT = /career|job|opening|join (?:us|our team)|work with us|opportunit/i;
@@ -90,33 +89,49 @@ function unwrapSearchUrl(value) {
 }
 
 async function searchOfficialCareerCandidates(companyName, { httpFetch = fetch, maxResults = 8, industry = '' } = {}) {
-  const endpoint = new URL('https://html.duckduckgo.com/html/');
-  const query = `${companyName}${industry ? ` ${industry}` : ''} careers`;
-  endpoint.searchParams.set('q', query);
-  const response = await httpFetch(endpoint, {
-    signal: AbortSignal.timeout(15_000),
-    headers: { Accept: 'text/html', 'User-Agent': 'ROOK-Careers/1.0 (public employer-source discovery)' },
-  });
-  if (!response.ok) throw new Error(`Public careers search returned ${response.status}`);
-  const $ = cheerio.load(await response.text());
   const results = [];
-  $('.result').each((_, node) => {
-    if (results.length >= maxResults) return;
-    const anchor = $(node).find('a.result__a').first();
-    const url = unwrapSearchUrl(anchor.attr('href'));
-    if (!url || SEARCH_REJECT_HOST.test(new URL(url).hostname) || ATS_HOST.test(url)) return;
-    if (results.some((item) => item.url === url)) return;
-    results.push({
-      url,
-      title: anchor.text().replace(/\s+/g, ' ').trim(),
-      snippet: $(node).find('.result__snippet').text().replace(/\s+/g, ' ').trim(),
-      provider: 'duckduckgo-html',
-      query,
+  let lastSearchError = null;
+  const suffixes = ['careers', 'jobs'];
+  for (const suffix of suffixes) {
+    const endpoint = new URL('https://html.duckduckgo.com/html/');
+    const query = `${companyName}${industry ? ` ${industry}` : ''} ${suffix}`;
+    endpoint.searchParams.set('q', query);
+    let response;
+    try {
+      response = await httpFetch(endpoint, {
+        signal: AbortSignal.timeout(15_000),
+        headers: { Accept: 'text/html', 'User-Agent': 'ROOK-Careers/1.0 (public employer-source discovery)' },
+      });
+    } catch (error) {
+      lastSearchError = error;
+      continue;
+    }
+    if (!response.ok) {
+      lastSearchError = new Error(`Public careers search returned ${response.status}`);
+      continue;
+    }
+    const $ = cheerio.load(await response.text());
+    let queryResultCount = 0;
+    $('.result').each((_, node) => {
+      if (queryResultCount >= maxResults) return;
+      const anchor = $(node).find('a.result__a').first();
+      const url = unwrapSearchUrl(anchor.attr('href'));
+      if (!url || SEARCH_REJECT_HOST.test(new URL(url).hostname) || ATS_HOST.test(url)) return;
+      if (results.some((item) => item.url.replace(/\/$/, '') === url.replace(/\/$/, ''))) return;
+      queryResultCount++;
+      results.push({
+        url,
+        title: anchor.text().replace(/\s+/g, ' ').trim(),
+        snippet: $(node).find('.result__snippet').text().replace(/\s+/g, ' ').trim(),
+        provider: 'duckduckgo-html',
+        query,
+      });
     });
-  });
+  }
+  if (!results.length && lastSearchError) throw lastSearchError;
   const compact = String(companyName || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
   return results.map((result, index) => {
-    const label = new URL(result.url).hostname.replace(/^www\./, '').split('.')[0].replace(/[^a-z0-9]+/g, '');
+    const label = registrableDomain(result.url).split('.')[0].replace(/[^a-z0-9]+/g, '');
     const regionalDomainPenalty = /\.(?:com\.au|co\.nz|co\.uk|co\.in|co\.jp|com\.br)$/i.test(new URL(result.url).hostname) ? 4 : 0;
     const score = (label === compact ? 8 : label.startsWith(compact) || compact.startsWith(label) ? 3 : 0) +
       (CAREER_TEXT.test(new URL(result.url).pathname) ? 2 : 0) +
@@ -207,12 +222,14 @@ function detectSourceConfigurations(pages) {
     const eightfold = String(page.html || '').match(/[?&]domain=([a-z0-9.-]+)/i);
     if (/eightfold\.ai|eightfold/.test(lower) && eightfold) add({ ats_type: 'eightfold', ats_identifier: `${host}|${eightfold[1]}`, source_url: page.url }, { kind: 'page_marker', marker: 'eightfold-domain', page: page.url });
     if (/drupal-settings-json|drupal\.js/.test(lower) && /\/jobs?\/|job search|search jobs/.test(lower)) add({ ats_type: 'drupalcareers', ats_identifier: host, source_url: page.url }, { kind: 'page_marker', marker: 'drupal-careers', page: page.url });
+    const embeddedJobApi = findEmbeddedJobApi(page.html, page.url);
+    if (embeddedJobApi) add({ ats_type: 'custom_html', ats_identifier: page.url, source_url: page.url }, { kind: 'embedded_job_api', marker: embeddedJobApi.provider, endpoint: embeddedJobApi.url, page: page.url });
     if (/"@type"\s*:\s*"jobposting"/i.test(page.html || '')) add({ ats_type: 'custom_html', ats_identifier: page.url, source_url: page.url }, { kind: 'structured_job_data', marker: 'JobPosting', page: page.url });
     try {
       const parsed = parseCareersPage(page.html, page.url);
-      if (parsed.jobs.some((job) => titleLooksRelevant(job.title) && ['current', 'likely_current'].includes(job.status))) {
+      if (parsed.jobs.some((job) => ['current', 'likely_current'].includes(job.status))) {
         add({ ats_type: 'custom_html', ats_identifier: page.url, source_url: page.url }, { kind: 'bounded_static_jobs', marker: 'custom_html', page: page.url });
-      } else if (parsed.detailLinks.some((job) => job.title && titleLooksRelevant(job.title))) {
+      } else if (parsed.detailLinks.some((job) => job.title)) {
         add({ ats_type: 'custom_html', ats_identifier: page.url, source_url: page.url }, { kind: 'bounded_official_job_links', marker: 'custom_html', page: page.url });
       }
     } catch { /* Detection continues through platform-specific evidence. */ }
@@ -244,11 +261,27 @@ function companyIdentityEvidence(companyName, page) {
   const hostLabel = normalize(registrableDomain(page.url)?.split('.')[0]);
   const $ = cheerio.load(String(page.html || ''));
   const pageText = normalize(`${$('title').text()} ${$('meta[property="og:site_name"]').attr('content') || ''} ${$('body').text().slice(0, 100_000)}`);
-  const tokens = String(companyName || '').toLowerCase().match(/[a-z0-9]+/g)?.filter((token) => token.length >= 3 && !/^(the|and|inc|corp|llc|ltd|company|group|holdings)$/.test(token)) || [];
+  const tokens = [...new Set(String(companyName || '').toLowerCase().match(/[a-z0-9]+/g)?.filter((token) => token.length >= 3 && !/^(the|and|inc|corp|llc|ltd|company|group|holdings)$/.test(token)) || [])];
   const hostnameMatch = compactName.length >= 4 && hostLabel.length >= 4 && (hostLabel.includes(compactName) || compactName.includes(hostLabel));
   const textMatch = compactName.length >= 4 && pageText.includes(compactName);
   const tokenMatches = tokens.filter((token) => pageText.includes(token));
-  return { ok: hostnameMatch || textMatch || (tokens.length > 0 && tokenMatches.length >= Math.min(2, tokens.length)), hostname_match: hostnameMatch, text_match: textMatch, token_matches: tokenMatches.slice(0, 10) };
+  const requiredTokenMatches = tokens.length <= 2 ? tokens.length : Math.ceil(tokens.length * 0.75);
+  return { ok: hostnameMatch || textMatch || (tokens.length > 0 && tokenMatches.length >= requiredTokenMatches), hostname_match: hostnameMatch, text_match: textMatch, token_matches: tokenMatches.slice(0, 10) };
+}
+
+function verifiedRelatedDomains(companyName, page) {
+  const primary = registrableDomain(page.url);
+  const generic = /^(?:animal|health|hospital|medical|veterinary|vet|pet|systems|system|care|group|company|holdings|global|specialty|emergency)$/;
+  const brandTokens = (String(companyName || '').toLowerCase().match(/[a-z0-9]+/g) || [])
+    .filter((token) => token.length >= 4 && !generic.test(token));
+  const related = new Set();
+  for (const link of pageLinks(page.html, page.url)) {
+    const domain = registrableDomain(link.url);
+    if (!domain || domain === primary) continue;
+    const label = domain.split('.')[0].replace(/[^a-z0-9]+/g, '');
+    if (brandTokens.some((token) => label.includes(token) || token.includes(label))) related.add(domain);
+  }
+  return [...related];
 }
 
 function sitemapUrls(xml, baseUrl) {
@@ -289,16 +322,14 @@ async function resolveOfficialSource(signal, {
     }
   };
   await tryCandidates(candidates);
-  if (!home) {
-    try {
-      searchResults = await searchCareers(signal.company_name, { maxResults: maxSearchResults, industry: signal.industry || '' });
-      const searched = searchResults
-        .filter((result) => !candidates.some((candidate) => candidate.url === result.url))
-        .map((result) => ({ ...result, kind: 'public_search_result' }));
-      candidates.push(...searched);
-      await tryCandidates(searched);
-    } catch (error) { searchError = error.message; }
-  }
+  try {
+    searchResults = await searchCareers(signal.company_name, { maxResults: maxSearchResults, industry: signal.industry || '' });
+    const searched = searchResults
+      .filter((result) => !candidates.some((candidate) => candidate.url === result.url))
+      .map((result) => ({ ...result, kind: 'public_search_result' }));
+    candidates.push(...searched);
+    if (!home) await tryCandidates(searched);
+  } catch (error) { searchError = error.message; }
   if (!home) throw Object.assign(new Error('No supplied or search-discovered page safely corroborated the company identity'), {
     code: officialUrl && candidateFailures.length === 1 ? 'COMPANY_IDENTITY_MISMATCH' : 'SEARCH_IDENTITY_NOT_VERIFIED',
     evidence: { supplied_url: officialUrl, search_error: searchError, search_results: searchResults, candidate_failures: candidateFailures },
@@ -312,17 +343,25 @@ async function resolveOfficialSource(signal, {
     .filter((link) => (CAREER_TEXT.test(link.text) || CAREER_TEXT.test(link.url) || ATS_HOST.test(link.url)) &&
       ['a', 'iframe', 'form'].includes(link.tag))
     .map((link) => link.url);
+  const relatedDomains = verifiedRelatedDomains(signal.company_name, home);
+  const searchCareerTargets = searchResults.filter((result) => {
+    if (!CAREER_TEXT.test(`${result.title || ''} ${result.url}`)) return false;
+    const domain = registrableDomain(result.url);
+    return sameCompanyDomain(result.url, home.url) || relatedDomains.includes(domain);
+  });
   const homeIsCareersPage = CAREER_TEXT.test(`${new URL(home.url).hostname} ${new URL(home.url).pathname} ${selectedCandidate.title || ''}`) || /"@type"\s*:\s*"jobposting"/i.test(home.html || '');
-  const targets = [...new Set([...trustedExplicit, ...careerLinks])].slice(0, maxCareerPages);
+  const targets = [...new Set([...trustedExplicit, ...searchCareerTargets.map((result) => result.url), ...careerLinks])].slice(0, maxCareerPages);
+  const searchTargetEvidence = new Map(searchCareerTargets.map((result) => [result.url.replace(/\/$/, ''), result]));
   if (homeIsCareersPage) targets.unshift(home.url);
 
   // Some verified official sites do not expose Careers in server-rendered homepage HTML.
   // Probe only a small set of conventional same-domain paths after company identity is proven.
-  if (!targets.length) {
+  if (targets.length < maxCareerPages) {
     const base = new URL(home.url);
     for (const path of ['/careers', '/jobs', '/careers/', '/jobs/']) {
       if (targets.length >= maxCareerPages) break;
-      targets.push(new URL(path, base.origin).href);
+      const probe = new URL(path, base.origin).href;
+      if (!targets.includes(probe)) targets.push(probe);
     }
   }
 
@@ -337,8 +376,12 @@ async function resolveOfficialSource(signal, {
     visited.add(target.replace(/\/$/, ''));
     try {
       const page = await readPage(target);
-      const linkedFrom = pages.find((candidate) => pageLinks(candidate.html, candidate.url).some((link) => link.url.replace(/\/$/, '') === target.replace(/\/$/, '')))?.url || home.url;
-      pages.push({ ...page, role: 'careers', linked_from: linkedFrom, provenance: { kind: 'official_page_link', linked_from: linkedFrom, url: target } });
+      const directlyLinkedFrom = pages.find((candidate) => pageLinks(candidate.html, candidate.url).some((link) => link.url.replace(/\/$/, '') === target.replace(/\/$/, '')))?.url;
+      const searchEvidence = searchTargetEvidence.get(target.replace(/\/$/, ''));
+      const linkedFrom = directlyLinkedFrom || home.url;
+      pages.push({ ...page, role: 'careers', linked_from: linkedFrom, provenance: searchEvidence
+        ? { kind: 'verified_public_search_career_result', linked_from: home.url, url: target, relationship_domain: registrableDomain(target), search: searchEvidence }
+        : { kind: 'official_page_link', linked_from: linkedFrom, url: target } });
       for (const link of pageLinks(page.html, page.url)) {
         if (!(CAREER_TEXT.test(link.text) || CAREER_TEXT.test(link.url) || ATS_HOST.test(link.url))) continue;
         if (!['a', 'iframe', 'form'].includes(link.tag)) continue;
@@ -397,6 +440,7 @@ async function resolveOfficialSource(signal, {
       candidate_failures: candidateFailures,
       redirect_chain: home.redirect_chain || [],
       official_link_targets: queued,
+      verified_related_domains: relatedDomains,
       provenance_chains: pages.filter((page) => page.role === 'careers').map((page) => ({ url: page.url, ...page.provenance })),
       fetch_failures: failures,
       fallback,

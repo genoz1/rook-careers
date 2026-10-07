@@ -131,6 +131,7 @@ class EmployerDiscoveryPipeline {
     });
 
     const validationAttempts = [];
+    let passed = null;
     for (const configuration of resolved.configurations) {
       const sourceOwner = await this.store.findCandidateBySource(configuration.ats_type, configuration.ats_identifier);
       if (sourceOwner && sourceOwner.id !== candidate.id) {
@@ -140,7 +141,12 @@ class EmployerDiscoveryPipeline {
       const result = await this.validate(configuration, candidate);
       validationAttempts.push({ configuration, result });
       if (!result.ok) continue;
+      if (!passed) passed = { configuration, result };
+      if ((result.plausible_job_count || 0) > 0) { passed = { configuration, result }; break; }
+    }
 
+    if (passed) {
+      const { configuration, result } = passed;
       const currentEmployers = await this.store.listEmployers();
       const duplicateEmployer = currentEmployers.find((employer) => employerMatches(employer, candidate, configuration));
       if (duplicateEmployer) {

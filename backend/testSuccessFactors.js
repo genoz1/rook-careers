@@ -80,7 +80,10 @@ test('explicit "no results" text is a legitimate empty result', async () => {
     { 'https://careers.example.com/search/?q=sales': fixture('no-results') },
     async () => {
       const jobs = await fetchSuccessFactorsJobs('careers.example.com');
-      assert.deepEqual(jobs, []);
+      assert.equal(jobs.length, 0);
+      assert.equal(jobs.authoritativeEmpty, true);
+      assert.equal(jobs.inventoryCount, 0);
+      assert.equal(jobs.sourceRelevantCount, 0);
     }
   );
 });
