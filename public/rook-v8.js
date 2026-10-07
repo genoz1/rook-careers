@@ -79,7 +79,7 @@
     const place=revealed?(job.location_raw||[job.city,job.state].filter(Boolean).join(', ')||'Location varies'):
       (job.location_label||job.territory_type||(['remote_us','national_us','territory'].includes(job.geography_kind)?'Remote / territory':(Number.isFinite(job.distance_miles)?`${job.distance_miles} mi away`:'Location available after unlock')));
     const distance=Number.isFinite(job.distance_miles)?' · '+job.distance_miles+' mi':'';
-    const employer=revealed?job.company_name||'Employer not listed':job.masked_lines?.employer?.join(' ')||'Company information';
+    const employer=revealed?job.company_name||'Employer not listed':'Employer hidden until unlock';
     const title=revealed?job.title_original||'Sales opportunity':job.role_type||'Sales opportunity';
     const logo=revealed?RookV8EmployerLogo.render(employer):'';
     const url=revealed?safeUrl(job.application_url)||safeUrl(job.source_url):null;
