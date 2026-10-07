@@ -13,7 +13,9 @@ ROOK discovers **sales** roles in medical device, diagnostics/lab, pharmaceutica
 | Sales-only admission | `backend/relevanceFilter.js` |
 | Server-side masking | `backend/pretrialProjection.js`, `backend/redaction.js` |
 | Generalized titles + locations | `backend/maskedPresentation.js` |
-| Scheduled 6-category discovery | `backend/runScheduledDiscovery.js`, `backend/discovery/publicJobSignals.js` |
+| Scheduled 6-category discovery | `backend/runScheduledDiscovery.js` runs all six public queries each cycle (`--query-limit 6`) via `backend/discovery/publicJobSignals.js` |
+| Skipped employers advance the queue | `backend/ingest.js` `markIngestSkip` always sets `last_checked_at` |
+| Existing-employer discrepancy repair | Public signals for monitored employers trigger official-source re-ingest in `runPublicJobDiscovery.js` |
 | Incomplete snapshot safety | Adapter `incompleteSnapshot` + `backend/ingest.js` |
 | Inventory cleanup | `backend/scripts/auditAndCleanupNonSalesInventory.js` |
 

@@ -17,6 +17,11 @@ const BLUEPEARL_NON_SALES = [
   'Veterinary Practice Manager',
   'Veterinary Client Service Representative',
   'Oncology Clinical Specialist',
+  'Clinical Manager, RN',
+  'Senior Clinical Study Manager',
+  'Veterinary Relationship Manager',
+  'Clinical Care Transition Specialist / RN - Houston',
+  'Clinical Study Specialist',
 ];
 
 const LEGITIMATE_SALES = [

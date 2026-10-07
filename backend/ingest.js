@@ -121,6 +121,20 @@ const supabase = createClient(
   { global: { fetch: (url, options = {}) => fetch(url, { ...options, signal: AbortSignal.any([AbortSignal.timeout(20000), ...(options.signal ? [options.signal] : [])]) }) } }
 );
 
+async function markIngestSkip(employer, reason) {
+  // Skipped employers must still advance last_checked_at. Leaving it null
+  // parks them at the head of every scheduled run (nulls-first ordering) and
+  // starves the rest of the active employer set.
+  const checkedAt = new Date().toISOString();
+  const { error } = await supabase.from("employers").update({
+    sync_status: "error",
+    last_checked_at: checkedAt,
+    ingestion_hold_reason: String(reason || "Ingestion skipped").slice(0, 500),
+  }).eq("id", employer.id);
+  if (error) console.error(`  Could not record skip for ${employer.company_name}: ${error.message}`);
+  return { status: "skipped", skip_reason: reason, checked_at: checkedAt };
+}
+
 async function ingestEmployer(employer) {
   const repairSourceOnly = process.env.ROOK_INGEST_REPAIR_SOURCE_ONLY === '1';
   const disableClosures = process.env.ROOK_INGEST_REPAIR_NO_CLOSURES === '1';
@@ -130,16 +144,22 @@ async function ingestEmployer(employer) {
   let normalize;
 
   try {
-    if (employer.ingestion_hold_reason) throw new Error("Source verification hold: " + employer.ingestion_hold_reason);
+    if (employer.ingestion_hold_reason) {
+      console.log(`  Skipping — hold: ${employer.ingestion_hold_reason}`);
+      // Refresh the check timestamp without a source retry loop.
+      return markIngestSkip(employer, employer.ingestion_hold_reason);
+    }
     if (employer.ats_type === "custom_html") {
-      // Reviewed sources participate in normal scheduled runs. An explicit env
+      // Reviewed registry, discovery-enrolled employers, and any row that
+      // already carries a careers/source URL may be ingested. An explicit env
       // allowlist overrides the registry (an empty value disables every source).
       const configuredIds = process.env.CUSTOM_HTML_EMPLOYER_IDS;
       const enabledIds = (configuredIds ?? Object.keys(reviewedHtmlSources).join(",")).split(",").map(id => id.trim());
       const discoveryEnabled = configuredIds == null && employer.discovery_candidate_id;
-      if (!enabledIds.includes(employer.id) && !discoveryEnabled) {
+      const hasCareersUrl = /^https?:\/\//i.test(String(employer.careers_url || employer.ats_identifier || employer.source_url || ""));
+      if (!enabledIds.includes(employer.id) && !discoveryEnabled && !(configuredIds == null && hasCareersUrl)) {
         console.log("  Skipping custom_html — employer is not enabled for this run");
-        return { status: 'skipped' };
+        return markIngestSkip(employer, "custom_html source is not enabled for scheduled ingest");
       }
       rawJobs = await fetchCustomHtmlJobs(employer);
       const splitIds = (process.env.CUSTOM_HTML_SPLIT_TERRITORIES_IDS ?? Object.keys(reviewedHtmlSources).filter(id => reviewedHtmlSources[id].splitTerritories).join(",")).split(",").map(id => id.trim());
@@ -228,7 +248,7 @@ async function ingestEmployer(employer) {
       normalize = (job) => normalizeSuccessFactorsJob(job, employer, host);
     } else {
       console.log(`  Skipping — no adapter for ats_type "${employer.ats_type}"`);
-      return { status: 'skipped' };
+      return markIngestSkip(employer, `Unsupported ats_type "${employer.ats_type}"; needs source reconfiguration`);
     }
   } catch (err) {
     metric('source_failures');
@@ -539,6 +559,7 @@ async function ingestEmployer(employer) {
     .update({
       sync_status: rawJobs.incompleteSnapshot ? "partial" : "ok",
       last_checked_at: new Date().toISOString(),
+      ingestion_hold_reason: null,
       ...(rawJobs.incompleteSnapshot ? {} : { last_successful_sync_at: new Date().toISOString() }),
     })
     .eq("id", employer.id);
