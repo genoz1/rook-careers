@@ -56,11 +56,6 @@ const { fetchClinchTalentJobs } = require("./adapters/clinchtalent");
 const { fetchDrupalCareersJobs } = require("./adapters/drupalcareers");
 const { fetchTalentBrewJobs } = require("./adapters/talentbrew");
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
-
 // A small, polite pause between outbound requests — these are other
 // companies' production APIs, not infrastructure built to be probed
 // hundreds of times in a row.
@@ -251,6 +246,10 @@ const TARGET_EMPLOYERS = [
 ];
 
 async function run() {
+  const supabase = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
   console.log(`Starting employer discovery — ${TARGET_EMPLOYERS.length} candidate(s) in the target list.\n`);
 
   const { data: existing, error: existingErr } = await supabase
@@ -325,4 +324,6 @@ async function run() {
   console.log(`\nDiscovery run complete. Found ${foundCount}, not found ${notFoundCount}, already known ${skippedCount}, out of ${TARGET_EMPLOYERS.length} candidate(s).`);
 }
 
-run();
+module.exports = { TARGET_EMPLOYERS, slugCandidates };
+
+if (require.main === module) run();
