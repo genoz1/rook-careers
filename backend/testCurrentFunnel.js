@@ -87,3 +87,18 @@ test('current funnel tracks every required event through the deduplicating helpe
     assert.ok(acquisition.includes(event)||checkout.includes(event));
   assert.match(tracking,/currentEvents/);
 });
+
+test('acquisition cards keep generalized title, location, and industry readable',()=>{
+  const css=fs.readFileSync(path.join(root,'public/rook-acquisition.css'),'utf8');
+  const js=fs.readFileSync(path.join(root,'public/rook-acquisition.js'),'utf8');
+  assert.match(css,/\.job h2\{[^}]*color:#0a2f57/);
+  assert.match(css,/\.meta\{[^}]*color:#4b6079/);
+  assert.doesNotMatch(css,/\.job h2\{[^}]*filter:\s*blur/);
+  assert.doesNotMatch(css,/\.meta\{[^}]*filter:\s*blur/);
+  assert.doesNotMatch(css,/\.company\{[^}]*filter:\s*blur/);
+  assert.match(js,/Employer hidden until unlock/);
+  assert.match(js,/j\.role_type/);
+  assert.match(js,/location_label/);
+  assert.match(js,/industry_classification\?\.labels/);
+  assert.doesNotMatch(js,/masked_lines\?\.employer/);
+});

@@ -72,9 +72,41 @@ async function rank(db,profile,unused=[],timing={}){
   timing.scoring_ms=performance.now()-scoreStarted;
   return ranked;
 }
+function previewRecency(job){
+  return new Date(job.date_posted||job.first_seen_at||0).getTime()||0;
+}
+// Anonymous bootstrap has no home geography. Prefer a readable mix of roles,
+// industries, and cities over the newest 30 rows of one repeated title.
+function diversifyNationalPreview(jobs,limit=30){
+  const {isUsEligibleJob}=require('./jobEligibility');
+  const {generalizedRole,safeLocationLabel}=require('./maskedPresentation');
+  const {classify}=require('../public/rook-job-classification');
+  const eligible=jobs.filter(isUsEligibleJob).sort((a,b)=>previewRecency(b)-previewRecency(a));
+  const selected=[],seen=new Set();
+  const roleCounts=new Map(),industryCounts=new Map(),locationCounts=new Map();
+  const pass=(maxRole,maxIndustry,maxLocation)=>{
+    for(const job of eligible){
+      if(seen.has(job.id)||selected.length>=limit)continue;
+      const role=generalizedRole(job);
+      const industry=(classify(job).labels||[])[0]||'Medical sales';
+      const location=safeLocationLabel(job)||String(job.state||'').toUpperCase()||'National';
+      if((roleCounts.get(role)||0)>=maxRole)continue;
+      if((industryCounts.get(industry)||0)>=maxIndustry)continue;
+      if((locationCounts.get(location)||0)>=maxLocation)continue;
+      seen.add(job.id);selected.push(job);
+      roleCounts.set(role,(roleCounts.get(role)||0)+1);
+      industryCounts.set(industry,(industryCounts.get(industry)||0)+1);
+      locationCounts.set(location,(locationCounts.get(location)||0)+1);
+    }
+  };
+  // Widen caps only when the inventory cannot fill a varied first viewport.
+  pass(3,10,2);
+  pass(5,18,4);
+  pass(Number.POSITIVE_INFINITY,Number.POSITIVE_INFINITY,Number.POSITIVE_INFINITY);
+  return selected;
+}
 async function nationalPreview(db,timing={}){
   const local=await indexFor(db).current(timing)||await pages(db,JOB_LIST_COLUMNS_NO_DESCRIPTION,timing);
-  const {isUsEligibleJob}=require('./jobEligibility');
-  return local.filter(isUsEligibleJob).sort((a,b)=>new Date(b.date_posted||b.first_seen_at||0)-new Date(a.date_posted||a.first_seen_at||0)).slice(0,30);
+  return diversifyNationalPreview(local,30);
 }
-module.exports={rank,readCandidates,nationalPreview,GEO_COLUMNS,startIndex,indexFor,pages};
+module.exports={rank,readCandidates,nationalPreview,diversifyNationalPreview,GEO_COLUMNS,startIndex,indexFor,pages};
