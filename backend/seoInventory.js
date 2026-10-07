@@ -6,17 +6,17 @@ const {VERSION, validPoint, descriptionHash} = require('./jobLocationScope');
 const {project,publicPreview} = require('./pretrialProjection');
 const CATEGORIES = {
   'medical-sales-jobs': {label:'Medical Sales Jobs', labels:['Medical Device','Pharmaceutical','Diagnostics','Capital Equipment'], human:true,
-    intro:'Explore medical sales opportunities across devices, pharmaceuticals, diagnostics and capital equipment. Compare current masked previews, then start a trial to see employers, full job details and application links.'},
+    intro:'Explore medical sales opportunities across devices, pharmaceuticals, diagnostics and capital equipment. Compare current masked previews, then choose membership to see employers, full job details and application links.'},
   'medical-device-sales-jobs': {label:'Medical Device Sales Jobs', labels:['Medical Device'], human:true,
     intro:'Browse medical device sales opportunities, including surgical products, clinical equipment and patient-care technology. Roles can differ in clinical support, territory coverage and account responsibilities.'},
   'pharmaceutical-sales-jobs': {label:'Pharmaceutical Sales Jobs', labels:['Pharmaceutical'], human:true,
-    intro:'Explore pharmaceutical sales opportunities involving medicines and therapeutic products. Review the available role and location previews; full requirements and employer details are available with a trial.'},
+    intro:'Explore pharmaceutical sales opportunities involving medicines and therapeutic products. Review the available role and location previews; full requirements and employer details are available with membership.'},
   'diagnostics-sales-jobs': {label:'Diagnostics & Laboratory Sales Jobs', labels:['Diagnostics'], human:true,
     intro:'Find diagnostic sales jobs and laboratory sales opportunities involving testing, laboratory services and diagnostic products. These collections cover diagnostics and lab sales together so you can compare relevant opportunities in one place.'},
   'veterinary-sales-jobs': {label:'Veterinary & Animal Health Sales Jobs', labels:['Veterinary'],
     intro:'Explore veterinary sales jobs and animal health sales opportunities in one collection. Relevant roles may serve veterinary practices or animal-health customers across diagnostics, medicines and equipment.'},
   'capital-equipment-sales-jobs': {label:'Capital Equipment Sales Jobs', labels:['Capital Equipment'], human:true,
-    intro:'Browse medical capital equipment sales opportunities. These roles focus on equipment purchases and account relationships; consult the full listing during your trial for each role’s product, territory and experience requirements.'},
+    intro:'Browse medical capital equipment sales opportunities. These roles focus on equipment purchases and account relationships; consult the full listing with membership for each role’s product, territory and experience requirements.'},
 };
 // Existing role pages use the same inventory boundary as industry pages.
 CATEGORIES['territory-sales-manager-jobs'] = {

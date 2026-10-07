@@ -211,11 +211,11 @@ router.get("/jobs/:id", async (req, res, next) => {
   const bodyHtml = `<h1 style="font-size:28px;margin-bottom:20px;overflow-wrap:anywhere">${escapeHtml(title)}</h1>
     <p style="line-height:1.7;margin-bottom:24px">${facts.map(escapeHtml).join(' · ')}</p>
     <section style="background:white;border:1px solid var(--border);padding:24px;border-radius:14px">
-      <h2 style="font-size:18px;margin-bottom:12px">Employer: 🔒 Hidden until free trial</h2>
+      <h2 style="font-size:18px;margin-bottom:12px">Employer: 🔒 Protected until membership</h2>
       <p style="line-height:1.7;margin-bottom:20px">${escapeHtml(safe.summary)}</p>
       <p style="line-height:1.7;margin-bottom:20px">Want to see the employer, complete job description and application link?</p>
-      <a class="btn btn-primary" href="/rook-onboarding-v8.html?${escapeHtml(query.toString())}">Try ROOK Today for Free</a>
-      <p style="font-size:13px;margin-top:16px">24 hours of full access. No credit card required.</p>
+      <a class="btn btn-primary" href="/rook-onboarding-v8.html?${escapeHtml(query.toString())}">Browse protected matches</a>
+      <p style="font-size:13px;margin-top:16px">Preview first, then choose a paid access option when you want full details.</p>
     </section><script src="/rook-attribution.js"></script>`;
   res.send(pageShell({title:`${title} — ROOK`,description,canonicalUrl,bodyHtml,jobId:job.id,
     jsonLd:{'@context':'https://schema.org','@type':'WebPage',name:title,description,url:canonicalUrl}}));

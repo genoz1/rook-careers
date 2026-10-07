@@ -46,7 +46,7 @@ async function loadCandidateId(req, res, next) {
     .maybeSingle();
   if (error) return res.status(500).json({ error: error.message });
   if (!data) return res.status(404).json({ error: "Complete onboarding before tracking applications" });
-  if (!hasFullAccess(data)) return res.status(403).json({subscription_required:true,error:"Start your free trial to access applications."});
+  if (!hasFullAccess(data)) return res.status(403).json({subscription_required:true,error:"Choose a membership to access applications."});
   req.candidateId = data.id;
   next();
 }

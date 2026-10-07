@@ -693,7 +693,7 @@ async function run() {
   test("public job pages, directory, similar jobs, and sitemap apply isUsEligibleJob", () => {
     const src = fs.readFileSync(path.join(__dirname, "routes", "publicPages.js"), "utf8");
     assert.ok(/require\(["']\.\.\/jobEligibility["']\)/.test(src));
-    assert.ok(/error \|\| !job \|\| !isUsEligibleJob\(job\)/.test(src), "public job detail must reject ineligible jobs");
+    assert.ok(/if \(!job \|\| !isUsEligibleJob\(job\)\)/.test(src), "public job detail must reject ineligible jobs");
     assert.ok(/eligibleData = data\.filter\(isUsEligibleJob\)/.test(src), "public job directory must filter ineligible jobs");
     // The public page no longer renders a similar-jobs collection. Keep
     // this guard so an unfiltered collection cannot silently return.

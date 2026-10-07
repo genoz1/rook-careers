@@ -77,7 +77,7 @@ async function requireAuth(req, res, next) {
 async function requireFullAccess(req, res, next) {
   const {data:profile,error} = await supabaseAdmin.from("candidate_profiles").select("subscription_status,trial_ends_at,subscription_cancel_at").eq("user_id",req.user.id).maybeSingle();
   if(error) return res.status(503).json({error:"Unable to verify access."});
-  if(!hasFullAccess(profile)) return res.status(403).json({subscription_required:true,error:"Start your free trial to unlock this feature."});
+  if(!hasFullAccess(profile)) return res.status(403).json({subscription_required:true,error:"Choose a membership to unlock this feature."});
   next();
 }
 
@@ -1027,7 +1027,7 @@ router.post("/jobs/:id/apply", requireConfig, requireAuth, requireFullAccess, lo
     // since the UI can be bypassed by calling the API directly.
     if (!hasFullAccess(profile)) {
       console.log(`${tag} blocked — candidate does not have full access`);
-      return res.status(403).json({ error: "Start your free trial to apply to jobs.", subscription_required: true });
+      return res.status(403).json({ error: "Choose a membership to apply to jobs.", subscription_required: true });
     }
 
     let resumeUrl = null;
@@ -1172,7 +1172,7 @@ router.get("/jobs/:id", requireConfig, optionalAuth, async (req, res) => {
     .eq("user_id", req.user.id)
     .maybeSingle();
 
-  if (!hasFullAccess(profile)) return res.status(403).json({subscription_required:true,error:"Start your free trial to view job details."});
+  if (!hasFullAccess(profile)) return res.status(403).json({subscription_required:true,error:"Choose a membership to view job details."});
 
   // Single-job page: fall back to a live score if no precomputed row
   // exists yet, OR if the row that does exist predates the scoring

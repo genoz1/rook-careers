@@ -20,6 +20,7 @@ test('all old onboarding entries reach V8 in one redirect and retain attribution
       if (name === './backend/publicSeo') return seo;
       if (name === './backend/socialShortLinks') return { createRouter: () => express.Router() };
       if (name === './backend/resources/routes') return { createRouter: () => express.Router() };
+      if (name === './backend/industryNews/config') return { getFlags: () => ({industryNews:false}) };
       return express.Router();
     },
     __dirname: root, process: { env: {}, on() {} }, console, URLSearchParams,
@@ -46,5 +47,9 @@ test('all old onboarding entries reach V8 in one redirect and retain attribution
     ]) assert.equal((await get(from)).headers.get('location'), to);
     assert.equal((await get('/medical-sales/free-trial?utm_source=google')).headers.get('location'), '/rook-onboarding-v8.html?utm_source=google');
     assert.equal((await get('/medical-sales/rook-onboarding-v7.html?utm_source=meta')).headers.get('location'), '/rook-onboarding-v8.html?utm_source=meta');
+    assert.equal((await get('/rook-keep-access.html?utm_source=email')).headers.get('location'), '/rook-checkout-v8.html?utm_source=email');
+    const retiredApi=await get('/api/v9/session');
+    assert.equal(retiredApi.status,410);
+    assert.match(await retiredApi.text(),/offer is retired/i);
   } finally { server.close(); server.closeAllConnections(); }
 });
