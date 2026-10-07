@@ -5,6 +5,7 @@ const { resolveOfficialSource, detectFromUrl, detectSourceConfigurations, search
 const { plausibleJob, sourceIsAnchored, validateSource } = require('./discovery/sourceValidator');
 const { fetchCustomHtmlJobs } = require('./adapters/customHtml');
 const { parseInput, parseArgs, run } = require('./runEmployerDiscovery');
+const { assessSignalFreshness, mergeSignalPayload } = require('./discovery/evidenceFreshness');
 
 class MemoryStore {
   constructor(employers = []) {
@@ -16,18 +17,20 @@ class MemoryStore {
   async receiveCandidate(row) {
     const existing = await this.getCandidate(row.identity_key) || (row.company_domain && this.candidates.find((candidate) => candidate.company_domain === row.company_domain));
     if (existing) {
+      const freshness = assessSignalFreshness(existing.signal_payload, row.signal_payload);
       Object.assign(existing, {
         last_signal_at: row.last_signal_at,
-        signal_payload: { ...existing.signal_payload, ...row.signal_payload },
+        signal_payload: mergeSignalPayload(existing.signal_payload, row.signal_payload, row.last_signal_at),
         company_website: row.company_website || existing.company_website,
         careers_url: row.careers_url || existing.careers_url,
         job_url: row.job_url || existing.job_url,
       });
-      return { candidate: { ...existing }, duplicate: true };
+      return { candidate: { ...existing }, duplicate: true, freshEvidence: freshness.fresh, evidenceFingerprint: freshness.fingerprint };
     }
-    const candidate = { id: `candidate-${this.candidates.length + 1}`, attempt_count: 0, ...row };
+    const candidate = { id: `candidate-${this.candidates.length + 1}`, attempt_count: 0, ...row,
+      signal_payload: mergeSignalPayload(null, row.signal_payload, row.last_signal_at) };
     this.candidates.push(candidate);
-    return { candidate: { ...candidate }, duplicate: false };
+    return { candidate: { ...candidate }, duplicate: false, freshEvidence: false, evidenceFingerprint: null };
   }
   async updateCandidate(id, patch) {
     const candidate = this.candidates.find((row) => row.id === id);
@@ -198,6 +201,87 @@ test('retryable candidate is deferred until due, then can validate and enroll', 
   assert.equal(retried.status, 'enrolled');
   assert.equal(store.candidates[0].attempt_count, 2);
   assert.equal(store.enrollCalls, 1);
+});
+
+test('fresh current-job evidence wakes an unresolved candidate before its retry date', async () => {
+  const store = new MemoryStore();
+  const oldSignal = { company_name: 'Wakeable Medical', signal_source: 'linkedin-public-jobs', source_signal_id: 'job-1', job_url: 'https://www.linkedin.com/jobs/view/job-1' };
+  store.candidates.push({
+    id: 'wakeable-1', identity_key: identityKey(oldSignal), company_name: oldSignal.company_name,
+    normalized_company_name: 'wakeable medical', signal_payload: mergeSignalPayload(null, oldSignal, '2026-10-01T00:00:00.000Z'),
+    status: 'unresolved', attempt_count: 1, next_attempt_at: '2026-10-14T00:00:00.000Z',
+  });
+  let resolveCalls = 0;
+  const pipeline = new EmployerDiscoveryPipeline({
+    store, now: () => new Date('2026-10-07T12:00:00.000Z'),
+    resolveSource: async () => { resolveCalls++; return resolved(); }, validate: passValidation,
+  });
+  const result = await pipeline.processSignal({ ...oldSignal, source_signal_id: 'job-2', job_url: 'https://www.linkedin.com/jobs/view/job-2' });
+  assert.equal(result.status, 'enrolled');
+  assert.equal(result.awakened_by_fresh_evidence, true);
+  assert.equal(resolveCalls, 1);
+  assert.equal(store.candidates[0].attempt_count, 2);
+  assert.ok(store.candidates[0].evidence.fresh_signal_wake);
+});
+
+test('unchanged current-job evidence continues to respect retry backoff', async () => {
+  const store = new MemoryStore();
+  const oldSignal = { company_name: 'Backoff Medical', signal_source: 'linkedin-public-jobs', source_signal_id: 'same-job', job_url: 'https://www.linkedin.com/jobs/view/same-job' };
+  store.candidates.push({
+    id: 'backoff-1', identity_key: identityKey(oldSignal), company_name: oldSignal.company_name,
+    normalized_company_name: 'backoff medical', signal_payload: mergeSignalPayload(null, oldSignal, '2026-10-01T00:00:00.000Z'),
+    status: 'unresolved', attempt_count: 1, next_attempt_at: '2026-10-14T00:00:00.000Z',
+  });
+  let resolveCalls = 0;
+  const pipeline = new EmployerDiscoveryPipeline({
+    store, now: () => new Date('2026-10-07T12:00:00.000Z'),
+    resolveSource: async () => { resolveCalls++; return resolved(); }, validate: passValidation,
+  });
+  const result = await pipeline.processSignal(oldSignal);
+  assert.equal(result.status, 'deferred');
+  assert.equal(result.awakened_by_fresh_evidence, false);
+  assert.equal(resolveCalls, 0);
+  assert.equal(store.candidates[0].attempt_count, 1);
+});
+
+test('materially improved official-domain evidence wakes the same current job signal', async () => {
+  const store = new MemoryStore();
+  const oldSignal = { company_name: 'Improved Evidence Medical', signal_source: 'linkedin-public-jobs', source_signal_id: 'same-job', job_url: 'https://www.linkedin.com/jobs/view/same-job' };
+  store.candidates.push({
+    id: 'improved-1', identity_key: identityKey(oldSignal), company_name: oldSignal.company_name,
+    normalized_company_name: 'improved evidence medical', signal_payload: mergeSignalPayload(null, oldSignal, '2026-10-01T00:00:00.000Z'),
+    status: 'unresolved', attempt_count: 1, next_attempt_at: '2026-10-14T00:00:00.000Z',
+  });
+  let receivedWebsite = null;
+  const pipeline = new EmployerDiscoveryPipeline({
+    store, now: () => new Date('2026-10-07T12:00:00.000Z'),
+    resolveSource: async (input) => { receivedWebsite = input.company_website; return resolved(); }, validate: passValidation,
+  });
+  const result = await pipeline.processSignal({ ...oldSignal, company_website: 'https://improved-evidence.example/' });
+  assert.equal(result.status, 'enrolled');
+  assert.equal(result.awakened_by_fresh_evidence, true);
+  assert.equal(receivedWebsite, 'https://improved-evidence.example/');
+});
+
+test('unresolved fresh job signal retains a durable coverage discrepancy for repair', async () => {
+  const store = new MemoryStore();
+  const previous = { company_name: 'Repair Medical', signal_source: 'fixture-seed' };
+  store.candidates.push({
+    id: 'repair-1', identity_key: identityKey(previous), company_name: previous.company_name,
+    normalized_company_name: 'repair medical', signal_payload: previous,
+    status: 'unresolved', attempt_count: 1, next_attempt_at: '2026-10-14T00:00:00.000Z',
+  });
+  const failure = Object.assign(new Error('No safe official careers source'), { code: 'UNSUPPORTED_SOURCE', evidence: { attempted_pages: ['https://repair.example/careers'] } });
+  const pipeline = new EmployerDiscoveryPipeline({
+    store, now: () => new Date('2026-10-07T12:00:00.000Z'), resolveSource: async () => { throw failure; }, validate: passValidation,
+  });
+  const result = await pipeline.processSignal({ ...previous, signal_source: 'linkedin-public-jobs', source_signal_id: 'repair-job-2', job_url: 'https://www.linkedin.com/jobs/view/repair-job-2', job_title: 'Medical Sales Manager' });
+  assert.equal(result.status, 'unresolved');
+  assert.equal(result.awakened_by_fresh_evidence, true);
+  assert.equal(result.repair_condition_created, true);
+  assert.equal(result.candidate.evidence.coverage_discrepancy.status, 'open');
+  assert.equal(result.candidate.evidence.coverage_discrepancy.reason, 'UNSUPPORTED_SOURCE');
+  assert.deepEqual(result.candidate.evidence.attempted_pages, ['https://repair.example/careers']);
 });
 
 test('different company-name signals sharing an official domain reuse one durable candidate', async () => {

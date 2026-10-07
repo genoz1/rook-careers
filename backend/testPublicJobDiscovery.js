@@ -61,3 +61,33 @@ test('apply mode counts a valid source with no relevant jobs as machine validate
   assert.equal(summary.companies_machine_validated, 1);
   assert.equal(summary.automatically_enrolled, 1);
 });
+
+test('apply mode reports fresh-signal wakes, durable repair records, and jobs actually inserted', async () => {
+  let countReads = 0;
+  const summary = await run(['--apply', '--limit', '3', '--query-limit', '1', '--ingest-enrolled'], {
+    store: { listEmployers: async () => [] },
+    discoverSignals: async () => ({ stats: { relevant_signals: 3 }, signals: [
+      { company_name: 'Fresh Enrolled' }, { company_name: 'Fresh Unresolved' }, { company_name: 'Later Existing' },
+    ] }),
+    pipeline: { processSignal: async (signal) => {
+      if (signal.company_name === 'Fresh Enrolled') return {
+        status: 'enrolled', awakened_by_fresh_evidence: true,
+        candidate: { id: 'candidate-1' }, employer: { id: 'employer-1', ats_type: 'custom_html' },
+        validation: { status: 'PASS_VALIDATED_SOURCE', plausible_job_count: 4 },
+      };
+      if (signal.company_name === 'Fresh Unresolved') return {
+        status: 'unresolved', awakened_by_fresh_evidence: true, repair_condition_created: true,
+        candidate: { id: 'candidate-2', validation_status: 'UNSUPPORTED_SOURCE' },
+      };
+      return { status: 'existing', candidate: { id: 'candidate-3' }, employer: { id: 'employer-3' } };
+    } },
+    ingestEmployer: async () => ({ status: 'completed' }),
+    countActiveJobs: async () => countReads++ === 0 ? 0 : 4,
+  });
+  assert.equal(summary.processed, 3);
+  assert.equal(summary.old_candidates_awakened_by_fresh_evidence, 2);
+  assert.equal(summary.discrepancy_repair_records_created, 1);
+  assert.equal(summary.relevant_jobs_contributed, 4);
+  assert.equal(summary.results[0].relevant_jobs_inserted, 4);
+  assert.equal(summary.results[2].status, 'existing');
+});
