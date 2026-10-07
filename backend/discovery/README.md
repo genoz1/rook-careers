@@ -66,3 +66,19 @@ the page itself to corroborate the company identity. Shadow mode resolves
 official careers pages, detects ATS configurations, and runs the same read-only
 machine validation used by Phase 2. Apply mode sends only the bounded unknown
 company batch through Phase 2; it never writes employers directly.
+
+## Continuous public-job discovery
+
+`npm run discover-public-jobs-shadow` reads a small rotating set of current
+public LinkedIn guest-job results without cookies, login, or an authenticated
+account, plus Jobicy's free public API. These are discovery signals only: ROOK
+extracts and deduplicates employer names, resolves an official company site,
+and then uses the official careers source through Phase 2. Access restrictions
+fail closed; the code does not attempt to bypass an auth wall or CAPTCHA.
+
+`npm run discover-employers-scheduled` is the bounded autonomous daily loop:
+current public-job signals first, a small rotating VMX/catalog seed batch
+second, and due Phase 2 retries last. A newly enrolled employer is immediately
+ingested from its validated official source and remains in normal monitoring.
+The existing Adzuna market command remains available only as a supplemental,
+unscheduled input.
