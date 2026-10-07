@@ -18,6 +18,7 @@
     "discover-employers-legacy-target-list": "node backend/discoverEmployers.js",
     "discover-employers-signals": "node backend/runEmployerDiscovery.js",
     "test-employer-discovery": "node --test backend/testEmployerDiscovery.js",
+    "test-paycor": "node --test backend/testPaycor.js",
     "test-market-discovery": "node --test backend/testMarketDiscovery.js",
     "test-company-discovery": "node --test backend/testCompanyDiscovery.js",
     "test-public-job-discovery": "node --test backend/testPublicJobDiscovery.js",

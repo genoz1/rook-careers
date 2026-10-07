@@ -68,6 +68,15 @@ class SupabaseDiscoveryStore {
     return data || [];
   }
 
+  async listCandidatesByIds(ids) {
+    const unique = [...new Set((ids || []).map(String))];
+    if (!unique.length) return [];
+    const { data, error } = await this.client.from('employer_discovery_candidates').select('*').in('id', unique);
+    if (error) throw error;
+    const byId = new Map((data || []).map((candidate) => [candidate.id, candidate]));
+    return unique.map((id) => byId.get(id)).filter(Boolean);
+  }
+
   async enrollEmployer(candidate, configuration) {
     const companySlug = candidate.normalized_company_name.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     const row = {

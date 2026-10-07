@@ -31,6 +31,7 @@ const { fetchTeamtailorJobs, normalizeTeamtailorJob } = require("./adapters/team
 const { fetchPinpointJobs, normalizePinpointJob } = require("./adapters/pinpoint");
 const { fetchEightfoldJobs, normalizeEightfoldJob } = require("./adapters/eightfold");
 const { fetchPaylocityJobs, normalizePaylocityJob } = require("./adapters/paylocity");
+const { fetchPaycorJobs, normalizePaycorJob } = require("./adapters/paycor");
 const { fetchAemCareersJobs, normalizeAemCareersJob } = require("./adapters/aemcareers");
 const { fetchKulaJobs, normalizeKulaJob } = require("./adapters/kula");
 const { fetchAdpJobs }    = require("./adapters/adp");
@@ -200,6 +201,9 @@ async function ingestEmployer(employer) {
     } else if (employer.ats_type === "paylocity") {
       rawJobs = await fetchPaylocityJobs(employer.ats_identifier);
       normalize = normalizePaylocityJob;
+    } else if (employer.ats_type === "paycor") {
+      rawJobs = await fetchPaycorJobs(employer.ats_identifier);
+      normalize = normalizePaycorJob;
     } else if (employer.ats_type === "adp") {
       // ADP Workforce Now and ADP Recruiting — normalize built into adapter
       rawJobs = await fetchAdpJobs(employer);
@@ -505,6 +509,15 @@ async function ingestEmployer(employer) {
     .order("id")
     .range(start, end));
 
+  // A technically successful but abnormally small response is not a safe
+  // complete snapshot. Preserve existing jobs and let a later run confirm the
+  // contraction instead of mass-closing on a truncated upstream response.
+  const fetchedRelevantCount = Number.isInteger(rawJobs.sourceRelevantCount) ? rawJobs.sourceRelevantCount : rawJobs.length;
+  if ((existingJobs || []).length >= 10 && fetchedRelevantCount < (existingJobs || []).length && fetchedRelevantCount <= Math.floor((existingJobs || []).length * 0.2)) {
+    rawJobs.incompleteSnapshot = true;
+    rawJobs.snapshotWarnings = rawJobs.snapshotWarnings || [];
+    rawJobs.snapshotWarnings.push(`Abnormally small snapshot (${fetchedRelevantCount} fetched versus ${(existingJobs || []).length} active); disappearance closures suppressed`);
+  }
   if (writeFailed) rawJobs.incompleteSnapshot = true;
   const closedIds = (rawJobs.incompleteSnapshot || disableClosures ? [] : (existingJobs || []))
     .filter((j) => !seenSourceIds.has(j.source_job_id))

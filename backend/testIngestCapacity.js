@@ -421,7 +421,7 @@ test("ingestEmployer: closes a previously stored job that the current relevance 
   assert.equal(tables.jobs[0].status, 'closed');
 });
 
-test("ingestEmployer: complete snapshot closes stale jobs beyond the first 1000 stored rows", async () => {
+test("ingestEmployer: abnormally small snapshot preserves stale jobs beyond the first 1000 stored rows", async () => {
   const employer = { ...baseEmployer, id: "employer-paginated" };
   const tables = {
     employers: [employer],
@@ -436,8 +436,11 @@ test("ingestEmployer: complete snapshot closes stale jobs beyond the first 1000 
   const { ingest } = freshIngest(tables);
   const realFetch = global.fetch;
   global.fetch = greenhouseFetchStub(1);
-  try { await ingest.ingestEmployer(employer); } finally { global.fetch = realFetch; }
-  assert.equal(tables.jobs.filter((job) => job.status === "closed").length, 1004);
+  let result;
+  try { result = await ingest.ingestEmployer(employer); } finally { global.fetch = realFetch; }
+  assert.equal(result.status, 'partial');
+  assert.match(result.warnings.join(' '), /Abnormally small snapshot/);
+  assert.equal(tables.jobs.filter((job) => job.status === "closed").length, 0);
   assert.equal(tables.jobs.find((job) => job.source_job_id === "1000").status, "active");
 });
 

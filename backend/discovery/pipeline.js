@@ -58,7 +58,7 @@ class EmployerDiscoveryPipeline {
     this.now = now;
   }
 
-  async processSignal(signal) {
+  async processSignal(signal, { force = false, candidateId = null } = {}) {
     validateSignal(signal);
     const now = this.now();
     const normalizedName = normalizeCompanyName(signal.company_name);
@@ -79,8 +79,9 @@ class EmployerDiscoveryPipeline {
       updated_at: now.toISOString(),
     });
     let candidate = received.candidate;
+    if (candidateId && candidate.id !== candidateId) throw new Error('Explicit force target did not match the signal candidate');
     if (['enrolled', 'existing'].includes(candidate.status)) return { status: candidate.status, candidate, duplicate: true };
-    if (candidate.next_attempt_at && Date.parse(candidate.next_attempt_at) > +now) return { status: 'deferred', candidate, duplicate: received.duplicate };
+    if (!force && candidate.next_attempt_at && Date.parse(candidate.next_attempt_at) > +now) return { status: 'deferred', candidate, duplicate: received.duplicate };
 
     const direct = directConfiguration(signal);
     const employers = await this.store.listEmployers();
@@ -111,7 +112,7 @@ class EmployerDiscoveryPipeline {
     try {
       resolved = await this.resolveSource({ ...signal, company_website: candidate.company_website });
     } catch (error) {
-      const transient = !['NEEDS_OFFICIAL_DOMAIN', 'BAD_OFFICIAL_URL', 'OFFICIAL_DOMAIN_MISMATCH', 'COMPANY_IDENTITY_MISMATCH', 'NO_OFFICIAL_CAREERS_LINK', 'UNSUPPORTED_SOURCE'].includes(error.code);
+      const transient = !['NEEDS_OFFICIAL_DOMAIN', 'BAD_OFFICIAL_URL', 'OFFICIAL_DOMAIN_MISMATCH', 'COMPANY_IDENTITY_MISMATCH', 'SEARCH_IDENTITY_NOT_VERIFIED', 'NO_OFFICIAL_CAREERS_LINK', 'UNSUPPORTED_SOURCE'].includes(error.code);
       candidate = await this.store.updateCandidate(candidate.id, {
         status: transient ? 'retryable' : 'unresolved',
         last_error: error.message,

@@ -6,5 +6,5 @@
 alter table employers drop constraint if exists employers_ats_type_check;
 alter table employers add constraint employers_ats_type_check
   check (ats_type in (
-    'greenhouse', 'lever', 'ashby', 'workday', 'talentbrew', 'workable', 'smartrecruiters', 'clinchtalent', 'oraclehcm', 'phenom', 'jobvite', 'applicantpro', 'icims', 'drupalcareers', 'teamtailor', 'pinpoint', 'eightfold', 'paylocity', 'adp', 'ukg', 'jazzhr', 'aemcareers', 'kula', 'successfactors', 'custom_html', 'custom', 'manual'
+    'greenhouse', 'lever', 'ashby', 'workday', 'talentbrew', 'workable', 'smartrecruiters', 'clinchtalent', 'oraclehcm', 'phenom', 'jobvite', 'applicantpro', 'icims', 'drupalcareers', 'teamtailor', 'pinpoint', 'eightfold', 'paylocity', 'paycor', 'adp', 'ukg', 'jazzhr', 'aemcareers', 'kula', 'successfactors', 'custom_html', 'custom', 'manual'
   ));
