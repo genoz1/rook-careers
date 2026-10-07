@@ -56,10 +56,14 @@ function reveal(job) {
     industry_classification:classify(job),match:job.match,
     application_url:job.application_url,source_url:job.source_url};
 }
+// Locked surfaces only need a first viewport of cards. Projecting the full
+// 300-row rank set makes /session take ~12s and the acquisition modal looks stuck.
+const LOCKED_PREVIEW_LIMIT=48;
 function previewResponse(profile,jobs,unlocked) {
+  const listed=unlocked?jobs:jobs.slice(0,LOCKED_PREVIEW_LIMIT);
   return {profile:{home_location_label:profile.home_location_label,desired_industries:profile.desired_industries,
-    subscription_status:profile.subscription_status},unlocked,count:jobs.length,
-    jobs:jobs.map((j,i)=>unlocked?reveal(j):project(j,i,{dashboard:true}))};
+    subscription_status:profile.subscription_status},unlocked,count:listed.length,
+    jobs:listed.map((j,i)=>unlocked?reveal(j):project(j,i,{dashboard:true}))};
 }
 async function previewDetails(jobs,unlocked=false) {
   if(!unlocked)return jobs;

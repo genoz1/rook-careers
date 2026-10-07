@@ -55,6 +55,12 @@ for(const [title,expected] of generalizedCases) {
 const {safeLocationLabel}=require('./maskedPresentation');
 assert.equal(safeLocationLabel({city:'Orlando',state:'FL',location_raw:'Orlando, FL'}),'Orlando, FL');
 assert.equal(safeLocationLabel({city:'Tampa',state:'FL',remote_status:'remote'}),'Remote – FL');
+assert.equal(safeLocationLabel({city:'New York City',state:'NY'}),'New York, NY');
+{
+  const started=Date.now();
+  for(let i=0;i<300;i++) safeLocationLabel({city:'Orlando',state:'FL',location_raw:'Orlando, FL'});
+  assert(Date.now()-started<250,'safeLocationLabel must stay fast for locked preview batches');
+}
 const {project}=require('./pretrialProjection');
 const projected=project({title_original:'Territory Manager, CardioMEMS',city:'Jacksonville',state:'FL',location_raw:'Jacksonville, FL',ai_analysis:{product_categories:['Medical Device']}},0,{dashboard:true});
 assert.equal(projected.role_type,'Medical Device Territory Manager');

@@ -66,7 +66,7 @@ function publicPreview(job) {
   const city = /^new york city$/i.test(cityInput) ? 'New York' : cityInput;
   const stateValue = String(job.state || raw[1] || '').trim().toUpperCase();
   const state = stateValue.length === 2 ? stateValue : zipcodes.states.full[stateValue];
-  const place = Object.values(zipcodes.codes).find(p => p.city.toLowerCase() === city.toLowerCase() && p.state === state);
+  const place = city && state ? (zipcodes.lookupByName(city, state) || [])[0] : null;
   const location = place ? `${place.city}, ${place.state}` : null;
   // Public SEO/detail previews use the same generalized role contract as the
   // locked dashboard so distinctive product/brand title fragments cannot be
