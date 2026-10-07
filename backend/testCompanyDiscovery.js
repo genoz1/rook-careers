@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const { fetchVmxCompanies, websiteFromVmxProfile, dedupeCompanies, discoverCompanyFirstSignals } = require('./discovery/companySources');
-const { parseArgs, inspectSignals, run } = require('./runCompanyDiscovery');
+const { parseArgs, inspectSignals, isValidatedSourceStatus, run } = require('./runCompanyDiscovery');
 
 function response(body, { url = 'https://example.test', headers = {} } = {}) {
   return { ok: true, status: 200, url, headers: { getSetCookie: () => headers.cookies || [], get: () => null }, text: async () => String(body), json: async () => body };
@@ -71,4 +71,11 @@ test('runner is bounded and apply mode uses the Phase 2 pipeline', async () => {
   assert.equal(processed, 2);
   assert.equal(summary.automatically_enrolled, 1);
   assert.equal(summary.unresolved, 1);
+});
+
+test('validated-source status variants are counted as machine validated', () => {
+  assert.equal(isValidatedSourceStatus('PASS_VALIDATED_SOURCE'), true);
+  assert.equal(isValidatedSourceStatus('PASS_VALIDATED_SOURCE_EMPTY_INVENTORY'), true);
+  assert.equal(isValidatedSourceStatus('PASS_VALIDATED_SOURCE_NO_RELEVANT_JOBS'), true);
+  assert.equal(isValidatedSourceStatus('VALIDATION_FAILED'), false);
 });

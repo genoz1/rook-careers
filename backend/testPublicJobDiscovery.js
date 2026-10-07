@@ -46,3 +46,18 @@ test('shadow mode is read-only and reports Phase 2 inspection', async () => {
   assert.equal(summary.companies_machine_validated, 1);
   assert.equal(summary.validated_relevant_jobs, 2);
 });
+
+test('apply mode counts a valid source with no relevant jobs as machine validated', async () => {
+  const summary = await run(['--apply', '--limit', '1', '--query-limit', '1'], {
+    store: { listEmployers: async () => [] },
+    discoverSignals: async () => ({ stats: {}, signals: [{ company_name: 'Acme' }] }),
+    pipeline: { processSignal: async () => ({
+      status: 'enrolled',
+      candidate: { id: 'candidate-1' },
+      employer: { id: 'employer-1', ats_type: 'custom_html' },
+      validation: { status: 'PASS_VALIDATED_SOURCE_NO_RELEVANT_JOBS', plausible_job_count: 0 },
+    }) },
+  });
+  assert.equal(summary.companies_machine_validated, 1);
+  assert.equal(summary.automatically_enrolled, 1);
+});

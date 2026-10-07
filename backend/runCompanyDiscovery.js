@@ -26,6 +26,10 @@ function parseArgs(argv) {
 
 function increment(object, key) { object[key] = (object[key] || 0) + 1; }
 
+function isValidatedSourceStatus(status) {
+  return typeof status === 'string' && /^PASS_VALIDATED_SOURCE(?:_|$)/.test(status);
+}
+
 async function inspectSignals(signals, { resolveSource = resolveOfficialSource, validate = validateSource } = {}) {
   const results = [];
   for (const signal of signals) {
@@ -40,7 +44,8 @@ async function inspectSignals(signals, { resolveSource = resolveOfficialSource, 
       for (const configuration of resolved.configurations) {
         const validation = await validate(configuration, signal);
         attempts.push({ ats_type: configuration.ats_type, status: validation.status });
-        if (validation.ok) { passed = { configuration, validation }; break; }
+        if (validation.ok && !passed) passed = { configuration, validation };
+        if (validation.ok && (validation.plausible_job_count || 0) > 0) { passed = { configuration, validation }; break; }
       }
       results.push({
         company_name: signal.company_name, status: passed ? 'validated' : 'unresolved',
@@ -111,7 +116,7 @@ async function run(argv = process.argv.slice(2), dependencies = {}) {
   for (const result of results) increment(statuses, result.status);
   const summary = {
     mode: 'apply', ...discovery.stats, processed: results.length, statuses,
-    companies_machine_validated: results.filter((item) => item.validation_status === 'PASS_VALIDATED_SOURCE').length,
+    companies_machine_validated: results.filter((item) => isValidatedSourceStatus(item.validation_status)).length,
     automatically_enrolled: results.filter((item) => item.status === 'enrolled').length,
     relevant_jobs_contributed: results.reduce((sum, item) => sum + (item.active_relevant_jobs || 0), 0),
     unresolved: results.filter((item) => ['unresolved', 'retryable', 'error'].includes(item.status)).length,
@@ -121,6 +126,6 @@ async function run(argv = process.argv.slice(2), dependencies = {}) {
   return summary;
 }
 
-module.exports = { parseArgs, inspectSignals, run };
+module.exports = { parseArgs, inspectSignals, isValidatedSourceStatus, run };
 
 if (require.main === module) run().catch((error) => { console.error(error.message); process.exitCode = 1; });
