@@ -7,18 +7,20 @@
 //   4. Create a webhook endpoint in the Stripe dashboard pointing at
 //      https://<your-app-domain>/api/stripe/webhook and put its signing
 //      secret in STRIPE_WEBHOOK_SECRET. Make sure the endpoint is
-//      subscribed to at least: checkout.session.completed,
+//      subscribed to at least: payment_intent.succeeded,
+//      checkout.session.completed,
 //      customer.subscription.updated, customer.subscription.deleted,
 //      invoice.payment_failed, and invoice.payment_succeeded (or invoice.paid).
 //
-// The legacy Stripe payment-method trial is retired. V8/V9 free access is an
-// application entitlement activated after verified email, never a Stripe trial.
+// The legacy Stripe payment-method and application trials are retired. Current
+// acquisition access begins only after a verified paid membership purchase.
 
 const express = require("express");
 const Stripe = require("stripe");
 const { createClient } = require("@supabase/supabase-js");
 const { notifyNewSubscriber } = require("../adminPush");
 const linkedinPaid = require("../linkedinPaidConversion");
+const {hasFullAccess}=require('../matching');
 
 const router = express.Router();
 
@@ -107,6 +109,24 @@ function canPurchaseV8Intro(profile) {
   return profile.trial_source === "v8" && Boolean(profile.trial_started_at) && !profile.subscription_started_at;
 }
 
+const MEMBERSHIP_PLANS=Object.freeze({
+  two_day:{kind:'one_time',amount:599,label:'2-Day Pass',hours:48},
+  monthly:{kind:'subscription',amount:999,label:'Monthly'},
+  three_month:{kind:'one_time',amount:3999,label:'3-Month Pass',months:3},
+});
+
+function accessEnd(plan,from=new Date()){
+  const end=new Date(from);
+  if(plan.hours)end.setTime(end.getTime()+plan.hours*60*60*1000);
+  if(plan.months){
+    const day=end.getUTCDate();
+    end.setUTCDate(1);end.setUTCMonth(end.getUTCMonth()+plan.months);
+    const last=new Date(Date.UTC(end.getUTCFullYear(),end.getUTCMonth()+1,0)).getUTCDate();
+    end.setUTCDate(Math.min(day,last));
+  }
+  return end.toISOString();
+}
+
 function requireConfig(req, res, next) {
   if (!isConfigured || !stripe || !supabaseAnon || !supabaseAdmin) {
     return res.status(503).json({
@@ -142,6 +162,14 @@ function pickUtmFields(body) {
   }
   return out;
 }
+
+// Old hosted and generic embedded checkout clients are no longer public offer
+// paths. Keep their pure helpers below for historical webhook compatibility and
+// tests, but reject direct calls before configuration/auth so stale clients
+// cannot recreate a fourth, full-price acquisition offer.
+const retiredCheckout=(req,res)=>res.status(410).json({error:'This checkout is retired. Use the current ROOK membership checkout.'});
+router.post('/stripe/create-checkout-session',retiredCheckout);
+router.post('/stripe/create-subscription-from-setup',retiredCheckout);
 
 // POST /api/stripe/create-checkout-session
 // Pure function, no Stripe/Express dependency — builds the exact
@@ -541,6 +569,57 @@ router.post("/stripe/create-v8-subscription-from-setup", requireConfig, requireA
   }
 });
 
+// The single current acquisition purchase endpoint. Monthly is the existing
+// $19.99 subscription with the verified one-time $10 coupon; both passes are
+// one-time card payments with timestamp-bounded access in the existing gate.
+router.post('/stripe/purchase-membership',requireConfig,requireAuth,async(req,res)=>{
+  try{
+    const planId=String(req.body?.plan||''),plan=MEMBERSHIP_PLANS[planId];
+    const paymentMethodId=String(req.body?.payment_method_id||''),customerId=String(req.body?.customer_id||'');
+    const purchaseToken=String(req.body?.purchase_token||'');
+    if(!plan)return res.status(400).json({error:'Choose a valid membership option.'});
+    if(!/^pm_/.test(paymentMethodId)||!/^cus_/.test(customerId)||!/^[-a-f0-9]{20,64}$/i.test(purchaseToken))
+      return res.status(400).json({error:'Invalid payment setup. Please restart checkout.'});
+    const result=await supabaseAdmin.from('candidate_profiles')
+      .select('stripe_customer_id,subscription_status,subscription_cancel_at,trial_ends_at,subscription_started_at,utm_source,utm_medium,utm_campaign,utm_term,utm_content,utm_id')
+      .eq('user_id',req.user.id).maybeSingle();
+    if(result.error)throw result.error;
+    const profile=result.data||{};
+    if(hasFullAccess(profile))return res.status(409).json({error:'This account already has membership access.'});
+    if(profile.stripe_customer_id&&profile.stripe_customer_id!==customerId)
+      return res.status(400).json({error:'Payment customer mismatch. Please restart checkout.'});
+    const metadata={user_id:req.user.id,onboarding_version:'v8',membership_plan:planId,...pickUtmFields(profile)};
+    const key=`rook_${req.user.id}_${purchaseToken}`.slice(0,255);
+    let reference,status='active',expiresAt=null;
+    if(plan.kind==='subscription'){
+      const couponId=process.env.STRIPE_V9_FIRST_MONTH_COUPON_ID;
+      if(!couponId)return res.status(503).json({error:'Monthly membership is temporarily unavailable.'});
+      const [coupon,price]=await Promise.all([stripe.coupons.retrieve(couponId),stripe.prices.retrieve(process.env.STRIPE_PRICE_ID_MONTHLY)]);
+      validateV9Coupon(coupon);validateV9MonthlyPrice(price);
+      await stripe.customers.update(customerId,{invoice_settings:{default_payment_method:paymentMethodId}});
+      const subscription=await stripe.subscriptions.create(buildV8SubscriptionParams({customerId,paymentMethodId,userId:req.user.id,
+        priceId:process.env.STRIPE_PRICE_ID_MONTHLY,couponId,utm:metadata}),{idempotencyKey:key});
+      if(subscription.status!=='active')throw Error('Payment was not completed. No access was granted.');
+      reference=subscription.id;status=subscription.status;
+    }else{
+      const intent=await stripe.paymentIntents.create({amount:plan.amount,currency:'usd',customer:customerId,
+        payment_method:paymentMethodId,payment_method_types:['card'],confirm:true,description:`ROOK ${plan.label}`,metadata},{idempotencyKey:key});
+      if(intent.status!=='succeeded')throw Error('Payment was not completed. No access was granted.');
+      reference=intent.id;expiresAt=accessEnd(plan);
+    }
+    const paidAt=new Date().toISOString();
+    const update=await supabaseAdmin.from('candidate_profiles').upsert({user_id:req.user.id,stripe_customer_id:customerId,
+      subscription_status:status,subscription_cancel_at:expiresAt,subscription_started_at:profile.subscription_started_at||paidAt,
+      updated_at:paidAt},{onConflict:'user_id'});
+    if(update.error)throw update.error;
+    console.log(`[checkout-v8] uid=${req.user.id.slice(0,8)} plan=${planId} reference=${reference} status=${status}`);
+    res.json({ok:true,plan:planId,reference,status,access_expires_at:expiresAt});
+  }catch(error){
+    console.error('purchase-membership failed:',error.message);
+    res.status(500).json({error:'Payment could not be completed. Please verify your card or try another card.'});
+  }
+});
+
 // POST /api/stripe/create-portal-session
 // Called from Settings → Subscription's "Update Payment Method" button.
 // Uses Stripe's own hosted billing portal — the candidate updates their
@@ -822,6 +901,26 @@ function mapLiveSubscriptionToFields(sub) {
 // signature, no real database required to verify this logic is correct.
 async function handleStripeWebhookEvent(event, { stripe, supabaseAdmin, subscriberNotifier = notifyNewSubscriber, linkedinDelivery = linkedinPaid.deliverPaidConversion }) {
   switch (event.type) {
+    case 'payment_intent.succeeded': {
+      const intent=event.data.object,plan=MEMBERSHIP_PLANS[intent.metadata?.membership_plan];
+      if(!plan||plan.kind!=='one_time'||!intent.metadata?.user_id||intent.amount_received!==plan.amount)
+        return {applied:false,reason:'not_a_rook_one_time_membership'};
+      const entitlement=await applyGuardedSubscriptionUpdate(supabaseAdmin,{matchColumn:'user_id',matchValue:intent.metadata.user_id,
+        eventId:event.id,eventCreatedUnix:event.created,fields:{subscription_status:'active',stripe_customer_id:intent.customer,
+          subscription_cancel_at:accessEnd(plan,new Date(event.created*1000))},
+        setOnceFields:[{gate:'subscription_started_at',fields:{subscription_started_at:new Date(event.created*1000).toISOString()}}]});
+      const profileResult=await supabaseAdmin.from('candidate_profiles').select('name,email,utm_source,utm_medium,utm_campaign,utm_term,utm_content,utm_id')
+        .eq('user_id',intent.metadata.user_id).maybeSingle();
+      if(profileResult.error)throw profileResult.error;
+      const profile=profileResult.data||{};
+      const conversion=await supabaseAdmin.from('ad_conversion_events').insert({event_key:`first_paid_${intent.metadata.user_id}`,
+        event_type:'paid_subscription_started',user_id:intent.metadata.user_id,...pickUtmFields(profile),
+        platform_inferred:profile.utm_source||'unknown',occurred_at:new Date(event.created*1000).toISOString()});
+      if(conversion.error&&conversion.error.code!=='23505')throw conversion.error;
+      if(!conversion.error)try{await subscriberNotifier({version:'V8',profile,amountPaid:intent.amount_received,currency:intent.currency,
+        occurredAt:new Date(event.created*1000).toISOString()});}catch(_){console.warn('[admin push] subscriber notification failed');}
+      return {...entitlement,conversion:!conversion.error};
+    }
     case "checkout.session.completed": {
       const session = event.data.object;
       const userId = session.client_reference_id;
@@ -1045,5 +1144,7 @@ module.exports.buildV9SubscriptionParams = buildV9SubscriptionParams;
 module.exports.canPurchaseV9Intro = canPurchaseV9Intro;
 module.exports.buildV8SubscriptionParams = buildV8SubscriptionParams;
 module.exports.canPurchaseV8Intro = canPurchaseV8Intro;
+module.exports.MEMBERSHIP_PLANS = MEMBERSHIP_PLANS;
+module.exports.accessEnd = accessEnd;
 module.exports.warnIfPortalCancellationModeIsWrong = warnIfPortalCancellationModeIsWrong;
 module.exports._resetPortalConfigCheckForTests = _resetPortalConfigCheckForTests;

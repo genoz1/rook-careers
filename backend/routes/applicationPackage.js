@@ -56,7 +56,7 @@ router.get("/application-package/:jobId", requireConfig, requireAuth, async (req
   // the app the moment a card-less free account exists. Checked here,
   // server-side, not just left to the "createPackageLink" UI to hide.
   if (!hasFullAccess(profile)) {
-    return res.status(403).json({ error: "Start your free trial to generate a tailored application package.", subscription_required: true });
+    return res.status(403).json({ error: "Choose a membership to generate a tailored application package.", subscription_required: true });
   }
 
   if (!profile || !profile.resume_text) {

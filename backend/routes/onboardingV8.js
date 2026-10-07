@@ -2,12 +2,12 @@
 const express = require('express');
 const crypto = require('crypto');
 const {createClient} = require('@supabase/supabase-js');
-const {rank,startIndex,indexFor} = require('../v8Matching');
+const {rank,nationalPreview,startIndex,indexFor} = require('../v8Matching');
 const {performance} = require('node:perf_hooks');
 const {project} = require('../pretrialProjection');
 const {classify,normalizeSelection} = require('../../public/rook-job-classification');
 const {hasFullAccess} = require('../matching');
-const {notifyNewAccount} = require('../adminPush');
+const {resolveIpLocation}=require('../ipLocation');
 const router = express.Router();
 const db = process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
   ? createClient(process.env.SUPABASE_URL,process.env.SUPABASE_SERVICE_ROLE_KEY) : null;
@@ -29,16 +29,17 @@ function validate(body) {
   const l=body?.location, industry=body?.industry;
   if(!l || !Number.isFinite(l.lat) || !Number.isFinite(l.lng) || Math.abs(l.lat)>90 || Math.abs(l.lng)>180 ||
     !/^[A-Z]{2}$/.test(String(l.stateAbbr||l.state||'')) || !/^\d{5}$/.test(String(l.zip||''))) throw Error('Select a city, state or ZIP from the suggestions.');
-  if(!allowed.includes(industry)) throw Error('Select an industry preference.');
+  if(industry!=null && industry!=='' && !allowed.includes(industry)) throw Error('Select a valid industry preference.');
   return {home_lat:l.lat,home_lng:l.lng,home_city:String(l.city||'').slice(0,150),
     home_state:String(l.stateAbbr||l.state).slice(0,2),home_zip:l.zip,
-    home_location_label:String(l.label||'').slice(0,150),desired_industries:[industry],
+    home_location_label:String(l.label||'').slice(0,150),desired_industries:industry?[industry]:[],
     // An unanswered experience question is unknown, never invented.
     total_sales_years:null, territory_size_preferences:[], work_style:'field',onboarding_version:'v8',
-    ...Object.fromEntries(['utm_source','utm_medium','utm_campaign','utm_term','utm_content']
+    ...Object.fromEntries(['utm_source','utm_medium','utm_campaign','utm_term','utm_content','utm_id']
       .filter(key=>typeof body.attribution?.[key]==='string').map(key=>[key,body.attribution[key].slice(0,200)]))};
 }
 function prioritize(jobs,industry) {
+  if(!industry)return [...jobs].sort((a,b)=>(b.match?.overall_score||0)-(a.match?.overall_score||0)||String(a.id).localeCompare(String(b.id)));
   const pref=normalizeSelection([industry])[0];
   // Classification is deterministic for a job. Compute it once rather than
   // re-reading all evidence on every sort comparison.
@@ -58,10 +59,11 @@ function reveal(job) {
 function previewResponse(profile,jobs,unlocked) {
   return {profile:{home_location_label:profile.home_location_label,desired_industries:profile.desired_industries,
     subscription_status:profile.subscription_status},unlocked,count:jobs.length,
-    jobs:jobs.map((j,i)=>unlocked?reveal(j):i<2?reveal(j):project(j,i,{dashboard:true}))};
+    jobs:jobs.map((j,i)=>unlocked?reveal(j):project(j,i,{dashboard:true}))};
 }
 async function previewDetails(jobs,unlocked=false) {
-  const ids=jobs.slice(0,unlocked?jobs.length:2).map(j=>j.id);
+  if(!unlocked)return jobs;
+  const ids=jobs.map(j=>j.id);
   if(!ids.length)return jobs;
   // Only jobs actually revealed need identification and application links.
   const {data,error}=await db.from('jobs').select('id,company_name,city,application_url,source_url')
@@ -87,10 +89,33 @@ async function user(req) {
 router.post('/prepare',wrap(async(req,res)=>{
   let profile;
   // Preparation depends only on location and can begin before industry is chosen.
-  try {profile=validate({...req.body,industry:allowed[0]});} catch(e){return res.status(400).json({error:e.message});}
+  try {profile=validate({...req.body,industry:null});} catch(e){return res.status(400).json({error:e.message});}
   // Keep older browsers compatible. Every server warms its own shared index;
   // never trust a visitor pool which could predate an inventory correction.
   res.json({preparation:null});
+}));
+router.get('/bootstrap',wrap(async(req,res)=>{
+  const attribution=Object.fromEntries(['utm_source','utm_medium','utm_campaign','utm_term','utm_content','utm_id']
+    .filter(key=>typeof req.query[key]==='string').map(key=>[key,req.query[key].slice(0,200)]));
+  const geo=resolveIpLocation(req.ip);
+  const profile=geo.location?{
+    home_lat:geo.location.lat,home_lng:geo.location.lng,home_city:geo.location.city,
+    home_state:geo.location.state,home_zip:geo.location.zip,home_location_label:geo.location.label,
+    desired_industries:[],total_sales_years:null,territory_size_preferences:['remote','national'],
+    work_style:'field',onboarding_version:'v8',...attribution
+  }:{home_lat:null,home_lng:null,home_city:null,home_state:null,home_zip:null,
+    home_location_label:'Across the U.S.',desired_industries:[],total_sales_years:null,
+    territory_size_preferences:['remote','national'],work_style:'field',onboarding_version:'v8',national_fallback:true,...attribution};
+  let jobs=geo.location?await rank(db,profile,[]):await nationalPreview(db,{});
+  if(jobs.length<9){
+    const seen=new Set(jobs.map(j=>j.id));
+    jobs=[...jobs,...(await nationalPreview(db,{})).filter(j=>!seen.has(j.id))];
+  }
+  const token=crypto.randomBytes(32).toString('hex');
+  const record={token_hash:crypto.createHash('sha256').update(token).digest('hex'),profile,jobs:[],
+    expires_at:new Date(Date.now()+24*60*60*1000).toISOString()};
+  const {error}=await db.from(table).insert(record);if(error)throw error;
+  res.json({token,geo_status:geo.location?'success':'failure',preview:previewResponse(profile,jobs,false)});
 }));
 router.post('/session',wrap(async(req,res)=>{
   let profile;
@@ -161,7 +186,8 @@ router.get('/session',wrap(async(req,res)=>{
   const unlocked=!!(s.user_id && u?.id===s.user_id && hasFullAccess(profile));
   // Reloads still re-rank current inventory: old snapshots can predate a
   // location correction. Initial POST now returns its fresh safe projection.
-  const jobs=await previewDetails(prioritize(await rank(db,profile,[]),profile.desired_industries[0]),unlocked);
+  const base=profile.national_fallback?await nationalPreview(db,{}):await rank(db,profile,[]);
+  const jobs=await previewDetails(prioritize(base,profile.desired_industries?.[0]),unlocked);
   res.json(previewResponse(profile,jobs,unlocked));
 }));
 router.put('/preference',wrap(async(req,res)=>{
@@ -179,9 +205,8 @@ router.put('/preference',wrap(async(req,res)=>{
   if(!data) return res.status(409).json({error:'Your account changed. Please try again.'});
   res.json({ok:true});
 }));
-// V8's account handoff copies V7's ownership check and omits the V8-only
-// marker before writing to candidate_profiles. Trial activation happens only
-// after the server has confirmed the verified account and durable handoff.
+// Account handoff transfers the preview and attribution only. It never grants
+// access; a verified Stripe purchase is the sole acquisition entitlement.
 router.post('/claim',wrap(async(req,res)=>{
   let s=await session(req),u=await user(req);
   if(!s||!u)return res.status(401).json({error:'Verify your email and sign in first.'});
@@ -195,36 +220,15 @@ router.post('/claim',wrap(async(req,res)=>{
   if(!s.transferred_at){
     const {data:existing,error:readError}=await db.from('candidate_profiles').select('utm_source').eq('user_id',u.id).maybeSingle();
     if(readError)throw readError;
-    const profile={...s.profile};delete profile.onboarding_version;
-    if(existing?.utm_source)for(const key of ['utm_source','utm_medium','utm_campaign','utm_term','utm_content'])delete profile[key];
+    const profile={...s.profile};delete profile.onboarding_version;delete profile.national_fallback;
+    if(existing?.utm_source)for(const key of ['utm_source','utm_medium','utm_campaign','utm_term','utm_content','utm_id'])delete profile[key];
     const name=[u.user_metadata?.first_name,u.user_metadata?.last_name].filter(Boolean).join(' ');
     const {error}=await db.from('candidate_profiles').upsert({...profile,user_id:u.id,email:u.email,...(name?{name}:{})},{onConflict:'user_id'});
     if(error)throw error;
     const saved=await db.from(table).update({transferred_at:new Date().toISOString()}).eq('token_hash',s.token_hash).eq('user_id',u.id);
     if(saved.error)throw saved.error;
   }
-  const activated=await db.rpc('activate_v8_trial',{p_user_id:u.id});
-  if(activated.error)throw activated.error;
-  const entitlement=Array.isArray(activated.data)?activated.data[0]:activated.data;
-  if(!entitlement?.outcome)throw Error('Trial entitlement could not be confirmed.');
-  if(entitlement.outcome==='started'){
-    const profileResult=await db.from('candidate_profiles').select('name,utm_source,utm_medium,utm_campaign,utm_term,utm_content').eq('user_id',u.id).maybeSingle();
-    if(!profileResult.error){
-      const p=profileResult.data||{};
-      const event=await db.from('ad_conversion_events').insert({
-        event_key:`v8_trial_started_${u.id}`,event_type:'trial_started',user_id:u.id,
-        utm_source:p.utm_source||null,utm_medium:p.utm_medium||null,utm_campaign:p.utm_campaign||null,
-        utm_term:p.utm_term||null,utm_content:p.utm_content||null,
-        platform_inferred:p.utm_source||'unknown',occurred_at:entitlement.trial_started_at,
-      });
-      if(event.error&&event.error.code!=='23505')console.error('V8 trial analytics write failed:',event.error.message);
-      if(!event.error){
-        try{await notifyNewAccount({version:'V8',profile:p,occurredAt:entitlement.trial_started_at});}
-        catch(_){console.warn('[admin push] account notification failed');}
-      }
-    }
-  }
-  res.json({ok:true,...entitlement});
+  res.json({ok:true,outcome:'claimed'});
 }));
 module.exports=router;
-module.exports._test={validate,prioritize,reveal};
+module.exports._test={validate,prioritize,reveal,previewResponse};
