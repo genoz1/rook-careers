@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const { createClient } = require('@supabase/supabase-js');
 const { EmployerDiscoveryPipeline } = require('./discovery/pipeline');
 const { SupabaseDiscoveryStore } = require('./discovery/store');
+const { createPublicSearchSession, resolveOfficialSource, searchOfficialCareerCandidates } = require('./discovery/sourceResolver');
 
 function parseInput(text) {
   const trimmed = String(text || '').trim();
@@ -12,12 +13,13 @@ function parseInput(text) {
 }
 
 function parseArgs(argv) {
-  const result = { input: null, retryDue: false, forceCandidateIds: [], limit: 50 };
+  const result = { input: null, retryDue: false, forceCandidateIds: [], limit: 50, ingestEnrolled: false };
   for (let index = 0; index < argv.length; index++) {
     if (argv[index] === '--input') result.input = argv[++index];
     else if (argv[index] === '--retry-due') result.retryDue = true;
     else if (argv[index] === '--force-candidate-id') result.forceCandidateIds.push(...String(argv[++index] || '').split(',').filter(Boolean));
     else if (argv[index] === '--limit') result.limit = Number(argv[++index]);
+    else if (argv[index] === '--ingest-enrolled') result.ingestEnrolled = true;
     else throw new Error(`Unknown argument: ${argv[index]}`);
   }
   if (!result.input && !result.retryDue && !result.forceCandidateIds.length) throw new Error('Use --input <signals.json|signals.jsonl|->, --retry-due, or --force-candidate-id <uuid>');
@@ -32,7 +34,22 @@ async function run(argv = process.argv.slice(2), dependencies = {}) {
   const args = parseArgs(argv);
   const client = dependencies.client || (dependencies.store ? null : createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY));
   const store = dependencies.store || new SupabaseDiscoveryStore(client);
-  const pipeline = dependencies.pipeline || new EmployerDiscoveryPipeline({ store });
+  const searchSession = dependencies.searchSession || createPublicSearchSession({ httpFetch: dependencies.httpFetch || fetch });
+  const pipeline = dependencies.pipeline || new EmployerDiscoveryPipeline({
+    store,
+    resolveSource: (signal) => resolveOfficialSource(signal, {
+      searchCareers: (companyName, options) => searchOfficialCareerCandidates(companyName, { ...options, searchSession }),
+      ...(dependencies.readPage ? { readPage: dependencies.readPage } : {}),
+    }),
+    ...(dependencies.validate ? { validate: dependencies.validate } : {}),
+  });
+  const ingestEmployer = dependencies.ingestEmployer || (args.ingestEnrolled ? require('./ingest').ingestEmployer : null);
+  const countActiveJobs = dependencies.countActiveJobs || (client ? async (employerId) => {
+    const { count, error } = await client.from('jobs').select('id', { count: 'exact', head: true })
+      .eq('employer_id', employerId).eq('status', 'active');
+    if (error) throw error;
+    return count || 0;
+  } : null);
   let work = [];
   if (args.input) {
     const text = args.input === '-' ? fs.readFileSync(0, 'utf8') : fs.readFileSync(args.input, 'utf8');
@@ -58,8 +75,28 @@ async function run(argv = process.argv.slice(2), dependencies = {}) {
     const { signal, options } = item;
     try {
       const result = await pipeline.processSignal(signal, options);
-      results.push({ company_name: signal.company_name, status: result.status, candidate_id: result.candidate?.id, employer_id: result.employer?.id || null });
-      console.log(`${signal.company_name}: ${result.status}`);
+      const output = {
+        company_name: signal.company_name,
+        status: result.status,
+        candidate_id: result.candidate?.id,
+        employer_id: result.employer?.id || null,
+        source_type: result.employer?.ats_type || result.candidate?.detected_ats_type || null,
+        source_url: result.employer?.careers_url || result.candidate?.careers_url || null,
+        validation_status: result.validation?.status || result.candidate?.validation_status || null,
+        error_reason: result.candidate?.last_error || null,
+        search_provider_trace: result.candidate?.evidence?.search_provider_trace || [],
+      };
+      if (args.ingestEnrolled && result.status === 'enrolled' && result.employer) {
+        const before = countActiveJobs ? await countActiveJobs(result.employer.id) : 0;
+        const ingestion = await ingestEmployer(result.employer);
+        const after = countActiveJobs ? await countActiveJobs(result.employer.id) : before;
+        output.ingestion_status = ingestion.status;
+        output.ingestion_error = ingestion.error || null;
+        output.active_relevant_jobs = after;
+        output.relevant_jobs_inserted = Math.max(0, after - before);
+      }
+      results.push(output);
+      console.log('EMPLOYER_DISCOVERY_RESULT', JSON.stringify(output));
     } catch (error) {
       results.push({ company_name: signal.company_name, status: 'error', error: error.message });
       console.error(`${signal.company_name || '(unknown)'}: ${error.message}`);

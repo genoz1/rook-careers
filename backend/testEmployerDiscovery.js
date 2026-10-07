@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const { EmployerDiscoveryPipeline, identityKey } = require('./discovery/pipeline');
-const { resolveOfficialSource, detectFromUrl, detectSourceConfigurations, searchOfficialCareerCandidates } = require('./discovery/sourceResolver');
+const { resolveOfficialSource, detectFromUrl, detectSourceConfigurations, searchOfficialCareerCandidates, createPublicSearchSession, directOfficialDomainCandidates } = require('./discovery/sourceResolver');
 const { plausibleJob, sourceIsAnchored, validateSource } = require('./discovery/sourceValidator');
 const { fetchCustomHtmlJobs } = require('./adapters/customHtml');
 const { parseInput, parseArgs, run } = require('./runEmployerDiscovery');
@@ -281,8 +281,59 @@ test('empty DuckDuckGo batch responses fall back to bounded Bing RSS results', a
   });
   assert.equal(results[0].url, 'https://www.autoremind.com/jobs');
   assert.equal(results[0].provider, 'bing-rss');
-  assert.equal(calls.filter((url) => url.includes('duckduckgo.com')).length, 2);
+  assert.equal(calls.filter((url) => url.includes('duckduckgo.com')).length, 1);
   assert.equal(calls.filter((url) => url.includes('bing.com')).length, 1);
+});
+
+test('ten-candidate force batch survives provider degradation without poisoning later candidates', async () => {
+  const names = [
+    'AutoRemind', 'Banfield Pet Hospital', 'BluePearl Specialty + Emergency Pet Hospital', 'Arthrex Vet Systems',
+    'Merck Animal Health', 'PetVet Care Centers', 'Instinct Pet Food', 'Farmina Pet Food', 'Ardent Animal Health', 'Animal Biome',
+  ];
+  const store = new MemoryStore();
+  const ids = names.map((name, index) => {
+    const id = `10000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`;
+    const vmxSignal = { company_name: name, industry: 'animal health', signal_source: 'vmx-2027-exhibitor-list' };
+    store.candidates.push({
+      id, identity_key: identityKey(vmxSignal), company_name: name,
+      normalized_company_name: name.toLowerCase(), signal_payload: vmxSignal, status: 'unresolved', attempt_count: 1,
+    });
+    return id;
+  });
+  let duckCalls = 0;
+  let bingCalls = 0;
+  const httpFetch = async (url) => {
+    const target = String(url);
+    const queryName = new URL(target).searchParams.get('q').replace(/ animal health careers jobs$/, '');
+    const index = names.indexOf(queryName);
+    if (target.includes('duckduckgo.com')) {
+      duckCalls++;
+      if (index < 3) return { ok: true, text: async () => `<div class="result"><a class="result__a" href="https://search-${index}.example/careers">${queryName} careers</a><span class="result__snippet">Official ${queryName} jobs</span></div>` };
+      return { ok: true, text: async () => '<html><body>Transient empty provider response</body></html>' };
+    }
+    bingCalls++;
+    return { ok: true, text: async () => '<rss><channel><item><title>Unrelated directory</title><link>https://unrelated.example/</link><description>Nothing about this company</description></item></channel></rss>' };
+  };
+  const pages = new Map();
+  names.forEach((name, index) => {
+    pages.set(`https://search-${index}.example/careers`, { url: `https://search-${index}.example/careers`, html: `<title>${name} Careers</title><script type="application/ld+json">{"@type":"JobPosting","title":"Veterinarian"}</script>` });
+    const home = directOfficialDomainCandidates(name)[0].url;
+    const careers = new URL('/careers', home).href;
+    pages.set(home, { url: home, html: `<title>${name}</title><a href="/careers">Careers</a>` });
+    pages.set(careers, { url: careers, html: `<title>${name} Careers</title><script type="application/ld+json">{"@type":"JobPosting","title":"Veterinarian"}</script>` });
+  });
+  const results = await run(['--force-candidate-id', ids.join(','), '--limit', '10'], {
+    store, httpFetch,
+    readPage: async (url) => { const page = pages.get(url); if (!page) throw new Error(`fixture unavailable: ${url}`); return page; },
+    validate: async () => ({ ok: true, status: 'PASS_VALIDATED_SOURCE_NO_RELEVANT_JOBS', plausible_job_count: 0, inventory_job_count: 1 }),
+  });
+  assert.equal(results.length, 10);
+  assert.ok(results.every((item) => item.status === 'enrolled'));
+  assert.equal(results[9].validation_status, 'PASS_VALIDATED_SOURCE_NO_RELEVANT_JOBS');
+  assert.equal(results[9].source_type, 'custom_html');
+  assert.ok(results[9].search_provider_trace.every((entry) => entry.status === 'circuit_open'));
+  assert.equal(duckCalls, 5);
+  assert.equal(bingCalls, 2);
 });
 
 test('empty responses from every public provider remain retryable instead of an identity rejection', async () => {
@@ -290,8 +341,27 @@ test('empty responses from every public provider remain retryable instead of an 
     searchOfficialCareerCandidates('Temporary Search Outage', {
       httpFetch: async () => ({ ok: true, text: async () => '<html><body>No parseable results.</body></html>' }),
     }),
-    /no parseable results/i,
+    /no parseable.*results/i,
   );
+});
+
+test('total search outage with exhausted safe domain fallbacks is retryable, not terminally unresolved', async () => {
+  const store = new MemoryStore();
+  const session = createPublicSearchSession({
+    httpFetch: async () => ({ ok: true, text: async () => '<html><body>No results</body></html>' }),
+  });
+  const pipeline = new EmployerDiscoveryPipeline({
+    store,
+    resolveSource: (input) => resolveOfficialSource(input, {
+      searchCareers: (name, options) => searchOfficialCareerCandidates(name, { ...options, searchSession: session }),
+      readPage: async (url) => { throw new Error(`unavailable fixture domain: ${url}`); },
+    }),
+    validate: passValidation,
+  });
+  const result = await pipeline.processSignal({ company_name: 'Temporary Search Outage', industry: 'animal health', signal_source: 'fixture' });
+  assert.equal(result.status, 'retryable');
+  assert.equal(result.candidate.validation_status, 'SEARCH_PROVIDERS_UNAVAILABLE');
+  assert.ok(result.candidate.evidence.search_provider_trace.length >= 2);
 });
 
 test('verified subsidiary site may lead to a parent shared careers system with a provenance chain', async () => {
@@ -374,6 +444,24 @@ test('targeted force retry accepts explicit candidate UUIDs and bypasses schedul
   });
   assert.equal(results[0].candidate_id, id);
   assert.deepEqual(seen[0].options, { force: true, candidateId: id });
+});
+
+test('signal CLI enrollment ingests newly enrolled sources and reports inserted relevant jobs', async () => {
+  const id = '7db79ad7-805f-4ceb-967f-03a377a2101f';
+  const candidate = { id, company_name: 'Heska', signal_payload: { company_name: 'Heska', signal_source: 'fixture' } };
+  const employer = { id: 'employer-1', company_name: 'Heska', careers_url: 'https://jobs.example/', ats_type: 'custom_html' };
+  let ingested = 0;
+  let countReads = 0;
+  const results = await run(['--force-candidate-id', id, '--ingest-enrolled'], {
+    store: { listCandidatesByIds: async () => [candidate] },
+    pipeline: { processSignal: async () => ({ status: 'enrolled', candidate: { ...candidate, validation_status: 'PASS_VALIDATED_SOURCE' }, employer }) },
+    ingestEmployer: async (received) => { ingested++; assert.equal(received.id, employer.id); return { status: 'completed' }; },
+    countActiveJobs: async () => countReads++ === 0 ? 0 : 3,
+  });
+  assert.equal(ingested, 1);
+  assert.equal(results[0].ingestion_status, 'completed');
+  assert.equal(results[0].active_relevant_jobs, 3);
+  assert.equal(results[0].relevant_jobs_inserted, 3);
 });
 
 test('real force-reprocess CLI path recovers a minimal VMX signal through the fallback search provider', async () => {

@@ -7,6 +7,8 @@ const ATS_HOST = /greenhouse\.io|lever\.co|ashbyhq\.com|myworkdayjobs\.com|worka
 const CAREER_TEXT = /career|job|opening|join (?:us|our team)|work with us|opportunit/i;
 const MULTIPART_SUFFIXES = new Set(['co.uk', 'com.au', 'co.nz', 'com.br', 'co.jp', 'co.in']);
 const SEARCH_REJECT_HOST = /(?:^|\.)(?:linkedin\.com|indeed\.com|glassdoor\.com|ziprecruiter\.com|careerbuilder\.com|wikipedia\.org|facebook\.com|instagram\.com|youtube\.com|tiktok\.com|levels\.fyi)$/i;
+const SEARCH_GENERIC_TOKENS = new Set(['the', 'and', 'inc', 'corp', 'llc', 'ltd', 'company', 'group', 'holdings', 'pet', 'animal', 'health', 'hospital', 'medical', 'veterinary', 'vet', 'care', 'center', 'centers', 'specialty', 'emergency', 'systems', 'system']);
+const SEARCH_PROVIDER_COOLDOWN_MS = 5 * 60 * 1000;
 
 function cleanUrl(value, base) {
   try {
@@ -88,86 +90,138 @@ function unwrapSearchUrl(value) {
   return url;
 }
 
-async function searchOfficialCareerCandidates(companyName, { httpFetch = fetch, maxResults = 8, industry = '' } = {}) {
+function searchIdentityTokens(companyName) {
+  const all = String(companyName || '').toLowerCase().match(/[a-z0-9]+/g)?.filter((token) => token.length >= 3) || [];
+  const distinctive = all.filter((token) => !SEARCH_GENERIC_TOKENS.has(token));
+  return distinctive.length ? distinctive : all;
+}
+
+function searchResultMatchesCompany(companyName, result) {
+  const tokens = searchIdentityTokens(companyName);
+  if (!tokens.length) return false;
+  const haystack = `${result.url || ''} ${result.title || ''} ${result.snippet || ''}`.toLowerCase().replace(/[^a-z0-9]+/g, ' ');
+  const compact = haystack.replace(/\s+/g, '');
+  const matches = tokens.filter((token) => haystack.includes(token) || compact.includes(token));
+  return matches.length >= (tokens.length <= 2 ? tokens.length : Math.ceil(tokens.length * 0.67));
+}
+
+function createPublicSearchSession({ httpFetch = fetch, now = () => Date.now(), cooldownMs = SEARCH_PROVIDER_COOLDOWN_MS } = {}) {
+  return { httpFetch, now, cooldownMs, sequence: 0, providers: new Map() };
+}
+
+function providerState(session, provider) {
+  if (!session.providers.has(provider)) session.providers.set(provider, { consecutive_degraded: 0, cooldown_until: 0 });
+  return session.providers.get(provider);
+}
+
+function directOfficialDomainCandidates(companyName, { maxResults = 8 } = {}) {
+  const tokens = String(companyName || '').toLowerCase().match(/[a-z0-9]+/g)?.filter((token) => token.length >= 2 && !/^(?:inc|corp|llc|ltd|company|holdings)$/.test(token)) || [];
+  const distinctive = tokens.filter((token) => !SEARCH_GENERIC_TOKENS.has(token));
+  const labels = [];
+  const add = (value) => {
+    const label = String(value || '').replace(/^-+|-+$/g, '');
+    if (label.length >= 4 && !labels.includes(label)) labels.push(label);
+  };
+  add(tokens.join(''));
+  add(tokens.join('-'));
+  add(tokens.slice(0, 2).join(''));
+  add(tokens.slice(0, 2).join('-'));
+  if (distinctive[0]) add(distinctive[0]);
+  if (distinctive.length >= 2) {
+    add(distinctive.slice(0, 2).join(''));
+    add(distinctive.slice(0, 2).join('-'));
+  }
+  return labels.slice(0, maxResults).map((label) => ({
+    url: `https://${label}.com/`,
+    title: `${companyName} deterministic public-domain candidate`,
+    snippet: 'Candidate derived from the public company name; page identity must still be corroborated.',
+    provider: 'deterministic-domain',
+    query: null,
+    kind: 'deterministic_domain_candidate',
+  }));
+}
+
+async function searchOfficialCareerCandidates(companyName, { httpFetch = fetch, maxResults = 8, industry = '', searchSession = null } = {}) {
+  const session = searchSession || createPublicSearchSession({ httpFetch });
   const results = [];
+  const trace = [];
   let lastSearchError = null;
   const addResult = (result) => {
     const url = cleanUrl(result.url);
     if (!url || SEARCH_REJECT_HOST.test(new URL(url).hostname) || ATS_HOST.test(url)) return false;
+    if (!searchResultMatchesCompany(companyName, { ...result, url })) return false;
     if (results.some((item) => item.url.replace(/\/$/, '') === url.replace(/\/$/, ''))) return false;
     results.push({ ...result, url });
     return true;
   };
-  const suffixes = ['careers', 'jobs'];
-  for (const suffix of suffixes) {
-    const endpoint = new URL('https://html.duckduckgo.com/html/');
-    const query = `${companyName}${industry ? ` ${industry}` : ''} ${suffix}`;
-    endpoint.searchParams.set('q', query);
-    let response;
-    try {
-      response = await httpFetch(endpoint, {
-        signal: AbortSignal.timeout(15_000),
-        headers: { Accept: 'text/html', 'User-Agent': 'ROOK-Careers/1.0 (public employer-source discovery)' },
-      });
-    } catch (error) {
-      lastSearchError = error;
-      continue;
-    }
-    if (!response.ok) {
-      lastSearchError = new Error(`Public careers search returned ${response.status}`);
-      continue;
-    }
-    const $ = cheerio.load(await response.text());
-    let queryResultCount = 0;
-    $('.result').each((_, node) => {
-      if (queryResultCount >= maxResults) return;
-      const anchor = $(node).find('a.result__a').first();
-      const url = unwrapSearchUrl(anchor.attr('href'));
-      if (addResult({
-        url,
-        title: anchor.text().replace(/\s+/g, ' ').trim(),
-        snippet: $(node).find('.result__snippet').text().replace(/\s+/g, ' ').trim(),
-        provider: 'duckduckgo-html',
-        query,
-      })) queryResultCount++;
-    });
-    if (!queryResultCount) lastSearchError = new Error('DuckDuckGo returned no parseable public search results');
-  }
-  // Empty search pages are a common transient response during a bounded batch.
-  // A second public provider keeps that outage from becoming a permanent
-  // SEARCH_IDENTITY_NOT_VERIFIED decision. It never bypasses page identity or
-  // official-link provenance checks below.
-  if (results.length < Math.min(2, maxResults)) {
-    const query = `${companyName}${industry ? ` ${industry}` : ''} careers jobs`;
-    const endpoint = new URL('https://www.bing.com/search');
-    endpoint.searchParams.set('format', 'rss');
-    endpoint.searchParams.set('q', query);
-    try {
-      const response = await httpFetch(endpoint, {
-        signal: AbortSignal.timeout(15_000),
-        headers: { Accept: 'application/rss+xml,application/xml,text/xml', 'User-Agent': 'ROOK-Careers/1.0 (public employer-source discovery)' },
-      });
-      if (!response.ok) throw new Error(`Bing public careers search returned ${response.status}`);
-      const $ = cheerio.load(await response.text(), { xmlMode: true });
-      let count = 0;
-      $('item').each((_, node) => {
-        if (count >= maxResults) return;
-        if (addResult({
-          url: $(node).find('link').first().text().trim(),
-          title: $(node).find('title').first().text().replace(/\s+/g, ' ').trim(),
+  const query = `${companyName}${industry ? ` ${industry}` : ''} careers jobs`;
+  const providers = [
+    {
+      name: 'duckduckgo-html', endpoint: () => {
+        const url = new URL('https://html.duckduckgo.com/html/'); url.searchParams.set('q', query); return url;
+      }, accept: 'text/html', parse: (text) => {
+        const $ = cheerio.load(text); return $('.result').map((_, node) => {
+          const anchor = $(node).find('a.result__a').first();
+          return { url: unwrapSearchUrl(anchor.attr('href')), title: anchor.text().replace(/\s+/g, ' ').trim(), snippet: $(node).find('.result__snippet').text().replace(/\s+/g, ' ').trim() };
+        }).get();
+      },
+    },
+    {
+      name: 'bing-rss', endpoint: () => {
+        const url = new URL('https://www.bing.com/search'); url.searchParams.set('format', 'rss'); url.searchParams.set('q', query); return url;
+      }, accept: 'application/rss+xml,application/xml,text/xml', parse: (text) => {
+        const $ = cheerio.load(text, { xmlMode: true }); return $('item').map((_, node) => ({
+          url: $(node).find('link').first().text().trim(), title: $(node).find('title').first().text().replace(/\s+/g, ' ').trim(),
           snippet: $(node).find('description').first().text().replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
-          provider: 'bing-rss',
-          query,
-        })) count++;
+        })).get();
+      },
+    },
+  ];
+  session.sequence++;
+  for (const provider of providers) {
+    const state = providerState(session, provider.name);
+    if (state.cooldown_until > session.now()) {
+      trace.push({ provider: provider.name, status: 'circuit_open', cooldown_until: new Date(state.cooldown_until).toISOString() });
+      continue;
+    }
+    const started = session.now();
+    try {
+      const response = await session.httpFetch(provider.endpoint(), {
+        signal: AbortSignal.timeout(15_000), headers: { Accept: provider.accept, 'User-Agent': 'ROOK-Careers/1.0 (public employer-source discovery)' },
       });
-      if (!count && !results.length) lastSearchError = new Error('Public search providers returned no parseable results');
+      if (!response.ok) throw new Error(`${provider.name} returned HTTP ${response.status}`);
+      const parsed = provider.parse(await response.text()).slice(0, maxResults * 2);
+      const before = results.length;
+      for (const item of parsed) {
+        if (results.length >= maxResults) break;
+        addResult({ ...item, provider: provider.name, query });
+      }
+      const accepted = results.length - before;
+      if (accepted > 0) {
+        state.consecutive_degraded = 0;
+        trace.push({ provider: provider.name, status: 'ok', parsed: parsed.length, accepted, elapsed_ms: session.now() - started });
+        break;
+      }
+      state.consecutive_degraded++;
+      if (state.consecutive_degraded >= 2) state.cooldown_until = session.now() + session.cooldownMs;
+      const status = parsed.length ? 'low_relevance' : 'empty';
+      trace.push({ provider: provider.name, status, parsed: parsed.length, accepted: 0, consecutive_degraded: state.consecutive_degraded, elapsed_ms: session.now() - started });
+      lastSearchError = new Error(`${provider.name} returned ${status === 'empty' ? 'no parseable' : 'no company-relevant'} public search results`);
     } catch (error) {
-      if (!results.length) lastSearchError = error;
+      state.consecutive_degraded++;
+      if (state.consecutive_degraded >= 2) state.cooldown_until = session.now() + session.cooldownMs;
+      trace.push({ provider: provider.name, status: 'error', error: error.message, consecutive_degraded: state.consecutive_degraded, elapsed_ms: session.now() - started });
+      lastSearchError = error;
     }
   }
-  if (!results.length) throw lastSearchError || new Error('Public search providers returned no results');
+  if (!results.length) {
+    const error = lastSearchError || new Error('Public search providers were unavailable');
+    error.code = 'SEARCH_PROVIDERS_UNAVAILABLE';
+    error.evidence = { provider_trace: trace };
+    throw error;
+  }
   const compact = String(companyName || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
-  return results.map((result, index) => {
+  const ranked = results.map((result, index) => {
     const label = registrableDomain(result.url).split('.')[0].replace(/[^a-z0-9]+/g, '');
     const regionalDomainPenalty = /\.(?:com\.au|co\.nz|co\.uk|co\.in|co\.jp|com\.br)$/i.test(new URL(result.url).hostname) ? 4 : 0;
     const score = (label === compact ? 8 : label.startsWith(compact) || compact.startsWith(label) ? 3 : 0) +
@@ -175,6 +229,8 @@ async function searchOfficialCareerCandidates(companyName, { httpFetch = fetch, 
       (String(result.title).toLowerCase().includes(String(companyName).toLowerCase()) ? 2 : 0) - regionalDomainPenalty - index / 100;
     return { ...result, score };
   }).sort((a, b) => b.score - a.score).slice(0, maxResults);
+  Object.defineProperty(ranked, 'trace', { value: trace, enumerable: false });
+  return ranked;
 }
 
 function pageLinks(html, baseUrl) {
@@ -338,6 +394,7 @@ async function resolveOfficialSource(signal, {
 
   let searchResults = [];
   let searchError = null;
+  let searchTrace = [];
   const candidates = [];
   if (officialUrl) candidates.push({ url: officialUrl, kind: 'supplied_official_url' });
 
@@ -361,15 +418,25 @@ async function resolveOfficialSource(signal, {
   await tryCandidates(candidates);
   try {
     searchResults = await searchCareers(signal.company_name, { maxResults: maxSearchResults, industry: signal.industry || '' });
+    searchTrace = searchResults.trace || [];
     const searched = searchResults
       .filter((result) => !candidates.some((candidate) => candidate.url === result.url))
       .map((result) => ({ ...result, kind: 'public_search_result' }));
     candidates.push(...searched);
     if (!home) await tryCandidates(searched);
-  } catch (error) { searchError = error.message; }
+  } catch (error) {
+    searchError = error.message;
+    searchTrace = error.evidence?.provider_trace || [];
+  }
+  if (!home) {
+    const directCandidates = directOfficialDomainCandidates(signal.company_name, { maxResults: maxSearchResults })
+      .filter((result) => !candidates.some((candidate) => candidate.url === result.url));
+    candidates.push(...directCandidates);
+    await tryCandidates(directCandidates);
+  }
   if (!home) throw Object.assign(new Error('No supplied or search-discovered page safely corroborated the company identity'), {
-    code: officialUrl && candidateFailures.length === 1 ? 'COMPANY_IDENTITY_MISMATCH' : 'SEARCH_IDENTITY_NOT_VERIFIED',
-    evidence: { supplied_url: officialUrl, search_error: searchError, search_results: searchResults, candidate_failures: candidateFailures },
+    code: searchError && !searchResults.length ? 'SEARCH_PROVIDERS_UNAVAILABLE' : officialUrl && !searchResults.length ? 'COMPANY_IDENTITY_MISMATCH' : 'SEARCH_IDENTITY_NOT_VERIFIED',
+    evidence: { supplied_url: officialUrl, search_error: searchError, search_provider_trace: searchTrace, search_results: searchResults, candidate_failures: candidateFailures },
   });
 
   const links = pageLinks(home.html, home.url);
@@ -430,7 +497,7 @@ async function resolveOfficialSource(signal, {
     }
   }
   if (pages.length === 1 && !homeIsCareersPage) throw Object.assign(new Error('Official site did not expose or resolve a careers/jobs page'), {
-    code: 'NO_OFFICIAL_CAREERS_LINK', evidence: { official_url: home.url, attempted_pages: targets, failures },
+    code: 'NO_OFFICIAL_CAREERS_LINK', evidence: { official_url: home.url, search_provider_trace: searchTrace, attempted_pages: targets, failures },
   });
   let configurations = detectSourceConfigurations(pages.filter((page) => page.role === 'careers'));
   let fallback = fallbackArtifacts(pages.filter((page) => page.role === 'careers'));
@@ -461,7 +528,7 @@ async function resolveOfficialSource(signal, {
     fallback = fallbackArtifacts(pages.filter((page) => page.role === 'careers'));
   }
   if (!configurations.length) throw Object.assign(new Error('No supported or safely extractable source detected on official careers pages'), {
-    code: 'UNSUPPORTED_SOURCE', evidence: { official_url: home.url, identity: identityEvidence, selected_candidate: selectedCandidate, search_results: searchResults, attempted_pages: queued, failures, fallback }, pages,
+    code: 'UNSUPPORTED_SOURCE', evidence: { official_url: home.url, identity: identityEvidence, selected_candidate: selectedCandidate, search_provider_trace: searchTrace, search_results: searchResults, attempted_pages: queued, failures, fallback }, pages,
   });
   return {
     official_url: home.url,
@@ -473,6 +540,7 @@ async function resolveOfficialSource(signal, {
       official_url: home.url,
       identity: identityEvidence,
       selected_candidate: selectedCandidate,
+      search_provider_trace: searchTrace,
       search_results: searchResults,
       candidate_failures: candidateFailures,
       redirect_chain: home.redirect_chain || [],
@@ -494,6 +562,9 @@ module.exports = {
   detectSourceConfigurations,
   fallbackArtifacts,
   companyIdentityEvidence,
+  createPublicSearchSession,
+  directOfficialDomainCandidates,
+  searchResultMatchesCompany,
   searchOfficialCareerCandidates,
   sitemapUrls,
   resolveOfficialSource,

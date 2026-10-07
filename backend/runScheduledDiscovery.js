@@ -21,7 +21,7 @@ async function run() {
   results.company_seed = await safeStage('company_seed', () =>
     runCompanies(['--apply', '--limit', '4', '--offset', String((day * 4) % 400), '--ingest-enrolled']));
   results.retries = await safeStage('retries', () =>
-    runCandidates(['--retry-due', '--limit', '10']));
+    runCandidates(['--retry-due', '--limit', '10', '--ingest-enrolled']));
   console.log('SCHEDULED_DISCOVERY_RESULT', JSON.stringify(results));
   return results;
 }
