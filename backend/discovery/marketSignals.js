@@ -72,6 +72,51 @@ async function websiteFromWikidata(companyName, { httpFetch = fetch } = {}) {
   return null;
 }
 
+function nameDerivedDomains(companyName, industry = '') {
+  const normalized = normalizeCompanyName(companyName);
+  const tokens = normalized.split(' ').filter(Boolean);
+  const useful = tokens.filter((token) => !['group', 'companies', 'products', 'services', 'supply'].includes(token));
+  const compact = useful.join('');
+  const domains = [];
+  if (compact.length >= 3) domains.push(`${compact}.com`);
+  if (/veterinary|animal health/i.test(industry) && compact.length >= 3 && compact.length <= 12 && !compact.endsWith('vet')) {
+    domains.push(`${compact}vet.com`);
+  }
+  return [...new Set(domains)].slice(0, 2);
+}
+
+function pageCorroboratesCompany(companyName, url, html) {
+  const companyTokens = normalizeCompanyName(companyName).split(' ').filter((token) => token.length >= 3);
+  if (!companyTokens.length) return false;
+  const evidence = normalizeCompanyName(`${new URL(url).hostname} ${String(html || '').slice(0, 150_000)}`);
+  return companyTokens.every((token) => evidence.includes(token));
+}
+
+async function websiteFromNameDerivedDomain(companyName, { industry = '', httpFetch = fetch } = {}) {
+  for (const domain of nameDerivedDomains(companyName, industry)) {
+    try {
+      const response = await httpFetch(`https://${domain}`, {
+        redirect: 'follow', signal: AbortSignal.timeout(10_000),
+        headers: { Accept: 'text/html,application/xhtml+xml', 'User-Agent': 'ROOK-Careers/1.0 (public employer discovery; contact@rookcareers.com)' },
+      });
+      const website = safeOfficialWebsite(response.url || `https://${domain}`);
+      if (!response.ok || !website) continue;
+      const html = await response.text();
+      if (!pageCorroboratesCompany(companyName, website, html)) continue;
+      return { website, domain_guess: domain, match: 'name_derived_domain_with_page_identity' };
+    } catch {
+      // A failed guess is expected; the candidate remains unresolved and retryable.
+    }
+  }
+  return null;
+}
+
+async function websiteFromPublicSignals(companyName, options = {}) {
+  const wikidata = await websiteFromWikidata(companyName, options);
+  if (wikidata) return wikidata;
+  return websiteFromNameDerivedDomain(companyName, options);
+}
+
 function employerByName(employers, companyName) {
   const normalized = normalizeCompanyName(companyName);
   return (employers || []).find((employer) => normalizeCompanyName(employer.company_name) === normalized) || null;
@@ -84,7 +129,7 @@ async function discoverMarketSignals({
   signalLimit = 20,
   knownEmployers = [],
   fetchJobs = fetchAdzunaJobs,
-  resolveWebsite = websiteFromWikidata,
+  resolveWebsite = websiteFromPublicSignals,
 } = {}) {
   const queries = selectedQueries(now, queryLimit);
   const byCompany = new Map();
@@ -125,7 +170,7 @@ async function discoverMarketSignals({
     if (known) stats.existing_employer_signals++;
     if (!known) {
       try {
-        websiteEvidence = await resolveWebsite(candidate.companyName);
+        websiteEvidence = await resolveWebsite(candidate.companyName, { industry: candidate.industry });
         companyWebsite = websiteEvidence?.website || null;
       } catch (error) {
         websiteEvidence = { error: error.message };
@@ -160,6 +205,10 @@ module.exports = {
   plausibleEmployerName,
   safeOfficialWebsite,
   websiteFromWikidata,
+  nameDerivedDomains,
+  pageCorroboratesCompany,
+  websiteFromNameDerivedDomain,
+  websiteFromPublicSignals,
   employerByName,
   discoverMarketSignals,
 };

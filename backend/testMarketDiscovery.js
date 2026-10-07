@@ -6,6 +6,8 @@ const {
   plausibleEmployerName,
   safeOfficialWebsite,
   websiteFromWikidata,
+  nameDerivedDomains,
+  websiteFromNameDerivedDomain,
   discoverMarketSignals,
 } = require('./discovery/marketSignals');
 const { parseArgs, run } = require('./runMarketDiscovery');
@@ -39,6 +41,22 @@ test('Wikidata website resolution requires an exact company label or alias', asy
   ];
   const result = await websiteFromWikidata('Acme Medical', { httpFetch: async () => responses.shift() });
   assert.deepEqual(result, { website: 'https://acmemedical.example/', entity_id: 'Q1', match: 'exact_label_or_alias' });
+});
+
+test('bounded name-derived domains are industry-aware and require page identity evidence', async () => {
+  assert.deepEqual(nameDerivedDomains('iM3 Inc', 'Veterinary'), ['im3.com', 'im3vet.com']);
+  assert.deepEqual(nameDerivedDomains('Patterson Dental Supply', 'Veterinary'), ['pattersondental.com']);
+  const seen = [];
+  const result = await websiteFromNameDerivedDomain('iM3 Inc', {
+    industry: 'Veterinary',
+    httpFetch: async (url) => {
+      seen.push(url);
+      if (url === 'https://im3.com') throw new Error('not found');
+      return { ok: true, url: 'https://im3vet.com/', text: async () => '<title>iM3 Veterinary Dental</title>' };
+    },
+  });
+  assert.deepEqual(seen, ['https://im3.com', 'https://im3vet.com']);
+  assert.deepEqual(result, { website: 'https://im3vet.com/', domain_guess: 'im3vet.com', match: 'name_derived_domain_with_page_identity' });
 });
 
 test('Adzuna market results are sales-filtered, employer-deduped, and enriched without resolving known employers again', async () => {
