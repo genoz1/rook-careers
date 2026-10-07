@@ -102,3 +102,15 @@ test('acquisition cards keep generalized title, location, and industry readable'
   assert.match(js,/industry_classification\?\.labels/);
   assert.doesNotMatch(js,/masked_lines\?\.employer/);
 });
+
+test('acquisition location updates show immediate progress instead of a silent wait',()=>{
+  const js=fs.readFileSync(path.join(root,'public/rook-acquisition.js'),'utf8');
+  const widget=fs.readFileSync(path.join(root,'public/rook-location-widget-v8.js'),'utf8');
+  assert.match(js,/Updating opportunities near/);
+  assert.match(js,/Finding your location/);
+  assert.match(js,/setSubmitBusy/);
+  assert.match(js,/skeletons\(\)/);
+  assert.match(js,/resolveFromInput/);
+  assert.match(widget,/async function resolveFromInput/);
+  assert.match(widget,/commit\(activeIdx >= 0 \? activeIdx : 0\)/);
+});

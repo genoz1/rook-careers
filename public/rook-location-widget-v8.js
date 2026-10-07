@@ -162,9 +162,14 @@
         e.preventDefault();
         setActive(len ? (activeIdx - 1 + len) % len : -1);
       } else if (e.key === "Enter") {
-        e.preventDefault();
-        if (activeIdx >= 0) { commit(activeIdx); }
-        // No action if nothing is highlighted -- user must select explicitly
+        // Commit the highlighted suggestion, or the top match when the list is open.
+        // If a location is already committed, allow the parent form to submit.
+        if (suggestions.length) {
+          e.preventDefault();
+          commit(activeIdx >= 0 ? activeIdx : 0);
+        } else if (!committed) {
+          e.preventDefault();
+        }
       } else if (e.key === "Escape") {
         clearList();
         setStatus("");
@@ -196,7 +201,47 @@
       if (onClear) onClear();
     }
 
-    return { getValue, setValue, reset };
+    // Resolve typed text to a suggestion for form submit without a click.
+    // Prefers an exact label/city match, otherwise the top U.S. result.
+    async function resolveFromInput() {
+      const q = inputEl.value.trim();
+      if (q.length < 2) return null;
+      const pickFrom = (items, idx) => {
+        const chosen = items[idx];
+        if (!chosen) return null;
+        committed = true;
+        inputEl.value = chosen.label;
+        onSelect(chosen);
+        clearList();
+        setStatus("");
+        return chosen;
+      };
+      if (activeIdx >= 0 && suggestions[activeIdx]) return pickFrom(suggestions, activeIdx);
+      if (suggestions.length) {
+        const exact = suggestions.find((item) => matchesQuery(item, q));
+        return pickFrom(suggestions, exact ? suggestions.indexOf(exact) : 0);
+      }
+      try {
+        const res = await fetch(`${apiBase}/api/location-search?q=${encodeURIComponent(q)}`);
+        if (!res.ok) return null;
+        const items = await res.json();
+        if (!Array.isArray(items) || !items.length) return null;
+        const exact = items.find((item) => matchesQuery(item, q));
+        return pickFrom(items, exact ? items.indexOf(exact) : 0);
+      } catch {
+        return null;
+      }
+    }
+
+    function matchesQuery(item, q) {
+      const needle = q.toLowerCase();
+      const label = String(item.label || "").toLowerCase();
+      const cityState = `${item.city || ""}, ${item.stateAbbr || item.state || ""}`.toLowerCase();
+      const zip = String(item.zip || "");
+      return label === needle || cityState === needle || (zip && zip === q);
+    }
+
+    return { getValue, setValue, reset, resolveFromInput };
   }
 
   window.RookLocationWidget = { init };
