@@ -7,7 +7,7 @@
     "start": "node server.js",
     "ingest": "node backend/ingest.js",
     "ingest-adzuna": "node backend/ingestAdzuna.js",
-    "discover-employers": "node backend/runEmployerDiscovery.js --retry-due",
+    "discover-employers": "node backend/runScheduledDiscovery.js",
     "discover-employers-market-shadow": "node backend/runMarketDiscovery.js --shadow",
     "discover-employers-market": "node backend/runMarketDiscovery.js --apply --retry-due",
     "discover-companies-shadow": "node backend/runCompanyDiscovery.js --shadow",
