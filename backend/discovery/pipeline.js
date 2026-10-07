@@ -86,8 +86,17 @@ class EmployerDiscoveryPipeline {
     const employers = await this.store.listEmployers();
     const known = employers.find((employer) => employerMatches(employer, candidate, direct));
     if (known) {
+      const externalJobEvidence = signal.job_url ? {
+        investigation_required: true,
+        reason: 'EXTERNAL_JOB_SIGNAL_FOR_MONITORED_EMPLOYER',
+        job_url: signal.job_url,
+        job_title: signal.job_title || null,
+        signal_source: signal.signal_source,
+        observed_at: now.toISOString(),
+      } : null;
       candidate = await this.store.updateCandidate(candidate.id, {
         status: 'existing', employer_id: known.id, last_error: null, updated_at: now.toISOString(), next_attempt_at: null,
+        evidence: externalJobEvidence ? { ...(candidate.evidence || {}), external_job_signal: externalJobEvidence } : (candidate.evidence || {}),
         ...(direct ? { detected_ats_type: direct.ats_type, detected_ats_identifier: direct.ats_identifier } : {}),
       });
       return { status: 'existing', candidate, employer: known };

@@ -85,6 +85,8 @@ test('existing employer is deduplicated by normalized company identity before ex
   assert.equal(result.status, 'existing');
   assert.equal(resolveCalls, 0);
   assert.equal(store.enrollCalls, 0);
+  assert.equal(result.candidate.evidence.external_job_signal.reason, 'EXTERNAL_JOB_SIGNAL_FOR_MONITORED_EMPLOYER');
+  assert.equal(result.candidate.evidence.external_job_signal.investigation_required, true);
 });
 
 test('official-page ATS detection plus successful machine validation auto-enrolls exactly once', async () => {
