@@ -21,8 +21,9 @@ Feed a JSON array or JSONL file with:
 npm run discover-employers-signals -- --input signals.jsonl
 ```
 
-The scheduled `npm run discover-employers` command retries due durable
-candidates. A candidate becomes an active employer only after the official
+The scheduled `npm run discover-employers` command runs the bounded public-job
+activity input, a rotating company-seed batch, and due durable-candidate
+retries. A candidate becomes an active employer only after the official
 company site links or resolves to the source, the exact ATS identifiers are
 extracted, the existing adapter retrieves jobs, and at least one active,
 source-verified sales listing normalizes successfully. Unsupported sources and
