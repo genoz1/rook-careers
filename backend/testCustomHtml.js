@@ -100,7 +100,7 @@ test('existing ATS normalizers retain their contracts',()=>{
 
 test('ingestion dispatcher: custom current/future rows, failed fetch safety and unchanged ATS path',async()=>{
  const vm=require('node:vm');
- async function run(type,{failure=false,sharedParent=false,env={CUSTOM_HTML_EMPLOYER_IDS:'test'},id='test'}={}){
+ async function run(type,{failure=false,sharedParent=false,env={CUSTOM_HTML_EMPLOYER_IDS:'test'},id='test',discoveryCandidateId=null}={}){
   const writes=[],calls=[];
   const db={from(table){const q={table,op:'select',values:null,filters:[],select(){return q;},eq(k,v){q.filters.push([k,v]);return q;},not(){q.analysis=true;return q;},order(){return q;},range(){return q;},update(v){q.op='update';q.values=v;return q;},insert(v){q.op='insert';q.values=v;return q;},upsert(v){q.op='upsert';q.values=v;return q;},in(k,v){q.filters.push([k,v]);return q;},single(){return Promise.resolve({data:{...q.values,id:'new',ai_analysis:{sales_motion:['sales']},job_embedding:[1]},error:null}).then(r=>{writes.push({...q});return r;});},then(resolve,reject){if(q.op!=='select')writes.push({...q});return Promise.resolve({data:sharedParent && q.analysis ? [{source_job_id:'parent',title_original:'Sales Representative',description_text:detail,ai_analysis:{product_categories:['veterinary diagnostics']},job_embedding:[0.5]}] : [],error:null}).then(resolve,reject);}};return q;}};
   const custom=require('./adapters/customHtml');
@@ -121,10 +121,12 @@ test('ingestion dispatcher: custom current/future rows, failed fetch safety and 
   };
   const context={require:localRequire,module:{exports:{}},console:{log(){},error(){}},process:{env,argv:[]},Set,Map,Date};
   vm.runInNewContext(fs.readFileSync(path.join(__dirname,'ingest.js'),'utf8'),context);
-  await context.module.exports.ingestEmployer({...employer,id,ats_type:type});return {writes,calls};
+  await context.module.exports.ingestEmployer({...employer,id,ats_type:type,discovery_candidate_id:discoveryCandidateId});return {writes,calls};
  }
  const scheduled=await run('custom_html',{env:{},id:'83ada8b6-a0a0-4c62-8384-d507015275cb'});assert.deepEqual(scheduled.calls,['custom']);
  assert.deepEqual((await run('custom_html',{env:{}})).calls,[]);
+ assert.deepEqual((await run('custom_html',{env:{},discoveryCandidateId:'validated-candidate'})).calls,['custom']);
+ assert.deepEqual((await run('custom_html',{env:{CUSTOM_HTML_EMPLOYER_IDS:''},discoveryCandidateId:'validated-candidate'})).calls,[]);
  assert.deepEqual((await run('custom_html',{env:{CUSTOM_HTML_EMPLOYER_IDS:''},id:'83ada8b6-a0a0-4c62-8384-d507015275cb'})).calls,[]);
  const custom=await run('custom_html');assert.deepEqual(custom.calls,['custom']);
  const saved=custom.writes.filter(q=>['insert','upsert'].includes(q.op));assert.equal(saved.length,2);assert.equal(saved[0].values.status,'active');assert.equal(saved[1].values.status,'closed');

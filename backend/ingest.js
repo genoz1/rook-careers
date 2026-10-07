@@ -133,8 +133,10 @@ async function ingestEmployer(employer) {
     if (employer.ats_type === "custom_html") {
       // Reviewed sources participate in normal scheduled runs. An explicit env
       // allowlist overrides the registry (an empty value disables every source).
-      const enabledIds = (process.env.CUSTOM_HTML_EMPLOYER_IDS ?? Object.keys(reviewedHtmlSources).join(",")).split(",").map(id => id.trim());
-      if (!enabledIds.includes(employer.id)) {
+      const configuredIds = process.env.CUSTOM_HTML_EMPLOYER_IDS;
+      const enabledIds = (configuredIds ?? Object.keys(reviewedHtmlSources).join(",")).split(",").map(id => id.trim());
+      const discoveryEnabled = configuredIds == null && employer.discovery_candidate_id;
+      if (!enabledIds.includes(employer.id) && !discoveryEnabled) {
         console.log("  Skipping custom_html — employer is not enabled for this run");
         return { status: 'skipped' };
       }
