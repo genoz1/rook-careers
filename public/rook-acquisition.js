@@ -7,7 +7,11 @@ const submitButton=$('locationForm').querySelector('button.action');
 async function api(path,options={}){
   const {data:{session}}=await rookSupabase.auth.getSession();
   const r=await fetch('/api/v8'+path,{...options,headers:{'X-ROOK-V7':token(),...(session?{Authorization:'Bearer '+session.access_token}:{}),...options.headers},cache:'no-store'});
-  const j=await r.json();if(!r.ok)throw Error(j.error||'Please try again.');return j;
+  const text=await r.text();
+  let j=null;
+  try{j=text?JSON.parse(text):null;}catch(_){throw Error(r.ok?'Invalid response from server.':'Unable to load jobs. Please try again.');}
+  if(!r.ok)throw Error((j&&j.error)||'Unable to load jobs. Please try again.');
+  return j;
 }
 function open(id,source){$(id).hidden=false;document.body.classList.add('dialog-open');if(id==='pricingDialog')track('pricing_paywall_viewed',{source})}
 function close(id){$(id).hidden=true;document.body.classList.remove('dialog-open')}
@@ -53,21 +57,37 @@ function setSubmitBusy(on,label){
   busy=on;submitButton.disabled=!!on;submitButton.textContent=label||'Update opportunities';
   submitButton.setAttribute('aria-busy',on?'true':'false');
 }
+function normalizeLocation(place){
+  if(!place||typeof place!=='object')return null;
+  const state=String(place.stateAbbr||place.state||'').trim().toUpperCase();
+  const zip=String(place.zip||'').trim();
+  const lat=Number(place.lat),lng=Number(place.lng);
+  if(!Number.isFinite(lat)||!Number.isFinite(lng)||!/^[A-Z]{2}$/.test(state)||!/^\d{5}$/.test(zip))return null;
+  return {
+    label:String(place.label||[place.city,state].filter(Boolean).join(', ')),
+    city:String(place.city||''),
+    state,
+    stateAbbr:state,
+    lat,lng,zip
+  };
+}
 $('locationForm').onsubmit=async e=>{
   e.preventDefault();
   if(busy)return;
   $('formError').textContent='';
+  const previousJobs=jobs.slice();
   setSubmitBusy(true,'Finding your location…');
   let placeChoice=selected;
   try{
     if(!placeChoice && locationWidget?.resolveFromInput) placeChoice=await locationWidget.resolveFromInput();
+    placeChoice=normalizeLocation(placeChoice);
     if(!placeChoice){
       $('formError').textContent='Choose a location from the suggestions.';
       setSubmitBusy(false);return;
     }
     selected=placeChoice;
-    const label=placeChoice.label||[placeChoice.city,placeChoice.stateAbbr||placeChoice.state].filter(Boolean).join(', ');
-    // Close immediately and paint loading state — ranking can take several seconds.
+    const label=placeChoice.label;
+    // Close immediately and paint loading state while ranking finishes.
     close('locationDialog');
     setSubmitBusy(true,'Updating opportunities…');
     $('geoStatus').textContent=`Updating opportunities near ${label}…`;
@@ -80,10 +100,12 @@ $('locationForm').onsubmit=async e=>{
     display(result);
     track('location_changed');
   }catch(error){
-    open('locationDialog','change_location');
-    $('formError').textContent=error.message||'Could not update that location. Please try again.';
+    // Restore prior cards and leave the dialog closed — bouncing back into the
+    // city form made successful-looking loads feel broken.
+    jobs=previousJobs;
     if(jobs.length)render();
-    else $('geoStatus').textContent='Could not update location. Please try again.';
+    else $('jobGrid').innerHTML='';
+    $('geoStatus').textContent=(error.message||'Could not update that location')+' Use Change Location to try again.';
   }finally{
     setSubmitBusy(false);
   }

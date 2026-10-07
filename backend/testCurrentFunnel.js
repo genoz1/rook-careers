@@ -111,6 +111,23 @@ test('acquisition location updates show immediate progress instead of a silent w
   assert.match(js,/setSubmitBusy/);
   assert.match(js,/skeletons\(\)/);
   assert.match(js,/resolveFromInput/);
+  assert.match(js,/normalizeLocation/);
+  assert.match(js,/previousJobs/);
+  assert.match(js,/Use Change Location to try again/);
   assert.match(widget,/async function resolveFromInput/);
   assert.match(widget,/commit\(activeIdx >= 0 \? activeIdx : 0\)/);
+});
+
+test('locked preview responses stay small enough for a reliable location change',()=>{
+  const source=fs.readFileSync(path.join(root,'backend/routes/onboardingV8.js'),'utf8');
+  assert.match(source,/LOCKED_PREVIEW_LIMIT\s*=\s*48/);
+  const {project}=require('./pretrialProjection');
+  const raw=Array.from({length:80},(_,i)=>({
+    id:'job-'+i,title_original:'Territory Manager',city:'Orlando',state:'FL',location_raw:'Orlando, FL',
+    ai_analysis:{product_categories:['Medical Device']},match:{overall_score:90-i%10}
+  }));
+  // Mirror the locked previewResponse slice contract.
+  const listed=raw.slice(0,48).map((j,i)=>project(j,i,{dashboard:true}));
+  assert.equal(listed.length,48);
+  assert.equal(listed[0].location_label,'Orlando, FL');
 });

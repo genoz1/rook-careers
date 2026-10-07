@@ -237,8 +237,9 @@ function safeLocationLabel(job) {
   const state = stateUpper.length === 2 ? stateUpper : zipcodes.states.full[stateValue] ||
     zipcodes.states.full[stateUpper];
   if (city && state) {
-    const place = Object.values(zipcodes.codes).find(p =>
-      p.city.toLowerCase() === city.toLowerCase() && p.state === state);
+    // lookupByName is O(matches); never scan the full ZIP table per card.
+    const places = zipcodes.lookupByName(city, state);
+    const place = places && places[0];
     if (place) {
       const label = `${place.city}, ${place.state}`;
       return remote ? `Remote – ${place.state}` : label;
