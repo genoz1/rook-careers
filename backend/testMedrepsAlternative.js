@@ -33,7 +33,7 @@ test('each CTA preserves campaign values and creates one event on click', async 
     link.handler();
   }
   assert.equal(events.filter(e=>e[1]==='medreps_alternative_cta_click').length,4);
-  assert.equal(offer.textContent,'24 hours of full access. No credit card required.');
+  assert.equal(offer.textContent,'Preview current protected matches first. Paid access starts at $5.99.');
   assert.equal(offer.hidden,false);
 });
 

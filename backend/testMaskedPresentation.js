@@ -80,7 +80,7 @@ for(const file of ['rook-dashboard.html','rook-dashboard-v7.html']) {
   assert(locked.includes('class="masked-employer-fragment" aria-hidden="true">raveni dofanu</span>'));
   assert(locked.indexOf('Strong Match')<locked.indexOf('masked-role'));
   assert(locked.indexOf('Preference Match')<locked.indexOf('48 miles away'));
-  assert(locked.includes('Try ROOK Today for Free'));
+  assert(locked.includes('View membership options'));
   assert(locked.includes('Employer:'));
   const css=fs.readFileSync(require('node:path').join(__dirname,'../public/rook-pretrial.css'),'utf8');
   assert(css.includes('.masked-job-v7 .masked-role{')&&css.includes('filter:blur(1.7px)'));

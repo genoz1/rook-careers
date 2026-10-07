@@ -72,4 +72,9 @@ async function rank(db,profile,unused=[],timing={}){
   timing.scoring_ms=performance.now()-scoreStarted;
   return ranked;
 }
-module.exports={rank,readCandidates,GEO_COLUMNS,startIndex,indexFor,pages};
+async function nationalPreview(db,timing={}){
+  const local=await indexFor(db).current(timing)||await pages(db,JOB_LIST_COLUMNS_NO_DESCRIPTION,timing);
+  const {isUsEligibleJob}=require('./jobEligibility');
+  return local.filter(isUsEligibleJob).sort((a,b)=>new Date(b.date_posted||b.first_seen_at||0)-new Date(a.date_posted||a.first_seen_at||0)).slice(0,30);
+}
+module.exports={rank,readCandidates,nationalPreview,GEO_COLUMNS,startIndex,indexFor,pages};

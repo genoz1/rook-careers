@@ -72,7 +72,7 @@ function publicPreview(job) {
   const money = n => n != null && n > 0 && n < 10000000 ? '$' + n.toLocaleString('en-US') : null;
   const salary = [money(min),money(max)].filter(Boolean).join('–') || null;
   const category = safe.industry_classification.labels.join(' · ');
-  const summary = `${title}${location ? ' in ' + location : ''}${category ? '. Industry: ' + category : ''}. Explore this opportunity and unlock the complete job description with your free trial.`;
+  const summary = `${title}${location ? ' in ' + location : ''}${category ? '. Industry: ' + category : ''}. Explore this protected opportunity and choose membership to unlock the complete job description.`;
   return {...safe,title,location,employment_type:employment,salary,summary};
 }
 module.exports={project,broadRole,publicPreview,maskedLines};

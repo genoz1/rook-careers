@@ -7,31 +7,32 @@ const root = path.join(__dirname, '..');
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 const obsoleteOffer = /3[- ]day free trial|free (?:trial )?for 3 days|3 days free|after (?:your )?3[- ]day trial|card required (?:at checkout|to start)|card-required/i;
 
-test('current public acquisition surfaces use the canonical no-card offer', () => {
+test('current public acquisition surfaces use the protected paid-access offer', () => {
   for (const file of [
     'public/index.html',
     'public/rook-login.html',
-    'public/rook-pricing.html',
+    'public/rook-pricing-current.html',
+    'public/rook-acquisition.html',
     'public/rook-trial-banner.js',
     'public/medreps-alternative.js',
     'public/rook-pretrial.js',
     'public/rook-browse.html',
-    'public/rook-dashboard.html',
-    'public/rook-dashboard-v7.html',
-    'public/rook-mobile-menu.html',
     'backend/routes/publicPages.js',
   ]) {
     const source = read(file);
     assert.doesNotMatch(source, obsoleteOffer, file);
-    assert.match(source, /Try ROOK Today for Free|24 hours of full access/i, file);
+    assert.match(source, /membership|protected|paid access|View Matches|VIEW JOBS NEAR ME|Browse protected/i, file);
   }
   assert.doesNotMatch(read('public/medreps-alternative.html'), obsoleteOffer);
 });
 
-test('pricing communicates the complete canonical progression without creating a Stripe trial', () => {
-  const pricing = read('public/rook-pricing.html');
-  assert.match(pricing, /24 hours of full access\. No credit card required\./i);
-  assert.match(pricing, /\$9\.99 for your first 30 paid days/i);
+test('pricing communicates exactly three paid choices without creating a Stripe trial', () => {
+  const pricing = read('public/rook-pricing-current.html');
+  assert.match(pricing, /2-Day Pass/i);
+  assert.match(pricing, /3-Month Pass/i);
+  assert.match(pricing, /\$5\.99/i);
+  assert.match(pricing, /\$39\.99/i);
+  assert.match(pricing, /\$9\.99/i);
   assert.match(pricing, /then \$19\.99\/month/i);
   assert.match(pricing, /Cancel anytime/i);
   assert.match(pricing, /rook-onboarding-v8\.html/);
@@ -70,12 +71,8 @@ test('non-subscriber email destinations enter V8 and keep unsubscribe handling i
   assert.match(pretrial, /alerts\/unsubscribe/);
 });
 
-test('shared expired-trial destination and approved offer remain intact', () => {
-  const page = read('public/rook-keep-access.html');
-  assert.match(page, /KEEP YOUR ROOK ACCESS/i);
-  assert.match(page, /First 30 paid days[^$]*\$9\.99/i);
-  assert.match(page, /Thereafter[^$]*\$19\.99\/month/i);
+test('shared locked destinations now use current checkout without trial routing', () => {
   for (const file of ['public/rook-access.js', 'public/rook-access-context.js', 'public/rook-auth.js']) {
-    assert.match(read(file), /rook-keep-access\.html/, file);
+    assert.match(read(file), /rook-checkout-v8\.html|rook-onboarding-v8\.html/, file);
   }
 });

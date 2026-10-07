@@ -103,10 +103,11 @@ test("friendlySourceLabel maps a genuine ATS/employer-site source to a customer-
   assert.strictEqual(fn("agency_aggregated"), "Staffing Agency");
 });
 
-console.log("\n=== REGRESSION: homepage hero trial CTA ===");
-test("the homepage hero uses the canonical no-card offer and opens V8 directly", () => {
+console.log("\n=== REGRESSION: homepage hero protected-preview CTA ===");
+test("the homepage hero uses the current outcome message and opens V8 directly", () => {
   const src = readPublic("index.html");
-  assert.ok(src.includes(">TRY ROOK TODAY FOR FREE<"), "must use the canonical CTA text");
+  assert.ok(src.includes("Medical Sales Jobs."), "must use the current outcome headline");
+  assert.ok(src.includes(">VIEW JOBS NEAR ME<"), "must use the protected-preview CTA text");
   assert.ok(src.includes('href="rook-onboarding-v8.html" class="btn btn-primary"'), "the primary CTA must point to current V8 onboarding");
   assert.ok(src.includes("Medical sales jobs only") && src.includes("Cancel anytime"), "supporting line must be present in the hero");
 });
@@ -115,11 +116,11 @@ test("the old 'Find My Matches' hero CTA text and its plain (login-tab) destinat
   assert.ok(!src.includes('href="rook-login.html" class="btn btn-primary">Find My Matches'), "the old CTA text/destination pairing must no longer exist in the hero");
 });
 
-console.log("\n=== REGRESSION: trial banner strip uses current acquisition ===");
-test("rook-trial-banner.js presents the canonical offer and opens V8", () => {
+console.log("\n=== REGRESSION: preview banner strip uses current acquisition ===");
+test("rook-trial-banner.js presents protected preview messaging and opens V8", () => {
   const src = fs.readFileSync(path.join(__dirname, "..", "public", "rook-trial-banner.js"), "utf8");
-  assert.ok(src.includes("Try ROOK Today for Free"));
-  assert.ok(src.includes("24 hours of full access. No credit card required."));
+  assert.ok(src.includes("Browse protected medical sales job matches"));
+  assert.ok(src.includes("View Matches"));
   assert.ok(src.includes("cta.href = 'rook-onboarding-v8.html';"));
   assert.ok(!src.includes("/api/stripe/trial-config"));
 });
@@ -136,13 +137,12 @@ test("existing Log In links (plain rook-login.html, no mode param) are unaffecte
   const src = readPublic("rook-login.html");
   assert.ok(src.includes('class="tab active" id="tabSignin"'), "sign-in must remain the default active tab when no mode param is present");
 });
-test("the Create Account panel uses the exact requested headline, description, and button copy", () => {
+test("the Create Account panel uses paid-access messaging without a trial", () => {
   const src = readPublic("rook-login.html");
-  assert.ok(src.includes("<h2>Try ROOK Today for Free</h2>"));
-  assert.ok(src.includes("Create your profile for 24 hours of full access. No credit card required."));
-  assert.ok(src.includes("Opportunities from hundreds of employer career sites"));
-  assert.ok(src.includes("24 hours of full ROOK access"));
-  assert.ok(src.includes(">CREATE ACCOUNT &amp; START FREE TRIAL<"));
+  assert.ok(src.includes("<h2>Create your ROOK account</h2>"));
+  assert.ok(src.includes("choose the paid access"));
+  assert.ok(src.includes("Protected previews before purchase"));
+  assert.ok(src.includes(">CREATE ACCOUNT<"));
 });
 test("no price, trial duration, or Stripe-related text was introduced into the signup panel", () => {
   const src = readPublic("rook-login.html");
