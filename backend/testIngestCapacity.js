@@ -47,9 +47,10 @@ process.env.SUPABASE_URL = "https://test.invalid";
 process.env.SUPABASE_SERVICE_ROLE_KEY = "fake";
 
 class Query {
-  constructor(tableName, tables) {
+  constructor(tableName, tables, operations) {
     this.tableName = tableName;
     this.tables = tables;
+    this.operations = operations;
     this.filters = [];
     this.kind = "select";
   }
@@ -99,6 +100,7 @@ class Query {
   then(resolve, reject) {
     return Promise.resolve()
       .then(() => {
+        this.operations.push({ table: this.tableName, kind: this.kind, payload: structuredClone(this.payload) });
         if (!this.tables[this.tableName]) {
           return { data: null, error: { message: `relation "${this.tableName}" does not exist` } };
         }
@@ -123,10 +125,11 @@ class Query {
 }
 
 function makeDb(tables) {
-  return { from: (name) => new Query(name, tables) };
+  const operations = [];
+  return { from: (name) => new Query(name, tables, operations), operations };
 }
 
-function freshIngest(tables, { geocodeImpl, analyzeJobImpl, embeddingImpl } = {}) {
+function freshIngest(tables, { geocodeImpl, analyzeJobImpl, embeddingImpl, deterministicAnalysisImpl } = {}) {
   const db = makeDb(tables);
   require.cache[require.resolve("@supabase/supabase-js")] = { exports: { createClient: () => db } };
 
@@ -146,11 +149,35 @@ function freshIngest(tables, { geocodeImpl, analyzeJobImpl, embeddingImpl } = {}
     exports: { analyzeJob: analyzeJobImpl || (async () => ({ product_categories: ["Medical Devices"], required_industries: [], sales_motion: ["field"] })) },
   };
   const embeddingsPath = require.resolve("./ai/embeddings");
-  require.cache[embeddingsPath] = { exports: { generateEmbedding: embeddingImpl || (async () => [0.1, 0.2, 0.3]) } };
+  let embeddingCallCount = 0;
+  require.cache[embeddingsPath] = { exports: { generateEmbedding: async (...args) => {
+    embeddingCallCount++;
+    return embeddingImpl ? embeddingImpl(...args) : [0.1, 0.2, 0.3];
+  } } };
+
+  const deterministicPath = require.resolve("./deterministicJobAnalysis");
+  delete require.cache[deterministicPath];
+  const realDeterministic = require(deterministicPath);
+  let deterministicAnalysisCallCount = 0;
+  require.cache[deterministicPath] = { exports: {
+    ...realDeterministic,
+    deterministicJobAnalysis: (...args) => {
+      deterministicAnalysisCallCount++;
+      return deterministicAnalysisImpl
+        ? deterministicAnalysisImpl(...args)
+        : realDeterministic.deterministicJobAnalysis(...args);
+    },
+  } };
 
   delete require.cache[require.resolve("./ingest")];
   const ingest = requireWithUnreffedIntervals(() => require("./ingest"));
-  return { ingest, getGeocodeCallCount: () => geocodeCallCount };
+  return {
+    ingest,
+    getGeocodeCallCount: () => geocodeCallCount,
+    getEmbeddingCallCount: () => embeddingCallCount,
+    getDeterministicAnalysisCallCount: () => deterministicAnalysisCallCount,
+    getOperations: () => db.operations,
+  };
 }
 
 function greenhouseFetchStub(jobCount) {
@@ -179,6 +206,157 @@ const baseEmployer = {
   active: true,
   last_checked_at: null,
 };
+
+function existingGreenhouseJob(overrides = {}) {
+  return {
+    id: "existing-job",
+    employer_id: baseEmployer.id,
+    source_job_id: "1000",
+    source_type: "greenhouse",
+    source_url: "https://boards.greenhouse.io/testco/jobs/1000",
+    application_url: "https://boards.greenhouse.io/testco/jobs/1000",
+    title_original: "Territory Sales Manager 0",
+    company_name: baseEmployer.company_name,
+    description_html: "<p>Great sales role</p>",
+    description_text: "Great sales role",
+    location_raw: "Dallas, TX",
+    date_posted: "2026-09-01",
+    status: "active",
+    source_verified: true,
+    ai_analysis: { analysis_source: "existing" },
+    job_embedding: [0.9, 0.8],
+    job_lat: 32.78,
+    job_lng: -96.8,
+    state: "Texas",
+    location_evidence: {
+      version: require("./jobLocationScope").VERSION,
+      status: "validated",
+      source_location: "Dallas, TX",
+      source_title: "Territory Sales Manager 0",
+      source_description_hash: require("./jobLocationScope").descriptionHash("Great sales role"),
+      source_country_code: "US",
+      checked_at: new Date().toISOString(),
+      geocoded_location: "Dallas, TX",
+      scope: { kind: "local", reason: "explicit_city_state" },
+    },
+    first_seen_at: "2026-08-01T00:00:00.000Z",
+    last_seen_at: "2026-09-01T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Incremental source comparison
+// ---------------------------------------------------------------------------
+test("ingestEmployer: unchanged job receives only freshness work and skips geocoding, analysis, and embeddings", async () => {
+  const job = existingGreenhouseJob();
+  const tables = { jobs: [job], employers: [{ ...baseEmployer }] };
+  const counters = freshIngest(tables);
+  const oldLastSeen = job.last_seen_at;
+  const realFetch = global.fetch;
+  global.fetch = greenhouseFetchStub(1);
+  let measured;
+  try {
+    measured = await require("./ingestRunMetrics").measure(() => counters.ingest.ingestEmployer(tables.employers[0]));
+  } finally {
+    global.fetch = realFetch;
+  }
+
+  assert.equal(counters.getGeocodeCallCount(), 0);
+  assert.equal(counters.getDeterministicAnalysisCallCount(), 0);
+  assert.equal(counters.getEmbeddingCallCount(), 0);
+  assert.equal(measured.metrics.unchanged, 1);
+  assert.equal(measured.metrics.updated, 0);
+  assert.notEqual(tables.jobs[0].last_seen_at, oldLastSeen);
+  assert.equal(tables.jobs[0].first_seen_at, "2026-08-01T00:00:00.000Z");
+  assert.deepEqual(tables.jobs[0].ai_analysis, { analysis_source: "existing" });
+  assert.deepEqual(tables.jobs[0].job_embedding, [0.9, 0.8]);
+});
+
+test("ingestEmployer: unchanged jobs batch freshness writes instead of issuing per-job upserts", async () => {
+  const jobs = Array.from({ length: 501 }, (_, index) => {
+    const sourceId = String(1000 + index);
+    const title = `Territory Sales Manager ${index}`;
+    return existingGreenhouseJob({
+      id: `existing-${sourceId}`,
+      source_job_id: sourceId,
+      source_url: `https://boards.greenhouse.io/testco/jobs/${sourceId}`,
+      application_url: `https://boards.greenhouse.io/testco/jobs/${sourceId}`,
+      title_original: title,
+      location_evidence: { ...existingGreenhouseJob().location_evidence, source_title: title },
+    });
+  });
+  const tables = { jobs, employers: [{ ...baseEmployer }] };
+  const counters = freshIngest(tables);
+  const realFetch = global.fetch;
+  global.fetch = greenhouseFetchStub(501);
+  try { await counters.ingest.ingestEmployer(tables.employers[0]); } finally { global.fetch = realFetch; }
+
+  const jobWrites = counters.getOperations().filter((operation) => operation.table === "jobs" && operation.kind !== "select");
+  assert.equal(jobWrites.filter((operation) => operation.kind === "update" && Object.keys(operation.payload).length === 1 && operation.payload.last_seen_at).length, 2);
+  assert.equal(jobWrites.filter((operation) => ["insert", "upsert"].includes(operation.kind)).length, 0);
+  assert.equal(counters.getGeocodeCallCount(), 0);
+  assert.equal(counters.getDeterministicAnalysisCallCount(), 0);
+  assert.equal(counters.getEmbeddingCallCount(), 0);
+});
+
+test("ingestEmployer: materially changed existing job follows enrichment path", async () => {
+  const original = existingGreenhouseJob();
+  const job = existingGreenhouseJob({
+    description_html: "<p>Old sales role</p>",
+    description_text: "Old sales role",
+    location_evidence: {
+      ...original.location_evidence,
+      source_description_hash: require("./jobLocationScope").descriptionHash("Old sales role"),
+    },
+  });
+  const tables = { jobs: [job], employers: [{ ...baseEmployer }] };
+  const counters = freshIngest(tables);
+  const realFetch = global.fetch;
+  global.fetch = greenhouseFetchStub(1);
+  try { await counters.ingest.ingestEmployer(tables.employers[0]); } finally { global.fetch = realFetch; }
+
+  assert.equal(counters.getGeocodeCallCount(), 1);
+  assert.equal(counters.getDeterministicAnalysisCallCount(), 1);
+  assert.equal(counters.getEmbeddingCallCount(), 1);
+  assert.equal(tables.jobs[0].description_text, "Great sales role");
+});
+
+test("ingestEmployer: new job follows normal enrichment path", async () => {
+  const tables = { jobs: [], employers: [{ ...baseEmployer }] };
+  const counters = freshIngest(tables);
+  const realFetch = global.fetch;
+  global.fetch = greenhouseFetchStub(1);
+  try { await counters.ingest.ingestEmployer(tables.employers[0]); } finally { global.fetch = realFetch; }
+
+  assert.equal(counters.getGeocodeCallCount(), 1);
+  assert.equal(counters.getDeterministicAnalysisCallCount(), 1);
+  assert.equal(counters.getEmbeddingCallCount(), 1);
+  assert.equal(tables.jobs.length, 1);
+});
+
+test("ingestEmployer: incomplete snapshot refreshes present jobs but never closes disappeared jobs", async () => {
+  const current = existingGreenhouseJob();
+  const stale = existingGreenhouseJob({ id: "stale-job", source_job_id: "999", title_original: "Territory Sales Manager stale" });
+  const tables = { jobs: [current, stale], employers: [{ ...baseEmployer }] };
+  const { ingest } = freshIngest(tables);
+  const jobs = [{
+    id: 1000,
+    title: "Territory Sales Manager 0",
+    absolute_url: "https://boards.greenhouse.io/testco/jobs/1000",
+    location: { name: "Dallas, TX" },
+    content: "<p>Great sales role</p>",
+    updated_at: "2026-09-01T00:00:00Z",
+  }];
+  jobs.incompleteSnapshot = true;
+  const realFetch = global.fetch;
+  global.fetch = async () => ({ ok: true, json: async () => ({ jobs }) });
+  let result;
+  try { result = await ingest.ingestEmployer(tables.employers[0]); } finally { global.fetch = realFetch; }
+
+  assert.equal(result.status, "partial");
+  assert.equal(tables.jobs.find((row) => row.source_job_id === "999").status, "active");
+});
 
 // ---------------------------------------------------------------------------
 // Geocode cap
