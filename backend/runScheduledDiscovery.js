@@ -16,8 +16,11 @@ async function safeStage(name, operation) {
 async function run() {
   const day = Math.floor(Date.now() / 86_400_000);
   const results = {};
+  // Rotate three of the six discovery categories each day so every market
+  // (medical, device, diagnostics, pharma/biotech, veterinary, animal health)
+  // receives coverage within two UTC days instead of three.
   results.public_job_activity = await safeStage('public_job_activity', () =>
-    runPublic(['--apply', '--limit', '12', '--query-limit', '2', '--ingest-enrolled']));
+    runPublic(['--apply', '--limit', '12', '--query-limit', '3', '--ingest-enrolled']));
   results.company_seed = await safeStage('company_seed', () =>
     runCompanies(['--apply', '--limit', '4', '--offset', String((day * 4) % 400), '--ingest-enrolled']));
   results.retries = await safeStage('retries', () =>

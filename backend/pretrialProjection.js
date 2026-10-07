@@ -1,7 +1,7 @@
 // Only this allowlist may cross the locked job boundary. Source records and
 // matching remain unchanged; no title, excerpt or free-form AI text is copied.
 const {classify} = require('../public/rook-job-classification');
-const {freshness, generalizedRole, safeSpecialty} = require('./maskedPresentation');
+const {freshness, generalizedRole, safeSpecialty, safeLocationLabel} = require('./maskedPresentation');
 const {randomInt} = require('node:crypto');
 const number = value => typeof value === 'number' && Number.isFinite(value) ? value : null;
 const score = value => number(value) == null ? null : Math.max(0, Math.min(100, value));
@@ -27,20 +27,28 @@ function broadRole(job) {
     const role=roles[String(value || '').trim().toLowerCase()];
     if(role) return role;
   }
-  return null;
+  // Never return a blank role to locked surfaces — fall back to generalized
+  // presentation so anonymous/free dashboards stay useful without leaking.
+  return generalizedRole(job);
 }
 function project(job, index=0, options={}) {
   const territory = {regional:'Regional Territory',national:'National Territory',remote:'Remote / Territory Role'};
+  const locationLabel = safeLocationLabel(job);
+  const territoryType = locationLabel ||
+    (job.remote_status === 'remote' ? territory.remote : territory[String(job.territory || '').toLowerCase()] || null);
+  // Locked surfaces always receive a useful generalized role and validated
+  // geography. Synthetic blur fragments remain dashboard-only.
   return {
     id:`locked-${Number.isInteger(index) && index>=0 ? index : 0}`,
     subscription_required:true,
     industry_classification:classify(job),
     geography_kind:['local','remote_us','national_us','territory'].includes(job.geographic_eligibility?.kind) ? job.geographic_eligibility.kind : null,
-    role_type:options.dashboard ? generalizedRole(job) : broadRole(job),
+    role_type:generalizedRole(job),
+    location_label:locationLabel,
     ...(options.dashboard ? {specialty_label:safeSpecialty(job)} : {}),
     ...(options.dashboard ? {masked_lines:maskedLines()} : {}),
     distance_miles:number(job.distance_miles) == null || job.distance_miles<0 ? null : Math.round(job.distance_miles),
-    territory_type:job.remote_status === 'remote' ? territory.remote : territory[String(job.territory || '').toLowerCase()] || null,
+    territory_type:territoryType,
     freshness_label:freshness(job,Date.now(),!!options.dashboard),
     match:{overall_score:score(job.match?.overall_score),preference_fit:score(job.match?.preference_fit),
       candidate_fit:score(job.match?.candidate_fit),excellent_match:job.match?.excellent_match===true,
@@ -60,8 +68,10 @@ function publicPreview(job) {
   const state = stateValue.length === 2 ? stateValue : zipcodes.states.full[stateValue];
   const place = Object.values(zipcodes.codes).find(p => p.city.toLowerCase() === city.toLowerCase() && p.state === state);
   const location = place ? `${place.city}, ${place.state}` : null;
-  // Only validated geography may augment the shared title vocabulary.
-  const title = require('./maskedPresentation').maskedTitle({...job, city:place?.city || '', state:place?.state || '', location_raw:location || ''});
+  // Public SEO/detail previews use the same generalized role contract as the
+  // locked dashboard so distinctive product/brand title fragments cannot be
+  // Googled from free pages. Validated city/state remain visible.
+  const title = generalizedRole({...job, city:place?.city || '', state:place?.state || '', location_raw:location || ''});
   const employment = {'full-time':'Full-time','full time':'Full-time','part-time':'Part-time','part time':'Part-time',contract:'Contract',temporary:'Temporary',internship:'Internship','per diem':'Per diem'}[String(job.employment_type || '').toLowerCase()] || null;
   let min = number(job.salary_min), max = number(job.salary_max);
   if (min == null && max == null) {

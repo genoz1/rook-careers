@@ -77,7 +77,7 @@
     const badge=score(job)>=75?'STRONG MATCH':'GOOD MATCH';
     const labels=(job.industry_classification?.labels||[]).join(' / ')||'Sales';
     const place=revealed?(job.location_raw||[job.city,job.state].filter(Boolean).join(', ')||'Location varies'):
-      (job.territory_type||(['remote_us','national_us','territory'].includes(job.geography_kind)?'Remote / territory':'Opportunity near you'));
+      (job.location_label||job.territory_type||(['remote_us','national_us','territory'].includes(job.geography_kind)?'Remote / territory':(Number.isFinite(job.distance_miles)?`${job.distance_miles} mi away`:'Location available after unlock')));
     const distance=Number.isFinite(job.distance_miles)?' · '+job.distance_miles+' mi':'';
     const employer=revealed?job.company_name||'Employer not listed':job.masked_lines?.employer?.join(' ')||'Company information';
     const title=revealed?job.title_original||'Sales opportunity':job.role_type||'Sales opportunity';
@@ -140,7 +140,7 @@
         await load();return;
       }catch(e){sessionStorage.removeItem('rook_v8_active');}
     }
-    $('jobGrid').innerHTML=Array.from({length:9},(_,i)=>`<article class="job-card masked" aria-hidden="true"><div class="card-top"><span class="badge ${i%2?'good':''}">${i%2?'GOOD':'STRONG'} MATCH</span></div><div class="employer-line"><div class="company">${i%2?'Caralume':'Beredicalis'}</div></div><h2>Territory Sales Opportunity</h2><div class="card-meta"><span>▣ &nbsp;Field Sales</span><span>⌖ &nbsp;Opportunity near you</span><span>▥ &nbsp;<span class="category">Sales</span></span></div></article>`).join('');
+    $('jobGrid').innerHTML=Array.from({length:9},(_,i)=>`<article class="job-card masked" aria-hidden="true"><div class="card-top"><span class="badge ${i%2?'good':''}">${i%2?'GOOD':'STRONG'} MATCH</span></div><div class="employer-line"><div class="company">${i%2?'Caralume':'Beredicalis'}</div></div><h2>Medical Sales Representative</h2><div class="card-meta"><span>▣ &nbsp;Field Sales</span><span>⌖ &nbsp;Loading location</span><span>▥ &nbsp;<span class="category">Sales</span></span></div></article>`).join('');
     $('overlay').hidden=false;track('v8_overlay_displayed');
   }
   init();

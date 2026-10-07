@@ -29,28 +29,39 @@ const generalizedCases = [
  ['Executive Oncology Sales Representative – Head & Neck (Denver-Omaha) – Johnson & Johnson Innovative Medicine','Executive Oncology Sales Representative'],
  ['Immunology Sales Specialist, Dermatology (Boise, ID) – Johnson & Johnson Innovative Medicine','Immunology Sales Specialist'],
  ['Area Sales Director, Molecular Diagnostics, QIAstat (East Region)','Area Sales Director'],
- ['Territory Manager, CardioMEMS – Western Region','Territory Manager'],
+ ['Territory Manager, CardioMEMS – Western Region','Medical Device Territory Manager'],
  ['Veterinary Regional Sales Manager – Charlotte/Raleigh, NC (Royal Canin)','Veterinary Regional Sales Manager'],
  ['Oncology Sales Representative','Oncology Sales Representative'],
  ['Clinical Account Executive – Portland, OR','Clinical Account Executive'],
- ['Account Executive II – North Orlando – [Hidden Health]','Account Executive II'],
+ ['Account Executive II – North Orlando – [Hidden Health]','Medical Device Account Executive II'],
  ['Veterinary District Sales Manager – Florida West – [Royal Canin]','Veterinary District Sales Manager'],
  ['Clinical Sales Specialist, Surgical Pain – Cleveland, OH','Clinical Sales Specialist'],
- ['Territory Manager – BrandX Pump – Orlando','Territory Manager'],
+ ['Territory Manager – BrandX Pump – Orlando','Medical Device Territory Manager'],
  ['Oncology Account Executive – [Hidden Pharma] – Central Florida','Oncology Account Executive'],
  ['Area Sales Director, Molecular Diagnostics, QIAstat (East Region)','Area Sales Director'],
- ['Acme Oncology Corp – Account Executive – Tampa','Account Executive'],
- ['Req 882401 | Territory Manager – Orlando','Territory Manager'],
- ['BrandZ HyperPulse Advisor – Eastern Florida','Medical Device Sales Role'],
- ['BrandX CardioFlow Account Manager – Orlando','Account Manager'],
+ ['Acme Oncology Corp – Account Executive – Tampa','Medical Device Account Executive'],
+ ['Req 882401 | Territory Manager – Orlando','Medical Device Territory Manager'],
+ ['BrandZ HyperPulse Advisor – Eastern Florida','Medical Device Territory Manager'],
+ ['BrandX CardioFlow Account Manager – Orlando','Medical Device Account Manager'],
  ['Acme Lumina Regional Account Manager – Tampa','Regional Account Manager'],
- ['Medical Device Sales Specialist – North Orlando','Sales Specialist'],
+ ['Medical Device Sales Specialist – North Orlando','Medical Device Sales Specialist'],
+ ['Business Development Manager – Orlando','Business Development Manager'],
 ];
 for(const [title,expected] of generalizedCases) {
  const result=generalizedRole({title_original:title,ai_analysis:{product_categories:['Medical Device']}});
  assert.equal(result,expected,title);
  assert(!/Hidden Health|Royal Canin|Cleveland|Orlando|Tampa|Florida|QIAstat|BrandX|BrandZ|882401|Acme|Pulse|East Region/i.test(result),title);
 }
+const {safeLocationLabel}=require('./maskedPresentation');
+assert.equal(safeLocationLabel({city:'Orlando',state:'FL',location_raw:'Orlando, FL'}),'Orlando, FL');
+assert.equal(safeLocationLabel({city:'Tampa',state:'FL',remote_status:'remote'}),'Remote – FL');
+const {project}=require('./pretrialProjection');
+const projected=project({title_original:'Territory Manager, CardioMEMS',city:'Jacksonville',state:'FL',location_raw:'Jacksonville, FL',ai_analysis:{product_categories:['Medical Device']}},0,{dashboard:true});
+assert.equal(projected.role_type,'Medical Device Territory Manager');
+assert.equal(projected.location_label,'Jacksonville, FL');
+assert.equal(projected.territory_type,'Jacksonville, FL');
+assert.equal(projected.company_name,undefined);
+assert.equal(projected.title_original,undefined);
 assert.equal(safeSpecialty({ai_analysis:{product_categories:['Surgical','BrandX Pump']}}),'Surgical');
 assert.equal(safeSpecialty({ai_analysis:{product_categories:['BrandX Pump']}}),null);
 assert.equal(freshness({date_posted:'2026-09-19'},Date.parse('2026-09-19T16:00:00Z'),true),'Posted today');

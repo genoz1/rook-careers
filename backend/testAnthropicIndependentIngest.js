@@ -29,11 +29,13 @@ test('obvious non-sales jobs remain excluded before enrichment', () => {
   }
 });
 
-test('ambiguous relevant titles are retained with enrichment safely deferred', () => {
-  for (const title of ['Clinical Specialist', 'District Manager']) {
-    assert.equal(titleLooksRelevant(title), true, title);
-    assert.equal(deterministicJobAnalysis(title), null, title);
-  }
+test('ambiguous clinical titles are rejected; commercial titles without sales proof stay out of live inventory', () => {
+  assert.equal(titleLooksRelevant('Clinical Specialist'), false);
+  assert.equal(deterministicJobAnalysis('Clinical Specialist'), null);
+  // District Manager is commercial-but-ambiguous: reject without description
+  // evidence so hospital/ops postings cannot enter the catalog by title alone.
+  assert.equal(titleLooksRelevant('District Manager'), false);
+  assert.equal(deterministicJobAnalysis('District Manager'), null);
 });
 
 test('ingestion has no Anthropic analysis dependency or failure path', () => {

@@ -16,7 +16,7 @@
     const facts=(isV7()?[...labels,job.specialty_label]:[job.role_type,...labels]).filter((value,index,all)=>value && all.indexOf(value)===index);
     const role=isV7()?job.role_type || '':'';
     const badge=m.excellent_match ? 'Excellent Match' : m.recommendation;
-    const geography=job.territory_type || (Number.isFinite(job.distance_miles) ? `${job.distance_miles} miles away` : '');
+    const geography=job.location_label || job.territory_type || (Number.isFinite(job.distance_miles) ? `${job.distance_miles} miles away` : '');
     if(isV7()) {
       const safeLabels=(job.industry_classification?.labels || []).filter((value,index,all)=>value && all.indexOf(value)===index);
       const cardFacts=[...safeLabels,job.specialty_label].filter((value,index,all)=>value && all.indexOf(value)===index);

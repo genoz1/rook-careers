@@ -2,7 +2,7 @@ const test=require('node:test');const assert=require('node:assert/strict');const
 const {project}=require('./pretrialProjection');const {hasFullAccess}=require('./matching');
 const {preview}=require('./v7Preview');const {redactForNonSubscriber,redactForAnonymous}=require('./redaction');
 const canary={id:'private-job-id',title_original:'Unique Oncology Account Manager BrandXYZ',title_normalized:'Unique Title',company_name:'HiddenEmployer',source_job_id:'ReqSecret8842',source_url:'https://secret.example/source',application_url:'https://secret.example/apply',description_text:'Confidential job description and BrandXYZ',description_html:'<p>HiddenEmployer</p>',location_raw:'DistinctCity, FL',city:'DistinctCity',territory:'Unique District Wording',product_type:'BrandXYZ',employer_note:'HiddenEmployer employment history',new_sensitive_field:'future secret',ai_analysis:{product_categories:['Pharmaceutical'],unrecognized:'secret AI text'},category:'Account Management',distance_miles:48,match:{overall_score:100,preference_fit:100,candidate_fit:null,recommendation:'Strong Match',reasons:['HiddenEmployer'],concerns:['DistinctCity'],categories:{secret:'BrandXYZ'}}};
-const permitted=['id','subscription_required','industry_classification','role_type','distance_miles','territory_type','freshness_label','geography_kind','match'].sort();
+const permitted=['id','subscription_required','industry_classification','role_type','distance_miles','territory_type','freshness_label','geography_kind','match','location_label'].sort();
 const permittedDashboard=[...permitted,'specialty_label','masked_lines'].sort();
 test('authenticated entitlement takes precedence over a retained anonymous preview',async()=>{
  const vm=require('node:vm');
@@ -14,11 +14,14 @@ test('authenticated entitlement takes precedence over a retained anonymous previ
 });
 test('all locked projectors omit arbitrary source fields and nested text without mutating source',()=>{
  const original=JSON.stringify(canary);
- for(const fn of [project,redactForNonSubscriber]){
-  const result=fn(canary,2);assert.deepEqual(Object.keys(result).sort(),permitted);assert.equal(result.id,'locked-2');
-  assert(!/HiddenEmployer|BrandXYZ|DistinctCity|Unique|ReqSecret|secret\.example|private-job-id|future secret/.test(JSON.stringify(result)));
-  assert.equal(result.match.preference_fit,100);assert.equal(result.match.candidate_fit,null);assert.equal(result.role_type,'Account Management');assert.equal(result.territory_type,null);
- }
+ const base=project(canary,2);
+ assert.deepEqual(Object.keys(base).sort(),permitted);assert.equal(base.id,'locked-2');
+ assert(!/HiddenEmployer|BrandXYZ|DistinctCity|Unique|ReqSecret|secret\.example|private-job-id|future secret/.test(JSON.stringify(base)));
+ assert.equal(base.match.preference_fit,100);assert.equal(base.match.candidate_fit,null);
+ assert.equal(base.role_type,'Oncology Account Manager');assert.equal(base.location_label,null);assert.equal(base.territory_type,null);
+ const locked=redactForNonSubscriber(canary,2);
+ assert.deepEqual(Object.keys(locked).sort(),permittedDashboard);assert.equal(locked.role_type,'Oncology Account Manager');
+ assert.deepEqual(Object.keys(locked.masked_lines).sort(),['employer','title']);
  const dashboard=preview(canary,2);assert.deepEqual(Object.keys(dashboard).sort(),permittedDashboard);assert.equal(dashboard.role_type,'Oncology Account Manager');
  assert.deepEqual(Object.keys(dashboard.masked_lines).sort(),['employer','title']);
  for(const words of Object.values(dashboard.masked_lines))assert(words.length>=2&&words.length<=3&&words.every(word=>/^[a-z]{4,9}$/.test(word)));
@@ -30,11 +33,11 @@ test('all locked projectors omit arbitrary source fields and nested text without
  assert.equal(project({...canary,geographic_eligibility:{kind:'territory'}}).geography_kind,'territory');
  assert.equal(JSON.stringify(canary),original);assert.equal(redactForAnonymous(canary).match,undefined);
 });
-test('unknown structured attributes never become fabricated industry, role or territory',()=>{
+test('unknown structured attributes never become fabricated industry or territory identifiers',()=>{
  const r=project({category:'random unknown words',territory:'Headquarters in New York',industry:'made up industry',distance_miles:NaN,match:{preference_fit:Infinity}});
- assert.deepEqual(r.industry_classification.labels,[]);assert.equal(r.role_type,null);assert.equal(r.territory_type,null);assert.equal(r.distance_miles,null);assert.equal(r.match.preference_fit,null);
+ assert.deepEqual(r.industry_classification.labels,[]);assert.equal(r.role_type,'Medical Sales Representative');assert.equal(r.territory_type,null);assert.equal(r.distance_miles,null);assert.equal(r.match.preference_fit,null);
  const dashboard=preview({category:'random unknown words',territory:'Headquarters in New York',industry:'made up industry',distance_miles:NaN,match:{preference_fit:Infinity}});
- assert.equal(dashboard.role_type,'Sales Opportunity');assert.equal(dashboard.specialty_label,null);
+ assert.equal(dashboard.role_type,'Medical Sales Representative');assert.equal(dashboard.specialty_label,null);
 });
 test('all required access states retain the same originals only for valid entitlements',()=>{
  for(const [name,profile,full] of [['anonymous',null,false],['pretrial',{},false],['returning',{},false],['abandoned',{subscription_status:'incomplete'},false],['trialing',{subscription_status:'trialing',trial_ends_at:'2099-01-01'},true],['active',{subscription_status:'active'},true],['canceled',{subscription_status:'cancelled'},false],['expired',{subscription_status:'trialing',trial_ends_at:'2020-01-01'},false]]){
@@ -48,7 +51,6 @@ if(process.env.ROOK_SECURITY_SAMPLES) test('four targeted real production jobs w
   assert.equal(JSON.stringify(job),before);assert.equal(hasFullAccess({subscription_status:'trialing'}),true);assert.equal(job.title_original,JSON.parse(before).title_original);
  }
 });
-
 test('candidate profile updates cannot grant access, reset trial eligibility or reassign ownership',()=>{
  const write=require('./profileWriteBoundary');
  const result=write({name:'Candidate',home_lat:28,desired_industries:['Diagnostics'],resume_structured:{employers:[]},subscription_status:'active',trial_started_at:null,trial_ends_at:'2099-01-01',subscription_cancel_at:null,stripe_customer_id:'another_customer',id:'another_profile',user_id:'another_user',new_admin_flag:true});

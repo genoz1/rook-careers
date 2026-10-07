@@ -23,7 +23,14 @@ const originalInterval=global.setInterval;global.setInterval=(...a)=>originalInt
 const app=express();app.use(express.json());app.use('/api',require('./routes/jobs'));app.use('/api',require('./routes/applications'));app.use('/api',require('./routes/profile'));app.use('/api',require('./routes/careerIntelligence'));app.use('/api',require('./routes/applicationPackage'));app.use('/',require('./routes/publicPages'));
 (async()=>{const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));const origin=`http://127.0.0.1:${server.address().port}`;
  const call=(url,auth=true,method='GET',body)=>fetch(origin+url,{method,headers:{...(auth?{Authorization:'Bearer valid'}:{}),...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})});
- const noSecrets=data=>assert(!/HiddenEmployer|BrandXYZ|secret-requisition|secret\.example|Unique Specialty|Boston/.test(typeof data==='string'?data:JSON.stringify(data)));
+ // City/state geography is intentionally visible while locked. Employer,
+ // exact brand/product titles, and source URLs must never leak.
+ const noSecrets=data=>assert(!/HiddenEmployer|BrandXYZ|secret-requisition|secret\.example|Unique Specialty/.test(typeof data==='string'?data:JSON.stringify(data)));
+ const assertLockedGeo=payload=>{
+  const text=typeof payload==='string'?payload:JSON.stringify(payload);
+  noSecrets(text);
+  assert(/Boston,\s*MA/.test(text),'locked surfaces must keep validated city/state');
+ };
  try{
   for(const [state,status,end] of [['pretrial',null],['returning',null],['abandoned','incomplete'],['canceled','cancelled'],['expired','trialing','2020-01-01'],['missing-profile',null]]){
    profile=state==='missing-profile'?null:{id:'candidate',user_id:'user',subscription_status:status,trial_ends_at:end};
@@ -33,9 +40,9 @@ const app=express();app.use(express.json());app.use('/api',require('./routes/job
    const apps=await call('/api/applications');assert.equal(apps.status,state==='missing-profile'?404:403);noSecrets(await apps.json());
    const keyword=await call('/api/jobs?keyword=HiddenEmployer');assert.equal(keyword.status,403);
   }
-  const anonymous=await call('/api/jobs/'+job.id,false);assert.equal(anonymous.status,200);noSecrets(await anonymous.json());
-  profile=null;const missing=await call('/api/jobs');assert.equal(missing.status,200);noSecrets(await missing.json());
-  for(const path of ['/jobs','/jobs/'+job.id]){const r=await call(path,false);assert.equal(r.status,200);const html=await r.text();if(path==='/jobs') noSecrets(html);else {assert(!/HiddenEmployer|BrandXYZ|secret-requisition|secret\.example|Unique Specialty/.test(html));assert(html.includes('Boston, MA'));assert(html.includes('Specialty Manager'));}}
+  const anonymous=await call('/api/jobs/'+job.id,false);assert.equal(anonymous.status,200);assertLockedGeo(await anonymous.json());
+  profile=null;const missing=await call('/api/jobs');assert.equal(missing.status,200);assertLockedGeo(await missing.json());
+  for(const path of ['/jobs','/jobs/'+job.id]){const r=await call(path,false);assert.equal(r.status,200);const html=await r.text();if(path==='/jobs') assertLockedGeo(html);else {assert(!/HiddenEmployer|BrandXYZ|secret-requisition|secret\.example|Unique Specialty/.test(html));assert(html.includes('Boston, MA'));assert(html.includes('Specialty Manager'));}}
   for(const state of ['trialing','active']){
    profile={id:'candidate',user_id:'user',subscription_status:state,trial_ends_at:'2099-01-01'};
    const r=await call('/api/jobs/'+job.id);assert.equal(r.status,200);const full=await r.json();assert.equal(full.company_name,job.company_name);assert.equal(full.title_original,job.title_original);assert.equal(full.source_url,job.source_url);

@@ -41,6 +41,8 @@ async function fetchSmartRecruitersJobs(companyIdentifier) {
   const pageSize = 100;
   let offset = 0;
   let totalFound = Infinity;
+  let incompleteSnapshot = false;
+  const snapshotWarnings = [];
 
   while (offset < totalFound) {
     const res = await fetchWithTimeout(`${listUrl}?limit=${pageSize}&offset=${offset}`);
@@ -53,29 +55,48 @@ async function fetchSmartRecruitersJobs(companyIdentifier) {
     offset += pageSize;
     console.log(`    ...listed ${allPostings.length} / ${totalFound} postings`);
 
-    if (offset > 2000) break; // safety cap, same as the Workday adapter
+    if (offset > 2000) {
+      // Safety cap: never treat a truncated listing as authoritative empties.
+      incompleteSnapshot = true;
+      snapshotWarnings.push('Listing safety cap reached before totalFound');
+      break;
+    }
     if (!data.content || data.content.length === 0) break;
+  }
+  if (Number.isFinite(totalFound) && allPostings.length < totalFound) {
+    incompleteSnapshot = true;
+    snapshotWarnings.push(`Listed ${allPostings.length} of ${totalFound} postings`);
   }
 
   const relevantPostings = allPostings.filter((p) => titleLooksRelevant(p.name || "", p));
   console.log(`    ${relevantPostings.length} / ${allPostings.length} titles look relevant — fetching their descriptions...`);
 
   const detailed = [];
+  let detailFailures = 0;
   for (let i = 0; i < relevantPostings.length; i++) {
     const posting = relevantPostings[i];
     try {
       const detailRes = await fetchWithTimeout(`${BASE_URL}/${companyIdentifier}/postings/${posting.id}`);
-      if (!detailRes.ok) continue;
+      if (!detailRes.ok) { detailFailures += 1; continue; }
       const detail = await detailRes.json();
       detailed.push({ ...posting, detail });
     } catch {
+      detailFailures += 1;
       continue;
     }
     if ((i + 1) % 10 === 0 || i === relevantPostings.length - 1) {
       console.log(`    ...fetched details for ${i + 1} / ${relevantPostings.length}`);
     }
   }
+  if (detailFailures > 0) {
+    incompleteSnapshot = true;
+    snapshotWarnings.push(`${detailFailures} detail fetch(es) failed`);
+  }
 
+  if (incompleteSnapshot) {
+    detailed.incompleteSnapshot = true;
+    detailed.snapshotWarnings = snapshotWarnings;
+  }
   return detailed;
 }
 

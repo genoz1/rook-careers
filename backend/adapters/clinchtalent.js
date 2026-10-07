@@ -85,6 +85,9 @@ async function fetchClinchTalentJobs(hostname) {
   const base = `https://${hostname}`;
   const rawJobs = [];
   const maxPages = 20; // safety cap — a 500-posting employer over ~30/page
+  let incompleteSnapshot = false;
+  const snapshotWarnings = [];
+  let lastPageFull = false;
 
   for (let page = 1; page <= maxPages; page++) {
     const url = page === 1 ? `${base}/jobs/search` : `${base}/jobs/search?page=${page}`;
@@ -96,6 +99,8 @@ async function fetchClinchTalentJobs(hostname) {
       // already collected — but the first page failing this way means
       // nothing was collected at all, same as a non-ok response below.
       if (page === 1) throw new Error(`ClinchTalent fetch failed for "${hostname}": ${err.message}`);
+      incompleteSnapshot = true;
+      snapshotWarnings.push(`Page ${page} fetch failed: ${err.message}`);
       break;
     }
     if (!res.ok) {
@@ -109,6 +114,8 @@ async function fetchClinchTalentJobs(hostname) {
       // (rows from earlier pages are already collected); a first-page
       // failure must fail loudly instead.
       if (page === 1) throw new Error(`ClinchTalent fetch failed for "${hostname}": ${res.status} ${res.statusText}`);
+      incompleteSnapshot = true;
+      snapshotWarnings.push(`Page ${page} returned ${res.status}`);
       break;
     }
     const html = await res.text();
@@ -117,6 +124,7 @@ async function fetchClinchTalentJobs(hostname) {
     const foundOnPage = pageJobs.length;
     rawJobs.push(...pageJobs);
     console.log(`    ...page ${page}: ${foundOnPage} listing(s) found (${rawJobs.length} total so far)`);
+    lastPageFull = foundOnPage >= 25;
 
     if (foundOnPage === 0) {
       // Zero rows on page 1 itself is only safe to treat as a genuine
@@ -135,6 +143,10 @@ async function fetchClinchTalentJobs(hostname) {
       }
       break;
     }
+    if (page === maxPages && lastPageFull) {
+      incompleteSnapshot = true;
+      snapshotWarnings.push('Pagination safety cap reached with a full final page');
+    }
   }
 
   const seen = new Set();
@@ -148,21 +160,30 @@ async function fetchClinchTalentJobs(hostname) {
   console.log(`    ${relevant.length} / ${deduped.length} titles look relevant — fetching their descriptions...`);
 
   const detailed = [];
+  let detailFailures = 0;
   for (let i = 0; i < relevant.length; i++) {
     const job = relevant[i];
     try {
       const detailRes = await fetchWithTimeout(`${base}${job.path}`);
-      if (!detailRes.ok) continue;
+      if (!detailRes.ok) { detailFailures += 1; continue; }
       const detailHtml = await detailRes.text();
       detailed.push({ ...job, detailHtml });
     } catch {
+      detailFailures += 1;
       continue;
     }
     if ((i + 1) % 10 === 0 || i === relevant.length - 1) {
       console.log(`    ...fetched details for ${i + 1} / ${relevant.length}`);
     }
   }
-
+  if (detailFailures > 0) {
+    incompleteSnapshot = true;
+    snapshotWarnings.push(`${detailFailures} detail fetch(es) failed`);
+  }
+  if (incompleteSnapshot) {
+    detailed.incompleteSnapshot = true;
+    detailed.snapshotWarnings = snapshotWarnings;
+  }
   return detailed;
 }
 

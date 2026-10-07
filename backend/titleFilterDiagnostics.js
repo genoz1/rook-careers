@@ -63,12 +63,24 @@ function getTitleFilterRejections() {
 }
 
 function titleLooksRelevantWithDiagnostics(title, job = {}) {
-  const accepted = titleLooksRelevant(title);
+  const description = firstValue(job, [
+    'description_text', 'description', 'description_html', 'jobDescription', 'job_description',
+  ]) || textOf(job);
+  const accepted = titleLooksRelevant(title, description || job);
   if (!accepted) {
     const active = context.getStore();
     if (active) active.rejections.push(rejectionRecord(title, job, active.employer));
   }
   return accepted;
+}
+
+function textOf(value) {
+  if (!value || typeof value !== 'object') return '';
+  return [
+    value.description_text, value.description, value.description_html,
+    value.jobDescription, value.job_description,
+    value.detail?.jobAd?.sections?.jobDescription?.text,
+  ].filter(Boolean).join(' ');
 }
 
 async function persistTitleFilterRejections(db, rows, { batchSize = 500 } = {}) {
