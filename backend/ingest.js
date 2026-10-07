@@ -54,6 +54,64 @@ async function allEmployerRows(queryPage, pageSize = 1000) {
   }
 }
 
+// Compare only source-owned normalized fields. Database-owned freshness and
+// enrichment fields are deliberately excluded so an unchanged posting can be
+// recognized before geocoding, analysis, embeddings, or a full-row upsert.
+const NON_SOURCE_JOB_FIELDS = new Set([
+  "id", "first_seen_at", "last_seen_at", "created_at", "updated_at",
+  "job_lat", "job_lng", "state", "ai_analysis", "job_embedding",
+  "social_eligible", "moderation_status",
+]);
+
+const EXISTING_JOB_COLUMNS = [
+  "source_job_id", "employer_id", "source_type", "source_url", "application_url",
+  "title_original", "title_normalized", "company_name", "description_html", "description_text",
+  "location_raw", "job_lat", "job_lng", "city", "state", "region", "territory",
+  "remote_status", "employment_type", "category", "subcategory", "industry", "product_type",
+  "sales_type", "experience_min_years", "experience_max_years", "salary_min", "salary_max",
+  "compensation_text", "travel_percentage", "overnight_travel", "required_skills",
+  "preferred_skills", "required_experience", "preferred_experience", "degree_required",
+  "certifications", "date_posted", "status", "source_verified", "extraction_evidence",
+  "expires_at", "location_evidence",
+];
+
+function stableComparisonValue(value) {
+  if (value == null) return null;
+  if (Array.isArray(value)) return value.map(stableComparisonValue);
+  if (typeof value === "object") {
+    return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stableComparisonValue(value[key])]));
+  }
+  return value;
+}
+
+function sourceComparableJob(job) {
+  const comparable = {};
+  for (const key of Object.keys(job).sort()) {
+    if (NON_SOURCE_JOB_FIELDS.has(key)) continue;
+    if (key === "location_evidence") {
+      // The validator expands this object with derived/cached evidence. The
+      // adapter-owned country signal is the only source input not already
+      // represented by title, description, and location_raw.
+      comparable.location_source_country_code = job.location_evidence?.source_country_code || null;
+      continue;
+    }
+    comparable[key] = stableComparisonValue(job[key]);
+  }
+  return comparable;
+}
+
+function sourceJobUnchanged(incoming, existing) {
+  if (!existing) return false;
+  const current = sourceComparableJob(incoming);
+  const prior = {};
+  for (const key of Object.keys(current)) {
+    prior[key] = key === "location_source_country_code"
+      ? existing.location_evidence?.source_country_code || null
+      : stableComparisonValue(existing[key]);
+  }
+  return JSON.stringify(current) === JSON.stringify(prior);
+}
+
 // Use the SERVICE ROLE key here, never the anon key — ingestion writes
 // to the jobs table and must bypass row-level security intentionally.
 const supabase = createClient(
@@ -181,14 +239,20 @@ async function ingestEmployer(employer) {
   let writeFailed = false;
   let nonUsSkippedCount = 0;
   let aiAnalyzedThisRun = 0;
+  const unchangedSourceIds = new Set();
 
-  // Pre-fetched once per employer, not per job — social_eligible needs
-  // to know whether a PRIOR run already analyzed this specific job,
-  // since the AI analysis step itself only happens after the upsert
-  // below (and only for jobs under this run's per-employer cap).
+  // Fetch existing jobs once per employer. Besides supplying reusable
+  // enrichment, this enables an early source-field comparison that keeps
+  // unchanged jobs off the expensive processing path entirely.
+  const existingSourceRows = await allEmployerRows((start, end) => supabase
+    .from("jobs")
+    .select(EXISTING_JOB_COLUMNS.join(","))
+    .eq("employer_id", employer.id)
+    .order("id")
+    .range(start, end));
   const existingAnalysisRows = await allEmployerRows((start, end) => supabase
     .from("jobs")
-    .select(employer.ats_type === "custom_html" ? "source_job_id, ai_analysis, job_embedding, extraction_evidence, title_original, description_text" : "source_job_id, ai_analysis, title_original, description_text")
+    .select(employer.ats_type === "custom_html" ? "source_job_id, ai_analysis, job_embedding, extraction_evidence, title_original, description_text" : "source_job_id, ai_analysis")
     .eq("employer_id", employer.id)
     .not("ai_analysis", "is", null)
     .order("id")
@@ -196,16 +260,10 @@ async function ingestEmployer(employer) {
   const existingAiAnalysisBySourceId = new Map((existingAnalysisRows || []).map((r) => [r.source_job_id, r.ai_analysis]));
   const sharedAnalysisKey = j => `${j.extraction_evidence?.original_title || j.title_original}\n${j.description_text}`;
   const sharedCustomAnalysis = new Map((existingAnalysisRows || []).map(j => [sharedAnalysisKey(j), j]));
-  const existingContentBySourceId = new Map((existingAnalysisRows || []).map(r => [r.source_job_id, r]));
+  const existingContentBySourceId = new Map((existingSourceRows || []).map(r => [r.source_job_id, r]));
 
   // All existing source IDs for this employer — used to detect new jobs
   // so first_seen_at is only set on insert, never overwritten on update.
-  const existingSourceRows = await allEmployerRows((start, end) => supabase
-    .from("jobs")
-    .select("source_job_id, location_evidence, job_lat, job_lng, state")
-    .eq("employer_id", employer.id)
-    .order("id")
-    .range(start, end));
   const existingLocations = new Map((existingSourceRows || []).map(r => [r.source_job_id,r]));
   const existingSourceIds = new Set((existingSourceRows || []).map((r) => r.source_job_id));
   const closeExcludedJob = async (sourceId) => {
@@ -301,6 +359,12 @@ async function ingestEmployer(employer) {
     // Only relevant IDs belong in the live snapshot; otherwise the
     // close-missing step below leaves newly excluded jobs active forever.
     seenSourceIds.add(job.source_job_id);
+
+    const priorSourceJob = existingContentBySourceId.get(job.source_job_id);
+    if (sourceJobUnchanged(job, priorSourceJob)) {
+      unchangedSourceIds.add(job.source_job_id);
+      continue;
+    }
 
     // Hard filter, not just a scoring-time penalty: ROOK is a US-focused
     // platform, and several employers added this session are large
@@ -407,6 +471,26 @@ async function ingestEmployer(employer) {
       }
     }
 
+  }
+
+  // One bounded update per chunk replaces a full upsert for every unchanged
+  // job. A failed freshness batch makes the snapshot partial, preserving all
+  // existing jobs from disappearance closure just like any other write error.
+  const unchangedIds = [...unchangedSourceIds];
+  for (let index = 0; index < unchangedIds.length; index += 500) {
+    const chunk = unchangedIds.slice(index, index + 500);
+    const { error: freshnessError } = await supabase.from("jobs")
+      .update({ last_seen_at: new Date().toISOString() })
+      .eq("employer_id", employer.id)
+      .in("source_job_id", chunk);
+    if (freshnessError) {
+      metric("write_failures");
+      writeFailed = true;
+      console.error(`  Freshness update failed for ${chunk.length} unchanged job(s): ${freshnessError.message}`);
+    } else {
+      savedCount += chunk.length;
+      metric("unchanged", chunk.length);
+    }
   }
 
   // Mark jobs that disappeared from the source as closed, rather than
@@ -664,4 +748,4 @@ async function runEmployerLoop(startedAt, employerFilter, options = {}) {
 }
 
 if (require.main === module) run().catch(error => { console.error(error.message); process.exitCode = 1; });
-module.exports = { ingestEmployer, run, runEmployerLoop, tryAcquireIngestLock, releaseIngestLock };
+module.exports = { ingestEmployer, sourceJobUnchanged, run, runEmployerLoop, tryAcquireIngestLock, releaseIngestLock };
