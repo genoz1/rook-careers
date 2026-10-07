@@ -50,7 +50,7 @@ async function rookSignOut(loginPage = "rook-login.html") {
 }
 
 async function rookLockedJobCtaLabel() {
-  return "Try ROOK Today for Free";
+  return "View membership options";
 }
 
 // Client-side mirror of backend/matching.js's hasFullAccess(). This is
@@ -96,7 +96,7 @@ function rookTrackEvent(name, params = {}) {
 function rookGoToCheckout(source) {
   rookTrackEvent('job_unlock_clicked', { event_category: 'engagement', source: String(source || 'unknown') });
   const profile=window.rookCurrentProfile;
-  window.location.href=profile?.trial_started_at&&!profile?.subscription_started_at&&!rookHasFullAccess(profile)?'rook-keep-access.html':'rook-onboarding-v8.html';
+  window.location.href=profile?'rook-checkout-v8.html':'rook-onboarding-v8.html';
 }
 
 // Fills in the sidebar's name/avatar/plan card (the ".side-foot" block

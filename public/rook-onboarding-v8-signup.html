@@ -84,9 +84,9 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
   </div>
 
   <div class="screen">
-    <div class="eyebrow">Try ROOK Today for Free</div>
+    <div class="eyebrow">SECURE YOUR MEMBERSHIP</div>
     <h2>Unlock your matches.</h2>
-    <p class="lead">Save your matches with a verified account. Includes 24 hours of full access. No credit card required.</p>
+    <p class="lead">Create a private account, verify your email, then complete secure payment for the plan you selected.</p>
 
     <div class="form-section" id="createSection">
       <div class="form-section-label">Create your account</div>
@@ -116,7 +116,7 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
     <div id="createActions">
       <div class="err" id="formErr" role="alert"></div>
       <button class="btn-primary" id="btnCreateAccount">Email my verification code</button>
-      <p class="fine">24 hours of full access. No credit card required.<br>Continue for $9.99 for your first 30 days, then $19.99/month. Cancel anytime.</p>
+      <p class="fine">Account creation does not start access or charge you. Your selected plan is confirmed before payment.</p>
     </div>
     <div id="verifySection" style="display:none">
       <div class="form-section">
@@ -125,7 +125,7 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
         <label class="field-label" for="codeInput" style="margin-top:18px">Verification code</label>
         <input class="field-input" id="codeInput" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="10" pattern="[0-9]{6,10}" placeholder="Code from email">
         <div class="err" id="codeErr" role="alert"></div>
-        <button class="btn-primary" id="btnVerifyCode">Verify and start my 24 hours</button>
+        <button class="btn-primary" id="btnVerifyCode">Verify and continue to payment</button>
         <div class="verify-actions">
           <button type="button" id="btnResendCode" disabled>Resend code (60s)</button>
           <button type="button" id="btnChangeEmail">Change email</button>
@@ -158,11 +158,8 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
     });
     const result=await claim.json().catch(()=>({}));
     if (!claim.ok) throw new Error(result.error || 'Return to your V8 dashboard to retry transferring your matches.');
-    const accountId=session.user?.id;
-    if(result.outcome==='started' && typeof rookTrackFunnelEvent==='function')rookTrackFunnelEvent('v8_trial_started',{},accountId);
-    if(result.outcome==='started'||result.outcome==='trial_active')window.location.href='rook-onboarding-v8.html?trial=started';
-    else if(result.outcome==='trial_used')window.location.href='rook-keep-access.html';
-    else window.location.href='rook-dashboard-v8.html';
+    const plan=sessionStorage.getItem('rook_membership_plan')||new URLSearchParams(location.search).get('plan')||'monthly';
+    window.location.href=`rook-checkout-v8.html?plan=${encodeURIComponent(plan)}`;
   }
 
   const existingSession = await sb.auth.getSession();
@@ -290,7 +287,7 @@ h2{font-size:clamp(27px,5vw,34px);font-weight:900;line-height:1.1;letter-spacing
     } catch (err) {
       codeErr.textContent = err.message;
       verifyBtn.disabled = false;
-      verifyBtn.textContent = 'Verify and start my 24 hours';
+      verifyBtn.textContent = 'Verify and continue to payment';
     }
   });
 })();

@@ -42,12 +42,12 @@
   // existing behavior for everyone except an explicitly marked V8 journey.
   window.rookGoToCheckout = function (source) {
     if (typeof rookTrackEvent === 'function') rookTrackEvent('job_unlock_clicked', { event_category: 'engagement', source: String(source || 'unknown') });
-    location.href = ['v8','v9'].includes(window.rookAccessState?.trialSource)?'rook-keep-access.html':'rook-onboarding-v8.html';
+    location.href = window.rookAccessState?.signedIn?'rook-checkout-v8.html':'rook-onboarding-v8.html';
   };
   const requireAuth = window.rookRequireAuth;
   if (typeof requireAuth === 'function') window.rookRequireAuth = function (page = 'rook-login-v8.html') { return requireAuth(page); };
   window.rookStartExistingTrial = function () {
     if (typeof rookTrackEvent === 'function') rookTrackEvent('job_unlock_clicked', { source: 'pretrial_navigation' });
-    location.href = window.rookAccessState?.signedIn ? (['v8','v9'].includes(window.rookAccessState?.trialSource)?'rook-keep-access.html':'rook-onboarding-v8.html') : 'rook-onboarding-v8-signup.html';
+    location.href = window.rookAccessState?.signedIn ? 'rook-checkout-v8.html' : 'rook-onboarding-v8-signup.html';
   };
 })();

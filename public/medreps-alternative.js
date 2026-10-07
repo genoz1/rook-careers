@@ -16,7 +16,7 @@
   });
   var offer = document.getElementById('trialOffer');
   if (offer) {
-    offer.textContent = '24 hours of full access. No credit card required.';
+    offer.textContent = 'Preview current protected matches first. Paid access starts at $5.99.';
     offer.hidden = false;
   }
 })();

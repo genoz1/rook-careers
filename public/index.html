@@ -494,12 +494,12 @@
   <div class="hero-grid">
     <div class="hero-text">
       <div class="eyebrow"><span class="dot"></span> Built exclusively for medical &amp; veterinary sales</div>
-      <h1 class="hero-h">The right opportunity.<br>Expertly <span class="accent">matched.</span></h1>
-      <p class="hero-sub">ROOK continuously searches medical and veterinary sales jobs from employer career sites and ranks the best matches for your experience and goals.</p>
+      <h1 class="hero-h">Medical Sales Jobs.<br><span class="accent">Without the Endless Searching.</span></h1>
+      <p class="hero-sub">ROOK collects current medical and veterinary sales jobs directly from employers and matches them to your area.</p>
       <div style="margin-bottom:0;">
         <div class="hero-actions" style="margin-bottom:0;">
-          <a href="rook-onboarding-v8.html" class="btn btn-primary" style="font-size:16px; padding:16px 30px; font-weight:700;">TRY ROOK TODAY FOR FREE</a>
-          <a href="rook-onboarding-v8.html" class="btn btn-outline">Find My Matches</a>
+          <a href="rook-onboarding-v8.html" class="btn btn-primary" style="font-size:16px; padding:16px 30px; font-weight:700;">VIEW JOBS NEAR ME</a>
+          <a href="rook-pricing.html" class="btn btn-outline">See Plans</a>
         </div>
         <div style="font-size:13.5px; color:var(--muted); font-weight:600; margin-top:12px;">Medical sales jobs only &nbsp;•&nbsp; Cancel anytime</div>
       </div>
@@ -551,8 +551,8 @@
       <div class="stat-label">Current Opportunities</div>
     </div>
     <div class="stat-item">
-      <div class="stat-num" id="statEmployerCount">323</div>
-      <div class="stat-label">Companies in Directory</div>
+      <div class="stat-num" style="font-size:22px;">Direct From Employers</div>
+      <div class="stat-label">Current opportunities, not recycled listings</div>
     </div>
     <div class="stat-item">
       <div class="stat-num" style="font-size:22px;">Continuously Updated</div>
@@ -601,10 +601,10 @@
     <div class="section-head">
       <div class="section-eyebrow">Direct Sourcing</div>
       <h2>We Search Employer Career Sites Directly</h2>
-      <p>ROOK searches employer career sites directly for medical, healthcare, and related sales opportunities — so you don't have to check hundreds of company career pages yourself.</p>
+      <p>ROOK searches employer career sites directly for medical, healthcare, and related sales opportunities — so you can spend less time checking career pages.</p>
     </div>
 
-    <div style="text-align:center; margin-bottom:40px;">
+    <div style="text-align:center; margin-bottom:40px; display:none" aria-hidden="true">
       <div style="display:inline-flex; align-items:baseline; gap:10px; background:var(--gray); border:1px solid var(--border); border-radius:999px; padding:14px 28px;">
         <span id="directoryEmployerCount" style="font-family:var(--font-display); font-size:30px; font-weight:700; color:var(--navy); line-height:1;">323</span>
         <span style="font-size:14.5px; font-weight:600; color:var(--muted);">Companies in Directory</span>
@@ -903,18 +903,6 @@
     }
   } catch (err) {
     console.error('Could not load homepage job count:', err);
-  }
-})();
-(async () => {
-  try {
-    const res = await fetch('/api/public-companies');
-    if (!res.ok) return;
-    const data = await res.json();
-    if (!Number.isInteger(data.total_count)) return;
-    document.getElementById('statEmployerCount').textContent = data.total_count.toLocaleString();
-    document.getElementById('directoryEmployerCount').textContent = data.total_count.toLocaleString();
-  } catch (err) {
-    console.error('Could not load homepage company count:', err);
   }
 })();
 </script>

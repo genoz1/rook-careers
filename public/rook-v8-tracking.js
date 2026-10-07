@@ -17,6 +17,7 @@
     v8_trial_started: ['trackSingle', 'StartTrial']
   };
   var seen = Object.create(null);
+  var currentEvents = ['acquisition_landing_viewed','protected_dashboard_viewed','ip_geolocation_success','ip_geolocation_failure','change_location_clicked','location_changed','anonymous_job_interaction','pricing_paywall_viewed','membership_plan_selected','checkout_viewed','checkout_started','successful_paid_conversion'];
   // No advanced matching, automatic form detection, or automatic events.
   if (!window.fbq) {
     var q = window.fbq = function () {
@@ -37,7 +38,7 @@
       var storage = accountScope ? localStorage : sessionStorage;
       var scope = accountScope || sessionStorage.getItem('rook_v7_token') || 'visit';
       var key = 'rook_funnel_v1:' + name + ':' + scope;
-      if (mapping || name === 'sign_up' || /^v8_/.test(name)) {
+      if (mapping || name === 'sign_up' || /^v8_/.test(name) || currentEvents.indexOf(name) !== -1) {
         if (seen[key]) return;
         try { if (storage.getItem(key)) return; } catch (_) {}
         seen[key] = true;
@@ -46,7 +47,7 @@
       var safe = {onboarding_version: 'v8'};
       if (sessionStorage.getItem('rook_acquisition_origin') === 'medreps-alternative') safe.acquisition_page = 'medreps-alternative';
       // Only fixed, non-identifying event context is accepted.
-      ['event_category', 'event_label', 'method', 'source', 'stage'].forEach(function (field) {
+      ['event_category', 'event_label', 'method', 'source', 'stage', 'plan', 'geo_status'].forEach(function (field) {
         var value = params && params[field];
         if (typeof value === 'string' && /^[a-z0-9_ -]{1,40}$/i.test(value)) safe[field] = value;
       });
