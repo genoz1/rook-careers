@@ -73,7 +73,15 @@ async function discoverCompanyFirstSignals({
   knownEmployers = [], limit = 10, offset = 0, includeVmx = true, includeCurated = true,
   httpFetch = fetch, resolveWebsite = websiteFromPublicSignals,
 } = {}) {
-  const vmx = includeVmx ? await fetchVmxCompanies({ httpFetch }) : { companies: [], total_listed: 0 };
+  let vmx = { companies: [], total_listed: 0 };
+  let vmx_error = null;
+  if (includeVmx) {
+    try {
+      vmx = await fetchVmxCompanies({ httpFetch });
+    } catch (error) {
+      vmx_error = error.message;
+    }
+  }
   const catalog = dedupeCompanies([...(includeVmx ? vmx.companies : []), ...(includeCurated ? curatedIndustryCompanies() : [])]);
   const known = new Set(knownEmployers.map((employer) => normalizeCompanyName(employer.company_name)));
   const existing = catalog.filter((company) => known.has(normalizeCompanyName(company.company_name)));
@@ -95,7 +103,7 @@ async function discoverCompanyFirstSignals({
     });
   }
   return { signals, stats: {
-    vmx_total_listed: vmx.total_listed, catalog_companies: catalog.length,
+    vmx_total_listed: vmx.total_listed, vmx_error, catalog_companies: catalog.length,
     already_monitored: existing.length, genuinely_new: unknown.length,
     selected_for_controlled_run: selected.length,
     official_websites_resolved: signals.filter((signal) => signal.company_website).length,
