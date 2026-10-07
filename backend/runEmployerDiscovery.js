@@ -12,35 +12,52 @@ function parseInput(text) {
 }
 
 function parseArgs(argv) {
-  const result = { input: null, retryDue: false, limit: 50 };
+  const result = { input: null, retryDue: false, forceCandidateIds: [], limit: 50 };
   for (let index = 0; index < argv.length; index++) {
     if (argv[index] === '--input') result.input = argv[++index];
     else if (argv[index] === '--retry-due') result.retryDue = true;
+    else if (argv[index] === '--force-candidate-id') result.forceCandidateIds.push(...String(argv[++index] || '').split(',').filter(Boolean));
     else if (argv[index] === '--limit') result.limit = Number(argv[++index]);
     else throw new Error(`Unknown argument: ${argv[index]}`);
   }
-  if (!result.input && !result.retryDue) throw new Error('Use --input <signals.json|signals.jsonl|-> or --retry-due');
+  if (!result.input && !result.retryDue && !result.forceCandidateIds.length) throw new Error('Use --input <signals.json|signals.jsonl|->, --retry-due, or --force-candidate-id <uuid>');
+  if (!Number.isInteger(result.limit) || result.limit < 1 || result.limit > 50) throw new Error('--limit must be an integer from 1 to 50');
+  if (result.forceCandidateIds.length > 50 || result.forceCandidateIds.some((id) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))) {
+    throw new Error('--force-candidate-id requires at most 50 explicit UUID candidate IDs');
+  }
   return result;
 }
 
 async function run(argv = process.argv.slice(2), dependencies = {}) {
   const args = parseArgs(argv);
-  const client = dependencies.client || createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+  const client = dependencies.client || (dependencies.store ? null : createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY));
   const store = dependencies.store || new SupabaseDiscoveryStore(client);
   const pipeline = dependencies.pipeline || new EmployerDiscoveryPipeline({ store });
-  let signals = [];
+  let work = [];
   if (args.input) {
     const text = args.input === '-' ? fs.readFileSync(0, 'utf8') : fs.readFileSync(args.input, 'utf8');
-    signals.push(...parseInput(text));
+    work.push(...parseInput(text).map((signal) => ({ signal, options: {} })));
   }
   if (args.retryDue) {
     const due = await store.listDueCandidates(args.limit);
-    signals.push(...due.map((candidate) => candidate.signal_payload));
+    work.push(...due.map((candidate) => ({ signal: candidate.signal_payload, options: {} })));
+  }
+  if (args.forceCandidateIds.length) {
+    const targeted = await store.listCandidatesByIds(args.forceCandidateIds);
+    const found = new Set(targeted.map((candidate) => candidate.id));
+    const missing = args.forceCandidateIds.filter((id) => !found.has(id));
+    if (missing.length) throw new Error(`Candidate IDs not found: ${missing.join(', ')}`);
+    work.push(...targeted.map((candidate) => ({ signal: candidate.signal_payload, options: { force: true, candidateId: candidate.id } })));
   }
   const results = [];
-  for (const signal of signals.slice(0, args.limit)) {
+  const seenTargets = new Set();
+  for (const item of work) {
+    const key = item.options.candidateId || JSON.stringify(item.signal);
+    if (seenTargets.has(key) || results.length >= args.limit) continue;
+    seenTargets.add(key);
+    const { signal, options } = item;
     try {
-      const result = await pipeline.processSignal(signal);
+      const result = await pipeline.processSignal(signal, options);
       results.push({ company_name: signal.company_name, status: result.status, candidate_id: result.candidate?.id, employer_id: result.employer?.id || null });
       console.log(`${signal.company_name}: ${result.status}`);
     } catch (error) {

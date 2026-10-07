@@ -2,8 +2,8 @@ const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const { EmployerDiscoveryPipeline } = require('./discovery/pipeline');
 const { resolveOfficialSource, detectFromUrl, detectSourceConfigurations } = require('./discovery/sourceResolver');
-const { plausibleJob, validateSource } = require('./discovery/sourceValidator');
-const { parseInput } = require('./runEmployerDiscovery');
+const { plausibleJob, sourceIsAnchored, validateSource } = require('./discovery/sourceValidator');
+const { parseInput, parseArgs, run } = require('./runEmployerDiscovery');
 
 class MemoryStore {
   constructor(employers = []) {
@@ -37,6 +37,7 @@ class MemoryStore {
   async findCandidateBySource(type, identifier) {
     return this.candidates.find((row) => row.detected_ats_type === type && row.detected_ats_identifier === identifier && ['existing', 'enrolled'].includes(row.status)) || null;
   }
+  async listCandidatesByIds(ids) { return ids.map((id) => this.candidates.find((candidate) => candidate.id === id)).filter(Boolean); }
   async enrollEmployer(candidate, configuration) {
     this.enrollCalls++;
     const employer = {
@@ -155,7 +156,10 @@ test('a supplied website that does not corroborate the company identity is not t
     ['https://unrelated.example/', { url: 'https://unrelated.example/', html: '<title>Unrelated Software</title><a href="https://boards.greenhouse.io/unrelated">Careers</a>' }],
   ]);
   const store = new MemoryStore();
-  const pipeline = new EmployerDiscoveryPipeline({ store, resolveSource: (input) => resolveOfficialSource(input, { readPage: async (url) => pages.get(url) || pages.get(`${url}/`) }), validate: passValidation });
+  const pipeline = new EmployerDiscoveryPipeline({ store, resolveSource: (input) => resolveOfficialSource(input, {
+    readPage: async (url) => pages.get(url) || pages.get(`${url}/`),
+    searchCareers: async () => [],
+  }), validate: passValidation });
   const result = await pipeline.processSignal({ ...signal, company_website: 'https://unrelated.example', careers_url: null, job_url: null });
   assert.equal(result.status, 'unresolved');
   assert.equal(result.candidate.validation_status, 'COMPANY_IDENTITY_MISMATCH');
@@ -237,4 +241,96 @@ test('URL extraction handles identifiers that cannot be guessed from company nam
 test('source-agnostic input accepts JSON arrays and JSONL without provider coupling', () => {
   assert.equal(parseInput(JSON.stringify([signal])).length, 1);
   assert.equal(parseInput(`${JSON.stringify(signal)}\n${JSON.stringify({ ...signal, company_name: 'Other' })}`).length, 2);
+});
+
+test('public careers search resolves companies without a supplied or guessed domain', async () => {
+  const pages = new Map([
+    ['https://workwave.example/careers', { url: 'https://workwave.example/careers', html: '<title>WorkWave Careers</title><a href="https://boards.greenhouse.io/workwave">See open positions</a>' }],
+    ['https://boards.greenhouse.io/workwave', { url: 'https://boards.greenhouse.io/workwave', html: '<h1>WorkWave jobs</h1>' }],
+  ]);
+  const result = await resolveOfficialSource({ company_name: 'WorkWave' }, {
+    searchCareers: async () => [{ url: 'https://workwave.example/careers', title: 'Careers - WorkWave', snippet: 'Join WorkWave', provider: 'fixture-search' }],
+    readPage: async (url) => { const page = pages.get(url); if (!page) throw new Error(`unexpected ${url}`); return page; },
+  });
+  assert.equal(result.official_domain, 'workwave.example');
+  assert.equal(result.configurations[0].ats_type, 'greenhouse');
+  assert.equal(result.evidence.selected_candidate.kind, 'public_search_result');
+});
+
+test('verified subsidiary site may lead to a parent shared careers system with a provenance chain', async () => {
+  const pages = new Map([
+    ['https://aesculap.example/', { url: 'https://aesculap.example/', html: '<title>Aesculap US</title><a href="https://careers.bbraun.example/jobs">Careers at our parent B. Braun</a>' }],
+    ['https://careers.bbraun.example/jobs', { url: 'https://careers.bbraun.example/jobs', html: '<title>B. Braun careers</title><a href="https://bbraun.wd5.myworkdayjobs.com/en-US/External/job/1">Open positions</a>' }],
+    ['https://bbraun.wd5.myworkdayjobs.com/en-US/External/job/1', { url: 'https://bbraun.wd5.myworkdayjobs.com/en-US/External/job/1', html: '<h1>Aesculap opportunity</h1>' }],
+  ]);
+  const result = await resolveOfficialSource({ company_name: 'Aesculap (US)', company_website: 'https://aesculap.example/' }, {
+    readPage: async (url) => { const page = pages.get(url); if (!page) throw new Error(`unexpected ${url}`); return page; },
+  });
+  assert.equal(result.configurations[0].ats_type, 'workday');
+  assert.equal(result.configurations[0].ats_identifier, 'bbraun|wd5|External');
+  assert.ok(result.evidence.provenance_chains.some((chain) => chain.linked_from === 'https://aesculap.example/'));
+});
+
+test('embedded Paycor destination is detected from a verified official careers page', async () => {
+  const result = await resolveOfficialSource({ company_name: 'Zomedica', company_website: 'https://zomedica.example/careers/' }, {
+    readPage: async () => ({ url: 'https://zomedica.example/careers/', html: '<title>Careers - Zomedica</title><h1>Open positions</h1><script src="https://recruitingbypaycor.com/career/iframe.action?clientId=8a7883d08145828d0181914c5b7a2fa1"></script>' }),
+  });
+  assert.deepEqual(result.configurations.map((item) => [item.ats_type, item.ats_identifier]), [['paycor', '8a7883d08145828d0181914c5b7a2fa1']]);
+  assert.equal(result.configurations[0].evidence.kind, 'official_page_link');
+});
+
+test('unknown source falls through to verified official sitemap and structured job extraction', async () => {
+  const pages = new Map([
+    ['https://spire.example/', { url: 'https://spire.example/', html: '<title>Spire</title><a href="/careers">Careers</a>' }],
+    ['https://spire.example/careers', { url: 'https://spire.example/careers', html: '<h1>Spire careers</h1><p>Browse opportunities.</p>' }],
+    ['https://spire.example/sitemap.xml', { url: 'https://spire.example/sitemap.xml', html: '<urlset><url><loc>https://spire.example/jobs/sales-manager</loc></url></urlset>' }],
+    ['https://spire.example/jobs/sales-manager', { url: 'https://spire.example/jobs/sales-manager', html: '<script type="application/ld+json">{"@type":"JobPosting","title":"Territory Sales Manager","description":"Sell healthcare products throughout the assigned territory and support customers.","url":"https://spire.example/jobs/sales-manager"}</script>' }],
+  ]);
+  const result = await resolveOfficialSource({ company_name: 'Spire', company_website: 'https://spire.example/' }, {
+    readPage: async (url) => { const page = pages.get(url); if (!page) throw new Error(`unexpected ${url}`); return page; },
+  });
+  assert.equal(result.configurations[0].ats_type, 'custom_html');
+  assert.ok(result.evidence.provenance_chains.some((chain) => chain.kind === 'verified_official_sitemap'));
+});
+
+test('career hostnames are followed even when the link path is a locale root', async () => {
+  const pages = new Map([
+    ['https://jnj.example/innovativemedicine', { url: 'https://jnj.example/innovativemedicine', html: '<title>Johnson & Johnson Innovative Medicine</title><a href="https://careers.jnj.example/en/">Explore opportunities</a>' }],
+    ['https://careers.jnj.example/en/', { url: 'https://careers.jnj.example/en/', html: '<title>J&J careers</title><a href="https://jj.wd5.myworkdayjobs.com/en-US/JJ/jobs">Search roles</a>' }],
+    ['https://jj.wd5.myworkdayjobs.com/en-US/JJ/jobs', { url: 'https://jj.wd5.myworkdayjobs.com/en-US/JJ/jobs', html: '<h1>J&J jobs</h1>' }],
+  ]);
+  const result = await resolveOfficialSource({ company_name: 'Johnson & Johnson Innovative Medicine', company_website: 'https://jnj.example/innovativemedicine' }, {
+    readPage: async (url) => { const page = pages.get(url); if (!page) throw new Error(`unexpected ${url}`); return page; },
+  });
+  assert.ok(result.careers_pages.includes('https://careers.jnj.example/en/'));
+  assert.ok(result.configurations.some((configuration) => configuration.ats_type === 'workday' && configuration.ats_identifier === 'jj|wd5|JJ'));
+});
+
+test('verified first-party job detail listings activate the bounded custom HTML fallback', () => {
+  const configs = detectSourceConfigurations([{
+    url: 'https://spire.example/careers/job-openings/',
+    html: '<main><h1>Spire job openings</h1><a href="/careers/job-openings/job/?gh_jid=8238125">Sales Account Manager — Remote — Apply</a></main>',
+  }]);
+  assert.equal(configs[0].ats_type, 'custom_html');
+  assert.equal(configs[0].evidence.kind, 'bounded_official_job_links');
+});
+
+test('Workday source anchoring uses the detected tenant identity even when the official-link URL redirected', () => {
+  const configuration = { ats_type: 'workday', ats_identifier: 'mvh|wd115|antechcareers', source_url: 'https://careers.antechdiagnostics.example/open-roles' };
+  const job = { source_url: 'https://mvh.wd115.myworkdayjobs.com/antechcareers/job/Remote/Diagnostic-Sales-Manager_R-1' };
+  assert.equal(sourceIsAnchored(job, configuration), true);
+});
+
+test('targeted force retry accepts explicit candidate UUIDs and bypasses scheduling only for those targets', async () => {
+  const id = '7db79ad7-805f-4ceb-967f-03a377a2101f';
+  assert.deepEqual(parseArgs(['--force-candidate-id', id]).forceCandidateIds, [id]);
+  assert.throws(() => parseArgs(['--force-candidate-id', 'not-a-uuid']), /explicit UUID/);
+  const candidate = { id, company_name: 'Heska', signal_payload: { company_name: 'Heska', signal_source: 'fixture' } };
+  const seen = [];
+  const results = await run(['--force-candidate-id', id], {
+    store: { listCandidatesByIds: async () => [candidate] },
+    pipeline: { processSignal: async (input, options) => { seen.push({ input, options }); return { status: 'retryable', candidate }; } },
+  });
+  assert.equal(results[0].candidate_id, id);
+  assert.deepEqual(seen[0].options, { force: true, candidateId: id });
 });
