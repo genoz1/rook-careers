@@ -13,9 +13,17 @@
 <script src="rook-v8-context.js"></script>
 <script>
 const byId=id=>document.getElementById(id);let uploading=false;
+function dashboardHref(){
+  // V8 members arrive with ?rook_v8=1; send them back to the V8 dashboard
+  // instead of the legacy page (and instead of waiting on a background rescore).
+  return new URLSearchParams(window.location.search).get('rook_v8')==='1'
+    ? 'rook-dashboard-v8.html'
+    : 'rook-dashboard.html';
+}
 // File picker must stay enabled immediately — do not wait on auth or the
 // signed résumé URL fetch, or Choose file feels hung while those run.
 byId('resumeFile').disabled=false;
+byId('viewUpdatedMatches').href=dashboardHref();
 async function loadResume(){
   const response=await rookApiFetch('/resume-url');
   if(!response.ok)throw new Error('Unable to load your résumé. Please refresh and try again.');
@@ -44,26 +52,18 @@ byId('uploadForm').addEventListener('submit',async event=>{
     byId('resumeFile').value='';byId('viewUpdatedMatches').hidden=true;
     try{await loadResume();}catch(_){showStatus('Your résumé was uploaded. Refresh this page to view the new file.');}
     if(result.analysis_status!=='ok'){
-      showStatus('Your new résumé file was saved, but its contents could not be analyzed. Your match refresh was not confirmed. Please try a readable PDF or Word document.');
+      showStatus('Your new résumé file was saved, but its contents could not be analyzed. Please try a readable PDF or Word document.');
       return;
     }
-    showStatus('Your résumé was analyzed. Refreshing your job matches…');
-    const deadline=Date.now()+180000;
-    while(Date.now()<deadline){
-      try{
-        const statusResponse=await rookApiFetch('/resume-status');
-        if(statusResponse.ok){
-          const status=await statusResponse.json();
-          if(status.status==='complete'){
-            showStatus('✓ Your résumé was updated and your job matches have been refreshed.');
-            byId('viewUpdatedMatches').hidden=false;
-            return;
-          }
-        }
-      }catch(_){}
-      await new Promise(resolve=>setTimeout(resolve,2000));
-    }
-    showStatus('Your résumé was saved and analyzed, but ROOK has not yet confirmed that the match refresh finished. You can check My Job Matches now and return here shortly.');
+    // Matching uses live scoring on the dashboard from the saved résumé —
+    // do not hold the member here while a background inventory rescore runs
+    // (that used to take minutes and left people stuck on this page).
+    const next=dashboardHref();
+    byId('viewUpdatedMatches').href=next;
+    byId('viewUpdatedMatches').hidden=false;
+    showStatus('✓ Your résumé was updated. Taking you back to your job matches…');
+    setTimeout(()=>{window.location.href=next;},900);
+    return;
   }catch(error){showStatus(error.message,true);}finally{uploading=false;byId('uploadButton').disabled=false;byId('resumeFile').disabled=false;}
 });
 window.addEventListener('beforeunload',event=>{if(uploading){event.preventDefault();event.returnValue='';}});

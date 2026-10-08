@@ -901,24 +901,14 @@
                   }
                   return;
                 }
-                if (statusEl) statusEl.textContent = 'Your résumé was analyzed. Refreshing your job matches…';
-                const deadline = Date.now() + 180000;
-                while (Date.now() < deadline) {
-                  try {
-                    const statusResponse = await fetch('/api/resume-status', { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
-                    if (statusResponse.ok && (await statusResponse.json()).status === 'complete') {
-                      clearInterval(progressInterval);
-                      if (link) link.innerHTML = 'Matches refreshed';
-                      if (statusEl) statusEl.textContent = '✓ Your résumé was updated and your job matches have been refreshed. Reloading your matches…';
-                      setTimeout(() => window.location.reload(), 1200);
-                      return;
-                    }
-                  } catch (_) {}
-                  await new Promise(resolve => setTimeout(resolve, 2000));
-                }
+                // Dashboard live-scores from the saved résumé on reload.
+                // Waiting on /api/resume-status held members for minutes while
+                // a background inventory rescore finished — unnecessary now.
                 clearInterval(progressInterval);
-                if (link) link.innerHTML = 'Refresh not confirmed';
-                if (statusEl) statusEl.textContent = 'Your résumé was saved and analyzed, but ROOK has not yet confirmed that the match refresh finished. Your matches will update when processing completes; return to your dashboard shortly to check.';
+                if (link) link.innerHTML = 'Matches updated';
+                if (statusEl) statusEl.textContent = '✓ Your résumé was updated. Reloading your matches…';
+                setTimeout(() => window.location.reload(), 900);
+                return;
               } catch (err) {
                 clearInterval(progressInterval);
                 if (link) {

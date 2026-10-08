@@ -4,17 +4,16 @@ const fs=require('node:fs');
 const path=require('node:path');
 
 for(const page of ['rook-dashboard.html','rook-dashboard-v7.html','rook-dashboard-v8.html']){
-  test(`${page} confirms résumé analysis and persisted rescore before reloading`,()=>{
+  test(`${page} returns to the dashboard after résumé analysis without waiting on inventory rescore`,()=>{
     const html=fs.readFileSync(path.join(__dirname,'../public',page),'utf8');
     const uploadFlow=html.slice(html.indexOf("fileInput.onchange = async () =>"),html.indexOf("} else if (missingResume"));
     assert.notEqual(uploadFlow.length,0,'profile-gate upload handler exists');
-    assert.match(uploadFlow,/analysis_status !== 'ok'/,'an unsuccessful analysis must not be reported as a completed refresh');
-    assert.match(uploadFlow,/\/api\/resume-status/,'the dashboard checks the authenticated rescore status endpoint');
-    assert.match(uploadFlow,/status === 'complete'/,'the dashboard waits for persisted scoring confirmation');
-    assert.match(uploadFlow,/180000/,'polling ends with an honest timeout state');
-    const confirmed=uploadFlow.indexOf("status === 'complete'");
+    assert.match(uploadFlow,/analysis_status !== 'ok'/,'an unsuccessful analysis must not claim success');
+    assert.doesNotMatch(uploadFlow,/fetch\(['"]\/api\/resume-status['"]/,'do not block the member on background inventory rescore');
+    assert.doesNotMatch(uploadFlow,/180000/,'do not poll for three minutes after analysis');
+    const analyzed=uploadFlow.indexOf("analysis_status !== 'ok'");
     const reload=uploadFlow.indexOf('window.location.reload()');
-    assert.ok(confirmed>=0 && reload>confirmed,'reload only occurs after the complete status branch');
-    assert.match(uploadFlow,/not yet confirmed that the match refresh finished/,'timeout does not claim the matches were refreshed');
+    assert.ok(analyzed>=0 && reload>analyzed,'reload happens in the successful upload path');
+    assert.match(uploadFlow,/Reloading your matches/,'success state tells the member they are returning to matches');
   });
 }
