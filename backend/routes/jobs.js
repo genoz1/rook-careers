@@ -238,10 +238,12 @@ router.get("/public-job-count", requireConfig, async (req, res) => {
 
 // GET /api/public-featured-jobs — a few masked marketing cards for the
 // homepage. Intentionally tiny: short column select, ORDER BY
-// first_seen_at DESC LIMIT 24, in-memory TTL cache, and Cache-Control so
-// the homepage stays fast and never pays for a full inventory fetch.
-// Titles/locations use the same public masking contract as pretrial
-// surfaces — no employer names, descriptions, or source URLs.
+// first_seen_at DESC LIMIT 24 (or a tight lat/lng box when ?zip= is set),
+// in-memory TTL cache, and Cache-Control so the homepage stays fast and
+// never pays for a full inventory fetch. Titles/locations use the same
+// public masking contract as pretrial surfaces — no employer names,
+// descriptions, or source URLs. Optional ?zip=##### personalizes the
+// sample to nearby roles without loading the full catalog.
 const FEATURED_JOB_SELECT = [
   "id",
   "title_original",
@@ -259,18 +261,24 @@ const FEATURED_JOB_SELECT = [
   "sales_type",
   "date_posted",
   "first_seen_at",
+  "job_lat",
+  "job_lng",
 ].join(",");
-let featuredJobsCache = { at: 0, payload: null };
+const featuredJobsCacheMap = new Map();
 const FEATURED_JOBS_TTL_MS = 90 * 1000;
+const FEATURED_NEAR_RADIUS_MILES = 150;
+const FEATURED_NEAR_POOL_LIMIT = 40;
+const FEATURED_CACHE_MAX_KEYS = 60;
 
 function pickFeaturedJobs(rows, limit = 6) {
   const picked = [];
   const seenStates = new Set();
   const seenRoles = new Set();
-  const pushCard = (job, allowRepeat) => {
+  const pushCard = (job, { requireLocation, allowRepeat }) => {
     const role = generalizedRole(job);
     if (!role) return false;
-    const location = safeLocationLabel(job) || "United States";
+    const location = safeLocationLabel(job) || (requireLocation ? null : "United States");
+    if (!location) return false;
     const stateKey = String(job.state || location).trim().toUpperCase().slice(0, 2);
     const roleKey = role.toLowerCase();
     // Prefer geographic + title variety so the homepage does not look
@@ -281,46 +289,171 @@ function pickFeaturedJobs(rows, limit = 6) {
     if (picked.some((card) => card.role_title === role && card.location_label === location)) {
       return false;
     }
-    picked.push({
+    const card = {
       role_title: role,
       location_label: location,
       specialty_label: safeSpecialty(job),
       freshness_label: freshness(job, Date.now(), true) || freshness(job),
       industry_labels: (classify(job).labels || []).slice(0, 2),
-    });
+    };
+    if (Number.isFinite(job._miles)) {
+      card.distance_miles = Math.round(job._miles);
+      card.distance_label = card.distance_miles <= 1
+        ? "About 1 mile away"
+        : `About ${card.distance_miles} miles away`;
+    }
+    picked.push(card);
     seenStates.add(stateKey);
     seenRoles.add(roleKey);
     return true;
   };
   for (const job of rows || []) {
-    pushCard(job, false);
+    pushCard(job, { requireLocation: true, allowRepeat: false });
     if (picked.length >= limit) return picked;
   }
-  // Second pass fills remaining slots if the newest batch is too samey.
   for (const job of rows || []) {
-    pushCard(job, true);
+    pushCard(job, { requireLocation: true, allowRepeat: true });
+    if (picked.length >= limit) return picked;
+  }
+  // Last resort: fill remaining slots without a validated city/state.
+  for (const job of rows || []) {
+    pushCard(job, { requireLocation: false, allowRepeat: true });
     if (picked.length >= limit) break;
   }
   return picked;
 }
 
-router.get("/public-featured-jobs", requireConfig, async (req, res) => {
-  res.set("Cache-Control", "public, max-age=60");
-  if (featuredJobsCache.payload && Date.now() - featuredJobsCache.at < FEATURED_JOBS_TTL_MS) {
-    return res.json(featuredJobsCache.payload);
-  }
-  const { data, error } = await supabaseAdmin
+async function fetchRecentFeaturedPool(limit = 24) {
+  return supabaseAdmin
     .from("jobs")
     .select(FEATURED_JOB_SELECT)
     .eq("status", "active")
     .eq("moderation_status", "approved")
     .order("first_seen_at", { ascending: false })
-    .limit(24);
-  if (error) return res.status(500).json({ error: error.message });
-  const jobs = pickFeaturedJobs(data, 6);
-  const payload = { jobs, cached_for_seconds: FEATURED_JOBS_TTL_MS / 1000 };
-  featuredJobsCache = { at: Date.now(), payload };
-  res.json(payload);
+    .limit(limit);
+}
+
+async function fetchNearbyFeaturedPool(lat, lng) {
+  const latDelta = FEATURED_NEAR_RADIUS_MILES / 69;
+  const lngDelta = FEATURED_NEAR_RADIUS_MILES / (69 * Math.max(0.1, Math.cos((lat * Math.PI) / 180)));
+  return supabaseAdmin
+    .from("jobs")
+    .select(FEATURED_JOB_SELECT)
+    .eq("status", "active")
+    .eq("moderation_status", "approved")
+    .gte("job_lat", lat - latDelta)
+    .lte("job_lat", lat + latDelta)
+    .gte("job_lng", lng - lngDelta)
+    .lte("job_lng", lng + lngDelta)
+    .order("first_seen_at", { ascending: false })
+    .limit(FEATURED_NEAR_POOL_LIMIT);
+}
+
+function rememberFeaturedCache(key, payload) {
+  featuredJobsCacheMap.set(key, { at: Date.now(), payload });
+  if (featuredJobsCacheMap.size <= FEATURED_CACHE_MAX_KEYS) return;
+  const oldest = featuredJobsCacheMap.keys().next().value;
+  featuredJobsCacheMap.delete(oldest);
+}
+
+async function buildNearbyFeaturedCards(lat, lng) {
+  const { data, error } = await fetchNearbyFeaturedPool(lat, lng);
+  if (error) return { error };
+  const nearby = (data || [])
+    .filter((job) => job.job_lat != null && job.job_lng != null)
+    .map((job) => ({
+      ...job,
+      _miles: distanceMiles(lat, lng, job.job_lat, job.job_lng),
+    }))
+    .filter((job) => job._miles <= FEATURED_NEAR_RADIUS_MILES)
+    .sort((a, b) => a._miles - b._miles);
+  let jobs = pickFeaturedJobs(nearby, 6);
+  let scope = jobs.length ? "near" : "national";
+  // Sparse local inventory: keep local cards, fill remaining from
+  // the national recent window so the grid never looks empty.
+  if (jobs.length < 6) {
+    const { data: nationalRows, error: nationalError } = await fetchRecentFeaturedPool(24);
+    if (nationalError) return { error: nationalError };
+    const fill = pickFeaturedJobs(nationalRows, 6);
+    const seen = new Set(jobs.map((card) => `${card.role_title}|${card.location_label}`));
+    for (const card of fill) {
+      if (jobs.length >= 6) break;
+      const key = `${card.role_title}|${card.location_label}`;
+      if (seen.has(key)) continue;
+      jobs.push(card);
+      seen.add(key);
+    }
+    if (jobs.some((card) => card.distance_label) && jobs.some((card) => !card.distance_label)) {
+      scope = "near_plus_national";
+    } else if (!jobs.some((card) => card.distance_label)) {
+      scope = "national";
+    }
+  }
+  return { jobs, scope };
+}
+
+router.get("/public-featured-jobs", requireConfig, async (req, res) => {
+  res.set("Cache-Control", "public, max-age=60");
+  const zip = String(req.query.zip || "").trim();
+  const queryLat = req.query.near_lat != null && req.query.near_lat !== "" ? Number(req.query.near_lat) : null;
+  const queryLng = req.query.near_lng != null && req.query.near_lng !== "" ? Number(req.query.near_lng) : null;
+  const queryState = typeof req.query.near_state === "string" ? req.query.near_state.trim() : "";
+  const hasQueryCoords = Number.isFinite(queryLat) && Number.isFinite(queryLng);
+  const cacheKey = /^\d{5}$/.test(zip)
+    ? `zip:${zip}`
+    : hasQueryCoords
+      ? `coords:${queryLat.toFixed(2)},${queryLng.toFixed(2)}`
+      : "national";
+  const cached = featuredJobsCacheMap.get(cacheKey);
+  if (cached && Date.now() - cached.at < FEATURED_JOBS_TTL_MS) {
+    return res.json(cached.payload);
+  }
+
+  try {
+    let jobs = [];
+    let scope = "national";
+    let nearLabel = null;
+    let nearLat = null;
+    let nearLng = null;
+
+    if (/^\d{5}$/.test(zip) || hasQueryCoords) {
+      // Prefer client-supplied coords (from a prior ZIP lookup) so the
+      // homepage can skip a second Nominatim round-trip on warm visits.
+      if (hasQueryCoords) {
+        nearLat = queryLat;
+        nearLng = queryLng;
+        nearLabel = queryState || (/^\d{5}$/.test(zip) ? zip : "your area");
+      } else {
+        const coords = await geocodeZip(zip);
+        if (!coords) return res.status(404).json({ error: "Could not find that ZIP code." });
+        nearLat = coords.lat;
+        nearLng = coords.lng;
+        nearLabel = coords.state || zip;
+      }
+      const nearbyResult = await buildNearbyFeaturedCards(nearLat, nearLng);
+      if (nearbyResult.error) return res.status(500).json({ error: nearbyResult.error.message });
+      jobs = nearbyResult.jobs;
+      scope = nearbyResult.scope;
+    } else {
+      const { data, error } = await fetchRecentFeaturedPool(24);
+      if (error) return res.status(500).json({ error: error.message });
+      jobs = pickFeaturedJobs(data, 6);
+    }
+
+    const payload = {
+      jobs,
+      scope,
+      near_label: nearLabel,
+      zip: /^\d{5}$/.test(zip) ? zip : null,
+      lat: nearLat,
+      lng: nearLng,
+      cached_for_seconds: FEATURED_JOBS_TTL_MS / 1000,
+    };
+    rememberFeaturedCache(cacheKey, payload);
+    res.json(payload);
+  } catch (error) {
+    res.status(500).json({ error: error.message || "Failed to load featured jobs." });
+  }
 });
 
 // GET /api/public-employer-count — same pattern as /public-job-count

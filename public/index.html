@@ -320,6 +320,32 @@
   .job-card.is-skeleton .company .sk{height:13px; width:54%;}
   .job-card.is-skeleton .job-meta .sk{height:12px; width:66%; margin-bottom:4px;}
   @keyframes skShine{to{background-position:-200% 0;}}
+  .jobs-zip-bar{
+    display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:10px;
+    max-width:640px; margin:0 auto 28px; padding:14px 18px; background:#fff;
+    border:1px solid var(--border); border-radius:14px;
+    box-shadow:0 8px 22px -18px rgba(11,29,58,0.28);
+  }
+  .jobs-zip-bar label{font-size:13.5px; font-weight:700; color:var(--navy);}
+  .jobs-zip-bar input{
+    width:112px; border:1px solid var(--border); border-radius:10px; padding:10px 12px;
+    font-size:14px; font-family:inherit; text-align:center; font-weight:700; color:var(--navy);
+  }
+  .jobs-zip-bar .btn{padding:10px 16px; font-size:13.5px;}
+  .jobs-zip-status{font-size:13px; color:var(--muted); font-weight:600; text-align:center; margin:-12px 0 22px;}
+  .jobs-zip-status.is-error{color:#C0392B;}
+  .jobs-zip-status.is-ok{color:#00806E;}
+
+  /* ===== Membership clarity ===== */
+  .membership-strip{max-width:820px; margin:0 auto; text-align:center;}
+  .membership-strip h2{font-size:32px; font-weight:700; color:var(--navy); line-height:1.2; margin-bottom:12px;}
+  .membership-strip > p{font-size:16px; color:var(--muted); line-height:1.6; margin-bottom:28px;}
+  .membership-points{display:grid; grid-template-columns:repeat(3,1fr); gap:18px; text-align:left; margin-bottom:28px;}
+  .membership-point{background:#fff; border:1px solid var(--border); border-radius:14px; padding:18px 16px;}
+  .membership-point strong{display:block; font-size:14.5px; font-weight:800; color:var(--navy); margin-bottom:6px;}
+  .membership-point span{font-size:13.5px; color:var(--muted); line-height:1.5;}
+  .membership-price{font-size:14.5px; font-weight:700; color:var(--navy); margin-bottom:16px;}
+  .membership-price em{font-style:normal; color:var(--royal);}
 
   /* ===== Seeker conversion band ===== */
   .split{background:var(--gray); padding:88px 0;}
@@ -410,7 +436,7 @@
     .benefit-grid{grid-template-columns:1fr;}
     .steps, .jobs-grid, .testimonials-grid{grid-template-columns:1fr;}
     .split-grid{grid-template-columns:1fr;}
-    .contrast-grid, .product-proof{grid-template-columns:1fr;}
+    .contrast-grid, .product-proof, .membership-points{grid-template-columns:1fr;}
     .footer-grid{grid-template-columns:1fr 1fr;}
     nav.links{display:none;}
     h1.hero-h{font-size:38px;}
@@ -552,7 +578,7 @@
         <div class="role-meta">Veterinary Diagnostics</div>
         <div class="role-meta">Southeast Region</div>
         <div class="comp">$110K – $150K OTE</div>
-        <a href="rook-pricing.html" class="view-btn">View Match</a>
+        <a href="rook-onboarding-v8.html" class="view-btn">See my matches</a>
       </div>
     </div>
   </div>
@@ -700,34 +726,35 @@
       </div>
     </div>
     <div class="product-proof">
-      <div class="proof-panel">
-        <div class="proof-label">Your match feed</div>
-        <div class="proof-row">
-          <div class="pr-top"><div class="pr-title">Diagnostics Territory Manager</div><span class="match-pill">Strong fit</span></div>
+      <div class="proof-panel" id="proofPanel">
+        <div class="proof-label">Roles in the market right now</div>
+        <div class="proof-row" data-proof-row>
+          <div class="pr-top"><div class="pr-title">Diagnostics Territory Manager</div><span class="match-pill">Current</span></div>
           <div class="pr-meta">Southeast territory · Companion animal diagnostics</div>
         </div>
-        <div class="proof-row">
-          <div class="pr-top"><div class="pr-title">Medical Device Account Executive</div><span class="match-pill">Strong fit</span></div>
+        <div class="proof-row" data-proof-row>
+          <div class="pr-top"><div class="pr-title">Medical Device Account Executive</div><span class="match-pill">Current</span></div>
           <div class="pr-meta">Regional role · Capital equipment</div>
         </div>
-        <div class="proof-row">
-          <div class="pr-top"><div class="pr-title">Animal Health Sales Specialist</div><span class="match-pill">Good fit</span></div>
+        <div class="proof-row" data-proof-row>
+          <div class="pr-top"><div class="pr-title">Animal Health Sales Specialist</div><span class="match-pill">Current</span></div>
           <div class="pr-meta">Field-based · Vaccines &amp; therapeutics</div>
         </div>
       </div>
       <div class="proof-why">
-        <div class="proof-label">Why this match</div>
-        <h3>See the fit before you apply</h3>
-        <p>Membership unlocks full match detail, employer context, and tools to tailor your résumé for the roles that matter.</p>
+        <div class="proof-label">What membership unlocks</div>
+        <h3>See employers, scores, and next steps</h3>
+        <p>Build a profile once. ROOK ranks live roles to your territory and experience, then gives you the tools to apply with a tailored résumé.</p>
         <ul>
-          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 13l4 4L19 7"/></svg>Clear reasons a role fits your background</li>
-          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 13l4 4L19 7"/></svg>Territory and industry alignment up front</li>
-          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 13l4 4L19 7"/></svg>Skip the roles that only look good on paper</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 13l4 4L19 7"/></svg>Full employer names and match scores</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 13l4 4L19 7"/></svg>Territory and specialty fit before you apply</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 13l4 4L19 7"/></svg>Résumé, cover letter, and outreach tools included</li>
         </ul>
       </div>
     </div>
     <div class="section-cta">
       <a href="rook-onboarding-v8.html" class="btn btn-primary">See matches for my background</a>
+      <div style="margin-top:12px; font-size:13.5px; color:var(--muted); font-weight:600;">24 hours free after email verify · No credit card to start</div>
     </div>
   </div>
 </section>
@@ -767,9 +794,15 @@
   <div class="wrap">
     <div class="section-head">
       <div class="section-eyebrow">Live inventory</div>
-      <h2>Roles ROOK is adding right now</h2>
-      <p>A live sample from current openings — titles and locations only, so the page stays fast and employer details stay behind membership.</p>
+      <h2 id="jobsSectionTitle">Roles ROOK is adding right now</h2>
+      <p id="jobsSectionSub">A live sample from current openings — titles and locations only, so the page stays fast and employer details stay behind membership.</p>
     </div>
+    <form class="jobs-zip-bar" id="jobsZipForm" autocomplete="off">
+      <label for="jobsZipInput">Show roles near</label>
+      <input type="text" id="jobsZipInput" name="zip" placeholder="ZIP code" maxlength="5" inputmode="numeric" pattern="[0-9]{5}" aria-describedby="jobsZipStatus">
+      <button type="submit" class="btn btn-primary" id="jobsZipSubmit">Update</button>
+    </form>
+    <div class="jobs-zip-status" id="jobsZipStatus" role="status">Optional — enter a ZIP to personalize this sample. National roles load instantly either way.</div>
     <div class="jobs-grid" id="featuredJobsGrid">
       <div class="job-card is-skeleton" aria-hidden="true">
         <div class="job-card-top"><span class="match-pill">New</span></div>
@@ -791,7 +824,8 @@
       </div>
     </div>
     <div class="section-cta">
-      <a href="rook-onboarding-v8.html" class="btn btn-primary">See jobs near me</a>
+      <a href="rook-onboarding-v8.html" class="btn btn-primary">See jobs matched to me</a>
+      <div style="margin-top:12px; font-size:13.5px; color:var(--muted); font-weight:600;">About 2 minutes · No payment yet</div>
     </div>
   </div>
 </section>
@@ -836,12 +870,39 @@
   </div>
 </section>
 
+<section class="pad" id="membership">
+  <div class="wrap">
+    <div class="membership-strip">
+      <div class="section-eyebrow">Membership</div>
+      <h2>One plan. Full access from day one.</h2>
+      <p>Verify your email for 24 hours free — no credit card. Keep going for $9.99 your first paid month, then $19.99/month. Cancel anytime.</p>
+      <div class="membership-points">
+        <div class="membership-point">
+          <strong>Matched roles, not keyword noise</strong>
+          <span>See employers, scores, and territory fit for medical and veterinary sales only.</span>
+        </div>
+        <div class="membership-point">
+          <strong>Apply with the right materials</strong>
+          <span>Tailored résumés, cover letters, and recruiter outreach for the roles you pursue.</span>
+        </div>
+        <div class="membership-point">
+          <strong>Stay current without re-searching</strong>
+          <span>New openings keep matching against the profile you build once.</span>
+        </div>
+      </div>
+      <div class="membership-price">Start free for 24 hours · Then <em>$9.99</em> for your first 30 paid days</div>
+      <a href="rook-onboarding-v8.html" class="btn btn-primary">Start with my profile</a>
+      <div style="margin-top:12px;"><a href="rook-pricing.html" style="font-size:13.5px; font-weight:700; color:var(--royal);">See full plan details →</a></div>
+    </div>
+  </div>
+</section>
+
 <section class="pad" style="padding-top:0;">
   <div class="wrap">
     <div class="cta-banner">
       <h2>Your next role is already out there.</h2>
       <p>Build your profile once. ROOK does the searching from here.</p>
-      <div class="cta-trust">No long-term contract · Cancel anytime · Built only for med &amp; vet sales</div>
+      <div class="cta-trust">24 hours free after verify · Cancel anytime · Built only for med &amp; vet sales</div>
       <div class="actions">
         <a href="rook-onboarding-v8.html" class="btn btn-primary">Find Your Next Role</a>
         <a href="rook-pricing.html" class="btn btn-outline" style="background:transparent; color:#fff; border-color:rgba(255,255,255,0.25);">See Plans</a>
@@ -903,7 +964,8 @@
 <script>
 // Homepage marketing data: two tiny public endpoints only (counts + a
 // handful of masked cards). Neither returns full inventory, descriptions,
-// or employer names — so first paint stays light.
+// or employer names — so first paint stays light. Optional ZIP only
+// re-fetches the same slim featured endpoint with a nearby box.
 (async () => {
   try {
     const res = await fetch('/api/public-job-count');
@@ -920,38 +982,164 @@
   }
 })();
 
-(async () => {
+(() => {
   const grid = document.getElementById('featuredJobsGrid');
   if (!grid) return;
   const pinIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-6-7-11a7 7 0 1114 0c0 5-7 11-7 11z"/></svg>';
   const clockIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
-  try {
-    const res = await fetch('/api/public-featured-jobs');
-    if (!res.ok) return;
-    const data = await res.json();
+  const ZIP_LOCATION_STORAGE_KEY = 'rook_visitor_location_v2';
+  const ZIP_LOCATION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+  const zipInput = document.getElementById('jobsZipInput');
+  const zipForm = document.getElementById('jobsZipForm');
+  const zipStatus = document.getElementById('jobsZipStatus');
+  const titleEl = document.getElementById('jobsSectionTitle');
+  const subEl = document.getElementById('jobsSectionSub');
+
+  function esc(value) {
+    return String(value == null ? '' : value).replace(/</g, '');
+  }
+
+  function getCachedLocation() {
+    try {
+      const raw = localStorage.getItem(ZIP_LOCATION_STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || !/^\d{5}$/.test(String(parsed.zip || ''))) return null;
+      if (Date.now() - (parsed.savedAt || 0) > ZIP_LOCATION_MAX_AGE_MS) return null;
+      return {
+        zip: String(parsed.zip),
+        lat: typeof parsed.lat === 'number' ? parsed.lat : null,
+        lng: typeof parsed.lng === 'number' ? parsed.lng : null,
+        state: parsed.state || null,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  function cacheZip(zip, lat, lng, state) {
+    try {
+      localStorage.setItem(ZIP_LOCATION_STORAGE_KEY, JSON.stringify({
+        zip, lat, lng, state: state || null, savedAt: Date.now()
+      }));
+    } catch {
+      // Private browsing / full storage — non-fatal.
+    }
+  }
+
+  function setZipStatus(message, kind) {
+    if (!zipStatus) return;
+    zipStatus.textContent = message;
+    zipStatus.classList.remove('is-error', 'is-ok');
+    if (kind) zipStatus.classList.add(kind);
+  }
+
+  function updateProofPanel(jobs) {
+    const rows = document.querySelectorAll('#proofPanel [data-proof-row]');
+    if (!rows.length || !jobs.length) return;
+    jobs.slice(0, rows.length).forEach((job, index) => {
+      const row = rows[index];
+      const title = row.querySelector('.pr-title');
+      const meta = row.querySelector('.pr-meta');
+      const pill = row.querySelector('.match-pill');
+      if (title) title.textContent = job.role_title || 'Sales opportunity';
+      if (meta) {
+        const specialty = job.specialty_label || (job.industry_labels && job.industry_labels[0]) || 'Medical & veterinary sales';
+        meta.textContent = (job.location_label || 'United States') + ' · ' + specialty;
+      }
+      if (pill) pill.textContent = job.freshness_label || 'Current';
+    });
+  }
+
+  function renderJobs(data) {
     const jobs = Array.isArray(data.jobs) ? data.jobs.slice(0, 6) : [];
     if (!jobs.length) return;
+    if (titleEl && subEl) {
+      if (data.scope === 'near' || data.scope === 'near_plus_national') {
+        const where = data.near_label || (data.zip ? ('ZIP ' + data.zip) : 'your area');
+        titleEl.textContent = 'Roles near ' + where;
+        subEl.textContent = data.scope === 'near_plus_national'
+          ? 'Nearby openings first, plus a few national roles when the local sample is thin — titles and locations only.'
+          : 'A live sample near your ZIP — titles and locations only, so the page stays fast.';
+      } else {
+        titleEl.textContent = 'Roles ROOK is adding right now';
+        subEl.textContent = 'A live sample from current openings — titles and locations only, so the page stays fast and employer details stay behind membership.';
+      }
+    }
     grid.innerHTML = jobs.map((job) => {
       const specialty = job.specialty_label || (job.industry_labels && job.industry_labels[0]) || 'Medical & veterinary sales';
       const fresh = job.freshness_label || 'Current opportunity';
       const loc = job.location_label || 'United States';
       const title = job.role_title || 'Sales opportunity';
+      const distance = job.distance_label || 'Live from employer career sites';
       return (
         '<article class="job-card">' +
-          '<div class="job-card-top"><span class="match-pill">' + fresh.replace(/</g, '') + '</span></div>' +
-          '<h4>' + title.replace(/</g, '') + '</h4>' +
-          '<div class="company">' + String(specialty).replace(/</g, '') + '</div>' +
+          '<div class="job-card-top"><span class="match-pill">' + esc(fresh) + '</span></div>' +
+          '<h4>' + esc(title) + '</h4>' +
+          '<div class="company">' + esc(specialty) + '</div>' +
           '<div class="job-meta">' +
-            '<span>' + pinIcon + loc.replace(/</g, '') + '</span>' +
-            '<span>' + clockIcon + 'Live from employer career sites</span>' +
+            '<span>' + pinIcon + esc(loc) + '</span>' +
+            '<span>' + clockIcon + esc(distance) + '</span>' +
           '</div>' +
-          '<a href="rook-onboarding-v8.html" class="view">See matches near me →</a>' +
+          '<a href="rook-onboarding-v8.html" class="view">See matches for my background →</a>' +
         '</article>'
       );
     }).join('');
-  } catch (err) {
-    console.error('Could not load featured jobs:', err);
+    updateProofPanel(jobs);
   }
+
+  async function loadFeaturedJobs(location) {
+    const params = new URLSearchParams();
+    const zip = location && location.zip ? String(location.zip) : '';
+    if (/^\d{5}$/.test(zip)) params.set('zip', zip);
+    if (location && Number.isFinite(location.lat) && Number.isFinite(location.lng)) {
+      params.set('near_lat', String(location.lat));
+      params.set('near_lng', String(location.lng));
+      if (location.state) params.set('near_state', String(location.state));
+    }
+    const url = '/api/public-featured-jobs' + (params.toString() ? ('?' + params.toString()) : '');
+    const res = await fetch(url);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || ('API returned ' + res.status));
+    renderJobs(data);
+    if (zip && (data.scope === 'near' || data.scope === 'near_plus_national')) {
+      setZipStatus('Showing roles near ' + (data.near_label || ('ZIP ' + zip)) + '.', 'is-ok');
+    } else if (zip) {
+      setZipStatus('No dense local sample yet — showing current national roles for ZIP ' + zip + '.', 'is-ok');
+    } else {
+      setZipStatus('Optional — enter a ZIP to personalize this sample. National roles load instantly either way.');
+    }
+    return data;
+  }
+
+  if (zipForm) {
+    zipForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const zip = String(zipInput && zipInput.value || '').trim();
+      if (!/^\d{5}$/.test(zip)) {
+        setZipStatus('Enter a valid 5-digit ZIP code.', 'is-error');
+        return;
+      }
+      setZipStatus('Updating roles near ' + zip + '…');
+      try {
+        // One slim featured call does geocode + nearby sample. Persist
+        // coords from the response so Find Jobs can reuse them.
+        const data = await loadFeaturedJobs({ zip });
+        if (data && typeof data.lat === 'number' && typeof data.lng === 'number') {
+          cacheZip(zip, data.lat, data.lng, data.near_label || null);
+        }
+      } catch (err) {
+        console.error('Could not personalize featured jobs:', err);
+        setZipStatus(err.message || 'Could not update roles for that ZIP.', 'is-error');
+      }
+    });
+  }
+
+  const cachedLocation = getCachedLocation();
+  if (cachedLocation && zipInput) zipInput.value = cachedLocation.zip;
+  loadFeaturedJobs(cachedLocation).catch((err) => {
+    console.error('Could not load featured jobs:', err);
+  });
 })();
 </script>
 <script type="text/javascript">
