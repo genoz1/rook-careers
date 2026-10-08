@@ -1075,6 +1075,8 @@
         if (!pendingLocation) return;
         btnSave.disabled = true;
         btnSave.textContent = 'Saving…';
+        const statusEl = document.getElementById('dashLocStatus');
+        if (statusEl) statusEl.textContent = 'Saving location and refreshing matches…';
         try {
           const payload = {
             home_city:  pendingLocation.city  || null,
@@ -1094,10 +1096,12 @@
           document.getElementById('locationLabel').textContent = pendingLocation.label || pendingLocation.zip || '—';
           editor.style.display = 'none';
           row.style.display = 'flex';
+          btnSave.textContent = 'Save & Refresh';
+          if (statusEl) statusEl.textContent = '';
           // Reload jobs with new location
-          loadJobs();
+          await loadJobs();
         } catch (err) {
-          document.getElementById('dashLocStatus').textContent = 'Could not save. Try again.';
+          if (statusEl) statusEl.textContent = 'Could not save. Try again.';
           btnSave.disabled = false;
           btnSave.textContent = 'Save & Refresh';
         }
@@ -1139,11 +1143,21 @@
 
     async function loadJobs() {
     const requestVersion = ++jobsLoadVersion;
+    // Show the busy state immediately on first load and on every
+    // location/industry refresh so the previous list doesn't look frozen
+    // while /jobs is in flight.
+    jobList.style.display = 'none';
+    loading.style.display = '';
+    jobList.setAttribute('aria-busy', 'true');
     try {
       // Kicked off in parallel here, awaited just before rendering
       // below — overlaps with the rest of this function's own fetches
       // instead of adding to them sequentially.
       const ctaLabelPromise = rookLockedJobCtaLabel();
+      // Recruiter merge is best-effort and must never block the main
+      // ranked list — kick it off alongside profile/jobs and fold in
+      // after first paint if it finishes later.
+      const recruiterPromise = rookApiFetch('/recruiter-jobs').catch(() => null);
       const profileRes = await rookApiFetch('/profile');
       if (!profileRes.ok) throw new Error('Profile request failed');
       const profileForLocation = await profileRes.json();
@@ -1172,6 +1186,9 @@
           jobsUrl = `/jobs?limit=300&near_lat=${geo.lat}&near_lng=${geo.lng}`;
         }
       }
+      if (profileForLocation?.home_state) {
+        jobsUrl += '&near_state=' + encodeURIComponent(profileForLocation.home_state);
+      }
       jobsUrl += '&industries=' + encodeURIComponent(showAllIndustries ? 'all' : selectedIndustries().join(','));
       const res = await rookApiFetch(jobsUrl);
       if (!res.ok) throw new Error('API returned ' + res.status);
@@ -1195,6 +1212,7 @@
         if (_ms0) _ms0.textContent = 'No ranked opportunities yet.';
         showBanner('No jobs match the selected industries. Try All industries or another location.');
         revealDemo();
+        jobList.setAttribute('aria-busy', 'false');
         if (industryUpdatePending) setIndustryUpdateState('idle');
         return;
       }
@@ -1205,33 +1223,31 @@
       if (requestVersion !== jobsLoadVersion) return;
       currentJobs = jobs;
 
-      // The "Show recruiter-posted jobs" toggle implies recruiter jobs
-      // belong on this main list, not just the separate Recruiter Jobs
-      // page — but /jobs only returns jobs that already have a
-      // precomputed score row, so a just-approved recruiter posting can
-      // sit invisible here until the next scheduled scoring run. Merge
-      // in any recruiter-posted jobs from /recruiter-jobs (which reads
-      // straight from the jobs table, no scoring dependency) that
-      // aren't already present, so the toggle actually has something to
-      // show/hide the moment a job is approved, not hours later.
-      try {
-        const recRes = await rookApiFetch('/recruiter-jobs');
-        if (recRes.ok) {
-          const recJobs = await recRes.json();
-          if (requestVersion !== jobsLoadVersion) return;
-          const knownIds = new Set(currentJobs.map((j) => j.id));
-          const missing = (Array.isArray(recJobs) ? recJobs : []).filter((j) => !knownIds.has(j.id));
-          currentJobs = [...currentJobs, ...missing];
-        }
-      } catch {}
-
       jobList.dataset.demo = 'false';
       lockedJobCtaLabel = await ctaLabelPromise;
       if (requestVersion !== jobsLoadVersion) return;
       applyRecruiterToggle();
       updateStats(jobs);
       revealDemo();
+      jobList.setAttribute('aria-busy', 'false');
       if (industryUpdatePending) setIndustryUpdateState('idle');
+
+      // Fold recruiter-posted extras in after first paint so a slow
+      // /recruiter-jobs response cannot stall the ranked list.
+      try {
+        const recRes = await recruiterPromise;
+        if (recRes && recRes.ok) {
+          const recJobs = await recRes.json();
+          if (requestVersion !== jobsLoadVersion) return;
+          const knownIds = new Set(currentJobs.map((j) => j.id));
+          const missing = (Array.isArray(recJobs) ? recJobs : []).filter((j) => !knownIds.has(j.id));
+          if (missing.length) {
+            currentJobs = [...currentJobs, ...missing];
+            applyRecruiterToggle();
+            updateStats(currentJobs);
+          }
+        }
+      } catch {}
     } catch (err) {
       if (requestVersion !== jobsLoadVersion) return;
       const _mce = document.getElementById('mobileJobCount');
@@ -1240,6 +1256,7 @@
       if (_mse) _mse.textContent = 'Unable to load opportunities.';
       showBanner('We’re having trouble loading your matches right now. Please try again.');
       showJobsLoadError();
+      jobList.setAttribute('aria-busy', 'false');
       if (industryUpdatePending) setIndustryUpdateState('error');
     }
     }

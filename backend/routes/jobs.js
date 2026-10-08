@@ -23,6 +23,7 @@ const { maskedTitle } = require('../maskedPresentation');
 const express = require("express");
 const {matches: matchesIndustry, normalizeSelection, classify} = require("../../public/rook-job-classification");
 const {readJobPool} = require("../jobPool");
+const {fetchGeoScopedJobPool} = require("../geoJobPool");
 const {industryPrefilter} = require("../industryPrefilter");
 const { createClient } = require("@supabase/supabase-js");
 const { scoreJob, hasFullAccess, stateAbbrFromName } = require("../matching");
@@ -369,9 +370,19 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
   const selectionInput = industries !== undefined ? String(industries) : (industry || "all");
   const selection = normalizeSelection(selectionInput.split(","));
   const industryPass = job => selectionInput === "all" || matchesIndustry(job, selection);
-  const selectedJobPool = query => {
+  const selectedJobPool = (query, opts) => {
     const prefilter = selectionInput === 'all' ? '' : industryPrefilter(selection);
-    return readJobPool(prefilter ? query.or(prefilter) : query);
+    return readJobPool(prefilter ? query.or(prefilter) : query, opts);
+  };
+  const createSelectedJobQuery = (columns = JOB_LIST_COLUMNS_NO_DESCRIPTION) => {
+    let query = supabaseAdmin
+      .from("jobs")
+      .select(columns)
+      .eq("status", "active")
+      .eq("moderation_status", "approved");
+    const prefilter = selectionInput === 'all' ? '' : industryPrefilter(selection);
+    if (prefilter) query = query.or(prefilter);
+    return query;
   };
 
   // Anonymous browsing. Direct instruction: "copy the job search page
@@ -430,47 +441,30 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     }
 
     const EXPLORE_RADIUS_MILES = 300; // same constant as the authenticated explore path below — one radius, not two to keep in sync
-    const latDelta = EXPLORE_RADIUS_MILES / 69;
-    const lngDelta = EXPLORE_RADIUS_MILES / (69 * Math.max(0.1, Math.cos((nearLat * Math.PI) / 180)));
-
-    const { data: boxJobs, error: boxError } = await selectedJobPool(supabaseAdmin
-      .from("jobs")
-      .select(JOB_LIST_COLUMNS_NO_DESCRIPTION)
-      .eq("status", "active")
-      .eq("moderation_status", "approved")
-      .gte("job_lat", nearLat - latDelta)
-      .lte("job_lat", nearLat + latDelta)
-      .gte("job_lng", nearLng - lngDelta)
-      .lte("job_lng", nearLng + lngDelta));
-    if (boxError) return res.status(500).json({ error: boxError.message });
-
-    const nearby = (boxJobs || []).filter((job) => {
-      if (job.job_lat == null || job.job_lng == null) return false;
-      return distanceMiles(nearLat, nearLng, job.job_lat, job.job_lng) <= EXPLORE_RADIUS_MILES;
+    // Geo-scoped pool: box + capped home-state text supplements. Never pull
+    // the full null-coordinate inventory on an anonymous location browse.
+    let exploreQuery = () => {
+      let q = createSelectedJobQuery();
+      if (state) q = q.eq("state", state);
+      if (keyword) q = q.or(`title_original.ilike.%${keyword}%,company_name.ilike.%${keyword}%`);
+      return q;
+    };
+    const { data: exploreJobs, error: exploreError } = await fetchGeoScopedJobPool({
+      createQuery: exploreQuery,
+      lat: nearLat,
+      lng: nearLng,
+      homeState: nearStateName,
+      allowBroad: false,
+      radiusMiles: EXPLORE_RADIUS_MILES,
     });
-
-    // Same reasoning as the authenticated path: a bounding box can only
-    // ever match jobs that HAVE real coordinates — fetched separately so
-    // a vague multi-location or never-geocoded posting isn't silently
-    // dropped, just scored through scoreJob()'s own honest fallback.
-    let noCoordsQuery = supabaseAdmin
-      .from("jobs")
-      .select(JOB_LIST_COLUMNS_NO_DESCRIPTION)
-      .eq("status", "active")
-      .eq("moderation_status", "approved")
-      .is("job_lat", null);
-
-    if (state) noCoordsQuery = noCoordsQuery.eq("state", state);
-    if (keyword) noCoordsQuery = noCoordsQuery.or(`title_original.ilike.%${keyword}%,company_name.ilike.%${keyword}%`);
-    const { data: noCoordsJobs, error: noCoordsError } = await selectedJobPool(noCoordsQuery);
-    if (noCoordsError) return res.status(500).json({ error: noCoordsError.message });
+    if (exploreError) return res.status(500).json({ error: exploreError.message });
 
     // The synthetic profile a visitor's ZIP produces — home_lat/lng and
     // home_state only. Every other scoreJob() field (résumé, industries,
     // salary floor, willing_to_relocate) is simply absent, which
     // scoreJob already handles safely everywhere it's read.
     const anonymousProfile = { home_lat: nearLat, home_lng: nearLng, home_state: nearStateName };
-    let scored = [...nearby, ...(noCoordsJobs || [])]
+    let scored = (exploreJobs || [])
       .filter(isUsEligibleJob)
       .filter(industryPass)
       .map((job) => ({ ...job, match: scoreJob(job, anonymousProfile) }))
@@ -548,65 +542,36 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
 
   if (nearLat != null && nearLng != null && !Number.isNaN(nearLat) && !Number.isNaN(nearLng) && !isHomeLocation) {
     const EXPLORE_RADIUS_MILES = 300;
-    // Reported directly as genuinely slow: fetching ALL ~2,500+ active
-    // jobs via fetchActiveJobs (paginated, full columns) and THEN
-    // filtering by distance in JS meant paying the cost of the entire
-    // table on every single location search, when only a few hundred
-    // rows are ever geographically relevant. A simple lat/lng bounding
-    // box pushes that filtering down into the actual database query
-    // instead - approximate (a box isn't a true circle, so a handful of
-    // corner cases slightly outside the real radius can slip in; the
-    // exact per-job distanceMiles() filter below still trims those),
-    // but cuts the fetched row count dramatically for a real speed win.
-    // 1 degree latitude is ~69 miles everywhere; 1 degree longitude
-    // shrinks toward the poles, hence the cos(latitude) term.
-    const latDelta = EXPLORE_RADIUS_MILES / 69;
-    const lngDelta = EXPLORE_RADIUS_MILES / (69 * Math.max(0.1, Math.cos((nearLat * Math.PI) / 180)));
-
-    const { data: boxJobs, error: boxError } = await selectedJobPool(supabaseAdmin
-      .from("jobs")
-      .select(JOB_LIST_COLUMNS_NO_DESCRIPTION)
-      .eq("status", "active")
-      .eq("moderation_status", "approved")
-      .gte("job_lat", nearLat - latDelta)
-      .lte("job_lat", nearLat + latDelta)
-      .gte("job_lng", nearLng - lngDelta)
-      .lte("job_lng", nearLng + lngDelta));
-    if (boxError) return res.status(500).json({ error: boxError.message });
-
-    const nearby = (boxJobs || []).filter((job) => {
-      if (job.job_lat == null || job.job_lng == null) return false;
-      return distanceMiles(nearLat, nearLng, job.job_lat, job.job_lng) <= EXPLORE_RADIUS_MILES;
+    // Same geo-scoped pool as the home live path: bounding box plus capped
+    // state-text supplements. The old uncapped null-coordinate fetch was
+    // multi-second on every "show jobs near X" / location change.
+    let exploreQuery = () => {
+      let q = createSelectedJobQuery();
+      if (state) q = q.eq("state", state);
+      if (keyword) q = q.or(`title_original.ilike.%${keyword}%,company_name.ilike.%${keyword}%`);
+      return q;
+    };
+    // Prefer an explicit explored-state hint when present; otherwise leave
+    // state supplements empty so we don't inject the candidate's home-state
+    // inventory into a different city's explore results.
+    const exploredState = typeof req.query.near_state === "string" ? req.query.near_state : null;
+    const { data: exploreJobs, error: exploreError } = await fetchGeoScopedJobPool({
+      createQuery: exploreQuery,
+      lat: nearLat,
+      lng: nearLng,
+      homeState: exploredState,
+      allowBroad: allowsBroadLocations(profile),
+      radiusMiles: EXPLORE_RADIUS_MILES,
     });
-
-    // A lat/lng bounding box can only ever match jobs that HAVE real
-    // coordinates - a genuinely remote role, or a vague multi-location
-    // posting that never successfully geocoded, would be silently
-    // dropped entirely rather than shown (even far down the list) if
-    // this were the only query run. Fetched separately since a NULL
-    // column can't be bounded by range; scoreJob()'s own fallback path
-    // (state-text-matching, or a flat remote credit) already applies an
-    // honest, non-inflated distanceMultiplier to these - same as the
-    // real-coordinates case above, just without an exact mile figure.
-    let noCoordsQuery = supabaseAdmin
-      .from("jobs")
-      .select(JOB_LIST_COLUMNS_NO_DESCRIPTION)
-      .eq("status", "active")
-      .eq("moderation_status", "approved")
-      .is("job_lat", null);
-
-    if (state) noCoordsQuery = noCoordsQuery.eq("state", state);
-    if (keyword) noCoordsQuery = noCoordsQuery.or(`title_original.ilike.%${keyword}%,company_name.ilike.%${keyword}%`);
-    const { data: noCoordsJobs, error: noCoordsError } = await selectedJobPool(noCoordsQuery);
-    if (noCoordsError) return res.status(500).json({ error: noCoordsError.message });
+    if (exploreError) return res.status(500).json({ error: exploreError.message });
 
     // Scores against a location-shifted COPY of the real profile — every
     // other preference (industry, comp, experience, exclusions) stays
     // the candidate's own real, actual profile; only the point distance
     // is measured from shifts to the explored location, which is the
     // entire point of "what if I lived here instead."
-    const exploredProfile = { ...profile, home_lat: nearLat, home_lng: nearLng };
-    let scored = [...nearby, ...(noCoordsJobs || [])]
+    const exploredProfile = { ...profile, home_lat: nearLat, home_lng: nearLng, home_state: exploredState || profile.home_state };
+    let scored = (exploreJobs || [])
       .filter(isUsEligibleJob)
       .filter(industryPass)
       .map((job) => ({ ...job, match: scoreJob(job, exploredProfile) }))
@@ -657,8 +622,9 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
   //   - Required complex rescore endpoints, scoring_version tracking,
   //     background refresh logic, and cache invalidation — all fragile
   //
-  // The live scoring path fetches ~300-400 jobs via SQL bounding box
-  // and scores them in-memory in milliseconds. It is fast enough.
+  // The live scoring path fetches a geo-scoped pool (box + capped
+  // home-state text supplements; optional remote cap for national/remote
+  // prefs) and scores them in-memory. It is fast enough.
   // Scores are always current. There is no staleness to manage.
   //
   // If you are considering precomputed scores for performance: measure
@@ -666,33 +632,41 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
   // reintroduce precomputed scores without explicit written approval
   // from Gene and a full staleness management plan reviewed in advance.
   //
-  let liveQuery = supabaseAdmin
-    .from("jobs")
-    .select(JOB_LIST_COLUMNS_NO_DESCRIPTION)
-    .eq("status", "active")
-    .eq("moderation_status", "approved");
+  // Do NOT skip the box when allowsBroadLocations is true — that used to
+  // scan the full active inventory (~5k+ rows, multi-second). Broad prefs
+  // get a capped remote supplement instead.
+  let allMatchingJobs;
+  if (profile.home_lat != null && profile.home_lng != null && !keyword) {
+    const createLiveQuery = () => {
+      let q = createSelectedJobQuery();
+      if (state) q = q.eq("state", state);
+      return q;
+    };
+    const liveResult = await fetchGeoScopedJobPool({
+      createQuery: createLiveQuery,
+      lat: profile.home_lat,
+      lng: profile.home_lng,
+      homeState: profile.home_state || null,
+      allowBroad: allowsBroadLocations(profile),
+    });
+    if (liveResult.error) return res.status(500).json({ error: liveResult.error.message });
+    allMatchingJobs = liveResult.data;
+  } else {
+    let liveQuery = supabaseAdmin
+      .from("jobs")
+      .select(JOB_LIST_COLUMNS_NO_DESCRIPTION)
+      .eq("status", "active")
+      .eq("moderation_status", "approved");
 
-  if (state) liveQuery = liveQuery.eq("state", state);
-  if (keyword) {
-    liveQuery = liveQuery.or(`title_original.ilike.%${keyword}%,company_name.ilike.%${keyword}%`);
+    if (state) liveQuery = liveQuery.eq("state", state);
+    if (keyword) {
+      liveQuery = liveQuery.or(`title_original.ilike.%${keyword}%,company_name.ilike.%${keyword}%`);
+    }
+
+    const { data, error: liveError } = await selectedJobPool(liveQuery);
+    if (liveError) return res.status(500).json({ error: liveError.message });
+    allMatchingJobs = data;
   }
-
-  // Bounding box pre-filter — cuts Supabase response from 5,000+ rows
-  // to ~300-400 before any scoring happens. Applied only when the candidate
-  // has a home location; always includes remote and no-coordinate jobs so
-  // they're never accidentally excluded. Uses 300-mile box (same radius
-  // as the explore path) with a tighter SQL query rather than scoring
-  // everything in-memory first.
-  if (profile.home_lat != null && profile.home_lng != null && !keyword && !allowsBroadLocations(profile)) {
-    const latDelta = 300 / 69;
-    const lngDelta = 300 / (69 * Math.max(0.1, Math.cos((profile.home_lat * Math.PI) / 180)));
-    liveQuery = liveQuery.or(
-      `and(source_type.eq.custom_html,job_lat.is.null),location_raw.ilike.%|%,and(job_lat.gte.${profile.home_lat - latDelta},job_lat.lte.${profile.home_lat + latDelta},job_lng.gte.${profile.home_lng - lngDelta},job_lng.lte.${profile.home_lng + lngDelta})`
-    );
-  }
-
-  const { data: allMatchingJobs, error: liveError } = await selectedJobPool(liveQuery);
-  if (liveError) return res.status(500).json({ error: liveError.message });
 
   const { data: statusRows } = await supabaseAdmin
     .from("candidate_job_matches")
