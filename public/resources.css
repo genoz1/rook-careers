@@ -5,3 +5,22 @@
 @media(max-width:1150px) and (min-width:761px){header nav{gap:11px}.nav-inner{padding-left:18px;padding-right:18px}header nav a{font-size:10px}header nav .button{padding:8px}.news-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:1000px) and (min-width:761px){.menu-toggle{display:block;border:0;background:none;color:var(--navy);font-size:25px;padding:8px}header nav{display:none;position:absolute;top:78px;left:0;right:0;z-index:5;background:white;padding:20px;box-shadow:0 8px 10px #071e4120;flex-wrap:wrap;gap:20px}header nav.open{display:flex}header nav a{font-size:14px}}
 @media(max-width:760px){.news-categories{grid-template-columns:repeat(2,minmax(0,1fr))}.news-card .excerpt{font-size:12px;margin-top:6px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.news-article-layout .article-sidebar{display:none}.news-mobile-cta{display:block;margin-top:24px}}
+/* Live open-role panels on resource/news articles (hydrate via /api/public-featured-jobs). */
+.article-jobs{background:#f7fbff}
+.article-jobs-lead{font-size:13px;color:#465974;margin:10px 0 14px;line-height:1.5}
+.article-jobs-list{display:grid;gap:10px;margin:0 0 14px}
+.article-job-card{display:block;margin:0!important;padding:12px 14px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--navy)}
+.article-job-card:hover{border-color:#9cc7ef;text-decoration:none;background:#fafcff}
+.article-job-card strong{display:block;font-size:14px;line-height:1.35}
+.article-job-card small{display:block;margin-top:5px;font-size:12px;color:#52617b}
+.article-job-card span{display:block;margin-top:8px;font-size:12px;font-weight:600;color:var(--blue)}
+.article-jobs-fallback,.article-jobs-empty{font-size:13px;margin:0}
+.article-jobs .button{width:100%}
+.article-jobs-inline{display:block;margin:8px 0 28px}
+.article-jobs-sidebar{margin-top:18px}
+@media(max-width:760px){
+ /* Avoid duplicating the early open-roles module under the article on small screens. */
+ .article-jobs-sidebar{display:none}
+ .article-footer-cta .resource-cta p,.article-footer-cta .resource-cta .browse-link{display:block}
+ .article-footer-cta .resource-cta .button{width:100%;margin:12px 0 0;padding:11px 20px;font-size:14px}
+}
