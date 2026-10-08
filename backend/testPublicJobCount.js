@@ -12,9 +12,12 @@ test('public-job-count exposes inventory total and 7-day first_seen intake', () 
   assert.match(route, /total_count/);
 });
 
-test('homepage renders a dynamic 7-day new-jobs stat', () => {
+test('homepage renders a dynamic 7-day new-jobs stat in the hero', () => {
   const html = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
-  assert.match(html, /id="statNewJobs7d"/);
-  assert.match(html, /New jobs added in the past 7 days/);
+  const heroEnd = html.indexOf('class="trustrow"');
+  const hero = html.slice(html.indexOf('class="hero"'), heroEnd > -1 ? heroEnd : html.length);
+  assert.match(hero, /id="statNewJobs7d"/);
+  assert.match(hero, /class="hero-fresh"/);
+  assert.match(hero, /new jobs added in the past 7 days/);
   assert.match(html, /new_last_7_days/);
 });
