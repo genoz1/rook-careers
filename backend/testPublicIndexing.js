@@ -47,7 +47,7 @@ function setup(rows, { cap = 1000, failAt = Infinity, configured = true, resourc
       if (name === "../jobEligibility") return { isUsEligibleJob: (job) => job.location_raw !== "Kuwait" };
       throw new Error(`Unexpected dependency: ${name}`);
     },
-    process: { env: configured ? { SUPABASE_URL: "https://example.test", SUPABASE_ANON_KEY: "test", SUPABASE_SERVICE_ROLE_KEY: "server-test", PUBLIC_APP_URL: "https://rookcareers.com" } : {} },
+    process: { env: configured ? { SUPABASE_URL: "https://example.test", SUPABASE_ANON_KEY: "test", SUPABASE_SERVICE_ROLE_KEY: "server-test", PUBLIC_APP_URL: "https://rookcareers.com", NODE_TEST_CONTEXT: "1", SITEMAP_CACHE: "0" } : { SITEMAP_CACHE: "0" } },
     module: { exports: {} },
   });
   return async (route, { query = {}, params = {} } = {}) => {
@@ -147,7 +147,10 @@ test("job previews use ordinary WebPage metadata, retain gates, and escape conte
  test("LinkedIn preview preserves the clicked job and campaign without leaking source fields", async () => {
   const row = {...jobs(1)[0], id:'9980b1fc-c214-4c65-9f3f-70d46e748be6', title_original:'Clinical Sales Manager (New York) PRIVATE_EMPLOYER BrandXYZ ReqSecret8842',city:'New York City',state:'NY',location_raw:'New York City, NY',employment_type:'Full-time',salary_min:118337,salary_max:177505,ai_analysis:{product_categories:['Diagnostics'],summary:'PRIVATE_FULL_DESCRIPTION BrandXYZ'}};
   const res = await setup([row])('/jobs/:id',{params:{id:row.id},query:{utm_source:'linkedin',utm_medium:'social',utm_campaign:'organic',ref:'linkedin-post'}});
-  for (const value of ['Clinical Sales Manager (New York)','New York, NY','Full-time','$118,337–$177,505','Diagnostics','Browse protected matches','Preview first, then choose a paid access option','job='+row.id,'utm_source=linkedin','ref=linkedin-post']) assert.ok(res.body.includes(value),value);
+  // Generalized role titles omit parenthetical city fragments; city/state
+  // remain on the separate location line so free pages stay useful without
+  // exposing uniquely searchable employer titles.
+  for (const value of ['Clinical Sales Manager','New York, NY','Full-time','$118,337–$177,505','Diagnostics','Browse protected matches','Preview first, then choose a paid access option','job='+row.id,'utm_source=linkedin','ref=linkedin-post']) assert.ok(res.body.includes(value),value);
   for (const value of ['PRIVATE_','BrandXYZ','ReqSecret8842','private-application','Browse current opportunities']) assert.ok(!res.body.includes(value),value);
  });
 

@@ -225,17 +225,38 @@ function generalizedRole(job) {
   ];
   return fallbacks.find(([label]) => labels.includes(label))?.[1] || 'Medical Sales Representative';
 }
-function safeLocationLabel(job) {
+function normalizeCityStateInputs(job) {
   const zipcodes = require('zipcodes');
   const remote = String(job.remote_status || '').toLowerCase() === 'remote' ||
     /\bremote\b/i.test(String(job.location_raw || ''));
-  const raw = String(job.location_raw || '').split(',').map(s => s.trim()).filter(Boolean);
-  const cityInput = String(job.city || raw[0] || '').trim();
-  const city = /^new york city$/i.test(cityInput) ? 'New York' : cityInput;
-  const stateValue = String(job.state || raw[1] || '').trim();
+  const raw = String(job.location_raw || '').split(',').map(s => s.trim()).filter(Boolean)
+    .filter(s => !/^(United States?|US|USA)$/i.test(s));
+  let cityInput = String(job.city || '').trim();
+  let stateValue = String(job.state || '').trim();
+  // City fields sometimes store "Tampa, FL" — split before ZIP lookup.
+  if (cityInput.includes(',')) {
+    const parts = cityInput.split(',').map(s => s.trim()).filter(Boolean);
+    cityInput = parts[0] || cityInput;
+    if (!stateValue && parts[1]) stateValue = parts[1];
+  }
+  if (!cityInput && raw[0] && !/^\d{5}(-\d{4})?$/.test(raw[0]) && !/\bremote\b/i.test(raw[0])) {
+    cityInput = raw[0];
+  }
+  if (!stateValue && raw[1]) stateValue = raw[1];
+  cityInput = cityInput.replace(/\s+(?:metro(?:politan)?|area|region|county)$/i, '').trim();
+  if (/^new york city$/i.test(cityInput)) cityInput = 'New York';
   const stateUpper = stateValue.toUpperCase();
   const state = stateUpper.length === 2 ? stateUpper : zipcodes.states.full[stateValue] ||
-    zipcodes.states.full[stateUpper];
+    zipcodes.states.full[stateUpper] || null;
+  // Accept only plausible city tokens — never invent geography.
+  const cityOk = cityInput && /^[A-Za-z][A-Za-z .'-]{1,60}$/.test(cityInput) &&
+    !/\b(?:remote|united states|nationwide|various|multiple)\b/i.test(cityInput);
+  return { remote, city: cityOk ? cityInput : '', state };
+}
+
+function safeLocationLabel(job) {
+  const zipcodes = require('zipcodes');
+  const { remote, city, state } = normalizeCityStateInputs(job);
   if (city && state) {
     // lookupByName is O(matches); never scan the full ZIP table per card.
     const places = zipcodes.lookupByName(city, state);
@@ -243,6 +264,12 @@ function safeLocationLabel(job) {
     if (place) {
       const label = `${place.city}, ${place.state}`;
       return remote ? `Remote – ${place.state}` : label;
+    }
+    // ZIP table miss (neighborhood/styling) — still show validated city + ST
+    // when both fields are present and state is a US abbreviation.
+    if (/^[A-Z]{2}$/.test(state)) {
+      const label = `${city.replace(/\b\w/g, c => c.toUpperCase())}, ${state}`;
+      return remote ? `Remote – ${state}` : label;
     }
   }
   if (remote && state) return `Remote – ${state}`;
@@ -257,6 +284,15 @@ function safeLocationLabel(job) {
     return 'National Territory';
   }
   if (remote || job.geographic_eligibility?.kind === 'remote_us') return 'Remote – United States';
+  // Territory evidence with explicit US states (no city) — show state list
+  // only when short and validated, never employer territory brand names.
+  const evidenceStates = job.location_evidence?.scope?.kind === 'territory'
+    ? (job.location_evidence.scope.states || []).map(s => String(s).trim().toUpperCase()).filter(s => /^[A-Z]{2}$/.test(s))
+    : [];
+  if (evidenceStates.length === 1) return `Territory – ${evidenceStates[0]}`;
+  if (evidenceStates.length > 1 && evidenceStates.length <= 4) {
+    return `Territory – ${evidenceStates.join(', ')}`;
+  }
   return null;
 }
 function safeSpecialty(job) {

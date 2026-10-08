@@ -26,7 +26,7 @@ const {readJobPool} = require("../jobPool");
 const {fetchGeoScopedJobPool} = require("../geoJobPool");
 const {industryPrefilter} = require("../industryPrefilter");
 const { createClient } = require("@supabase/supabase-js");
-const { scoreJob, hasFullAccess, stateAbbrFromName } = require("../matching");
+const { hasFullAccess, stateAbbrFromName } = require("../matching");
 const { scoreLiveJob } = require("../liveScoring");
 const { scrubCompanyNameFromText, redactForNonSubscriber, redactForAnonymous } = require("../redaction");
 const {prepareJob,allowsBroadLocations} = require('../v7Location');
@@ -427,6 +427,13 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
       // than a mandatory gate, so plenty of requests will genuinely
       // have no location yet. Falls back to a plain recency-ordered,
       // redacted list rather than erroring or showing nothing.
+      //
+      // Cap the pool: previously readJobPool paged the entire active
+      // inventory (5k+ rows) on every unscoped anonymous request —
+      // 6–10s and occasional 500s. Fetch a bounded recent window with
+      // headroom for US-eligibility / industry filters, then slice.
+      const want = Math.min(Math.max(Number(limit) || 20, 1), 300);
+      const poolCap = Math.min(Math.max(want * 4, 80), 200);
       let fallbackQuery = supabaseAdmin
         .from("jobs")
         .select(JOB_LIST_COLUMNS_NO_DESCRIPTION)
@@ -435,9 +442,9 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
         .order("date_posted", { ascending: false });
 
       if (state) fallbackQuery = fallbackQuery.eq("state", state);
-      const { data: fallbackJobs, error: fallbackError } = await selectedJobPool(fallbackQuery);
+      const { data: fallbackJobs, error: fallbackError } = await selectedJobPool(fallbackQuery, { maxAccepted: poolCap });
       if (fallbackError) return res.status(500).json({ error: fallbackError.message });
-      const usOnly = (fallbackJobs || []).filter(isUsEligibleJob).filter(industryPass).slice(0, Number(limit));
+      const usOnly = (fallbackJobs || []).filter(isUsEligibleJob).filter(industryPass).slice(0, want);
       return res.json({ jobs: usOnly.map(redactForAnonymous).map(stripUnusedDescriptionFields), total_count: totalCount || 0, explored_location: false });
     }
 
@@ -496,12 +503,14 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     // scored branches below, description_text isn't even needed in
     // the query here — excluded directly rather than fetched and
     // stripped afterward.
+    const want = Math.min(Math.max(Number(limit) || 20, 1), 300);
+    const poolCap = Math.min(Math.max(want * 4, 80), 200);
     let query = supabaseAdmin.from("jobs").select(JOB_LIST_COLUMNS_NO_DESCRIPTION).eq("status", "active").eq("moderation_status", "approved").order("date_posted", { ascending: false });
 
     if (state) query = query.eq("state", state);
-    const { data, error } = await selectedJobPool(query);
+    const { data, error } = await selectedJobPool(query, { maxAccepted: poolCap });
     if (error) return res.status(500).json({error:error.message});
-    return res.json((data || []).filter(isUsEligibleJob).filter(industryPass).slice(0, Number(limit)).map(redactForNonSubscriber).map(stripUnusedDescriptionFields));
+    return res.json((data || []).filter(isUsEligibleJob).filter(industryPass).slice(0, want).map(redactForNonSubscriber).map(stripUnusedDescriptionFields));
   }
 
   // "Explore a different location" — Job Search's "Show jobs near"
@@ -1176,7 +1185,7 @@ router.get("/jobs/:id", requireConfig, optionalAuth, async (req, res) => {
     .maybeSingle();
 
   const hasRealScore = row && row.scored_at != null;
-  const match = hasRealScore ? matchFromRow(row) : scoreJob(data, profile);
+  const match = hasRealScore ? matchFromRow(row) : scoreLiveJob(data, profile);
 
   // Persist a freshly-computed live fallback score so list views
   // (dashboard, recruiter-jobs) pick it up on their next load instead
@@ -1578,7 +1587,7 @@ router.post("/onboarding/anonymous-preview", requireConfig, async (req, res) => 
         const distMi = j.job_lat != null
           ? Math.round(distanceMiles(profile.home_lat, profile.home_lng, j.job_lat, j.job_lng))
           : null;
-        return { job: j, score: scoreJob(j, profile), distMi, proxy: _anonProxyScore(j) };
+        return { job: j, score: scoreLiveJob(j, profile), distMi, proxy: _anonProxyScore(j) };
       })
       .filter(r => r.score.overall_score >= 50)
       .sort((a, b) => {
@@ -1687,7 +1696,7 @@ router.get("/onboarding/match-preview", requireConfig, requireAuth, async (req, 
       .filter(isUsEligibleJob)
       .filter(job => !normalizeSelection(profile.desired_industries).length || matchesIndustry(job,profile.desired_industries))
       .slice(0,500)
-      .map((job) => ({ score: scoreJob(job, profile), jobId: job.id, job }))
+      .map((job) => ({ score: scoreLiveJob(job, profile), jobId: job.id, job }))
       .filter((r) => r.score.overall_score != null && r.score.overall_score > 0)
       .sort((a, b) => b.score.overall_score - a.score.overall_score);
 

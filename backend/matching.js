@@ -541,7 +541,7 @@ function scoreJob(job, profile, options = {}) {
   }
 
   // No-résumé differentiation: use onboarding experience years + field vs
-  // inside-sales cues so preference-only rankings are not a flat 100% cluster.
+  // inside-sales cues so preference-only rankings are not a flat 100%/99% cluster.
   if (!profile.resume_structured) {
     const title = String(job.title_original || "").toLowerCase();
     const empType = String(job.employment_type || "").toLowerCase();
@@ -567,6 +567,32 @@ function scoreJob(job, profile, options = {}) {
     if (Number.isFinite(years) && years > 0 && years < 6 && /\b(?:director|vp|vice president|national sales)\b/i.test(title)) {
       prefScore -= 6;
       concerns.push("Senior leadership title relative to the experience you listed");
+    }
+    // Freshness spread — older postings rank below recent ones when everything
+    // else is preference-only proximity.
+    const postedAt = Date.parse(job.date_posted || job.first_seen_at || "");
+    if (Number.isFinite(postedAt)) {
+      const ageDays = Math.max(0, Math.floor((Date.now() - postedAt) / 86400000));
+      if (ageDays > 7) prefScore -= Math.min(12, Math.floor((ageDays - 7) / 7) * 2);
+    }
+    // Missing coordinates when the candidate has a home point — weaker geo signal.
+    if (profile.home_lat != null && profile.home_lng != null &&
+        (job.job_lat == null || job.job_lng == null) &&
+        String(job.remote_status || "").toLowerCase() !== "remote") {
+      prefScore -= 5;
+    }
+    // Lightweight industry label mismatch when the visitor stated a preference
+    // via classification labels (acquisition / dashboard industry control).
+    const desired = Array.isArray(profile.desired_industries) ? profile.desired_industries : [];
+    if (desired.length) {
+      try {
+        const { classify } = require("../public/rook-job-classification");
+        const labels = classify(job).labels || [];
+        if (labels.length && !desired.some((d) => labels.includes(d))) {
+          prefScore -= 14;
+          concerns.push("Industry may not match your stated preference");
+        }
+      } catch (_) { /* classification unavailable — skip */ }
     }
   }
 

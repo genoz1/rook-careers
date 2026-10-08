@@ -135,8 +135,8 @@ function rookApplySidebarProfile(profile) {
   const statusLabel = profile.subscription_status === 'active'
     ? 'Professional Plan'
     : profile.subscription_status === 'trialing'
-      ? 'Free Trial'
-      : 'No Active Subscription';
+      ? 'Membership'
+      : 'No Active Membership';
   document.querySelectorAll('.side-foot .r').forEach((el) => { el.textContent = statusLabel; });
 }
 

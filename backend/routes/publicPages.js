@@ -25,9 +25,18 @@ const supabaseAnon = isConfigured
   : null;
 
 const APP_BASE_URL = (process.env.PUBLIC_APP_URL || "https://rookcareers.com").replace(/\/$/, "");
-const {createInventoryLoader} = require("../seoInventory");
+const {CATEGORIES, FLORIDA, createInventoryLoader} = require("../seoInventory");
 const {createCollectionHandler, createRelatedArticleLoader, hasFilters} = require("../seoCollections");
 const loadSeoInventory = createInventoryLoader(supabaseAnon);
+// Sitemap XML is expensive to rebuild (thousands of job URLs). Serve a
+// short-lived in-memory copy so crawlers do not time out on cold hits.
+let sitemapCache = { body: null, expires: 0 };
+const SITEMAP_TTL_MS = 15 * 60 * 1000;
+// Disable when the test runner (or an explicit SITEMAP_CACHE=0) asks for
+// deterministic rebuilds — including VM harnesses that stub process.env.
+function sitemapCachingEnabled() {
+  return process.env.SITEMAP_CACHE !== '0' && !process.env.NODE_TEST_CONTEXT;
+}
 
 function escapeHtml(str) {
   return String(str || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -252,7 +261,7 @@ router.get("/jobs", async (req, res) => {
       <h1 style="font-size:28px;margin-bottom:16px;">Medical sales job previews${page > 1 ? ` — page ${page}` : ""}</h1>
       <p style="line-height:1.7;margin-bottom:24px;">Explore current opportunities by broad industry and role. ROOK membership unlocks job titles, employers, full details and application links.</p>
       <p style="margin-bottom:24px;"><a href="/rook-browse.html" style="color:var(--royal);">Find roles near your ZIP code</a></p>
-      ${eligibleData.slice(0, pageSize).map(job => `<a href="/jobs/${escapeHtml(job.id)}" style="display:block;background:#fff;border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:12px;"><h2 style="font-size:17px;margin-bottom:6px;">${escapeHtml(project(job).industry_classification.labels.join(' · ') || 'Sales opportunity')}</h2><p style="color:var(--muted);">${escapeHtml([project(job).role_type,project(job).territory_type,project(job).freshness_label].filter(Boolean).join(' · '))}</p></a>`).join("") || "<p>No open roles right now. Please check back soon.</p>"}
+      ${eligibleData.slice(0, pageSize).map(job => { const safe = project(job); return `<a href="/jobs/${escapeHtml(job.id)}" style="display:block;background:#fff;border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:12px;"><h2 style="font-size:17px;margin-bottom:6px;">${escapeHtml(safe.role_type || 'Sales opportunity')}</h2><p style="color:var(--muted);">${escapeHtml([(safe.industry_classification.labels || []).join(' · '), safe.territory_type || safe.location_label, safe.freshness_label].filter(Boolean).join(' · '))}</p></a>`; }).join("") || "<p>No open roles right now. Please check back soon.</p>"}
       <nav aria-label="Job directory pages" style="display:flex;justify-content:space-between;gap:16px;margin-top:24px;">
         ${page > 1 ? `<a href="${pageUrl(page - 1)}" class="btn btn-outline">Previous page</a>` : ""}
         ${data.length > pageSize ? `<a href="${pageUrl(page + 1)}" class="btn btn-outline">Next page</a>` : ""}
@@ -264,10 +273,16 @@ router.get("/jobs", async (req, res) => {
 });
 
 // GET /sitemap.xml — lists the homepage, the public browse page, and
-// every currently-active job's real crawlable URL. Regenerated on every
-// request rather than cached as a static file, since the job list
-// changes continuously via the scheduled ingestion job.
+// every currently-active job's real crawlable URL. Cached briefly in
+// memory so crawlers are not blocked by a full rebuild on every hit.
 router.get("/sitemap.xml", async (req, res) => {
+  if (!isConfigured) return res.status(503).set("Retry-After", "300").send("Sitemap temporarily unavailable.");
+  if (sitemapCachingEnabled() && sitemapCache.body && Date.now() < sitemapCache.expires) {
+    res.set("Content-Type", "application/xml");
+    res.set("Cache-Control", "public, max-age=300");
+    return res.send(sitemapCache.body);
+  }
+
   const staticUrls = [
     `${APP_BASE_URL}/`,
     `${APP_BASE_URL}/jobs`,
@@ -278,19 +293,23 @@ router.get("/sitemap.xml", async (req, res) => {
     `${APP_BASE_URL}/rook-pricing.html`,
     `${APP_BASE_URL}/rook-employers.html`,
   ];
+  // Category paths come from the static catalog — avoids waiting on the
+  // full SEO inventory rebuild (which loads descriptions for every job).
+  // Unqualified collection pages already emit noindex when thin.
+  for (const slug of Object.keys(CATEGORIES)) {
+    staticUrls.push(`${APP_BASE_URL}/jobs/category/${slug}`);
+    if (FLORIDA.includes(slug)) staticUrls.push(`${APP_BASE_URL}/jobs/category/${slug}/florida`);
+  }
 
-  if (!isConfigured) return res.status(503).set("Retry-After", "300").send("Sitemap temporarily unavailable.");
   const jobUrls = [];
   try {
-    const collections = await loadSeoInventory();
-    staticUrls.push(...Object.values(collections).filter(c=>c.qualified).map(c=>APP_BASE_URL+c.path));
     // PostgREST can cap a single response even when limit(5000) is requested.
     // Use small, ordered pages and advance by the number actually returned.
     let offset = 0;
     while (true) {
       const { data: jobs, error } = await supabaseAnon.from("jobs")
         .select("id, job_lat, job_lng, state, location_raw, location_evidence").eq("status", "active").eq("moderation_status", "approved")
-        .order("id", { ascending: true }).range(offset, offset + 499);
+        .order("id", { ascending: true }).range(offset, offset + 999);
       if (error || !Array.isArray(jobs)) throw new Error("Sitemap query failed");
       if (!jobs.length) break;
       jobUrls.push(...jobs.filter(isUsEligibleJob).map(j => `${APP_BASE_URL}/jobs/${j.id}`));
@@ -298,7 +317,7 @@ router.get("/sitemap.xml", async (req, res) => {
       offset += jobs.length;
     }
     // Only committed, published Resources articles; topics still in the queue
-    // (or rejected) never become sitemap entries. Read every page on each request.
+    // (or rejected) never become sitemap entries.
     offset = 0;
     const now = new Date().toISOString();
     while (true) {
@@ -322,8 +341,11 @@ router.get("/sitemap.xml", async (req, res) => {
     ...staticUrls, ...jobUrls,
   ].map(url => `<url><loc>${escapeHtml(url)}</loc></url>`).join("\n");
 
+  const body = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urlEntries}\n</urlset>`;
+  if (sitemapCachingEnabled()) sitemapCache = { body, expires: Date.now() + SITEMAP_TTL_MS };
   res.set("Content-Type", "application/xml");
-  res.send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urlEntries}\n</urlset>`);
+  res.set("Cache-Control", "public, max-age=300");
+  res.send(body);
 });
 
 module.exports = router;

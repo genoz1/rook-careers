@@ -102,7 +102,7 @@ function buildCollections(rows) {
 // The short server-only cache exposes allowlisted projection getters and counts.
 // Public previews are evaluated only for displayed cards, once per source row.
 // Source rows remain private in the loader closure; never serialize raw records.
-function createInventoryLoader(db,{ttl=60000}={}) {
+function createInventoryLoader(db,{ttl=10*60*1000}={}) {
   let cached,expires=0,pending;
   return async function load() {
     if(cached&&Date.now()<expires)return cached;
@@ -110,6 +110,9 @@ function createInventoryLoader(db,{ttl=60000}={}) {
     pending=(async()=>{
       const rows=[];
       for(let offset=0;;){
+        // description_text is only needed for Florida scope hash checks —
+        // keep it, but avoid re-fetching the full inventory on every
+        // category/sitemap hit (shared 10-minute cache).
         const {data,error}=await db.from('jobs').select('id,employer_id,company_name,source_job_id,source_url,application_url,title_original,title_normalized,description_text,location_raw,location_evidence,job_lat,job_lng,city,state,ai_analysis,status,moderation_status,category,subcategory,sales_type,territory,remote_status,employment_type,date_posted,first_seen_at')
           .eq('status','active').eq('moderation_status','approved').order('id',{ascending:true}).range(offset,offset+499);
         if(error||!Array.isArray(data))throw new Error('SEO inventory unavailable');

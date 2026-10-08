@@ -1,0 +1,60 @@
+{
+  "captured_at": "2026-10-08T14:35:00Z",
+  "results": [
+    {
+      "path": "/api/jobs?limit=20",
+      "codes": [
+        200,
+        200
+      ],
+      "times": [
+        10.68,
+        7.39
+      ]
+    },
+    {
+      "path": "/api/jobs?limit=20&near_lat=25.76&near_lng=-80.19&near_state=FL",
+      "codes": [
+        200,
+        200
+      ],
+      "times": [
+        0.88,
+        0.96
+      ]
+    },
+    {
+      "path": "/sitemap.xml",
+      "codes": [
+        200,
+        200
+      ],
+      "times": [
+        26.22,
+        30.5
+      ]
+    },
+    {
+      "path": "/jobs/category/medical-sales-jobs",
+      "codes": [
+        200,
+        200
+      ],
+      "times": [
+        0.31,
+        0.08
+      ]
+    },
+    {
+      "path": "/robots.txt",
+      "codes": [
+        200,
+        200
+      ],
+      "times": [
+        0.07,
+        0.09
+      ]
+    }
+  ]
+}
