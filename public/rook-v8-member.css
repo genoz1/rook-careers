@@ -4,9 +4,57 @@ body{background:#f3f8ff}.main{max-width:1900px;width:100%;margin:0 auto}.v8-offi
 @media(min-width:1150px){.job-list{grid-template-columns:repeat(2,minmax(0,1fr))}.job-row{display:flex;flex-direction:column;align-items:stretch;gap:12px;padding:22px;min-height:360px}.job-row .score-ring{align-self:flex-start}.job-row .job-info{min-width:0;width:100%;overflow-wrap:anywhere}.job-row .category-grid{grid-template-columns:1fr;gap:5px}.job-row .job-actions{display:flex;flex-direction:row;align-items:center;flex-wrap:wrap;gap:7px;margin-top:auto}.job-row .job-actions .btn{white-space:normal;text-align:center}}
 @media(min-width:1780px){.job-list{grid-template-columns:repeat(3,minmax(0,1fr))}.main{padding-left:30px;padding-right:30px}}
 @media(max-width:880px){.job-list{grid-template-columns:minmax(0,1fr)}.job-row .category-grid-wrap{display:block}.job-row .category-grid{grid-template-columns:1fr}.job-row{min-width:0}.job-row .job-actions{clear:both}.main{overflow-x:hidden}}
-/* Optional résumé modal retains the existing upload and rescore handler. */
-.profile-gate-overlay{z-index:350!important;padding:16px;overflow-y:auto}.profile-gate-card{position:relative;max-width:760px;width:min(100%,760px);padding:25px clamp(20px,4vw,54px) 30px;border-radius:25px;max-height:calc(100dvh - 32px);overflow:auto}.profile-gate-card .v8-resume-brand{display:block;width:180px;height:60px;object-fit:contain;margin:0 auto 16px}.profile-gate-card h2{font:600 clamp(35px,4vw,50px)/1.03 Caveat,cursive;color:#092d64;margin:0 auto 15px;max-width:450px}.profile-gate-card p{max-width:580px;margin:0 auto 19px}.v8-resume-drop{border:1.5px dashed #95b9ea;border-radius:14px;background:#f8fbff;padding:23px 15px;margin:20px auto 16px;cursor:pointer;color:#113568}.v8-resume-drop strong{display:block;font-size:17px;margin:8px 0 4px}.v8-resume-drop span{font-size:13px;color:#657a96}.v8-resume-drop:focus-visible,.v8-resume-drop.dragging{outline:2px solid #0877ef;background:#e9f3ff}.v8-resume-benefits{display:flex;justify-content:space-between;gap:10px;color:#123c71;font-size:13px;margin:14px 0}.v8-resume-benefits span{flex:1}.profile-gate-card .btn-primary{display:block;width:100%;background:#0877ef!important;border-radius:40px;padding:16px}.profile-gate-card .dismiss{margin:15px auto 0}.profile-gate-card #profileGateUploadStatus{line-height:1.5}
-@media(max-width:650px){.profile-gate-card{padding:20px}.v8-resume-benefits{display:block;text-align:left}.v8-resume-benefits span{display:block;margin:5px 0}.v8-resume-drop{padding:15px}}
+/* Optional résumé modal — above page chrome, below product tours; clickable controls. */
+.profile-gate-overlay{z-index:1200!important;display:none;position:fixed;inset:0;align-items:center;justify-content:center;padding:max(12px,env(safe-area-inset-top)) 16px max(12px,env(safe-area-inset-bottom));overflow-y:auto;-webkit-overflow-scrolling:touch;background:rgba(7,30,65,.55);overscroll-behavior:contain;pointer-events:auto}
+.profile-gate-overlay.active{display:flex!important}
+.profile-gate-card{position:relative;z-index:1;isolation:isolate;max-width:min(560px,100%);width:100%;margin:auto;padding:22px clamp(16px,4vw,28px) 20px;border-radius:20px;max-height:min(640px,calc(100dvh - 24px));overflow:auto;background:#fff;box-shadow:0 20px 60px rgba(7,30,65,.3);text-align:center;pointer-events:auto;-webkit-transform:translateZ(0)}
+.profile-gate-card .v8-resume-brand{display:block;width:140px;height:46px;object-fit:contain;margin:0 auto 10px}
+.profile-gate-card h2{font:700 clamp(22px,3.4vw,28px)/1.2 "Space Grotesk",system-ui,sans-serif;color:#0b2858;margin:0 auto 10px;max-width:420px}
+.profile-gate-card p{max-width:480px;margin:0 auto 12px;font-size:14px;line-height:1.45;color:#5b6b85}
+.v8-resume-drop{display:block;border:1.5px dashed #95b9ea;border-radius:14px;background:#f8fbff;padding:16px 14px;margin:12px auto;cursor:pointer;color:#113568;position:relative;z-index:2}
+.v8-resume-drop strong{display:block;font-size:15px;margin:6px 0 4px}
+.v8-resume-drop span{font-size:12px;color:#657a96}
+.v8-resume-drop:focus-visible,.v8-resume-drop.dragging{outline:2px solid #0877ef;background:#e9f3ff}
+.v8-resume-benefits{display:flex;justify-content:space-between;gap:8px;color:#123c71;font-size:12px;margin:10px 0;pointer-events:none}
+.v8-resume-benefits span{flex:1}
+.profile-gate-card .btn-primary,.profile-gate-card label.btn-primary{display:flex!important;align-items:center;justify-content:center;width:100%;box-sizing:border-box;background:#0877ef!important;color:#fff!important;border-radius:40px;padding:13px 16px;margin:0;position:relative;z-index:3;cursor:pointer;pointer-events:auto;text-decoration:none;font-weight:700;font-size:14.5px}
+.profile-gate-card .dismiss{display:block;width:100%;margin:12px auto 0;padding:12px 8px;font-size:14px;font-weight:600;color:#3d4a63;text-decoration:underline;cursor:pointer;background:none;border:none;position:relative;z-index:3;pointer-events:auto;-webkit-tap-highlight-color:transparent;min-height:44px}
+.profile-gate-card #profileGateUploadStatus{line-height:1.5;position:relative;z-index:3}
+body.match-setup-open,body.profile-gate-open{overflow:hidden;touch-action:none}
+@media(max-width:650px){.profile-gate-card{padding:18px 14px 16px;max-height:calc(100dvh - 16px)}.v8-resume-benefits{display:block;text-align:left}.v8-resume-benefits span{display:block;margin:4px 0}.v8-resume-drop{padding:14px}.profile-gate-card h2{font-size:22px}}
+
+/* Required match-setup gate (location → industry) before optional résumé. */
+.match-setup-overlay{display:none;position:fixed;inset:0;z-index:1300;align-items:center;justify-content:center;padding:max(12px,env(safe-area-inset-top)) 16px max(12px,env(safe-area-inset-bottom));overflow-y:auto;-webkit-overflow-scrolling:touch;background:rgba(7,30,65,.58);overscroll-behavior:contain}
+.match-setup-overlay.active{display:flex}
+.match-setup-card{width:min(560px,100%);margin:auto;background:#fff;border-radius:20px;padding:22px clamp(16px,4vw,28px);box-shadow:0 22px 60px rgba(7,30,65,.28);max-height:min(720px,calc(100dvh - 24px));overflow:auto}
+.match-setup-brand{display:block;width:132px;height:44px;object-fit:contain;margin:0 auto 8px}
+.match-setup-step{margin:0 0 6px;text-align:center;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#0877d1}
+.match-setup-card h2{margin:0 0 8px;text-align:center;font:700 clamp(22px,3.2vw,28px)/1.2 "Space Grotesk",system-ui,sans-serif;color:#0b2858}
+.match-setup-lead{margin:0 0 16px;text-align:center;font-size:14px;line-height:1.45;color:#5b6b85}
+.match-setup-label{display:block;margin:0 0 6px;font-size:12px;font-weight:700;color:#3d4a63}
+.match-setup-loc-wrap{position:relative}
+.match-setup-loc-wrap input{width:100%;box-sizing:border-box;height:48px;border:1px solid #d7e3ee;border-radius:12px;padding:0 12px;font:inherit;font-size:16px;background:#f8fbfe;color:#0b2858}
+.match-setup-loc-wrap input:focus{outline:2px solid #0877ef;outline-offset:1px;background:#fff}
+.match-setup-loc-wrap input:disabled{opacity:.55;cursor:not-allowed}
+.match-setup-loc-list{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:5;margin:0;padding:0;list-style:none;background:#fff;border:1px solid #d7e3ee;border-radius:12px;max-height:220px;overflow:auto;box-shadow:0 10px 28px rgba(16,42,74,.12)}
+.match-setup-loc-list .rlw-item{padding:10px 12px;cursor:pointer;font-size:14px;color:#0b2858;border-bottom:1px solid #eaf1f6}
+.match-setup-loc-list .rlw-item:last-child{border-bottom:0}
+.match-setup-loc-list .rlw-item.rlw-active,.match-setup-loc-list .rlw-item:hover{background:#f0f7ff;color:#0877d1}
+.match-setup-status{min-height:18px;margin:6px 0 10px;font-size:12px;color:#637589}
+.match-setup-fieldset{margin:0;padding:0;border:0}
+.match-setup-fieldset legend{padding:0;font-size:13px;font-weight:800;color:#0b2858}
+.match-setup-hint{margin:4px 0 10px;font-size:12.5px;color:#657792}
+.match-setup-checks{display:grid;gap:8px}
+.match-setup-check{display:flex;align-items:flex-start;gap:10px;padding:11px 12px;border:1.5px solid #dce6f2;border-radius:12px;font-size:13.5px;font-weight:600;color:#0b2858;cursor:pointer;background:#fff}
+.match-setup-check input{width:18px;height:18px;margin-top:1px;flex:none;accent-color:#0877ef}
+.match-setup-check.match-setup-all{border-color:#9cc4ef;background:#f3f8ff}
+.match-setup-error{margin:10px 0 0;padding:10px 12px;border-radius:10px;background:#fff3f3;border:1px solid #f3c7c7;color:#a42d2d;font-size:13px;font-weight:600}
+.match-setup-actions{display:flex;gap:10px;margin-top:18px}
+.match-setup-primary,.match-setup-secondary{min-height:48px;border-radius:40px;border:0;padding:12px 18px;font:700 14.5px inherit;cursor:pointer}
+.match-setup-primary{flex:1;background:#0877ef;color:#fff}
+.match-setup-primary:disabled{opacity:.65;cursor:wait}
+.match-setup-secondary{background:#edf3f8;color:#0b2858;min-width:96px}
+@media(max-width:650px){.match-setup-card{padding:18px 14px}.match-setup-actions{flex-direction:column-reverse}.match-setup-secondary{width:100%}}
 /* The V8 results area uses the preview's compact grid, borders and controls.
    Inline recruiter/Just Posted accents from renderRealJobRow retain precedence. */
 .main{max-width:none;background:#f3f8ff}
@@ -41,15 +89,7 @@ body{background:#f3f8ff}.main{max-width:1900px;width:100%;margin:0 auto}.v8-offi
 .job-row .job-actions .btn{border-radius:9px;padding:7px 9px;font-size:11px}
 .job-actions-overflow{margin-left:auto}
 .score-ring{width:50px;height:50px;font-size:13px}
-.profile-gate-card{max-width:620px;padding:16px 30px 20px;border-radius:20px}
-.profile-gate-card .v8-resume-brand{width:145px;height:48px;margin-bottom:7px}
-.profile-gate-card h2{font-size:clamp(32px,3vw,39px);margin-bottom:8px}
-.profile-gate-card p{font-size:13px;margin-bottom:11px;line-height:1.4}
-.v8-resume-drop{padding:13px;margin:10px auto}
-.v8-resume-drop strong{font-size:15px;margin:4px 0}
-.v8-resume-benefits{margin:8px 0;font-size:12px}
-.profile-gate-card .btn-primary{padding:11px}
-.profile-gate-card .dismiss{margin-top:9px}
+/* Compact résumé card sizing kept in the overlay block above. */
 @media(min-width:901px){
  .main{padding:24px clamp(18px,2.2vw,36px) 50px}
  .job-list{gap:12px}
@@ -61,8 +101,8 @@ body{background:#f3f8ff}.main{max-width:1900px;width:100%;margin:0 auto}.v8-offi
  .job-row .job-actions{grid-column:1/-1;grid-row:2;display:flex;align-items:center;flex-direction:row;flex-wrap:wrap;gap:5px;margin-top:10px}
 }
 @media(min-width:901px){.job-list{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:900px){.main{padding:17px 15px 45px}.stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.job-list{grid-template-columns:minmax(0,1fr)}.job-row .category-grid-wrap{display:block}.job-row .job-actions{border-top:1px solid #e4ebf3}.profile-gate-card{padding:17px;max-height:calc(100dvh - 24px)}}
-@media(max-width:540px){.stat-grid{gap:6px}.stat-card{padding:8px}.stat-card .num{font-size:17px}.stat-card .lbl{font-size:10px}.profile-gate-card .v8-resume-brand{width:125px;height:42px}.profile-gate-card h2{font-size:30px}}
+@media(max-width:900px){.main{padding:17px 15px 45px}.stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.job-list{grid-template-columns:minmax(0,1fr)}.job-row .category-grid-wrap{display:block}.job-row .job-actions{border-top:1px solid #e4ebf3}}
+@media(max-width:540px){.stat-grid{gap:6px}.stat-card{padding:8px}.stat-card .num{font-size:17px}.stat-card .lbl{font-size:10px}}
 
 /* Member results composition: the same restrained surfaces and density as V8 preview. */
 .main{min-width:0;container-type:inline-size}
