@@ -144,6 +144,18 @@ async function ingestEmployer(employer) {
   let normalize;
 
   try {
+    const { blockedEmployerReason } = require("./employerSourcePolicy");
+    const policyReason = blockedEmployerReason(employer);
+    if (policyReason) {
+      console.log(`  Skipping — policy: ${policyReason}`);
+      await supabase.from("employers").update({
+        active: false,
+        ingestion_hold_reason: policyReason,
+        sync_status: "error",
+        last_checked_at: new Date().toISOString(),
+      }).eq("id", employer.id);
+      return markIngestSkip(employer, policyReason);
+    }
     if (employer.ingestion_hold_reason) {
       console.log(`  Skipping — hold: ${employer.ingestion_hold_reason}`);
       // Refresh the check timestamp without a source retry loop.

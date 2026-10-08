@@ -63,6 +63,10 @@ const CLINICAL_CARE_EXCLUSIONS = [
   "medical front office", "front office patient", "patient service specialist",
   "patient access specialist", "patient access representative",
   "front desk", "receptionist",
+  // Pet/retail store floor roles — "Sales Associate" matches bare \bsales\b
+  // but is not a ROOK field-sales / quota territory role (Petco contamination).
+  "sales associate", "seasonal sales associate", "retail sales", "store associate",
+  "retail associate", "retail media", "cashier",
   // Clinical education / services management without commercial language.
   "clinical education manager", "clinical services manager",
   "clinical field specialist", "clinical pharmacy specialist",

@@ -63,6 +63,8 @@
     "test-ad-manager": "node backend/admanager/test.js",
     "test-industry-location": "node backend/testIndustryLocation.js && node backend/testV7Location.js",
     "test-geo-job-pool": "node --test backend/testGeoJobPool.js",
+    "test-employer-source-policy": "node --test backend/testEmployerSourcePolicy.js",
+    "cleanup-blocked-retail": "node backend/scripts/cleanupBlockedRetailEmployers.js",
     "test-job-search": "node --test backend/testJobSearch.js",
     "test-pretrial-security": "node --test backend/testPretrialSecurity.js && node backend/testPretrialRoutes.js && node --test backend/testPublicIndexing.js",
     "test-v8-no-card": "node backend/testV8NoCardTrial.js",

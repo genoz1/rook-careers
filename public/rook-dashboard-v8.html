@@ -318,10 +318,10 @@
     <img class="v8-resume-brand" src="assets/rook-full-logo-900.png" alt="ROOK — Smarter Careers. Better Matches.">
     <h2 id="profileGateTitle">Get even better results<br>with your résumé.</h2>
     <p id="profileGateBody">Uploading your résumé helps us find the most relevant opportunities and show higher match scores.</p>
-    <input type="file" id="profileGateResumeInput" accept=".pdf,.doc,.docx" hidden>
-    <div class="v8-resume-drop" id="v8ResumeDrop" role="button" tabindex="0" aria-label="Browse for a résumé or drop a file here">📄<strong>Drag and drop your résumé here</strong>or click to browse<br><span>PDF, DOC or DOCX (max 10 MB)</span></div>
+    <input type="file" id="profileGateResumeInput" accept="application/pdf,.pdf,application/msword,.doc,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx" hidden>
+    <label class="v8-resume-drop" id="v8ResumeDrop" for="profileGateResumeInput" tabindex="0" aria-label="Browse for a résumé or drop a file here">📄<strong>Drag and drop your résumé here</strong>or click to browse<br><span>PDF, DOC or DOCX (max 10 MB)</span></label>
     <div class="v8-resume-benefits"><span>◎ More relevant job matches</span><span>▥ Higher match scores</span><span>◷ Save time in your search</span></div>
-    <a class="btn-primary" href="rook-settings.html?rook_v8=1" id="profileGateLink">Upload Résumé (Optional) →</a>
+    <label class="btn-primary" id="profileGateLink" for="profileGateResumeInput" style="cursor:pointer;display:inline-flex;justify-content:center;align-items:center;">Upload Résumé (Optional) →</label>
     <div id="profileGateUploadStatus" role="status" aria-live="polite" style="display:none;font-size:13px;color:var(--royal);font-weight:600;margin-top:8px;text-align:center;"></div>
     <button type="button" class="dismiss" id="profileGateDismiss">Skip for now</button>
   </div>
@@ -877,16 +877,18 @@
           body.textContent = 'Uploading your résumé helps us find the most relevant opportunities and show higher match scores.';
           const fileInput = document.getElementById('profileGateResumeInput');
           const statusEl = document.getElementById('profileGateUploadStatus');
+          // Use a real <label for=…> (not input.click()) so the OS file
+          // picker opens on the user gesture immediately — programmatic
+          // click() while the dashboard is mid-render was delaying the
+          // dialog long enough that it looked broken.
           if (link) {
             link.textContent = 'Upload Résumé (Optional) →';
-            link.removeAttribute('href');
+            link.setAttribute('for', 'profileGateResumeInput');
             link.style.cursor = 'pointer';
-            link.onclick = (e) => { e.preventDefault(); fileInput && fileInput.click(); };
           }
           if (fileInput) {
             const drop=document.getElementById('v8ResumeDrop');
             if(drop){
-              drop.onclick=()=>fileInput.click();
               drop.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();fileInput.click();}};
               drop.ondragover=e=>{e.preventDefault();drop.classList.add('dragging');};
               drop.ondragleave=()=>drop.classList.remove('dragging');
@@ -900,7 +902,6 @@
                 link.innerHTML = '<span class="btn-spinner"></span>Uploading…';
                 link.style.opacity = '0.85';
                 link.style.pointerEvents = 'none';
-                link.onclick = null;
               }
               if (statusEl) { statusEl.style.display = 'block'; statusEl.textContent = '📤 Uploading your résumé…'; }
 
@@ -942,7 +943,6 @@
                     link.innerHTML = 'Try again';
                     link.style.opacity = '1';
                     link.style.pointerEvents = '';
-                    link.onclick = (e) => { e.preventDefault(); fileInput.click(); };
                   }
                   return;
                 }
@@ -970,7 +970,6 @@
                   link.innerHTML = 'Try again';
                   link.style.opacity = '1';
                   link.style.pointerEvents = '';
-                  link.onclick = (e) => { e.preventDefault(); fileInput.click(); };
                 }
                 if (statusEl) statusEl.textContent = '❌ Upload failed — please try again.';
               }
@@ -979,11 +978,26 @@
         } else if (missingResume && missingLocation) {
           title.textContent = "You're missing a résumé and a primary location";
           body.textContent = "Without these, we can't score jobs against your background or rank them by real distance.";
-          if (link) { link.textContent = 'Complete my profile'; link.href = 'rook-settings.html'; }
+          if (link) {
+            // Location+résumé: send them to settings rather than the file picker.
+            const settings = document.createElement('a');
+            settings.className = 'btn-primary';
+            settings.id = 'profileGateLink';
+            settings.href = 'rook-settings.html?rook_v8=1';
+            settings.textContent = 'Complete my profile';
+            link.replaceWith(settings);
+          }
         } else {
           title.textContent = "You're missing a primary job-search location";
           body.textContent = "Without it, we can't rank jobs by real distance from you — just which state they're in.";
-          if (link) { link.textContent = 'Add location'; link.href = 'rook-settings.html'; }
+          if (link) {
+            const settings = document.createElement('a');
+            settings.className = 'btn-primary';
+            settings.id = 'profileGateLink';
+            settings.href = 'rook-settings.html?rook_v8=1';
+            settings.textContent = 'Add location';
+            link.replaceWith(settings);
+          }
         }
         document.getElementById('profileGateOverlay').classList.add('active');
       } catch {
