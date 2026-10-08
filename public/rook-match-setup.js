@@ -45,9 +45,14 @@
     return /^\d{5}$/.test(String(profile?.home_zip || '').trim());
   }
 
+  function isNationwideLabel(profile) {
+    return /^across the u\.?s\.?$/i.test(String(profile?.home_location_label || '').trim());
+  }
+
+  // Legacy alias used by tests/callers — means nationwide label without a ZIP,
+  // not "preferences are incomplete." Prefer isExplicitNationwide / missingLocation.
   function isNationwideDefault(profile) {
-    const label = String(profile?.home_location_label || '').trim();
-    return /^across the u\.?s\.?$/i.test(label) && !hasZip(profile);
+    return isNationwideLabel(profile) && !hasZip(profile);
   }
 
   function isBootstrapTerritory(profile) {
@@ -58,29 +63,55 @@
     return terr.includes('remote') && terr.includes('national');
   }
 
-  function missingLocation(profile) {
-    if (!profile) return true;
-    if (isNationwideDefault(profile)) return true;
-    return !(hasCoords(profile) && hasZip(profile));
-  }
-
   function missingIndustry(profile) {
     return normalizeIndustries(profile?.desired_industries).length === 0;
   }
 
-  function missingTerritory(profile) {
+  function hasConfirmedTerritory(profile) {
     const terr = Array.isArray(profile?.territory_size_preferences)
       ? profile.territory_size_preferences.filter(Boolean)
       : [];
-    if (!terr.length) return true;
-    // Bootstrap defaults remote+national while industry was never chosen —
-    // treat as unconfirmed so the member sets their search area.
-    if (isBootstrapTerritory(profile) && missingIndustry(profile)) return true;
-    return false;
+    if (!terr.length) return false;
+    // Acquisition bootstrap seeds remote+national before industry is chosen.
+    // That pair alone is not a deliberate member preference yet.
+    if (isBootstrapTerritory(profile) && missingIndustry(profile)) return false;
+    return true;
+  }
+
+  function hasLocalLocation(profile) {
+    if (!hasCoords(profile)) return false;
+    if (hasZip(profile)) return true;
+    // Older established profiles may have city/state/label without ZIP.
+    const city = String(profile?.home_city || '').trim();
+    const state = String(profile?.home_state || '').trim();
+    const label = String(profile?.home_location_label || '').trim();
+    return !!(city || state || (label && !isNationwideLabel(profile)));
+  }
+
+  // Explicit "Across the U.S." after industry + territory were saved is a
+  // valid preference — never treat it like the empty acquisition bootstrap.
+  function isExplicitNationwide(profile) {
+    return isNationwideLabel(profile)
+      && !hasZip(profile)
+      && !missingIndustry(profile)
+      && hasConfirmedTerritory(profile);
+  }
+
+  function missingLocation(profile) {
+    if (!profile) return true;
+    if (isExplicitNationwide(profile)) return false;
+    if (hasLocalLocation(profile)) return false;
+    return true;
+  }
+
+  function missingTerritory(profile) {
+    return !hasConfirmedTerritory(profile);
   }
 
   function needsSetup(profile) {
-    if (!profile) return true;
+    // Never treat a missing/failed profile fetch as "incomplete prefs."
+    // Callers must only invoke this after a successful /profile load.
+    if (!profile || typeof profile !== 'object') return false;
     return missingLocation(profile) || missingIndustry(profile) || missingTerritory(profile);
   }
 
@@ -270,6 +301,8 @@
 
   function seedState(profile) {
     const industries = normalizeIndustries(profile?.desired_industries);
+    const allIndustries = industries.length > 0
+      && INDUSTRIES.every((ind) => industries.includes(ind.value));
     let territories = Array.isArray(profile?.territory_size_preferences)
       ? profile.territory_size_preferences.filter(Boolean)
       : [];
@@ -279,7 +312,7 @@
     const needInd = missingIndustry(profile);
 
     let location = null;
-    if (hasCoords(profile) && hasZip(profile) && !isNationwideDefault(profile)) {
+    if (hasLocalLocation(profile) && !isNationwideLabel(profile)) {
       location = {
         label: profile.home_location_label || [profile.home_city, profile.home_state].filter(Boolean).join(', '),
         city: profile.home_city || '',
@@ -287,7 +320,7 @@
         stateAbbr: profile.home_state || '',
         lat: Number(profile.home_lat),
         lng: Number(profile.home_lng),
-        zip: String(profile.home_zip),
+        zip: String(profile.home_zip || ''),
       };
     }
 
@@ -297,10 +330,10 @@
       skipLocation: !needLoc,
       onlyIndustry: !needLoc && needInd,
       location,
-      nationwide: false,
+      nationwide: isExplicitNationwide(profile) || (isNationwideLabel(profile) && !hasLocalLocation(profile) && !needLoc),
       territories,
       industries,
-      allIndustries: false,
+      allIndustries,
       widget: null,
     };
   }
@@ -479,7 +512,11 @@
     run,
     _test: {
       isNationwideDefault,
+      isNationwideLabel,
+      isExplicitNationwide,
       isBootstrapTerritory,
+      hasLocalLocation,
+      hasConfirmedTerritory,
       buildLocationPayload,
       buildIndustryPayload,
       seedState,

@@ -633,7 +633,7 @@
 <script src="rook-pretrial.js"></script>
 <script src="rook-job-classification.js"></script>
 <script src="rook-location-widget.js"></script>
-<script src="rook-match-setup.js?v=2"></script>
+<script src="rook-match-setup.js?v=3"></script>
 <script src="rook-employer-logos-v8.js?v=2"></script>
 <script>
   // Every job row currently in the HTML is sample/demo data — clearly
@@ -888,7 +888,8 @@
         // Required location → industry setup must finish before the optional
         // résumé prompt and before jobs load. Skipping résumé must never leave
         // a paying member on an unconfigured empty dashboard.
-        if (window.RookMatchSetup && RookMatchSetup.needsSetup(profile)) {
+        // Only evaluate after a successful /profile load — never on null/failed fetch.
+        if (window.RookMatchSetup && profile && RookMatchSetup.needsSetup(profile)) {
           try {
             const saved = await RookMatchSetup.run({
               profile,

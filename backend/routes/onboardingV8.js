@@ -222,10 +222,27 @@ router.post('/claim',wrap(async(req,res)=>{
   }
   if(s.user_id!==u.id)return res.status(403).json({error:'These matches belong to another account.'});
   if(!s.transferred_at){
-    const {data:existing,error:readError}=await db.from('candidate_profiles').select('utm_source').eq('user_id',u.id).maybeSingle();
+    const {data:existing,error:readError}=await db.from('candidate_profiles').select('*').eq('user_id',u.id).maybeSingle();
     if(readError)throw readError;
     const profile={...s.profile};delete profile.onboarding_version;delete profile.national_fallback;
     if(existing?.utm_source)for(const key of ['utm_source','utm_medium','utm_campaign','utm_term','utm_content','utm_id'])delete profile[key];
+    // Never wipe an established member's saved match preferences with a fresh
+    // acquisition bootstrap (empty industries + Across the U.S. defaults).
+    if(existing){
+      const incomingIndustries=Array.isArray(profile.desired_industries)?profile.desired_industries:[];
+      const existingIndustries=Array.isArray(existing.desired_industries)?existing.desired_industries:[];
+      if(!incomingIndustries.length && existingIndustries.length){
+        profile.desired_industries=existingIndustries;
+      }
+      const incomingNationwide=/^across the u\.?s\.?$/i.test(String(profile.home_location_label||'')) && !profile.home_zip;
+      const existingHasLocal=existing.home_lat!=null && existing.home_lng!=null;
+      const existingHasPrefs=existingIndustries.length>0 || existingHasLocal || !!existing.home_zip;
+      if(incomingNationwide && existingHasPrefs){
+        for(const key of ['home_lat','home_lng','home_city','home_state','home_zip','home_location_label','territory_size_preferences','territory_size_preference','work_style']){
+          if(existing[key]!=null && existing[key]!=='') profile[key]=existing[key];
+        }
+      }
+    }
     const name=[u.user_metadata?.first_name,u.user_metadata?.last_name].filter(Boolean).join(' ');
     const {error}=await db.from('candidate_profiles').upsert({...profile,user_id:u.id,email:u.email,...(name?{name}:{})},{onConflict:'user_id'});
     if(error)throw error;
