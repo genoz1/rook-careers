@@ -21,10 +21,20 @@ const article = {
   image_alt: 'Medical device sales',
 };
 
-test('resource articles expose an open-roles module with membership attribution', () => {
+test('resource articles expose a single sidebar open-roles module with membership attribution', () => {
   const html = views.article(article, []);
   assert.match(html, /data-article-jobs/);
   assert.match(html, /id="article-open-roles"/);
+  assert.match(html, /article-jobs-sidebar/);
+  assert.equal((html.match(/data-article-jobs[\s>]/g) || []).length, 1);
+  assert.ok(!html.includes('article-jobs-inline'));
+  // Jobs sit in the sidebar, not under the hero inside article body.
+  const heroIdx = html.indexOf('class="article-hero"');
+  const proseIdx = html.indexOf('class="prose"');
+  const jobsIdx = html.indexOf('data-article-jobs');
+  assert.ok(heroIdx > -1 && proseIdx > heroIdx);
+  assert.ok(jobsIdx > proseIdx, 'open roles must not sit between hero and prose');
+  assert.ok(html.indexOf('article-sidebar') < jobsIdx);
   assert.match(html, /Open Medical Device roles/);
   assert.match(html, /data-jobs-prefer="Medical Device"/);
   assert.match(html, /href="\/jobs\/category\/medical-device-sales-jobs"/);
@@ -32,6 +42,7 @@ test('resource articles expose an open-roles module with membership attribution'
   assert.match(html, /utm_campaign=open_roles/);
   assert.match(html, /Membership unlocks employers/);
   assert.match(html, /See matches for my background/);
+  assert.match(html, /Find My Matches/);
   // Still crawlable if JS/API fails.
   assert.match(html, /Browse current job previews/);
 });
@@ -45,11 +56,15 @@ test('industry news articles promote category jobs with news attribution', () =>
     body_html: '<h2>What changed</h2><p>The product was approved.</p>',
   }, []);
   assert.match(html, /data-article-jobs/);
+  assert.match(html, /id="article-open-roles"/);
+  assert.equal((html.match(/data-article-jobs[\s>]/g) || []).length, 1);
+  assert.ok(!html.includes('article-jobs-inline'));
   assert.match(html, /utm_source=news/);
   assert.match(html, /utm_campaign=open_roles/);
   assert.match(html, /data-jobs-prefer="Medical Device"/);
   assert.match(html, /href="\/jobs\/category\/medical-device-sales-jobs"/);
   assert.match(html, /Looking for your next/);
+  assert.match(html, /Find My Matches/);
 });
 
 test('client script hydrates open roles from the slim featured jobs API', () => {

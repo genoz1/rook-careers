@@ -4,7 +4,7 @@
 .news-hero{background-image:linear-gradient(90deg,#002946 0%,#002946 39%,#002946e0 49%,#00294610 77%),url('/assets/resources/news.jpg')}.news-container{padding-bottom:28px}.news-categories{grid-template-columns:repeat(4,1fr)}.news-categories .category-card img{aspect-ratio:2.25}.news-categories .selected{border-color:var(--blue);box-shadow:0 0 0 2px #006aca18}.news-grid{grid-template-columns:repeat(3,1fr)}.news-card .excerpt{color:#465974;line-height:1.55}.news-card .meta{margin-bottom:8px}.news-card h3{font-size:18px}.news-article-layout{grid-template-columns:minmax(0,780px) minmax(240px,1fr)}.news-resource-link{margin:28px 0;font-weight:600}.news-related{margin-top:34px}.news-related .news-grid{grid-template-columns:repeat(2,1fr)}.news-mobile-cta{display:none}.sources h2{font-size:21px;margin-bottom:10px}.sources li{margin:7px 0}
 @media(max-width:1150px) and (min-width:761px){header nav{gap:11px}.nav-inner{padding-left:18px;padding-right:18px}header nav a{font-size:10px}header nav .button{padding:8px}.news-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:1000px) and (min-width:761px){.menu-toggle{display:block;border:0;background:none;color:var(--navy);font-size:25px;padding:8px}header nav{display:none;position:absolute;top:78px;left:0;right:0;z-index:5;background:white;padding:20px;box-shadow:0 8px 10px #071e4120;flex-wrap:wrap;gap:20px}header nav.open{display:flex}header nav a{font-size:14px}}
-@media(max-width:760px){.news-categories{grid-template-columns:repeat(2,minmax(0,1fr))}.news-card .excerpt{font-size:12px;margin-top:6px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.news-article-layout .article-sidebar{display:none}.news-mobile-cta{display:block;margin-top:24px}}
+@media(max-width:760px){.news-categories{grid-template-columns:repeat(2,minmax(0,1fr))}.news-card .excerpt{font-size:12px;margin-top:6px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.news-article-layout .article-sidebar{display:block;padding-top:10px}.news-article-layout .article-sidebar>.resource-cta{display:none}.news-mobile-cta{display:block;margin-top:24px}}
 /* Live open-role panels on resource/news articles (hydrate via /api/public-featured-jobs). */
 .article-jobs{background:#f7fbff}
 .article-jobs-lead{font-size:13px;color:#465974;margin:10px 0 14px;line-height:1.5}
@@ -16,11 +16,12 @@
 .article-job-card span{display:block;margin-top:8px;font-size:12px;font-weight:600;color:var(--blue)}
 .article-jobs-fallback,.article-jobs-empty{font-size:13px;margin:0}
 .article-jobs .button{width:100%}
-.article-jobs-inline{display:block;margin:8px 0 28px}
 .article-jobs-sidebar{margin-top:18px}
 @media(max-width:760px){
- /* Avoid duplicating the early open-roles module under the article on small screens. */
- .article-jobs-sidebar{display:none}
+ /* Sidebar stacks after article; keep the single open-roles panel visible. */
+ .article-jobs-sidebar{display:block;margin-top:8px}
  .article-footer-cta .resource-cta p,.article-footer-cta .resource-cta .browse-link{display:block}
  .article-footer-cta .resource-cta .button{width:100%;margin:12px 0 0;padding:11px 20px;font-size:14px}
+ .news-mobile-cta .resource-cta p,.news-mobile-cta .resource-cta .browse-link{display:block}
+ .news-mobile-cta .resource-cta .button{width:100%;margin:12px 0 0;padding:11px 20px;font-size:14px}
 }
