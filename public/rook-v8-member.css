@@ -81,6 +81,7 @@ body{background:#f3f8ff}.main{max-width:1900px;width:100%;margin:0 auto}.v8-offi
 .v8-search-row #locationRow button{padding:4px 8px!important}
 .v8-industry-control{display:flex;flex-direction:column;justify-content:center;gap:3px;padding:6px 11px;background:#fff;border:1px solid #dce6f2;border-radius:12px;font-size:10px;font-weight:700;color:#60738f;min-width:0}
 .v8-industry-control select{width:100%;min-width:0;border:0;background:transparent;color:#0b2858;font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer;outline-color:#0877ef}
+#btnChangeLocation:disabled{opacity:.5;cursor:not-allowed}
 .v8-industry-status{display:flex;align-items:center;gap:8px;margin:-3px 0 11px;padding:8px 11px;border:1px solid #bad7f4;border-radius:10px;background:#edf6ff;color:#075b9e;font-size:12px;font-weight:700}
 .v8-industry-status[hidden]{display:none}
 .v8-industry-status.is-error{border-color:#f3c7c7;background:#fff3f3;color:#a42d2d}
