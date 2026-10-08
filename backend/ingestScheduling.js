@@ -6,6 +6,10 @@ const TIME_BUDGET_MS = 25 * 60 * 1000; // 25 min — 5 min buffer under DO's 30-
 const NEVER_CHECKED_RESERVE_MS = 8 * 60 * 1000;
 const EXPENSIVE_ATS = new Set(['workday', 'icims', 'successfactors', 'oraclehcm', 'phenom', 'adp']);
 
+function atsCostRank(employer) {
+  return EXPENSIVE_ATS.has(String(employer?.ats_type || '').toLowerCase()) ? 1 : 0;
+}
+
 function orderEmployersForIngest(employers = []) {
   const never = [];
   const held = [];
@@ -15,7 +19,13 @@ function orderEmployersForIngest(employers = []) {
     else if (employer.ingestion_hold_reason) held.push(employer);
     else rest.push(employer);
   }
-  rest.sort((a, b) => new Date(a.last_checked_at) - new Date(b.last_checked_at));
+  // Inside the never-checked set, prefer cheap ATS first so one 2k-posting
+  // Workday tenant cannot monopolize the reserved first-check window.
+  never.sort((a, b) => atsCostRank(a) - atsCostRank(b));
+  rest.sort((a, b) => {
+    const byTime = new Date(a.last_checked_at) - new Date(b.last_checked_at);
+    return byTime !== 0 ? byTime : atsCostRank(a) - atsCostRank(b);
+  });
   held.sort((a, b) => new Date(a.last_checked_at || 0) - new Date(b.last_checked_at || 0));
   // Never-checked first, then oldest remotes, held skips last.
   return [...never, ...rest, ...held];

@@ -1,0 +1,79 @@
+{
+  "captured_at": "2026-10-08T00:20:00Z",
+  "employer_coverage": {
+    "active": 411,
+    "ok": 350,
+    "not_ok": 61,
+    "error": 33,
+    "partial": 28,
+    "pending_never_checked": 0,
+    "held": 19,
+    "checked_24h": 411,
+    "pct_checked_24h": 100.0,
+    "oldest_checked_hours": 16.2,
+    "estimated_full_cycle_hours_at_30min_cadence": 1.87,
+    "notes": "All 46 previously never-checked employers received a first check (or timeout advancement). One new discovery enrollment (J&J MedTech Circulatory Restoration) also advanced. Fair 90s caps prevented Petco/U.S. Bank Workday boards from starving the rest."
+  },
+  "deltas_vs_before": {
+    "ok": "+40 (310→350)",
+    "not_ok": "-39 (100→61)",
+    "pending_never_checked": "-46 (46→0)",
+    "pct_checked_24h": "+11.2pp (88.8%→100%)",
+    "estimated_full_cycle_hours": "-1.33h (3.2→1.87)"
+  },
+  "ambiguous_inventory": {
+    "before": {
+      "active_approved": 5752,
+      "A": 4724,
+      "B": 0,
+      "C": 1028,
+      "C_with_desc_sales_evidence": 277,
+      "front_office_cluster": 237
+    },
+    "after_classifier_and_cleanup": {
+      "active_approved": 5618,
+      "A": 5172,
+      "B": 0,
+      "C": 446,
+      "C_with_desc_sales_evidence": 65,
+      "front_office_cluster": 0,
+      "confirmed_non_sales_closed": 332
+    },
+    "deltas": {
+      "A": "+448 vs original audit baseline (includes new inserts + classifier admits)",
+      "C": "-582 (1028→446)",
+      "closed_confirmed_non_sales": 332
+    }
+  },
+  "search_providers": {
+    "providers_after": ["duckduckgo-html", "bing-rss", "brave-html", "wikidata-official-website"],
+    "cooldown_on_empty_low_relevance": false,
+    "live_wikidata_fallback_vetoquinol": "ok (http://www.vetoquinol.com/)",
+    "retry_SEARCH_PROVIDERS_UNAVAILABLE": {
+      "candidate": "Johnson & Johnson MedTech | Circulatory Restoration",
+      "before_status": "retryable / SEARCH_PROVIDERS_UNAVAILABLE",
+      "after_status": "enrolled / PASS_VALIDATED_SOURCE",
+      "ats_type": "workday",
+      "active_jobs_inserted": 93
+    },
+    "other_first_check_job_inserts": {
+      "Aurora Pharmaceutical": 1,
+      "Torigen Pharmaceuticals": 1,
+      "Avid Identification Systems": 3,
+      "Hello Patient": 9
+    }
+  },
+  "ingest_budget": {
+    "changes": [
+      "orderEmployersForIngest: never-checked → oldest → held; cheap ATS before expensive inside never-checked",
+      "employerTimeBudgetMs: 90s expensive under backlog pressure (was flat 4min)",
+      "held skips capped at 15s"
+    ],
+    "observed_second_pass": {
+      "pending_at_start": 25,
+      "attempted": 25,
+      "timeouts_that_still_advanced_queue": ["Vet Receptionists", "Pet Comfycone", "U.S. Bank Healthcare Business Banking"],
+      "completed_including_partial": 22
+    }
+  }
+}

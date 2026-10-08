@@ -10,11 +10,11 @@ test('never-checked employers are scheduled before oldest remotes and held skips
   const ordered = orderEmployersForIngest([
     { id: 'held', last_checked_at: '2026-10-01T00:00:00Z', ingestion_hold_reason: 'manual hold' },
     { id: 'old', last_checked_at: '2026-10-06T00:00:00Z' },
-    { id: 'never-b', last_checked_at: null },
+    { id: 'never-workday', last_checked_at: null, ats_type: 'workday' },
     { id: 'mid', last_checked_at: '2026-10-07T00:00:00Z' },
-    { id: 'never-a', last_checked_at: null },
+    { id: 'never-html', last_checked_at: null, ats_type: 'custom_html' },
   ]).map((row) => row.id);
-  assert.deepEqual(ordered, ['never-b', 'never-a', 'old', 'mid', 'held']);
+  assert.deepEqual(ordered, ['never-html', 'never-workday', 'old', 'mid', 'held']);
 });
 
 test('backlog pressure shortens expensive ATS budgets so more employers get a first check', () => {
