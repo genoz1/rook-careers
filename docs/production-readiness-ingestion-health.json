@@ -1,0 +1,27 @@
+{
+  "ok": true,
+  "checked_at": "2026-10-08T15:13:59.526Z",
+  "last_run": {
+    "id": "7f1427d0-8747-4e73-87ef-d72275707b18",
+    "status": "budget_exhausted",
+    "started_at": "2026-10-08T09:32:02.501+00:00",
+    "ended_at": "2026-10-08T09:56:57.741+00:00",
+    "employers_checked": null,
+    "jobs_inserted": null,
+    "jobs_updated": null,
+    "failed_sources": 3
+  },
+  "last_successful_run": null,
+  "employers": {
+    "active": 410,
+    "never_checked": 0,
+    "held": 19
+  },
+  "watchdog": {
+    "problem": null,
+    "last_checked_at": "2026-10-08T15:10:46.937+00:00",
+    "failure_count": 0,
+    "emailed_at": null
+  },
+  "stale_ingestion": false
+}
