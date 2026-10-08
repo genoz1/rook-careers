@@ -1,0 +1,390 @@
+{
+  "measured_at": "2026-10-08T13:58:10.602Z",
+  "notes": [
+    "Live /jobs uses scoreLiveJob (smoothLocalDistance + geography + canonicalVeterinaryEvidence).",
+    "100% reserved for excellent_match only; no-resume clusters soft-capped at 99.",
+    "Latin America / international title territories excluded from local US prepareJob.",
+    "Industry classifier reconciles title/company/description against conflicting AI labels.",
+    "Embeddings not enabled on live list path (no new API spend); existing vectors unused in list SELECT."
+  ],
+  "profiles": [
+    {
+      "label": "FL Orlando Diagnostics + resume",
+      "scored": 24,
+      "at100": 0,
+      "at95": 2,
+      "top": [
+        {
+          "score": 99,
+          "pref": 100,
+          "cand": null,
+          "company": "AstraZeneca",
+          "title": "Oncology Account Specialist - Hematology - Orlando, FL",
+          "loc": "US - Orlando - FL",
+          "labels": [
+            "Diagnostics",
+            "Pharmaceutical"
+          ]
+        },
+        {
+          "score": 96,
+          "pref": 100,
+          "cand": 85,
+          "company": "Foundation Medicine",
+          "title": "Account Executive II - North Orlando, FL",
+          "loc": "Orlando, Florida, US",
+          "labels": [
+            "Diagnostics"
+          ]
+        },
+        {
+          "score": 93,
+          "pref": 96,
+          "cand": 85,
+          "company": "Philips",
+          "title": "Sales, Account Executive, Philips ECG Solutions (Sarasota/Tampa)",
+          "loc": "Sarasota, Florida, United States | Tampa",
+          "labels": [
+            "Diagnostics",
+            "Medical Device"
+          ]
+        },
+        {
+          "score": 93,
+          "pref": 100,
+          "cand": 78,
+          "company": "Myriad Genetics",
+          "title": "Sales Executive - Mental Health/Hereditary Cancer Risk Testing - Orlan",
+          "loc": "Orlando, FL, United States",
+          "labels": [
+            "Diagnostics",
+            "Medical Device",
+            "Pharmaceutical",
+            "Biotech/Life Sciences"
+          ]
+        },
+        {
+          "score": 92,
+          "pref": 100,
+          "cand": 73,
+          "company": "Tempus AI",
+          "title": "Oncology Clinical Account Executive, Orlando",
+          "loc": "Remote - Florida",
+          "labels": [
+            "Diagnostics",
+            "Healthcare SaaS"
+          ]
+        },
+        {
+          "score": 92,
+          "pref": 100,
+          "cand": 72,
+          "company": "Philips",
+          "title": "Sales, Clinical Strategy Specialist, Ambulatory Monitoring & Diagnosti",
+          "loc": "Malvern, Pennsylvania, United States | O",
+          "labels": [
+            "Diagnostics"
+          ]
+        },
+        {
+          "score": 92,
+          "pref": 95,
+          "cand": 85,
+          "company": "ResMed",
+          "title": "Territory Manager (Jacksonville, Florida)",
+          "loc": "Jacksonville, FL, United States",
+          "labels": [
+            "Diagnostics",
+            "Pharmaceutical"
+          ]
+        },
+        {
+          "score": 92,
+          "pref": 95,
+          "cand": 85,
+          "company": "ARUP Laboratories",
+          "title": "Account Executive - Eastern Region",
+          "loc": "Maitland, FL, United States",
+          "labels": [
+            "Diagnostics"
+          ]
+        },
+        {
+          "score": 91,
+          "pref": 96,
+          "cand": 78,
+          "company": "Hologic",
+          "title": "Diagnostic Sales Specialist - Tampa, Fl",
+          "loc": "Tampa, FL, United States",
+          "labels": [
+            "Diagnostics"
+          ]
+        },
+        {
+          "score": 91,
+          "pref": 96,
+          "cand": 78,
+          "company": "Quest Diagnostics",
+          "title": "Women's Health Account Executive",
+          "loc": "Tampa, FL, United States",
+          "labels": [
+            "Diagnostics",
+            "Biotech/Life Sciences"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "FL Orlando Diagnostics NO resume",
+      "scored": 24,
+      "at100": 0,
+      "at95": 19,
+      "top": [
+        {
+          "score": 99,
+          "pref": 100,
+          "cand": null,
+          "company": "Tempus AI",
+          "title": "Oncology Clinical Account Executive, Orlando",
+          "loc": "Remote - Florida",
+          "labels": [
+            "Diagnostics",
+            "Healthcare SaaS"
+          ]
+        },
+        {
+          "score": 99,
+          "pref": 100,
+          "cand": null,
+          "company": "Hologic",
+          "title": "Oncology Account Executive - Orlando, FL",
+          "loc": "Orlando, FL, United States",
+          "labels": [
+            "Diagnostics"
+          ]
+        },
+        {
+          "score": 99,
+          "pref": 100,
+          "cand": null,
+          "company": "AstraZeneca",
+          "title": "Oncology Account Specialist - Hematology - Orlando, FL",
+          "loc": "US - Orlando - FL",
+          "labels": [
+            "Diagnostics",
+            "Pharmaceutical"
+          ]
+        },
+        {
+          "score": 99,
+          "pref": 100,
+          "cand": null,
+          "company": "Foundation Medicine",
+          "title": "Account Executive II - North Orlando, FL",
+          "loc": "Orlando, Florida, US",
+          "labels": [
+            "Diagnostics"
+          ]
+        },
+        {
+          "score": 99,
+          "pref": 100,
+          "cand": null,
+          "company": "Myriad Genetics",
+          "title": "Sales Executive - Mental Health/Hereditary Cancer Risk Testing - Orlan",
+          "loc": "Orlando, FL, United States",
+          "labels": [
+            "Diagnostics",
+            "Medical Device",
+            "Pharmaceutical",
+            "Biotech/Life Sciences"
+          ]
+        },
+        {
+          "score": 99,
+          "pref": 100,
+          "cand": null,
+          "company": "Philips",
+          "title": "Sales, Clinical Strategy Specialist, Ambulatory Monitoring & Diagnosti",
+          "loc": "Malvern, Pennsylvania, United States | O",
+          "labels": [
+            "Diagnostics"
+          ]
+        },
+        {
+          "score": 96,
+          "pref": 96,
+          "cand": null,
+          "company": "Quest Diagnostics",
+          "title": "Sales Director - Co-Lab",
+          "loc": "Tampa, FL, United States",
+          "labels": [
+            "Diagnostics"
+          ]
+        },
+        {
+          "score": 96,
+          "pref": 96,
+          "cand": null,
+          "company": "Hologic",
+          "title": "Diagnostic Sales Specialist - Tampa, Fl",
+          "loc": "Tampa, FL, United States",
+          "labels": [
+            "Diagnostics"
+          ]
+        },
+        {
+          "score": 96,
+          "pref": 96,
+          "cand": null,
+          "company": "Quest Diagnostics",
+          "title": "Women's Health Account Executive",
+          "loc": "Tampa, FL, United States",
+          "labels": [
+            "Diagnostics",
+            "Biotech/Life Sciences"
+          ]
+        },
+        {
+          "score": 96,
+          "pref": 96,
+          "cand": null,
+          "company": "Guardant Health",
+          "title": "Account Executive - Screening (Tampa West)",
+          "loc": "Tampa, FL",
+          "labels": [
+            "Diagnostics",
+            "Pharmaceutical"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "FL Tampa Veterinary + resume",
+      "scored": 15,
+      "at100": 0,
+      "at95": 2,
+      "top": [
+        {
+          "score": 97,
+          "pref": 95,
+          "cand": 100,
+          "company": "Trupanion",
+          "title": "Territory Sales Partner - Fort Myers, FL",
+          "loc": "Fort Myers, FL, us",
+          "labels": [
+            "Veterinary"
+          ]
+        },
+        {
+          "score": 97,
+          "pref": 95,
+          "cand": 100,
+          "company": "Trupanion",
+          "title": "Territory Sales Partner - St. Petersburg, FL",
+          "loc": "St. Petersburg, FL, us",
+          "labels": [
+            "Veterinary"
+          ]
+        },
+        {
+          "score": 92,
+          "pref": 98,
+          "cand": 78,
+          "company": "Zoetis",
+          "title": "Account Manager - Spring Hill, FL",
+          "loc": "US FL Remote",
+          "labels": [
+            "Veterinary"
+          ]
+        },
+        {
+          "score": 90,
+          "pref": 95,
+          "cand": 78,
+          "company": "Bionote USA",
+          "title": "Diagnostic Sales Specialist (DSS) — Central/Northern Florida",
+          "loc": "Central/Northern Florida",
+          "labels": [
+            "Diagnostics",
+            "Veterinary"
+          ]
+        },
+        {
+          "score": 90,
+          "pref": 95,
+          "cand": 77,
+          "company": "Trupanion",
+          "title": "Veterinary Sales Associate (Part-Time) – Seminole County, FL",
+          "loc": "Sanford, FL, us",
+          "labels": [
+            "Veterinary"
+          ]
+        },
+        {
+          "score": 89,
+          "pref": 100,
+          "cand": 62,
+          "company": "Patterson Companies",
+          "title": "Territory Sales Representative - Dental",
+          "loc": "Tampa, FL",
+          "labels": [
+            "Veterinary",
+            "Dental"
+          ]
+        },
+        {
+          "score": 88,
+          "pref": 98,
+          "cand": 65,
+          "company": "Fetch Pet Insurance",
+          "title": "Pet Insurance Sales Associate - Sarasota, FL",
+          "loc": "Sarasota, FL",
+          "labels": [
+            "Veterinary"
+          ]
+        },
+        {
+          "score": 85,
+          "pref": 94,
+          "cand": 65,
+          "company": "Fetch Pet Insurance",
+          "title": "Pet Insurance Sales Associate Daytona Beach, FL",
+          "loc": "Daytona Beach, FL",
+          "labels": [
+            "Veterinary"
+          ]
+        },
+        {
+          "score": 85,
+          "pref": 91,
+          "cand": 71,
+          "company": "Fetch Pet Insurance",
+          "title": "Pet Insurance Sales Associate - Jacksonville, FL",
+          "loc": "Jacksonville, FL",
+          "labels": [
+            "Veterinary"
+          ]
+        },
+        {
+          "score": 85,
+          "pref": 95,
+          "cand": 63,
+          "company": "Fetch Pet Insurance",
+          "title": "Travel Pet Insurance Sales Associate - Florida",
+          "loc": "Florida",
+          "labels": [
+            "Veterinary"
+          ]
+        }
+      ]
+    }
+  ],
+  "ordering_proof": {
+    "local_orlando_diagnostics_score": 93,
+    "latin_america_pharma_excluded": true,
+    "smith_nephew_trauma_labels": [
+      "Medical Device"
+    ]
+  }
+}

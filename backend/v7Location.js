@@ -79,7 +79,7 @@ function repairSnapshot(jobs, profile) {
     const prepared = prepareJob(job,profile);
     if (!prepared || (selected.length && !matches(prepared,selected))) return null;
     if (prepared.job_lat === job.job_lat && prepared.job_lng === job.job_lng) return job;
-    return {...prepared, match:require('./matching').scoreJob(prepared,profile,{geography:prepared.geographic_eligibility}), distance_miles:prepared.job_lat == null ? null : Math.round(distanceMiles(profile.home_lat,profile.home_lng,prepared.job_lat,prepared.job_lng))};
+    return {...prepared, match:require('./liveScoring').scoreLiveJob(prepared,profile,prepared), distance_miles:prepared.job_lat == null ? null : Math.round(distanceMiles(profile.home_lat,profile.home_lng,prepared.job_lat,prepared.job_lng))};
   }).filter(Boolean);
 }
 

@@ -27,6 +27,7 @@ const {fetchGeoScopedJobPool} = require("../geoJobPool");
 const {industryPrefilter} = require("../industryPrefilter");
 const { createClient } = require("@supabase/supabase-js");
 const { scoreJob, hasFullAccess, stateAbbrFromName } = require("../matching");
+const { scoreLiveJob } = require("../liveScoring");
 const { scrubCompanyNameFromText, redactForNonSubscriber, redactForAnonymous } = require("../redaction");
 const {prepareJob,allowsBroadLocations} = require('../v7Location');
 const { isUsEligibleJob } = require("../jobEligibility");
@@ -466,9 +467,11 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     const anonymousProfile = { home_lat: nearLat, home_lng: nearLng, home_state: nearStateName };
     let scored = (exploreJobs || [])
       .filter(isUsEligibleJob)
+      .map((job) => prepareJob(job, anonymousProfile))
+      .filter(Boolean)
       .filter(industryPass)
-      .map((job) => ({ ...job, match: scoreJob(job, anonymousProfile) }))
-      .filter((job) => state ? job.state === state : true)
+      .map((job) => ({ ...job, match: scoreLiveJob(job, anonymousProfile, job) }))
+      .filter((job) => job.match && (state ? job.state === state : true))
       .sort((a, b) => (b.match?.overall_score ?? -1) - (a.match?.overall_score ?? -1));
     if (!keyword) scored = scored.slice(0, Number(limit));
 
@@ -573,9 +576,11 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     const exploredProfile = { ...profile, home_lat: nearLat, home_lng: nearLng, home_state: exploredState || profile.home_state };
     let scored = (exploreJobs || [])
       .filter(isUsEligibleJob)
+      .map((job) => prepareJob(job, exploredProfile))
+      .filter(Boolean)
       .filter(industryPass)
-      .map((job) => ({ ...job, match: scoreJob(job, exploredProfile) }))
-      .filter((job) => state ? job.state === state : true)
+      .map((job) => ({ ...job, match: scoreLiveJob(job, exploredProfile, job) }))
+      .filter((job) => job.match && (state ? job.state === state : true))
       .sort((a, b) => (b.match?.overall_score ?? -1) - (a.match?.overall_score ?? -1));
     if (!keyword) scored = scored.slice(0, Number(limit));
 
@@ -716,10 +721,13 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
   function _industryMatchRatio(job) {
     const desired = profile.desired_industries || [];
     if (!desired.length) return 0;
-    const prodCats = (job.ai_analysis?.product_categories || []).map(s => s.toLowerCase());
+    const labels = (require('../../public/rook-job-classification').classify(job).labels || []).map(s => s.toLowerCase());
+    const prodCats = labels.length
+      ? labels
+      : (job.ai_analysis?.product_categories || []).map(s => s.toLowerCase());
     if (!prodCats.length) return 0;
     const terms = desired.flatMap(ind => _INDUSTRY_TERMS[ind.toLowerCase().trim()] || [ind.toLowerCase().trim()]);
-    const matched = prodCats.filter(p => terms.some(t => p.includes(t))).length;
+    const matched = prodCats.filter(p => terms.some(t => p.includes(t) || t.includes(p))).length;
     return matched / prodCats.length;
   }
 
@@ -729,7 +737,8 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     .filter(Boolean)
     .filter(industryPass)
     .filter((job) => titleLocSanityPass(job))
-    .map((job) => ({ jobs: job, job_id: job.id, overall_score: null, saved: savedJobIds.has(job.id), _liveMatch: scoreJob(job, profile) }))
+    .map((job) => ({ jobs: job, job_id: job.id, overall_score: null, saved: savedJobIds.has(job.id), _liveMatch: scoreLiveJob(job, profile, job) }))
+    .filter((row) => row._liveMatch)
     .sort((a, b) => {
       const scoreDiff = (b._liveMatch?.overall_score ?? -1) - (a._liveMatch?.overall_score ?? -1);
       if (scoreDiff !== 0) return scoreDiff;
@@ -836,16 +845,19 @@ router.get("/recruiter-jobs", requireConfig, optionalAuth, async (req, res) => {
   const results = jobsData
     .filter(isUsEligibleJob) // replaces the older, less complete mentionsNonUsCountry-based filter for consistency with every other route
     .map((job) => {
-      const match = profile ? scoreJob(job, profile) : null;
+      const prepared = profile ? prepareJob(job, profile) : null;
+      const match = prepared ? scoreLiveJob(prepared, profile, prepared) : (profile ? scoreLiveJob(job, profile) : null);
+      const displayJob = prepared || job;
       return {
-        ...attachDistance(job, profile),
+        ...attachDistance(displayJob, profile),
         match,
         scored: Boolean(match),
         saved: Boolean(savedByJobId.get(job.id)),
         application_status: appStatusByJob.get(job.id) || null,
         employer_note: noteFor(job),
       };
-    });
+    })
+    .filter((row) => !profile || row.match);
 
   // Same paywall as the main /jobs endpoint: full detail only for a
   // signed-in, subscribed candidate. Anonymous visitors and signed-in
