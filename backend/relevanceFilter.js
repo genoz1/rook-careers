@@ -58,6 +58,16 @@ const CLINICAL_CARE_EXCLUSIONS = [
   "clinical healthcare operations", "clinical assessment specialist",
   "clinical services group", "medical support specialist",
   "client experience representative", "customer onboarding specialist",
+  // Front-office / patient-access roles share "specialist" vocabulary with
+  // commercial titles but are care-delivery operations, not selling.
+  "medical front office", "front office patient", "patient service specialist",
+  "patient access specialist", "patient access representative",
+  "front desk", "receptionist",
+  // Clinical education / services management without commercial language.
+  "clinical education manager", "clinical services manager",
+  "clinical field specialist", "clinical pharmacy specialist",
+  "clinical program manager", "clinical operations",
+  "global medical information", "medical information manager",
 ];
 
 const STRONG_TITLE_SIGNALS = [
@@ -70,6 +80,10 @@ const STRONG_TITLE_SIGNALS = [
   "area sales", "veterinary sales", "animal health sales",
   "pharmaceutical sales", "medical sales", "device sales",
   "diagnostics sales", "laboratory sales",
+  // Pharma/device commercial titles that omit the bare word "sales".
+  "oncology account specialist", "oncology account representative",
+  "territory business manager", "territory account specialist",
+  "medical account specialist",
 ];
 
 // Commercial titles that are usually sales in ROOK's markets, but can be
@@ -80,9 +94,17 @@ const COMMERCIAL_TITLE_PATTERNS = [
   // Territory Manager is a standard med-sales title. Bare district/regional/
   // area manager titles are ambiguous and require description evidence below.
   /\bterritory\s+manager\b/i,
+  /\bterritory\s+business\s+manager\b/i,
+  /\bterritory\s+account\s+(?:specialist|manager|executive|representative)\b/i,
   /\bbusiness\s+development\s+(?:manager|representative|director|executive)\b/i,
-  /\b(?:medical|clinical)\s+account\s+(?:manager|executive)\b/i,
+  /\b(?:medical|clinical)\s+account\s+(?:manager|executive|specialist)\b/i,
   /\bcommercial\s+(?:director|manager|lead)\b/i,
+  // Therapy-area + Account Specialist/Representative is the standard US
+  // pharma commercial naming pattern (Oncology Account Specialist, etc.).
+  /\b(?:oncology|dermatology|neuroscience|hematology|cardiology|rheumatology|neurology|urology|gastroenterology|endocrinology|immunology|respiratory|migraine|ophthalmology|psychiatry|rare\s+disease|specialty)\s+account\s+(?:specialist|manager|executive|representative)\b/i,
+  /\b(?:major|corporate|national|strategic)\s+accounts?\s+(?:manager|executive|director)\b/i,
+  /\b(?:executive|manager|director),?\s+corporate\s+accounts?\b/i,
+  /\bdiagnostics\s+solutions\s+(?:executive|consultant|manager)\b/i,
 ];
 
 const DESCRIPTION_SALES_EVIDENCE = [
@@ -93,10 +115,14 @@ const DESCRIPTION_SALES_EVIDENCE = [
   /\bachieve(?:ment)?\s+(?:of\s+)?sales\b/i,
   /\bsell(?:ing|s)?\b/i,
   /\bpromote\b.{0,40}\bproduct/i,
-  /\bcommercial\s+(?:sales|responsibility|objectives)\b/i,
+  /\bcommercial\s+(?:sales|responsibility|objectives|goals)\b/i,
   /\bcustomer\s+acquisition\b/i,
   /\brevenue\s+target/i,
   /\bclose\s+(?:new\s+)?business\b/i,
+  /\bsales\s+(?:goals?|targets?|objectives?|performance)\b/i,
+  /\bcall\s+on\b.{0,40}\b(?:physician|hcp|healthcare|clinic|hospital|account)/i,
+  /\b(?:promote|detail)\b.{0,60}\b(?:brand|portfolio|product)/i,
+  /\bhealthcare\s+professionals?\b.{0,80}\b(?:sell|promote|educate)/i,
 ];
 
 const DESCRIPTION_CLINICAL_PRIMARY = [
@@ -177,9 +203,10 @@ function isSalesAdmissibleJob({ title = '', description = '' } = {}) {
   if (isExcludedTitle(cleanTitle)) return false;
   if (titleHasStrongSalesSignal(cleanTitle)) return true;
   if (titleHasCommercialPattern(cleanTitle)) return true;
-  // Ambiguous commercial titles (e.g. bare "District Manager") require
-  // description evidence. Do not admit on industry vocabulary alone.
-  if (/\b(?:district manager|area manager|regional manager|clinical specialist|medical specialist|account director)\b/i.test(cleanTitle)) {
+  // Ambiguous commercial titles require description evidence. Do not admit
+  // on industry vocabulary alone — preserve genuine ambiguity rather than
+  // forcing a yes/no from the title string.
+  if (/\b(?:district manager|area manager|regional manager|clinical specialist|medical specialist|account director|account specialist|business manager|solutions (?:consultant|executive)|clinical oncology specialist|account representative|corporate accounts?|major accounts?)\b/i.test(cleanTitle)) {
     return descriptionHasSalesEvidence(description);
   }
   return false;

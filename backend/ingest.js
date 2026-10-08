@@ -596,7 +596,12 @@ async function ingestEmployer(employer) {
 // either way (progress is saved per-job throughout, not batched at the
 // end), but a clean stop logs which employers were skipped instead of
 // just vanishing mid-request.
-const TIME_BUDGET_MS = 25 * 60 * 1000; // 25 min — 5 min of buffer under DO's 30-min hard limit
+const {
+  TIME_BUDGET_MS,
+  NEVER_CHECKED_RESERVE_MS,
+  orderEmployersForIngest,
+  employerTimeBudgetMs,
+} = require('./ingestScheduling');
 
 // Guards against two overlapping `npm run ingest` invocations (e.g. a
 // scheduled run that hasn't finished when the next one fires 30 minutes
@@ -686,7 +691,9 @@ async function runEmployerLoop(startedAt, employerFilter, options = {}) {
   // that have never synced, or synced longest ago, get processed first.
   // If the time budget cuts a run short, it's a different employer that
   // gets skipped each time, not always the same ones at the end of an
-  // arbitrary list order.
+  // arbitrary list order. Client-side orderEmployersForIngest reinforces
+  // that contract (never-checked → oldest → held) even if PostgREST
+  // null ordering differs across environments.
   let employerQuery = supabase
     .from("employers")
     .select("*")
@@ -695,18 +702,19 @@ async function runEmployerLoop(startedAt, employerFilter, options = {}) {
   if (employerFilter) {
     employerQuery = employerQuery.or(`company_name.ilike.%${employerFilter}%,company_slug.ilike.%${employerFilter}%`);
   }
-  const { data: employers, error } = await employerQuery;
+  const { data: loadedEmployers, error } = await employerQuery;
 
   if (error) {
     console.error("Could not load employers:", error.message);
     throw new Error(error.message);
   }
 
-  if (employerFilter && employers.length === 0) {
+  if (employerFilter && loadedEmployers.length === 0) {
     console.error(`No active employer matched "${employerFilter}".`);
     throw new Error(`No active employer matched "${employerFilter}".`);
   }
 
+  const employers = employerFilter ? loadedEmployers : orderEmployersForIngest(loadedEmployers);
   console.log(`Found ${employers.length} active employer(s) to sync.\n`);
 
   // Reported directly as a real need: with the employer list roughly
@@ -746,13 +754,20 @@ async function runEmployerLoop(startedAt, employerFilter, options = {}) {
   let outcome = 'completed';
   try {
     for (let index = 0; index < employers.length; index++) {
-      const remaining = TIME_BUDGET_MS - (Date.now() - startedAt);
+      const elapsedMs = Date.now() - startedAt;
+      const remaining = TIME_BUDGET_MS - elapsedMs;
       if (remaining < 5000) { outcome = 'budget_exhausted'; break; }
       const employer = employers[index], entry = entries[index];
+      const neverSyncedRemaining = employers.slice(index).filter((row) => !row.last_checked_at).length;
+      const timeoutMs = employerTimeBudgetMs(employer, remaining, { neverSyncedRemaining, elapsedMs });
       entry.status = 'running'; entry.started_at = new Date().toISOString();
+      entry.timeout_ms = timeoutMs;
       await persist('running');
-      console.log('INGEST_EMPLOYER_START', JSON.stringify({ run_id: runId, employer_id: employer.id }));
-      const result = await require('./ingestionRecovery').recoverEmployer(employer, Math.min(4 * 60 * 1000, remaining - 3000), worker);
+      console.log('INGEST_EMPLOYER_START', JSON.stringify({
+        run_id: runId, employer_id: employer.id, timeout_ms: timeoutMs,
+        never_synced_remaining: neverSyncedRemaining,
+      }));
+      const result = await require('./ingestionRecovery').recoverEmployer(employer, timeoutMs, worker);
       Object.assign(entry, result, { ended_at: new Date().toISOString() });
       if (result.counts_complete === false) summary.counts_complete = false;
       for (const [key, count] of Object.entries(result.metrics || {})) summary.totals[key] = (summary.totals[key] || 0) + count;
@@ -773,6 +788,7 @@ async function runEmployerLoop(startedAt, employerFilter, options = {}) {
     summary.failed = entries.filter(e => ['failed','timeout'].includes(e.status)).length;
     summary.skipped = entries.filter(e => e.status === 'skipped').length;
     summary.not_reached = entries.filter(e => e.status === 'not_reached').length;
+    summary.never_checked_remaining = employers.filter((e, index) => !e.last_checked_at && entries[index].status === 'not_reached').length;
     await persist(outcome, new Date().toISOString());
     console.log('INGEST_RUN_END', JSON.stringify({ run_id: runId, status: outcome, ...summary }));
   }
@@ -784,4 +800,13 @@ async function runEmployerLoop(startedAt, employerFilter, options = {}) {
 }
 
 if (require.main === module) run().catch(error => { console.error(error.message); process.exitCode = 1; });
-module.exports = { ingestEmployer, sourceJobUnchanged, run, runEmployerLoop, tryAcquireIngestLock, releaseIngestLock };
+module.exports = {
+  ingestEmployer,
+  sourceJobUnchanged,
+  run,
+  runEmployerLoop,
+  tryAcquireIngestLock,
+  releaseIngestLock,
+  orderEmployersForIngest,
+  employerTimeBudgetMs,
+};
