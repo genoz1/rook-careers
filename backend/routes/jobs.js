@@ -251,7 +251,6 @@ const FEATURED_JOB_SELECT = [
   "state",
   "territory",
   "remote_status",
-  "geographic_eligibility",
   "location_evidence",
   "ai_analysis",
   "industry",
