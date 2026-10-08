@@ -12,14 +12,16 @@ const {readJobPool} = require('./jobPool');
 const profile = {home_lat:41.7207, home_lng:-83.5694, desired_industries:['Veterinary'], total_sales_years:5.5, territory_size_preferences:['local']};
 const vet = {id:'vet',title_original:'Veterinary District Sales Manager',location_raw:'USA-Ohio-Toledo',state:'OH',job_lat:41.6529143,job_lng:-83.5378173,ai_analysis:{product_categories:['Pet Food','Veterinary Nutrition'],required_customer_types:['Veterinary clinics']}};
 const dual = {...vet,id:'dual',ai_analysis:{product_categories:['Diagnostics','Therapeutics'],required_customer_types:['Veterinary professionals']}};
-const human = {...vet,id:'human',ai_analysis:{product_categories:['Cancer screening'],required_industries:['Veterinary/Animal Health'],preferred_industries:['Animal Health'],required_customer_types:['Oncologists','Hospitals']}};
+const human = {...vet,id:'human',title_original:'Oncology Account Executive',ai_analysis:{product_categories:['Cancer screening'],required_industries:['Veterinary/Animal Health'],preferred_industries:['Animal Health'],required_customer_types:['Oncologists','Hospitals']}};
 function db(rows) {return {from(){const q={select(){return q},eq(){return q},gte(){return q},lte(){return q},order(){return q},or(){return q},range(a,b){return Promise.resolve({data:rows.slice(a,b+1),error:null})}};return q}};}
 (async()=>{
   assert(matches(vet,['Veterinary']));
   assert(matches(dual,['Veterinary'])); assert(matches(dual,['Diagnostics']));
   assert(!matches(human,['Veterinary'])); assert(matches(human,['Diagnostics']));
-  assert(!matches({...vet,ai_analysis:null},['Veterinary']));
-  assert(!matches({...vet,ai_analysis:{product_categories:['Veterans Affairs software']}},['Veterinary']));
+  // Title/company text is used when AI is absent — a Veterinary title still matches.
+  assert(matches({...vet,ai_analysis:null},['Veterinary']));
+  // A non-vet title with an AI "Veterans Affairs" product label must not classify as Veterinary.
+  assert(!matches({...vet,title_original:'Software Account Executive',company_name:'Example Soft',ai_analysis:{product_categories:['Veterans Affairs software']}},['Veterinary']));
   for(const location_raw of ['Taipei','Warsaw']) assert(!isUsEligibleJob({...vet,location_raw,job_lat:40.2024077,job_lng:-83.0266448}));
   assert(isUsEligibleJob({...vet,location_raw:'Warsaw, IN',state:'IN'}));
   assert(isUsEligibleJob({...vet,location_raw:'Toledo',location_evidence:{source_country_code:'US'}}));

@@ -1,0 +1,696 @@
+[
+  {
+    "label": "FL Orlando Diagnostics + resume",
+    "pool": 299,
+    "scored": 45,
+    "at100": 0,
+    "at95": 4,
+    "top": [
+      {
+        "score": 98,
+        "pref": 100,
+        "cand": 94,
+        "title": "Territory Sales Executive, Orlando, FL",
+        "company": "Cepheid",
+        "loc": "Orlando, Florida, United States",
+        "ai": [
+          "Diagnostics",
+          "Capital Equipment",
+          "Consumables"
+        ],
+        "geo": {
+          "kind": "local",
+          "distance_miles": 0.1576475535598164
+        }
+      },
+      {
+        "score": 96,
+        "pref": 100,
+        "cand": 86,
+        "title": "Inside Sales Representative",
+        "company": "Abbott",
+        "loc": "United States - Florida - Lake Mary",
+        "ai": [
+          "Diagnostics",
+          "Point-of-Care Diagnostics",
+          "Medical Device"
+        ],
+        "geo": {
+          "kind": "local",
+          "distance_miles": 15.350291639697037
+        }
+      },
+      {
+        "score": 96,
+        "pref": 100,
+        "cand": 85,
+        "title": "Territory Manager, CardioMEMS - Orlando",
+        "company": "Abbott",
+        "loc": "United States - Florida - Orlando",
+        "ai": [
+          "Diagnostics",
+          "Medical Device",
+          "Pharmaceutical"
+        ],
+        "geo": {
+          "kind": "local",
+          "distance_miles": 0.1576475535598164
+        }
+      },
+      {
+        "score": 96,
+        "pref": 100,
+        "cand": 85,
+        "title": "Account Executive II - North Orlando, FL",
+        "company": "Foundation Medicine",
+        "loc": "Orlando, Florida, US",
+        "ai": [
+          "Diagnostics"
+        ],
+        "geo": {
+          "kind": "local",
+          "distance_miles": 0.1576475535598164
+        }
+      },
+      {
+        "score": 93,
+        "pref": 95,
+        "cand": 87,
+        "title": "Senior Sales Ambassador - Tampa, FL",
+        "company": "Abbott",
+        "loc": "United States - Florida - Tampa | United States - Florida - ",
+        "ai": [
+          "Diagnostics",
+          "Reagents",
+          "Lab instrumentation"
+        ],
+        "geo": {
+          "kind": "local",
+          "distance_miles": 77.24941928670908
+        }
+      },
+      {
+        "score": 93,
+        "pref": 100,
+        "cand": 78,
+        "title": "Diagnostics Solutions Executive (USA, REMOTE)",
+        "company": "Beckman Coulter",
+        "loc": "USA - Remote | Charleston, South Carolina, United States | P",
+        "ai": [
+          "Diagnostics",
+          "Diagnostic Solutions"
+        ],
+        "geo": {
+          "kind": "local",
+          "distance_miles": 0.1576475535598164
+        }
+      },
+      {
+        "score": 93,
+        "pref": 100,
+        "cand": 78,
+        "title": "Inside Sales Representative",
+        "company": "Abbott",
+        "loc": "United States - Florida - Lake Mary",
+        "ai": [
+          "Diagnostics",
+          "Medical Device"
+        ],
+        "geo": {
+          "kind": "local",
+          "distance_miles": 15.350291639697037
+        }
+      },
+      {
+        "score": 93,
+        "pref": 100,
+        "cand": 78,
+        "title": "Associate Sales Development Representative  - Infectious Disease Diagnostics (Or",
+        "company": "Abbott",
+        "loc": "United States - Florida - Orlando",
+        "ai": [
+          "Diagnostics",
+          "Medical Device"
+        ],
+        "geo": {
+          "kind": "local",
+          "distance_miles": 0.1576475535598164
+        }
+      },
+      {
+        "score": 93,
+        "pref": 100,
+        "cand": 78,
+        "title": "Account Executive, Diagnostic Solutions - Orlando, FL",
+        "company": "BD (Becton, Dickinson and Company)",
+        "loc": "USA - Florida - Orlando",
+        "ai": [
+          "Manual Microbiology",
+          "Blood Culture",
+          "TB"
+        ],
+        "geo": {
+          "kind": "local",
+          "distance_miles": 0.1576475535598164
+        }
+      },
+      {
+        "score": 93,
+        "pref": 100,
+        "cand": 78,
+        "title": "Sales Executive - Mental Health/Hereditary Cancer Risk Testing - Orlando, FL",
+        "company": "Myriad Genetics",
+        "loc": "Orlando, FL, United States",
+        "ai": [
+          "Diagnostics"
+        ],
+        "geo": {
+          "kind": "local",
+          "distance_miles": 0.1576475535598164
+        }
+      },
+      {
+        "score": 93,
+        "pref": 100,
+        "cand": 78,
+        "title": "District Modality Sales Leader, Diagnostic X-ray (Southeast)",
+        "company": "Philips",
+        "loc": "Atlanta, Georgia, United States | Orlando, Florida, United S",
+        "ai": [
+          "Diagnostics"
+        ],
+        "geo": {
+          "kind": "local",
+          "distance_miles": 0.1576475535598164
+        }
+      },
+      {
+        "score": 92,
+        "pref": 100,
+        "cand": 73,
+        "title": "Oncology Clinical Account Executive, Orlando",
+        "company": "Tempus AI",
+        "loc": "Remote - Florida",
+        "ai": [
+          "Molecular Diagnostics",
+          "Diagnostics",
+          "Healthcare SaaS"
+        ],
+        "geo": {
+          "kind": "local",
+          "distance_miles": 0.1576475535598164
+        }
+      },
+      {
+        "score": 92,
+        "pref": 95,
+        "cand": 85,
+        "title": "Sales, Account Executive, Philips ECG Solutions (Sarasota/Tampa)",
+        "company": "Philips",
+        "loc": "Sarasota, Florida, United States | Tampa, Florida, United St",
+        "ai": [
+          "Diagnostics"
+        ],
+        "geo": {
+          "kind": "local",
+          "distance_miles": 77.44732218913506
+        }
+      },
+      {
+        "score": 92,
+        "pref": 100,
+        "cand": 72,
+        "title": "Sales, Clinical Strategy Specialist, Ambulatory Monitoring & Diagnostics (Region",
+        "company": "Philips",
+        "loc": "Malvern, Pennsylvania, United States | Orlando, Florida, Uni",
+        "ai": [
+          "Ambulatory Cardiac Monitoring",
+          "Diagnostics"
+        ],
+        "geo": {
+          "kind": "local",
+          "distance_miles": 0.1576475535598164
+        }
+      },
+      {
+        "score": 92,
+        "pref": 95,
+        "cand": 85,
+        "title": "Account Executive, Molecular - North Florida",
+        "company": "Abbott",
+        "loc": "United States - Florida - Tampa | United States - Florida - ",
+        "ai": [
+          "Diagnostics",
+          "Medical Device"
+        ],
+        "geo": {
+          "kind": "territory"
+        }
+      }
+    ]
+  },
+  {
+    "label": "FL Orlando Diagnostics NO resume",
+    "pool": 299,
+    "scored": 45,
+    "at100": 12,
+    "at95": 36,
+    "top": [
+      {
+        "score": 100,
+        "pref": 100,
+        "cand": null,
+        "title": "Inside Sales Representative",
+        "company": "Abbott",
+        "loc": "United States - Florida - Lake Mary",
+        "ai": [
+          "Diagnostics",
+          "Point-of-Care Diagnostics",
+          "Medical Device"
+        ],
+        "geo": {
+          "kind": "local",
+          "distance_miles": 15.350291639697037
+        }
+      },
+      {
+        "score": 100,
+        "pref": 100,
+        "cand": null,
+        "title": "Territory Sales Executive, Orlando, FL",
+        "company": "Cepheid",
+        "loc": "Orlando, Florida, United States",
+        "ai": [
+          "Diagnostics",
+          "Capital Equipment",
+          "Consumables"
+        ],
+        "geo": {
+          "kind": "local",
+          "distance_miles": 0.1576475535598164
+        }
+      },
+      {
+        "score": 100,
+        "pref": 100,
+        "cand": null,
+        "title": "Oncology Clinical Account Executive, Orlando",
+        "company": "Tempus AI",
+        "loc": "Remote - Florida",
+        "ai": [
+          "Molecular Diagnostics",
+          "Diagnostics",
+          "Healthcare SaaS"
+        ],
+        "geo": {
+          "kind": "local",
+          "distance_miles": 0.1576475535598164
+        }
+      },
+      {
+        "score": 100,
+        "pref": 100,
+        "cand": null,
+        "title": "Territory Manager, CardioMEMS - Orlando",
+        "company": "Abbott",
+        "loc": "United States - Florida - Orlando",
+        "ai": [
+          "Diagnostics",
+          "Medical Device",
+          "Pharmaceutical"
+        ],
+        "geo": {
+          "kind": "local",
+          "distance_miles": 0.1576475535598164
+        }
+      },
+      {
+        "score": 100,
+        "pref": 100,
+        "cand": null,
+        "title": "Diagnostics Solutions Executive (USA, REMOTE)",
+        "company": "Beckman Coulter",
+        "loc": "USA - Remote | Charleston, South Carolina, United States | P",
+        "ai": [
+          "Diagnostics",
+          "Diagnostic Solutions"
+        ],
+        "geo": {
+          "kind": "local",
+          "distance_miles": 0.1576475535598164
+        }
+      },
+      {
+        "score": 100,
+        "pref": 100,
+        "cand": null,
+        "title": "Inside Sales Representative",
+        "company": "Abbott",
+        "loc": "United States - Florida - Lake Mary",
+        "ai": [
+          "Diagnostics",
+          "Medical Device"
+        ],
+        "geo": {
+          "kind": "local",
+          "distance_miles": 15.350291639697037
+        }
+      },
+      {
+        "score": 100,
+        "pref": 100,
+        "cand": null,
+        "title": "Associate Sales Development Representative  - Infectious Disease Diagnostics (Or",
+        "company": "Abbott",
+        "loc": "United States - Florida - Orlando",
+        "ai": [
+          "Diagnostics",
+          "Medical Device"
+        ],
+        "geo": {
+          "kind": "local",
+          "distance_miles": 0.1576475535598164
+        }
+      },
+      {
+        "score": 100,
+        "pref": 100,
+        "cand": null,
+        "title": "Account Executive, Diagnostic Solutions - Orlando, FL",
+        "company": "BD (Becton, Dickinson and Company)",
+        "loc": "USA - Florida - Orlando",
+        "ai": [
+          "Manual Microbiology",
+          "Blood Culture",
+          "TB"
+        ],
+        "geo": {
+          "kind": "local",
+          "distance_miles": 0.1576475535598164
+        }
+      },
+      {
+        "score": 100,
+        "pref": 100,
+        "cand": null,
+        "title": "Account Executive II - North Orlando, FL",
+        "company": "Foundation Medicine",
+        "loc": "Orlando, Florida, US",
+        "ai": [
+          "Diagnostics"
+        ],
+        "geo": {
+          "kind": "local",
+          "distance_miles": 0.1576475535598164
+        }
+      },
+      {
+        "score": 100,
+        "pref": 100,
+        "cand": null,
+        "title": "Sales Executive - Mental Health/Hereditary Cancer Risk Testing - Orlando, FL",
+        "company": "Myriad Genetics",
+        "loc": "Orlando, FL, United States",
+        "ai": [
+          "Diagnostics"
+        ],
+        "geo": {
+          "kind": "local",
+          "distance_miles": 0.1576475535598164
+        }
+      },
+      {
+        "score": 100,
+        "pref": 100,
+        "cand": null,
+        "title": "Sales, Clinical Strategy Specialist, Ambulatory Monitoring & Diagnostics (Region",
+        "company": "Philips",
+        "loc": "Malvern, Pennsylvania, United States | Orlando, Florida, Uni",
+        "ai": [
+          "Ambulatory Cardiac Monitoring",
+          "Diagnostics"
+        ],
+        "geo": {
+          "kind": "local",
+          "distance_miles": 0.1576475535598164
+        }
+      },
+      {
+        "score": 100,
+        "pref": 100,
+        "cand": null,
+        "title": "District Modality Sales Leader, Diagnostic X-ray (Southeast)",
+        "company": "Philips",
+        "loc": "Atlanta, Georgia, United States | Orlando, Florida, United S",
+        "ai": [
+          "Diagnostics"
+        ],
+        "geo": {
+          "kind": "local",
+          "distance_miles": 0.1576475535598164
+        }
+      },
+      {
+        "score": 95,
+        "pref": 95,
+        "cand": null,
+        "title": "Sales Director - Co-Lab",
+        "company": "Quest Diagnostics",
+        "loc": "Tampa, FL, United States",
+        "ai": [
+          "Laboratory management services",
+          "Hospital lab solutions"
+        ],
+        "geo": {
+          "kind": "local",
+          "distance_miles": 77.44732218913506
+        }
+      },
+      {
+        "score": 95,
+        "pref": 95,
+        "cand": null,
+        "title": "Diagnostic Sales Specialist - Tampa, Fl",
+        "company": "Hologic",
+        "loc": "Tampa, FL, United States",
+        "ai": [
+          "Diagnostics"
+        ],
+        "geo": {
+          "kind": "local",
+          "distance_miles": 77.44732218913506
+        }
+      },
+      {
+        "score": 95,
+        "pref": 95,
+        "cand": null,
+        "title": "Women's Health Account Executive",
+        "company": "Quest Diagnostics",
+        "loc": "Tampa, FL, United States",
+        "ai": [
+          "Diagnostics",
+          "Specialty Testing",
+          "Molecular Diagnostics"
+        ],
+        "geo": {
+          "kind": "local",
+          "distance_miles": 77.44732218913506
+        }
+      }
+    ]
+  },
+  {
+    "label": "FL Tampa Veterinary + resume",
+    "pool": 270,
+    "scored": 12,
+    "at100": 0,
+    "at95": 2,
+    "top": [
+      {
+        "score": 97,
+        "pref": 95,
+        "cand": 100,
+        "title": "Territory Sales Partner - Fort Myers, FL",
+        "company": "Trupanion",
+        "loc": "Fort Myers, FL, us",
+        "ai": [
+          "Pet health insurance",
+          "Veterinary"
+        ],
+        "geo": {
+          "kind": "local",
+          "distance_miles": 97.4002121767329
+        }
+      },
+      {
+        "score": 97,
+        "pref": 95,
+        "cand": 100,
+        "title": "Territory Sales Partner - St. Petersburg, FL",
+        "company": "Trupanion",
+        "loc": "St. Petersburg, FL, us",
+        "ai": [
+          "pet health insurance",
+          "Veterinary"
+        ],
+        "geo": {
+          "kind": "territory"
+        }
+      },
+      {
+        "score": 93,
+        "pref": 100,
+        "cand": 78,
+        "title": "Account Manager - Spring Hill, FL",
+        "company": "Zoetis",
+        "loc": "US FL Remote",
+        "ai": [
+          "Petcare",
+          "Animal Health products"
+        ],
+        "geo": {
+          "kind": "local",
+          "distance_miles": 35.78495316384692
+        }
+      },
+      {
+        "score": 90,
+        "pref": 95,
+        "cand": 78,
+        "title": "Diagnostic Sales Specialist (DSS) — Central/Northern Florida",
+        "company": "Bionote USA",
+        "loc": "Central/Northern Florida",
+        "ai": [
+          "Diagnostic Analyzers",
+          "Biomarker Tests",
+          "In-Clinic Veterinary Diagnostics"
+        ],
+        "geo": {
+          "kind": "territory"
+        }
+      },
+      {
+        "score": 90,
+        "pref": 95,
+        "cand": 77,
+        "title": "Veterinary Sales Associate (Part-Time) – Seminole County, FL",
+        "company": "Trupanion",
+        "loc": "Sanford, FL, us",
+        "ai": [
+          "Pet Insurance",
+          "Veterinary"
+        ],
+        "geo": {
+          "kind": "territory"
+        }
+      },
+      {
+        "score": 89,
+        "pref": 100,
+        "cand": 62,
+        "title": "Territory Sales Representative - Dental",
+        "company": "Patterson Companies",
+        "loc": "Tampa, FL",
+        "ai": [
+          "Dental equipment",
+          "Dental technology",
+          "Dental"
+        ],
+        "geo": {
+          "kind": "local",
+          "distance_miles": 0.3614957936429886
+        }
+      },
+      {
+        "score": 85,
+        "pref": 95,
+        "cand": 60,
+        "title": "Territory Sales Representative - Dental Primary Location: Tampa, Florida",
+        "company": "Elite Science LLC",
+        "loc": "Tampa, Florida, US",
+        "ai": [
+          "Dental",
+          "Veterinary"
+        ],
+        "geo": {
+          "kind": "territory"
+        }
+      },
+      {
+        "score": 85,
+        "pref": 95,
+        "cand": 60,
+        "title": "Territory Manager - Daytona, FL",
+        "company": "Hill's Pet Nutrition",
+        "loc": "Orlando, FL, USA,",
+        "ai": [
+          "Veterinary"
+        ],
+        "geo": {
+          "kind": "territory"
+        }
+      },
+      {
+        "score": 83,
+        "pref": 100,
+        "cand": 43,
+        "title": "Sr. Veterinary Sales Representative – Tampa/Clearwater, FL",
+        "company": "Elanco",
+        "loc": "US Territory Field based",
+        "ai": [
+          "Veterinary"
+        ],
+        "geo": {
+          "kind": "local",
+          "distance_miles": 0.3614957936429886
+        }
+      },
+      {
+        "score": 79,
+        "pref": 95,
+        "cand": 43,
+        "title": "Orthopedic Sales Representative",
+        "company": "Arthrex Vet Systems",
+        "loc": "Naples, FL",
+        "ai": [
+          "Veterinary"
+        ],
+        "geo": {
+          "kind": "local",
+          "distance_miles": 131.45381056294806
+        }
+      },
+      {
+        "score": 78,
+        "pref": 85,
+        "cand": 60,
+        "title": "Territory Manager - West Palm Beach, FL",
+        "company": "Hill's Pet Nutrition",
+        "loc": "West Palm Beach, FL, USA,",
+        "ai": [
+          "Veterinary"
+        ],
+        "geo": {
+          "kind": "local",
+          "distance_miles": 170.57922232737639
+        }
+      },
+      {
+        "score": 72,
+        "pref": 85,
+        "cand": 43,
+        "title": "Sales Associate - Wynwood Location at Wynwood Dog Food Co.",
+        "company": "Wynwood Dog Food Co",
+        "loc": "Miami, FL, US",
+        "ai": [
+          "Veterinary"
+        ],
+        "geo": {
+          "kind": "local",
+          "distance_miles": 205.21290206266335
+        }
+      }
+    ]
+  }
+]

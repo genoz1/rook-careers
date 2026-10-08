@@ -20,7 +20,10 @@ function db(rows,fail=false){let filters=[];const q={select(){return q;},eq(k,v)
     assert(prepareJob(reviewed('national_us'),{...p,territory_size_preferences:['national']}));
     assert.equal(prepareJob({...reviewed('remote_us'),location_raw:'Remote, Poland'},{...p,territory_size_preferences:['remote']}),null);
     const multi=job('Miami, FL | '+local.location_raw,25.77,-80.19,'FL');multi.location_evidence.locations=[{lat:25.77,lng:-80.19,state:'FL'},{lat:p.home_lat,lng:p.home_lng,state:p.home_state}];assert.equal(prepareJob(multi,p).job_lat,p.home_lat);
-    const rows=Array.from({length:650},(_,i)=>({...local,id:String(i).padStart(6,'0'),job_lat:p.home_lat+(i===649?0:1.5),ai_analysis:{product_categories:['Diagnostics']},experience_min_years:i===649?0:25}));
+    // Keep offsets inside the 75-mile city-point validity radius so prepareJob
+    // retains the pool; 1.5° (~100+ miles) was outside that guard and collapsed
+    // the competition set to a single row.
+    const rows=Array.from({length:650},(_,i)=>({...local,id:String(i).padStart(6,'0'),job_lat:p.home_lat+(i===649?0:((i%40)+1)*0.01),ai_analysis:{product_categories:['Diagnostics']},experience_min_years:i===649?0:25}));
     rows.unshift(...Array.from({length:450},(_,i)=>({...unknown,id:'unknown-'+i})));
     const result=await rank(db(rows),p);assert(result.some(j=>j.id==='000649'));assert.equal(result.length,300);
     const reverse=await rank(db([...rows].reverse()),p);assert.deepEqual(reverse.map(j=>j.id),result.map(j=>j.id));

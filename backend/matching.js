@@ -34,7 +34,11 @@
 // that are actually empty.
 
 const { distanceMiles } = require("./geocoding");
-const { matches: matchesCanonicalIndustry, normalizeSelection } = require("../public/rook-job-classification");
+const {
+  matches: matchesCanonicalIndustry,
+  normalizeSelection,
+  classify: classifyJobIndustry,
+} = require("../public/rook-job-classification");
 
 const STATE_ABBR = {
   alabama: "AL", alaska: "AK", arizona: "AZ", arkansas: "AR", california: "CA",
@@ -176,9 +180,15 @@ function containsNonLatinScript(text) {
   return /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af]/.test(String(text));
 }
 
+const INTERNATIONAL_TERRITORY_TITLE = /\b(?:latin america|latam|south america|central america|caribbean|emea|apac|asia[ -]?pacific|middle east|europe(?:an)?(?:\s+region)?|africa(?:n)?(?:\s+region)?)\b/i;
+
 function mentionsNonUsCountry(locationRaw, jobLng, titleRaw) {
   if (jobLng != null && jobLng > 0) return true;
   if (containsNonLatinScript(titleRaw) || containsNonLatinScript(locationRaw)) return true;
+  // Title-named international territories (Latin America, EMEA, …) even when
+  // the ATS row carries a US HQ city geocode.
+  if (INTERNATIONAL_TERRITORY_TITLE.test(String(titleRaw || ""))) return true;
+  if (INTERNATIONAL_TERRITORY_TITLE.test(String(locationRaw || ""))) return true;
   if (!locationRaw) return false;
   if (hasForeignCountryCodePrefix(locationRaw)) return true;
   return NON_US_COUNTRY_SIGNALS.some((country) => new RegExp(`\\b${country}\\b`, "i").test(locationRaw));
@@ -469,24 +479,25 @@ function scoreJob(job, profile, options = {}) {
   cat.location_prefs.score = prefScore;
 
   // ── Industry ──────────────────────────────────────────────────────────
-  // Only deduct if ai_analysis has industry data AND it doesn't match.
-  // No data → no deduction.
+  // Prefer reconciled classifier labels (title/company/description can
+  // override a conflicting AI product_categories label). Fall back to raw
+  // AI lists only when the classifier finds nothing.
   const INDUSTRY_GROUPS = {
     diagnostics:      ["diagnostics", "reference laboratory", "molecular", "point-of-care", "lab", "pathology", "clinical laboratory"],
-    "medical device": ["medical device", "capital equipment", "surgical", "dme", "consumables"],
+    "medical device": ["medical device", "capital equipment", "surgical", "dme", "consumables", "orthopedic", "trauma"],
     pharmaceutical:   ["pharmaceutical", "pharma", "biotech", "life sciences", "specialty pharma"],
     veterinary:       ["veterinary", "animal health", "vet"],
   };
 
-  // Use product_categories as primary signal — what the job SELLS.
-  // required_industries lists what backgrounds are accepted, which is too
-  // broad (a pharma job may accept diagnostics reps, but it is still pharma).
-  // Fall back to required_industries only when product_categories is empty.
+  const classified = classifyJobIndustry(job);
+  const classifiedLabels = (classified.labels || []).map((s) => String(s).toLowerCase());
   const _aiProd = (job.ai_analysis?.product_categories   || []).map(s => String(s).toLowerCase());
   const _aiReq  = (job.ai_analysis?.required_industries  || []).map(s => String(s).toLowerCase());
   const _aiPref = (job.ai_analysis?.preferred_industries || []).map(s => String(s).toLowerCase());
-  const _primaryList = _aiProd.length > 0 ? _aiProd : [..._aiReq, ..._aiPref];
-  const _aiAll  = [..._aiProd, ..._aiReq, ..._aiPref];
+  const _primaryList = classifiedLabels.length > 0
+    ? classifiedLabels
+    : (_aiProd.length > 0 ? _aiProd : [..._aiReq, ..._aiPref]);
+  const _aiAll  = [...classifiedLabels, ..._aiProd, ..._aiReq, ..._aiPref];
   const hasIndustryData = _primaryList.length > 0;
 
   if (Array.isArray(profile.desired_industries) && profile.desired_industries.length > 0) {
@@ -504,12 +515,13 @@ function scoreJob(job, profile, options = {}) {
       const matchedIndustry = profile.desired_industries.find((ind) => {
         const key   = String(ind).toLowerCase().trim();
         const group = INDUSTRY_GROUPS[key] || [key];
-        return group.some((term) => _primaryList.some(s => s.includes(term)));
+        return group.some((term) => _primaryList.some(s => s.includes(term))) ||
+          matchesCanonicalIndustry(job, [ind]);
       });
       if (matchedIndustry) {
         reasons.push(`Matches your interest in ${matchedIndustry}`);
       } else {
-        prefScore -= 20;
+        prefScore -= 25;
         concerns.push("Industry may not match your stated preference");
       }
     }
@@ -525,6 +537,36 @@ function scoreJob(job, profile, options = {}) {
       concerns.push(`Mentions ${avoided}, which you asked to avoid`);
       hardDisqualifier = true;
       prefCap = Math.min(prefCap, 40);
+    }
+  }
+
+  // No-résumé differentiation: use onboarding experience years + field vs
+  // inside-sales cues so preference-only rankings are not a flat 100% cluster.
+  if (!profile.resume_structured) {
+    const title = String(job.title_original || "").toLowerCase();
+    const empType = String(job.employment_type || "").toLowerCase();
+    const isInsideSales = title.includes("inside sales") || empType === "inside";
+    const wantsField = (profile.territory_size_preferences || [profile.territory_size_preference] || [])
+      .some((t) => ["local", "regional"].includes(String(t || "").toLowerCase())) &&
+      !(profile.territory_size_preferences || []).map((t) => String(t || "").toLowerCase()).includes("remote");
+    if (isInsideSales && wantsField) {
+      prefScore -= 8;
+      concerns.push("Inside-sales role while you prefer field territory work");
+    }
+    const years = Number(profile.total_sales_years);
+    const requiredYears = Number(job.experience_min_years ?? job.ai_analysis?.required_years_experience);
+    if (Number.isFinite(years) && years > 0 && Number.isFinite(requiredYears) && requiredYears > 0) {
+      if (years + 0.5 < requiredYears) {
+        prefScore -= Math.min(12, Math.round((requiredYears - years) * 2));
+        concerns.push(`Role typically asks for ~${requiredYears}+ years; you listed ${years}`);
+      } else if (years >= requiredYears) {
+        reasons.push(`Your ${years} years of sales experience meet this role's typical bar`);
+      }
+    }
+    // Soft seniority mismatch without a résumé — director/VP for early-career prefs.
+    if (Number.isFinite(years) && years > 0 && years < 6 && /\b(?:director|vp|vice president|national sales)\b/i.test(title)) {
+      prefScore -= 6;
+      concerns.push("Senior leadership title relative to the experience you listed");
     }
   }
 
@@ -1013,6 +1055,13 @@ function scoreJob(job, profile, options = {}) {
     // way an actual stated mismatch (rating === "Gap") should.
     (categories.requirements.rating === null || goodOrStrong(categories.requirements.rating))
   );
+
+  // Reserve a literal 100% for genuinely exceptional matches only.
+  // Preference-only proximity clusters (no résumé) and strong-but-ordinary
+  // locals must not all read as perfect. Soft-cap preserves ordering.
+  if (overall_score != null && overall_score >= 100 && !excellent_match) {
+    overall_score = 99;
+  }
 
   return {
     candidate_fit,

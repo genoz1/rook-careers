@@ -94,9 +94,53 @@ function sharedStateCityQueries(clause) {
   const parts=body.split(/\s*,\s*|\s+(?:and|or)\s+/i).map(s=>s.replace(/^(?:and|or|the|greater|metro)\s+/i,'').trim()).filter(Boolean);
   return parts.map(city=>zipcodes.lookupByName(city,state)[0]).filter(Boolean).map(place=>({query:`${place.city}, ${state}`,city:place.city,state}));
 }
+// International sales territories named in the title/description must not
+// collapse into a US HQ city geocode (e.g. "Latin America" + Tampa office).
+const INTERNATIONAL_TERRITORY = /\b(?:latin america|latam|south america|central america|caribbean|emea|apac|asia[ -]?pacific|middle east|europe(?:an)?(?:\s+region)?|africa(?:n)?(?:\s+region)?|canada(?:dian)?(?:\s+region)?|mexico|united kingdom|\buk\b|australia(?:n)?(?:\s+region)?|an?z(?:ac)?|global(?!\s*(?:us|u\.s\.|united states)))\b/i;
+
+const US_NAMED_REGIONS = [
+  { pattern: /\b(?:northeast|new england|mid[ -]?atlantic)\b/i, states: ['CT','DE','MA','MD','ME','NH','NJ','NY','PA','RI','VT','DC'] },
+  { pattern: /\b(?:southeast|south atlantic|gulf coast)\b/i, states: ['AL','FL','GA','KY','MS','NC','SC','TN','VA','WV','AR','LA'] },
+  { pattern: /\b(?:midwest|great lakes)\b/i, states: ['IA','IL','IN','KS','MI','MN','MO','ND','NE','OH','SD','WI'] },
+  { pattern: /\b(?:southwest)\b/i, states: ['AZ','NM','OK','TX'] },
+  { pattern: /\b(?:pacific northwest|northwest)\b/i, states: ['OR','WA','ID'] },
+  { pattern: /\b(?:west coast|western us|western united states)\b/i, states: ['CA','OR','WA','NV','AZ'] },
+];
+
+function explicitInternationalScope(job) {
+  const title = clean(job.title_original);
+  const raw = clean(job.location_raw);
+  const description = String(job.description_text || '');
+  // Prefer title — description can mention international markets without
+  // making the role itself an international territory.
+  if (INTERNATIONAL_TERRITORY.test(title) || INTERNATIONAL_TERRITORY.test(raw)) {
+    return { kind: 'foreign', reason: 'explicit_international_territory' };
+  }
+  // Description only when it clearly assigns the territory, not a casual mention.
+  if (/\b(?:territory|region|covering|responsible for|based in)\b/i.test(description) &&
+      INTERNATIONAL_TERRITORY.test(description)) {
+    return { kind: 'foreign', reason: 'explicit_international_territory' };
+  }
+  return null;
+}
+
+function explicitUsRegionScope(job) {
+  const title = clean(job.title_original);
+  const raw = clean(job.location_raw);
+  const haystack = `${title} ${raw}`;
+  for (const region of US_NAMED_REGIONS) {
+    if (region.pattern.test(haystack)) {
+      return { kind: 'territory', states: region.states, reason: 'explicit_title_us_region' };
+    }
+  }
+  return null;
+}
+
 function explicitTitleScope(job) {
   const title=clean(job.title_original);
   if(!/sales|territory|account|clinical|specialist|business development/i.test(title))return null;
+  const international=explicitInternationalScope(job); if(international)return international;
+  const region=explicitUsRegionScope(job); if(region)return region;
   const queries=cityQueriesInText(title);
   if(queries.length)return {kind:'local',queries,states:[...new Set(queries.map(q=>q.state))],reason:'explicit_title_territory'};
   const geographicPart=(title.match(/\(([^()]*)\)\s*$/)?.[1] || title.split(/\s+[–—-]\s+/).pop());
@@ -130,10 +174,17 @@ function classifyLocation(job) {
   const old=job.location_evidence;
   const currentDescriptionHash=descriptionHash(job.description_text);
   const newlyParsedCity=/,\s*us$/i.test(raw) && cityQuery(raw);
+  // International / named-region title territories always win over a cached
+  // city geocode — otherwise "Latin America" roles keep scoring as local Tampa.
+  const international=explicitInternationalScope(job); if(international)return international;
+  const namedRegion=explicitUsRegionScope(job);
   if(old?.version===VERSION && clean(old.source_location)===raw && old.source_title===clean(job.title_original) && old.scope &&
     (job.description_text===undefined || !old.source_description_hash || old.source_description_hash===currentDescriptionHash) &&
-    !(newlyParsedCity && !/^explicit_title/.test(old.scope.reason||''))) return old.scope;
+    !(newlyParsedCity && !/^explicit_title/.test(old.scope.reason||'')) &&
+    !namedRegion &&
+    !INTERNATIONAL_TERRITORY.test(clean(job.title_original))) return old.scope;
   const titleScope=explicitTitleScope(job); if(titleScope)return titleScope;
+  if(namedRegion)return namedRegion;
   const descriptionScope=explicitDescriptionScope(job); if(descriptionScope)return descriptionScope;
   if(hasUnambiguousForeignCountryEvidence(raw)||(country&&!US_COUNTRY_CODES.has(country))) return {kind:'foreign',reason:'explicit_foreign_evidence'};
   const suffixCountry=/,\s*([a-z]{2})$/.exec(raw);
@@ -185,4 +236,4 @@ async function resolveLocation(job, geocode) {
   if(scope.kind==='local')return {job_lat:job.job_lat,job_lng:job.job_lng,state:job.state,location_evidence:evidence};
   return {job_lat:null,job_lng:null,state:null,location_evidence:{...evidence,status:scope.kind==='foreign'?'foreign':scope.kind==='unresolved'?'unresolved':'validated'}};
 }
-module.exports={VERSION,LOCAL_MATCHING_SCOPE,classifyLocation,resolveLocation,cityQuery,stateOnly,validPoint,pointMatchesCity,explicitTitleScope,explicitDescriptionScope,stateCodesInText,cityQueriesInText,descriptionHash};
+module.exports={VERSION,LOCAL_MATCHING_SCOPE,classifyLocation,resolveLocation,cityQuery,stateOnly,validPoint,pointMatchesCity,explicitTitleScope,explicitDescriptionScope,explicitInternationalScope,explicitUsRegionScope,stateCodesInText,cityQueriesInText,descriptionHash};
