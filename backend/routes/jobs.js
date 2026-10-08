@@ -1,4 +1,4 @@
-const { maskedTitle } = require('../maskedPresentation');
+const { maskedTitle, generalizedRole, safeLocationLabel, safeSpecialty, freshness } = require('../maskedPresentation');
 // Public job-listing routes. Auth is optional here: signed-out visitors
 // can browse jobs same as before, but a signed-in candidate sees their
 // PRECOMPUTED match scores — see backend/scoring/precompute.js and
@@ -234,6 +234,80 @@ router.get("/public-job-count", requireConfig, async (req, res) => {
     total_count: totalResult.count || 0,
     new_last_7_days: weekResult.count || 0,
   });
+});
+
+// GET /api/public-featured-jobs — a few masked marketing cards for the
+// homepage. Intentionally tiny: short column select, ORDER BY
+// first_seen_at DESC LIMIT 24, in-memory TTL cache, and Cache-Control so
+// the homepage stays fast and never pays for a full inventory fetch.
+// Titles/locations use the same public masking contract as pretrial
+// surfaces — no employer names, descriptions, or source URLs.
+const FEATURED_JOB_SELECT = [
+  "id",
+  "title_original",
+  "title_normalized",
+  "location_raw",
+  "city",
+  "state",
+  "territory",
+  "remote_status",
+  "geographic_eligibility",
+  "location_evidence",
+  "ai_analysis",
+  "industry",
+  "category",
+  "subcategory",
+  "sales_type",
+  "date_posted",
+  "first_seen_at",
+].join(",");
+let featuredJobsCache = { at: 0, payload: null };
+const FEATURED_JOBS_TTL_MS = 90 * 1000;
+
+function pickFeaturedJobs(rows, limit = 6) {
+  const picked = [];
+  const seenStates = new Set();
+  const seenRoles = new Set();
+  for (const job of rows || []) {
+    const role = generalizedRole(job);
+    const location = safeLocationLabel(job);
+    if (!role || !location) continue;
+    const stateKey = String(job.state || location).trim().toUpperCase().slice(0, 2);
+    const roleKey = role.toLowerCase();
+    // Prefer geographic + title variety so the homepage does not look
+    // like six copies of the same Florida territory manager card.
+    if (picked.length >= 3 && seenStates.has(stateKey) && seenRoles.has(roleKey)) continue;
+    picked.push({
+      role_title: role,
+      location_label: location,
+      specialty_label: safeSpecialty(job),
+      freshness_label: freshness(job, Date.now(), true) || freshness(job),
+      industry_labels: (classify(job).labels || []).slice(0, 2),
+    });
+    seenStates.add(stateKey);
+    seenRoles.add(roleKey);
+    if (picked.length >= limit) break;
+  }
+  return picked;
+}
+
+router.get("/public-featured-jobs", requireConfig, async (req, res) => {
+  res.set("Cache-Control", "public, max-age=60");
+  if (featuredJobsCache.payload && Date.now() - featuredJobsCache.at < FEATURED_JOBS_TTL_MS) {
+    return res.json(featuredJobsCache.payload);
+  }
+  const { data, error } = await supabaseAdmin
+    .from("jobs")
+    .select(FEATURED_JOB_SELECT)
+    .eq("status", "active")
+    .eq("moderation_status", "approved")
+    .order("first_seen_at", { ascending: false })
+    .limit(24);
+  if (error) return res.status(500).json({ error: error.message });
+  const jobs = pickFeaturedJobs(data, 6);
+  const payload = { jobs, cached_for_seconds: FEATURED_JOBS_TTL_MS / 1000 };
+  featuredJobsCache = { at: Date.now(), payload };
+  res.json(payload);
 });
 
 // GET /api/public-employer-count — same pattern as /public-job-count
