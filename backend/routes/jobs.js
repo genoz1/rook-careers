@@ -267,15 +267,20 @@ function pickFeaturedJobs(rows, limit = 6) {
   const picked = [];
   const seenStates = new Set();
   const seenRoles = new Set();
-  for (const job of rows || []) {
+  const pushCard = (job, allowRepeat) => {
     const role = generalizedRole(job);
-    const location = safeLocationLabel(job);
-    if (!role || !location) continue;
+    if (!role) return false;
+    const location = safeLocationLabel(job) || "United States";
     const stateKey = String(job.state || location).trim().toUpperCase().slice(0, 2);
     const roleKey = role.toLowerCase();
     // Prefer geographic + title variety so the homepage does not look
     // like six copies of the same Florida territory manager card.
-    if (picked.length >= 3 && seenStates.has(stateKey) && seenRoles.has(roleKey)) continue;
+    if (!allowRepeat && picked.length >= 3 && seenStates.has(stateKey) && seenRoles.has(roleKey)) {
+      return false;
+    }
+    if (picked.some((card) => card.role_title === role && card.location_label === location)) {
+      return false;
+    }
     picked.push({
       role_title: role,
       location_label: location,
@@ -285,6 +290,15 @@ function pickFeaturedJobs(rows, limit = 6) {
     });
     seenStates.add(stateKey);
     seenRoles.add(roleKey);
+    return true;
+  };
+  for (const job of rows || []) {
+    pushCard(job, false);
+    if (picked.length >= limit) return picked;
+  }
+  // Second pass fills remaining slots if the newest batch is too samey.
+  for (const job of rows || []) {
+    pushCard(job, true);
     if (picked.length >= limit) break;
   }
   return picked;
