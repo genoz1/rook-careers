@@ -2,6 +2,7 @@ const { createHash } = require('node:crypto');
 const { detectFromUrl, registrableDomain, resolveOfficialSource } = require('./sourceResolver');
 const { validateSource } = require('./sourceValidator');
 const { currentJobEvidence } = require('./evidenceFreshness');
+const { blockedEmployerReason } = require('../employerSourcePolicy');
 
 function normalizeCompanyName(value) {
   return String(value || '')
@@ -74,6 +75,15 @@ class EmployerDiscoveryPipeline {
   async processSignal(signal, { force = false, candidateId = null } = {}) {
     validateSignal(signal);
     const now = this.now();
+    const policyReason = blockedEmployerReason(signal);
+    if (policyReason) {
+      return {
+        status: 'rejected_policy',
+        reason: policyReason,
+        candidate: null,
+        duplicate: false,
+      };
+    }
     const normalizedName = normalizeCompanyName(signal.company_name);
     const domain = candidateDomain(signal);
     const received = await this.store.receiveCandidate({
@@ -132,6 +142,28 @@ class EmployerDiscoveryPipeline {
     let resolved;
     try {
       resolved = await this.resolveSource({ ...signal, company_website: candidate.company_website });
+      const resolvedUrls = [
+        resolved?.official_url,
+        ...(resolved?.careers_pages || []),
+        ...(resolved?.configurations || []).flatMap((c) => [c.source_url, c.ats_identifier]),
+      ];
+      for (const value of resolvedUrls) {
+        const resolvedBlock = blockedEmployerReason({
+          company_name: candidate.company_name,
+          careers_url: value,
+          ats_identifier: value,
+        });
+        if (resolvedBlock) {
+          candidate = await this.store.updateCandidate(candidate.id, {
+            status: 'unresolved',
+            last_error: resolvedBlock,
+            validation_status: 'BLOCKED_EMPLOYER_SOURCE',
+            next_attempt_at: retryAt(now, 30),
+            updated_at: now.toISOString(),
+          });
+          return { status: 'rejected_policy', reason: resolvedBlock, candidate, awakened_by_fresh_evidence: awakenedByFreshEvidence };
+        }
+      }
     } catch (error) {
       const transient = !['NEEDS_OFFICIAL_DOMAIN', 'BAD_OFFICIAL_URL', 'OFFICIAL_DOMAIN_MISMATCH', 'COMPANY_IDENTITY_MISMATCH', 'SEARCH_IDENTITY_NOT_VERIFIED', 'NO_OFFICIAL_CAREERS_LINK', 'UNSUPPORTED_SOURCE'].includes(error.code);
       const discrepancy = coverageDiscrepancy(signal, now, error.code || 'RESOLUTION_FAILED', received.evidenceFingerprint);
