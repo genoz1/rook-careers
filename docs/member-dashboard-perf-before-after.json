@@ -1,0 +1,20 @@
+{
+  "measured_at": "2026-10-08T13:30:00Z",
+  "location": { "label": "Tampa, FL", "lat": 27.95, "lng": -82.46 },
+  "columns": "JOB_LIST_COLUMNS_NO_DESCRIPTION (dashboard live path)",
+  "before": {
+    "local_or_custom_html_null_pipe_box": { "ms": 1787, "rows": 1393 },
+    "broad_prefs_full_active_scan": { "ms": 5395, "rows": 5741 },
+    "explore_uncapped_null_coords": { "ms": 2141, "rows": 2568 }
+  },
+  "after": {
+    "local_geo_scoped_pool": { "ms": 410, "rows": 331 },
+    "broad_geo_scoped_pool": { "ms": 577, "rows": 622 },
+    "explore_geo_scoped_pool_illinois": { "ms": 616, "rows": 375 }
+  },
+  "notes": [
+    "Root cause: live /api/jobs skipped the bounding box when territory prefs included national/remote, scanning the full active inventory; even local prefs used a nationwide pipe/custom_html OR that inflated the pool.",
+    "Fix: always box when home coords exist; parallel capped home-state text supplements; capped remote supplement only for broad prefs; explore null-coord uncapped fetch removed.",
+    "Frontend: show busy state on every loadJobs; defer /recruiter-jobs until after first paint."
+  ]
+}
