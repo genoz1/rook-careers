@@ -35,7 +35,7 @@ function jobContext(categorySlug,source='resources',content='article'){
  const label=PREFER_LABEL[categorySlug]
   || (c && ['medical-device','diagnostics-laboratory','pharmaceutical-biotech','veterinary-animal-health'].includes(c.slug)
     ?(c.label.includes('/')?c.label.split('/')[0].trim():c.label)
-    :'medical & veterinary sales');
+    :'Medical & Veterinary Sales');
  const prefer=PREFER_LABEL[categorySlug]||'';
  return {label,jobsPath,source,content,prefer};
 }
