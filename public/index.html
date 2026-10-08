@@ -551,12 +551,12 @@
       <div class="stat-label">Current Opportunities</div>
     </div>
     <div class="stat-item">
-      <div class="stat-num" style="font-size:22px;">Direct From Employers</div>
-      <div class="stat-label">Current opportunities, not recycled listings</div>
+      <div class="stat-num" id="statNewJobs7d">—</div>
+      <div class="stat-label">New jobs added in the past 7 days</div>
     </div>
     <div class="stat-item">
-      <div class="stat-num" style="font-size:22px;">Continuously Updated</div>
-      <div class="stat-label">New opportunities added automatically</div>
+      <div class="stat-num" style="font-size:22px;">Direct From Employers</div>
+      <div class="stat-label">Current opportunities, not recycled listings</div>
     </div>
   </div>
   <p class="stats-sub">ROOK goes directly to employer career sites to uncover opportunities you may never see on a traditional job board — then matches them to your experience.</p>
@@ -892,7 +892,7 @@
 </footer>
 
 <script>
-// Refresh the current job count from the live database.
+// Refresh live inventory counts from the database (no job rows returned).
 (async () => {
   try {
     const res = await fetch('/api/public-job-count');
@@ -900,6 +900,9 @@
     const data = await res.json();
     if (data.total_count > 0) {
       document.getElementById('statJobCount').textContent = data.total_count.toLocaleString() + '+';
+    }
+    if (Number(data.new_last_7_days) > 0) {
+      document.getElementById('statNewJobs7d').textContent = Number(data.new_last_7_days).toLocaleString() + '+';
     }
   } catch (err) {
     console.error('Could not load homepage job count:', err);
