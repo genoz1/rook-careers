@@ -1,5 +1,6 @@
 const { nyWallClockToUtc } = require('./socialAutomation');
 const { getEasternParts } = require('./socialScheduler');
+const { assertNoStalePromoClaims } = require('./socialPromoGuard');
 // Preserve the four custom marketing times observed in the live Sept 23 queue.
 const DAILY_SLOTS = [
   { slot: 'am', hour: 8, minute: 30, kind: 'featured' },
@@ -61,6 +62,9 @@ function regularPost(slot, platform, copy, resourceSlug) {
   const body = copy[platform] || copy.text;
   // Advice stands on its own. Product posts retain the existing attribution.
   const cta = slot.kind === 'value' ? `\n\nExplore matching opportunities on ROOK: ${shortUrl}` : `\n\n${shortUrl}`;
-  return `${headline}\n\n${body}${cta}`;
+  const text = `${headline}\n\n${body}${cta}`;
+  // Final gate before Buffer: no free-trial / checkout-price pitches.
+  assertNoStalePromoClaims(text, `${platform} marketing post`);
+  return text;
 }
 module.exports = { DAILY_SLOTS, PERSONAL_COPY_TOKEN, futureSlots, representedPost, availableCapacity, isPersonalLinkedinSlot, personalLinkedinSlot, regularPost };

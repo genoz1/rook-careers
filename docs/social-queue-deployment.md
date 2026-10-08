@@ -36,8 +36,12 @@ An isolated OpenAI validation fallback is written to the job log with its slot, 
 
 ## Weekly owner report hook
 
-Weekly growth reporting remains disabled pending an existing trustworthy aggregate source. Future integration may use existing Resend with a week-specific idempotency key for visitors, onboarding starts, email captures, trials, paid conversions, source, social metrics and ad spend only where those real values exist. No missing metrics are invented; no tracking warehouse, payment change or new analytics system was added.
+Weekly growth reporting remains disabled pending an existing trustworthy aggregate source. Future integration may use existing Resend with a week-specific idempotency key for visitors, onboarding starts, email captures, paid conversions, source, social metrics and ad spend only where those real values exist. No free-trial metrics — ROOK is paid membership only. No missing metrics are invented; no tracking warehouse, payment change or new analytics system was added.
+
+## Promo copy rules
+
+Automated Buffer/Meta posts (company marketing, Gene personal LinkedIn, job posts, resources, industry news) must not mention free trials, free access, credit-card-free offers, or recite checkout prices. Send people to ROOK; pricing lives on the website (2-Day $5.99, Monthly $9.99 then $19.99, 3-Month $39.99). Enforced in `socialPromoGuard.js` plus OpenAI instructions in `socialMarketingCopy.js` / resources / industry-news generators.
 
 ## Focused tests
 
-Run `node backend/testSocialAutomation.js`, `node backend/testSocialPublishWorker.js`, `node backend/testSocialScheduler.js`, and `node --test backend/testSocialCityPreference.js backend/testSocialWorkerExit.js backend/testSocialQueue.js`. No unrelated full suite is required.
+Run `node backend/testSocialAutomation.js`, `node backend/testSocialPublishWorker.js`, `node backend/testSocialScheduler.js`, and `node --test backend/testSocialCityPreference.js backend/testSocialWorkerExit.js backend/testSocialQueue.js backend/testSocialPromoGuard.js`. No unrelated full suite is required.
