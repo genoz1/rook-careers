@@ -386,8 +386,18 @@ test('ten-candidate force batch survives provider degradation without poisoning 
   });
   let duckCalls = 0;
   let bingCalls = 0;
+  let braveCalls = 0;
+  let wikidataCalls = 0;
   const httpFetch = async (url) => {
     const target = String(url);
+    if (target.includes('wikidata.org')) {
+      wikidataCalls++;
+      return { ok: true, json: async () => ({ search: [], entities: {} }), text: async () => '{"search":[],"entities":{}}' };
+    }
+    if (target.includes('search.brave.com')) {
+      braveCalls++;
+      return { ok: true, text: async () => '<html><body>Transient empty Brave response</body></html>' };
+    }
     const queryName = new URL(target).searchParams.get('q').replace(/ animal health careers jobs$/, '');
     const index = names.indexOf(queryName);
     if (target.includes('duckduckgo.com')) {
@@ -415,18 +425,53 @@ test('ten-candidate force batch survives provider degradation without poisoning 
   assert.ok(results.every((item) => item.status === 'enrolled'));
   assert.equal(results[9].validation_status, 'PASS_VALIDATED_SOURCE_NO_RELEVANT_JOBS');
   assert.equal(results[9].source_type, 'custom_html');
-  assert.ok(results[9].search_provider_trace.every((entry) => entry.status === 'circuit_open'));
-  assert.equal(duckCalls, 5);
-  assert.equal(bingCalls, 2);
+  // Soft empty/low-relevance misses must not circuit-open HTML providers, so
+  // later candidates keep trying them (and Wikidata) instead of being poisoned.
+  assert.ok(duckCalls >= 7, `expected continued DuckDuckGo attempts, got ${duckCalls}`);
+  assert.ok(bingCalls >= 5, `expected continued Bing attempts, got ${bingCalls}`);
+  assert.ok(braveCalls >= 5, `expected Brave fallback attempts, got ${braveCalls}`);
+  assert.ok(wikidataCalls >= 5, `expected Wikidata fallback attempts, got ${wikidataCalls}`);
+  assert.ok(!results[9].search_provider_trace.some((entry) => entry.status === 'circuit_open'),
+    'empty provider responses must not open the circuit for later candidates');
 });
 
 test('empty responses from every public provider remain retryable instead of an identity rejection', async () => {
   await assert.rejects(
     searchOfficialCareerCandidates('Temporary Search Outage', {
-      httpFetch: async () => ({ ok: true, text: async () => '<html><body>No parseable results.</body></html>' }),
+      httpFetch: async (url) => {
+        if (String(url).includes('wikidata.org')) {
+          return { ok: true, json: async () => ({ search: [], entities: {} }), text: async () => '{"search":[],"entities":{}}' };
+        }
+        return { ok: true, text: async () => '<html><body>No parseable results.</body></html>' };
+      },
     }),
-    /no parseable.*results/i,
+    /no parseable.*results|no company-relevant/i,
   );
+});
+
+test('Wikidata official-website fallback recovers when HTML search providers are empty', async () => {
+  const results = await searchOfficialCareerCandidates('Vetoquinol', {
+    httpFetch: async (url) => {
+      const target = String(url);
+      if (target.includes('wikidata.org') && target.includes('wbsearchentities')) {
+        return {
+          ok: true,
+          json: async () => ({ search: [{ id: 'Q123', label: 'Vetoquinol', aliases: [] }] }),
+          text: async () => '',
+        };
+      }
+      if (target.includes('wikidata.org') && target.includes('wbgetentities')) {
+        return {
+          ok: true,
+          json: async () => ({ entities: { Q123: { claims: { P856: [{ mainsnak: { datavalue: { value: 'https://www.vetoquinol.com/' } } }] } } } }),
+          text: async () => '',
+        };
+      }
+      return { ok: true, text: async () => '<html><body>No parseable results.</body></html>' };
+    },
+  });
+  assert.equal(results[0].url, 'https://www.vetoquinol.com/');
+  assert.equal(results[0].provider, 'wikidata-official-website');
 });
 
 test('total search outage with exhausted safe domain fallbacks is retryable, not terminally unresolved', async () => {

@@ -88,3 +88,42 @@ test('sales-adjacent operations titles remain excluded', () => {
     assert.equal(titleLooksRelevant(title), false, title);
   }
 });
+
+test('pharma commercial account specialist titles are admitted without the bare word sales', () => {
+  for (const title of [
+    'Oncology Account Specialist - Minneapolis South',
+    'Dermatology Territory Account Specialist – Portland East',
+    'Territory Business Manager Psychiatry – Fort Lauderdale',
+    'Medical Account Specialist II - NEUROLOGY - RICHMOND, VA',
+    'Sr. Oncology Account Representative  - Cincinnati',
+    'Neuroscience Territory Account Specialist - San Jose, CA',
+    'Executive, Corporate Accounts',
+    'Diagnostics Solutions Executive (USA, REMOTE)',
+  ]) {
+    assert.equal(isSalesAdmissibleJob({ title }), true, title);
+  }
+});
+
+test('front-office patient service titles stay excluded as non-sales', () => {
+  for (const title of [
+    'Medical Front Office - Patient Service Specialist',
+    'Patient Service Specialist - Medical Front Office',
+    'Medical Front Office - Patient Service Specialist - Float',
+    'Clinical Education Manager',
+    'Clinical Services Manager (MCS)',
+  ]) {
+    assert.equal(isSalesAdmissibleJob({ title }), false, title);
+  }
+});
+
+test('bare account specialist admits only with description sales evidence', () => {
+  assert.equal(isSalesAdmissibleJob({ title: 'Account Specialist, Migraine - Brooklyn, NY' }), false);
+  assert.equal(isSalesAdmissibleJob({
+    title: 'Account Specialist, Migraine - Brooklyn, NY',
+    description: 'Drive product sales, achieve quarterly quota, and grow book of business with neurology clinics.',
+  }), true);
+  assert.equal(isSalesAdmissibleJob({
+    title: 'Account Specialist, Migraine - Brooklyn, NY',
+    description: 'Coordinate patient scheduling, front desk coverage, and clinic operations support.',
+  }), false);
+});

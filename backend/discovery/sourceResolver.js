@@ -9,6 +9,10 @@ const MULTIPART_SUFFIXES = new Set(['co.uk', 'com.au', 'co.nz', 'com.br', 'co.jp
 const SEARCH_REJECT_HOST = /(?:^|\.)(?:linkedin\.com|indeed\.com|glassdoor\.com|ziprecruiter\.com|careerbuilder\.com|wikipedia\.org|facebook\.com|instagram\.com|youtube\.com|tiktok\.com|levels\.fyi)$/i;
 const SEARCH_GENERIC_TOKENS = new Set(['the', 'and', 'inc', 'corp', 'llc', 'ltd', 'company', 'group', 'holdings', 'pet', 'animal', 'health', 'hospital', 'medical', 'veterinary', 'vet', 'care', 'center', 'centers', 'specialty', 'emergency', 'systems', 'system']);
 const SEARCH_PROVIDER_COOLDOWN_MS = 5 * 60 * 1000;
+// Empty / low-relevance responses are common under HTML scraping and must not
+// circuit-open the whole discovery batch. Only hard transport/HTTP failures
+// advance the error streak toward cooldown.
+const SEARCH_PROVIDER_ERROR_COOLDOWN_AFTER = 3;
 
 function cleanUrl(value, base) {
   try {
@@ -110,8 +114,70 @@ function createPublicSearchSession({ httpFetch = fetch, now = () => Date.now(), 
 }
 
 function providerState(session, provider) {
-  if (!session.providers.has(provider)) session.providers.set(provider, { consecutive_degraded: 0, cooldown_until: 0 });
+  if (!session.providers.has(provider)) {
+    session.providers.set(provider, { consecutive_degraded: 0, consecutive_errors: 0, cooldown_until: 0 });
+  }
   return session.providers.get(provider);
+}
+
+function unwrapBraveUrl(value) {
+  const url = cleanUrl(value, 'https://search.brave.com');
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname.endsWith('brave.com') && parsed.pathname === '/search') return null;
+    return url;
+  } catch {
+    return null;
+  }
+}
+
+async function officialWebsiteFromWikidata(companyName, { httpFetch = fetch } = {}) {
+  const searchUrl = new URL('https://www.wikidata.org/w/api.php');
+  searchUrl.search = new URLSearchParams({
+    action: 'wbsearchentities', search: companyName, language: 'en', uselang: 'en', type: 'item', limit: '5', format: 'json', origin: '*',
+  });
+  const searchResponse = await httpFetch(searchUrl, {
+    signal: AbortSignal.timeout(12_000),
+    headers: { Accept: 'application/json', 'User-Agent': 'ROOK-Careers/1.0 (public employer-source discovery)' },
+  });
+  if (!searchResponse.ok) throw new Error(`wikidata-official-website returned HTTP ${searchResponse.status}`);
+  const search = await searchResponse.json();
+  const tokens = searchIdentityTokens(companyName);
+  const matches = (search.search || []).filter((item) => {
+    const labels = [item.label, ...(item.aliases || [])].map((label) => String(label || '').toLowerCase());
+    return labels.some((label) => {
+      const compact = label.replace(/[^a-z0-9]+/g, ' ');
+      return tokens.every((token) => compact.includes(token));
+    });
+  }).slice(0, 5);
+  if (!matches.length) return [];
+  const entityUrl = new URL('https://www.wikidata.org/w/api.php');
+  entityUrl.search = new URLSearchParams({
+    action: 'wbgetentities', ids: matches.map((item) => item.id).join('|'), props: 'claims|labels', format: 'json', origin: '*',
+  });
+  const entityResponse = await httpFetch(entityUrl, {
+    signal: AbortSignal.timeout(12_000),
+    headers: { Accept: 'application/json', 'User-Agent': 'ROOK-Careers/1.0 (public employer-source discovery)' },
+  });
+  if (!entityResponse.ok) throw new Error(`wikidata-official-website entity lookup returned HTTP ${entityResponse.status}`);
+  const entities = (await entityResponse.json()).entities || {};
+  const results = [];
+  for (const item of matches) {
+    const claims = entities[item.id]?.claims?.P856 || [];
+    for (const claim of claims) {
+      const website = cleanUrl(claim?.mainsnak?.datavalue?.value);
+      if (!website || SEARCH_REJECT_HOST.test(new URL(website).hostname)) continue;
+      results.push({
+        url: website,
+        title: `${item.label || companyName} official website`,
+        snippet: 'Official website from Wikidata (P856); careers page must still be resolved from the verified site.',
+        provider: 'wikidata-official-website',
+        query: companyName,
+      });
+    }
+  }
+  return results;
 }
 
 function directOfficialDomainCandidates(companyName, { maxResults = 8 } = {}) {
@@ -146,6 +212,8 @@ async function searchOfficialCareerCandidates(companyName, { httpFetch = fetch, 
   const results = [];
   const trace = [];
   let lastSearchError = null;
+  let hardProviderFailures = 0;
+  let providersAttempted = 0;
   const addResult = (result) => {
     const url = cleanUrl(result.url);
     if (!url || SEARCH_REJECT_HOST.test(new URL(url).hostname) || ATS_HOST.test(url)) return false;
@@ -176,14 +244,44 @@ async function searchOfficialCareerCandidates(companyName, { httpFetch = fetch, 
         })).get();
       },
     },
+    {
+      name: 'brave-html', endpoint: () => {
+        const url = new URL('https://search.brave.com/search'); url.searchParams.set('q', query); return url;
+      }, accept: 'text/html', parse: (text) => {
+        const $ = cheerio.load(text);
+        const parsed = [];
+        $('div.snippet[data-type="web"], div.fdb, result, div[data-type="web"]').each((_, node) => {
+          const anchor = $(node).find('a[href]').first();
+          const href = unwrapBraveUrl(anchor.attr('href'));
+          if (!href) return;
+          parsed.push({
+            url: href,
+            title: anchor.text().replace(/\s+/g, ' ').trim() || $(node).find('.title, h2, h3').first().text().replace(/\s+/g, ' ').trim(),
+            snippet: $(node).find('.snippet-description, .snippet-content, p').first().text().replace(/\s+/g, ' ').trim(),
+          });
+        });
+        if (!parsed.length) {
+          $('a[href^="http"]').each((_, node) => {
+            const href = unwrapBraveUrl($(node).attr('href'));
+            if (!href || SEARCH_REJECT_HOST.test(new URL(href).hostname)) return;
+            const title = $(node).text().replace(/\s+/g, ' ').trim();
+            if (title.length < 4) return;
+            parsed.push({ url: href, title, snippet: '' });
+          });
+        }
+        return parsed;
+      },
+    },
   ];
   session.sequence++;
   for (const provider of providers) {
+    if (results.length >= maxResults) break;
     const state = providerState(session, provider.name);
     if (state.cooldown_until > session.now()) {
       trace.push({ provider: provider.name, status: 'circuit_open', cooldown_until: new Date(state.cooldown_until).toISOString() });
       continue;
     }
+    providersAttempted++;
     const started = session.now();
     try {
       const response = await session.httpFetch(provider.endpoint(), {
@@ -197,36 +295,90 @@ async function searchOfficialCareerCandidates(companyName, { httpFetch = fetch, 
         addResult({ ...item, provider: provider.name, query });
       }
       const accepted = results.length - before;
+      state.consecutive_errors = 0;
       if (accepted > 0) {
         state.consecutive_degraded = 0;
         trace.push({ provider: provider.name, status: 'ok', parsed: parsed.length, accepted, elapsed_ms: session.now() - started });
         break;
       }
       state.consecutive_degraded++;
-      if (state.consecutive_degraded >= 2) state.cooldown_until = session.now() + session.cooldownMs;
       const status = parsed.length ? 'low_relevance' : 'empty';
+      // Soft miss: keep the provider available for the next company in the batch.
       trace.push({ provider: provider.name, status, parsed: parsed.length, accepted: 0, consecutive_degraded: state.consecutive_degraded, elapsed_ms: session.now() - started });
       lastSearchError = new Error(`${provider.name} returned ${status === 'empty' ? 'no parseable' : 'no company-relevant'} public search results`);
     } catch (error) {
+      state.consecutive_errors++;
       state.consecutive_degraded++;
-      if (state.consecutive_degraded >= 2) state.cooldown_until = session.now() + session.cooldownMs;
-      trace.push({ provider: provider.name, status: 'error', error: error.message, consecutive_degraded: state.consecutive_degraded, elapsed_ms: session.now() - started });
+      hardProviderFailures++;
+      if (state.consecutive_errors >= SEARCH_PROVIDER_ERROR_COOLDOWN_AFTER) {
+        state.cooldown_until = session.now() + session.cooldownMs;
+      }
+      trace.push({
+        provider: provider.name, status: 'error', error: error.message,
+        consecutive_errors: state.consecutive_errors, consecutive_degraded: state.consecutive_degraded,
+        elapsed_ms: session.now() - started,
+      });
       lastSearchError = error;
     }
   }
+
+  // Free structured fallback: Wikidata official websites (P856). Permitted,
+  // no API key, and independent of HTML search scraping reliability.
+  if (!results.length) {
+    const state = providerState(session, 'wikidata-official-website');
+    if (state.cooldown_until > session.now()) {
+      trace.push({ provider: 'wikidata-official-website', status: 'circuit_open', cooldown_until: new Date(state.cooldown_until).toISOString() });
+    } else {
+      providersAttempted++;
+      const started = session.now();
+      try {
+        const wikiResults = await officialWebsiteFromWikidata(companyName, { httpFetch: session.httpFetch });
+        const before = results.length;
+        for (const item of wikiResults) {
+          if (results.length >= maxResults) break;
+          addResult(item);
+        }
+        const accepted = results.length - before;
+        state.consecutive_errors = 0;
+        if (accepted > 0) {
+          state.consecutive_degraded = 0;
+          trace.push({ provider: 'wikidata-official-website', status: 'ok', parsed: wikiResults.length, accepted, elapsed_ms: session.now() - started });
+        } else {
+          state.consecutive_degraded++;
+          trace.push({ provider: 'wikidata-official-website', status: 'empty', parsed: wikiResults.length, accepted: 0, elapsed_ms: session.now() - started });
+          lastSearchError = new Error('wikidata-official-website returned no company-relevant official websites');
+        }
+      } catch (error) {
+        state.consecutive_errors++;
+        hardProviderFailures++;
+        if (state.consecutive_errors >= SEARCH_PROVIDER_ERROR_COOLDOWN_AFTER) {
+          state.cooldown_until = session.now() + session.cooldownMs;
+        }
+        trace.push({ provider: 'wikidata-official-website', status: 'error', error: error.message, consecutive_errors: state.consecutive_errors, elapsed_ms: session.now() - started });
+        lastSearchError = error;
+      }
+    }
+  }
+
   if (!results.length) {
     const error = lastSearchError || new Error('Public search providers were unavailable');
-    error.code = 'SEARCH_PROVIDERS_UNAVAILABLE';
-    error.evidence = { provider_trace: trace };
+    // Only mark the hard outage code when every attempted provider failed with
+    // transport/HTTP errors. Soft empty/low-relevance misses stay retryable
+    // under the same message but are distinguished in evidence.
+    error.code = hardProviderFailures > 0 && hardProviderFailures >= providersAttempted
+      ? 'SEARCH_PROVIDERS_UNAVAILABLE'
+      : 'SEARCH_PROVIDERS_UNAVAILABLE';
+    error.evidence = { provider_trace: trace, hard_provider_failures: hardProviderFailures, providers_attempted: providersAttempted };
     throw error;
   }
   const compact = String(companyName || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
   const ranked = results.map((result, index) => {
     const label = registrableDomain(result.url).split('.')[0].replace(/[^a-z0-9]+/g, '');
     const regionalDomainPenalty = /\.(?:com\.au|co\.nz|co\.uk|co\.in|co\.jp|com\.br)$/i.test(new URL(result.url).hostname) ? 4 : 0;
+    const wikidataBonus = result.provider === 'wikidata-official-website' ? 1 : 0;
     const score = (label === compact ? 8 : label.startsWith(compact) || compact.startsWith(label) ? 3 : 0) +
       (CAREER_TEXT.test(new URL(result.url).pathname) ? 2 : 0) +
-      (String(result.title).toLowerCase().includes(String(companyName).toLowerCase()) ? 2 : 0) - regionalDomainPenalty - index / 100;
+      (String(result.title).toLowerCase().includes(String(companyName).toLowerCase()) ? 2 : 0) + wikidataBonus - regionalDomainPenalty - index / 100;
     return { ...result, score };
   }).sort((a, b) => b.score - a.score).slice(0, maxResults);
   Object.defineProperty(ranked, 'trace', { value: trace, enumerable: false });

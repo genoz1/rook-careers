@@ -1,0 +1,46 @@
+{
+  "captured_at": "2026-10-07T23:56:00Z",
+  "employer_coverage": {
+    "active": 410,
+    "ok": 310,
+    "not_ok": 100,
+    "error": 28,
+    "partial": 26,
+    "pending_never_checked": 46,
+    "held": 19,
+    "checked_24h": 364,
+    "pct_checked_24h": 88.8,
+    "oldest_checked_hours": 15.87,
+    "p50_age_hours": 14.63,
+    "notes": "46 pending mostly discovery-enrolled after last full scheduled run (09:31Z). 3 older custom_html (PetVivo/Aurora/Torigen) also never checked. Last 14 full runs all budget_exhausted."
+  },
+  "ingest_runs": {
+    "recent_full_runs_sampled": 14,
+    "all_budget_exhausted": true,
+    "avg_attempted_per_full_run": 90.1,
+    "typical_not_reached": "207-267",
+    "estimated_full_cycle_hours_at_30min_cadence": 3.2,
+    "last_full_run_started_at": "2026-10-07T09:31:59Z",
+    "schedule_gap_hours_before_followup": 14.4
+  },
+  "ambiguous_inventory": {
+    "active_approved": 5752,
+    "bucket_A_sales_admissible": 4724,
+    "bucket_B_confirmed_non_sales": 0,
+    "bucket_C_ambiguous": 1028,
+    "ambiguous_with_description_sales_evidence": 277,
+    "front_office_patient_service_cluster": 237,
+    "key_commercial_title_clusters": {
+      "account_specialist": 142,
+      "territory_business_manager": 52,
+      "territory_account_specialist": 43,
+      "oncology_account_specialist": 27
+    }
+  },
+  "search_providers": {
+    "failure_code": "SEARCH_PROVIDERS_UNAVAILABLE",
+    "providers_before": ["duckduckgo-html", "bing-rss"],
+    "cooldown_ms": 300000,
+    "cooldown_also_on_empty_low_relevance": true
+  }
+}
