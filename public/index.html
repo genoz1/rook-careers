@@ -123,7 +123,18 @@
   }
   h1.hero-h .accent{color:var(--royal);}
   .hero-sub{
-    font-size:16.5px; color:var(--muted); margin:22px 0 30px; max-width:440px; line-height:1.6;
+    font-size:16.5px; color:var(--muted); margin:22px 0 16px; max-width:440px; line-height:1.6;
+  }
+  .hero-fresh{
+    display:flex; align-items:baseline; flex-wrap:wrap; gap:6px 10px;
+    margin:0 0 26px; max-width:440px;
+  }
+  .hero-fresh-num{
+    font-family:var(--font-display); font-size:30px; font-weight:700;
+    color:var(--royal); line-height:1.1; letter-spacing:-0.02em;
+  }
+  .hero-fresh-label{
+    font-size:14.5px; font-weight:650; color:var(--navy); line-height:1.35;
   }
   .hero-actions{display:flex; gap:14px; flex-wrap:wrap;}
   .hero-actions .btn{padding:14px 26px; font-size:15px;}
@@ -139,8 +150,8 @@
   .trust-item .d{font-size:12.5px; color:var(--muted); margin-top:2px; line-height:1.5;}
 
   .stats-row{
-    display:grid; grid-template-columns:repeat(3,1fr); gap:0;
-    max-width:1000px; margin:0 auto; padding:36px clamp(32px, calc((100vw - 1200px)/2 + 32px), 200px) 0;
+    display:grid; grid-template-columns:repeat(2,1fr); gap:0;
+    max-width:720px; margin:0 auto; padding:36px clamp(32px, calc((100vw - 1200px)/2 + 32px), 200px) 0;
     border-top:1px solid var(--border);
   }
   .stat-item{text-align:center; padding:0 20px; border-left:1px solid var(--border);}
@@ -192,7 +203,10 @@
     .trustrow{grid-template-columns:1fr 1fr; padding:0 24px 40px;}
     .match-card{left:20px; bottom:24px; width:200px;}
     h1.hero-h{font-size:34px;}
-    .hero-sub{font-size:15px; margin:14px 0 20px;}
+    .hero-sub{font-size:15px; margin:14px 0 12px;}
+    .hero-fresh{margin:0 0 18px;}
+    .hero-fresh-num{font-size:26px;}
+    .hero-fresh-label{font-size:14px;}
   }
 
   @media(max-width:480px){
@@ -424,7 +438,10 @@
     .hero-grid{ grid-template-columns:1fr; gap:0; }
     .hero-text{ padding:24px 20px 20px; }
     h1.hero-h{ font-size:32px; }
-    .hero-sub{ font-size:15px; margin:12px 0 18px; }
+    .hero-sub{ font-size:15px; margin:12px 0 12px; }
+    .hero-fresh{ margin:0 0 16px; }
+    .hero-fresh-num{ font-size:26px; }
+    .hero-fresh-label{ font-size:14px; }
     .hero-photo-wrap{ min-height:220px; }
     .hero-actions{ flex-direction:column; gap:10px; }
     .hero-actions .btn{ width:100%; min-height:54px; justify-content:center; border-radius:15px; font-size:15px; font-weight:850; }
@@ -496,6 +513,10 @@
       <div class="eyebrow"><span class="dot"></span> Built exclusively for medical &amp; veterinary sales</div>
       <h1 class="hero-h">Medical Sales Jobs.<br><span class="accent">Without the Endless Searching.</span></h1>
       <p class="hero-sub">ROOK collects current medical and veterinary sales jobs directly from employers and matches them to your area.</p>
+      <p class="hero-fresh" id="heroFresh">
+        <span class="hero-fresh-num" id="statNewJobs7d">—</span>
+        <span class="hero-fresh-label">new jobs added in the past 7 days</span>
+      </p>
       <div style="margin-bottom:0;">
         <div class="hero-actions" style="margin-bottom:0;">
           <a href="rook-onboarding-v8.html" class="btn btn-primary" style="font-size:16px; padding:16px 30px; font-weight:700;">VIEW JOBS NEAR ME</a>
@@ -549,10 +570,6 @@
     <div class="stat-item">
       <div class="stat-num" id="statJobCount">—</div>
       <div class="stat-label">Current Opportunities</div>
-    </div>
-    <div class="stat-item">
-      <div class="stat-num" id="statNewJobs7d">—</div>
-      <div class="stat-label">New jobs added in the past 7 days</div>
     </div>
     <div class="stat-item">
       <div class="stat-num" style="font-size:22px;">Direct From Employers</div>
