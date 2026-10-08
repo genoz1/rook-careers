@@ -13,7 +13,21 @@ function createCollectionHandler({loadInventory,loadRelatedArticles=async()=>[],
     if(!CATEGORIES[slug]||(state&&(!FLORIDA.includes(slug)||state!=='florida')))return res.status(404).send('Page not found.');
     const page=pageNumber(req.query);if(!page)return res.status(404).send('Page not found.');
     try {
-      const all=await loadInventory(),path='/jobs/category/'+slug+(state?'/florida':''),c=all[path];
+      // Prefer a bounded wait so platform gateways (often ~20–60s) never
+      // hold an empty cold rebuild until 504. Retryable 503 lets crawlers
+      // come back once the shared inventory warm finishes.
+      const inventoryPromise=loadInventory();
+      const all=await Promise.race([
+        inventoryPromise,
+          new Promise((_,reject)=>setTimeout(()=>reject(Object.assign(new Error('SEO inventory still warming'),{code:'INVENTORY_WARMING'})),12000)),
+      ]).catch(async(err)=>{
+        if(err&&err.code==='INVENTORY_WARMING'){
+          inventoryPromise.catch(()=>{});
+          throw err;
+        }
+        throw err;
+      });
+      const path='/jobs/category/'+slug+(state?'/florida':''),c=all[path];
       const pages=Math.max(1,Math.ceil(c.count/PAGE_SIZE));if(page>pages)return res.status(404).send('Page not found.');
       const pagePath=n=>path+(n>1?'?page='+n:'');
       const canonicalUrl=baseUrl+pagePath(page),suffix=page>1?' — Page '+page:'';
@@ -45,7 +59,10 @@ function createCollectionHandler({loadInventory,loadRelatedArticles=async()=>[],
         {'@type':'BreadcrumbList',itemListElement:crumbs.map((x,i)=>({'@type':'ListItem',position:i+1,name:x.name,item:x.url}))}
       ]};
       return res.send(pageShell({title,description,canonicalUrl,bodyHtml,jsonLd,noindex:!c.qualified||hasFilters(req.query)}));
-    } catch(error) {return res.status(503).set('Retry-After','60').send('Job collection temporarily unavailable. Please try again shortly.');}
+    } catch(error) {
+      const retry=error&&error.code==='INVENTORY_WARMING'?15:60;
+      return res.status(503).set('Retry-After',String(retry)).send('Job collection temporarily unavailable. Please try again shortly.');
+    }
   };
 }
 // Optional published resource links never block inventory pages during an outage.

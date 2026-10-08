@@ -1,0 +1,62 @@
+{
+  "captured_at": "2026-10-08T15:00:59.712Z",
+  "env": "production",
+  "robots_has_allow_api_jobs": false,
+  "results": [
+    {
+      "path": "/api/jobs?limit=20",
+      "codes": [
+        200,
+        200
+      ],
+      "times": [
+        2.61,
+        1.57
+      ]
+    },
+    {
+      "path": "/api/jobs?limit=20&near_lat=25.76&near_lng=-80.19&near_state=FL",
+      "codes": [
+        200,
+        200
+      ],
+      "times": [
+        1.03,
+        2.27
+      ]
+    },
+    {
+      "path": "/sitemap.xml",
+      "codes": [
+        200,
+        200
+      ],
+      "times": [
+        0.03,
+        0.02
+      ]
+    },
+    {
+      "path": "/jobs/category/medical-sales-jobs",
+      "codes": [
+        504,
+        504
+      ],
+      "times": [
+        20.09,
+        40.2
+      ]
+    },
+    {
+      "path": "/robots.txt",
+      "codes": [
+        200,
+        200
+      ],
+      "times": [
+        0.12,
+        0.03
+      ]
+    }
+  ]
+}
