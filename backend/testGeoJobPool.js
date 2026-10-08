@@ -115,3 +115,8 @@ test('jobs route uses geo-scoped pool instead of broad-pref full scan', () => {
   assert.equal(source.includes('location_raw.ilike.%|%'), false, 'nationwide pipe OR removed from live path');
   assert.equal(source.includes('!allowsBroadLocations(profile)'), false, 'broad prefs must not skip the box');
 });
+
+test('geo pool caps the bounding-box page-through', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'geoJobPool.js'), 'utf8');
+  assert.match(source, /maxAccepted:\s*maxBox/);
+});

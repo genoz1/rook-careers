@@ -58,10 +58,11 @@ async function fetchGeoScopedJobPool({
   allowBroad = false,
   radiusMiles = 300,
   readPool = readJobPool,
-  maxStateName = 500,
-  maxStateAbbr = 300,
-  maxRemote = 300,
-  maxNullFallback = 400,
+  maxStateName = 300,
+  maxStateAbbr = 200,
+  maxRemote = 200,
+  maxNullFallback = 300,
+  maxBox = 700,
 } = {}) {
   if (lat == null || lng == null || Number.isNaN(lat) || Number.isNaN(lng)) {
     return { data: null, error: { message: 'lat and lng are required for geo-scoped pool' } };
@@ -72,12 +73,15 @@ async function fetchGeoScopedJobPool({
   const { name, abbr } = resolveHomeStateParts(homeState);
 
   const queries = [
+    // Cap the box page-through: dense metros used to keep paging past the
+    // rows the dashboard will ever display after scoring/limit.
     readPool(
       createQuery()
         .gte('job_lat', lat - latDelta)
         .lte('job_lat', lat + latDelta)
         .gte('job_lng', lng - lngDelta)
-        .lte('job_lng', lng + lngDelta)
+        .lte('job_lng', lng + lngDelta),
+      { maxAccepted: maxBox }
     ),
   ];
 
