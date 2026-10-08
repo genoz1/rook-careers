@@ -9,8 +9,10 @@ function visit(search, stored) {
   return JSON.parse(JSON.stringify(ctx.rookGetStoredAttribution()));
 }
 assert.deepEqual(visit('?gclid=google-click'), {utm_source:'google',utm_medium:'cpc'});
+assert.deepEqual(visit('?fbclid=meta-click'), {utm_source:'facebook',utm_medium:'paid_social'});
 assert.deepEqual(visit('?utm_source=reddit&utm_campaign=test'), {utm_source:'reddit',utm_campaign:'test'});
 assert.deepEqual(visit('?gclid=new',{utm_source:'facebook'}), {utm_source:'facebook'});
+assert.deepEqual(visit('?fbclid=new',{utm_source:'google',utm_medium:'cpc'}), {utm_source:'google',utm_medium:'cpc'});
 const answer={location:{lat:42,lng:-71},industry:'Veterinary',years:3,territories:['local']};
 assert.equal(answersToProfile({...answer,attribution:{utm_source:' google ',utm_campaign:'x'.repeat(300),email:'private'}}).utm_source,'google');
 assert.equal(answersToProfile({...answer,attribution:{utm_campaign:'x'.repeat(300)}}).utm_campaign.length,200);

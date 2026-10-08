@@ -40,6 +40,12 @@
       found.utm_medium = found.utm_medium || 'cpc';
       any = true;
     }
+    // Meta click IDs identify Facebook/Instagram paid traffic without UTMs.
+    if (params.get('fbclid')) {
+      found.utm_source = found.utm_source || 'facebook';
+      found.utm_medium = found.utm_medium || 'paid_social';
+      any = true;
+    }
     if (!any) return;
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(found));
