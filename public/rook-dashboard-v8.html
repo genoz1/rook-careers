@@ -309,21 +309,21 @@
   .rook-tour-next{background:#1463ff;color:#fff}
   @media(max-width:900px){.rook-tour-card{left:16px!important;right:16px!important;bottom:98px!important;top:auto!important;width:auto}.rook-tour-highlight{z-index:1004!important}}
 </style>
-<link rel="stylesheet" href="rook-v8-member.css?v=6">
+<link rel="stylesheet" href="rook-v8-member.css?v=7">
 <link rel="stylesheet" href="rook-employer-logos-v8.css?v=2">
 </head>
 <body>
-<div class="profile-gate-overlay" id="profileGateOverlay">
+<div class="profile-gate-overlay" id="profileGateOverlay" aria-modal="true" role="dialog" aria-labelledby="profileGateTitle">
   <div class="profile-gate-card">
     <img class="v8-resume-brand" src="assets/rook-full-logo-900.png" alt="ROOK — Smarter Careers. Better Matches.">
-    <h2 id="profileGateTitle">Get even better results<br>with your résumé.</h2>
-    <p id="profileGateBody">Uploading your résumé helps us find the most relevant opportunities and show higher match scores.</p>
+    <h2 id="profileGateTitle">Optional: upload your résumé</h2>
+    <p id="profileGateBody">Uploading your résumé is optional. It can improve match scores, but you can skip it and still see jobs based on your location and industry preferences.</p>
     <input type="file" id="profileGateResumeInput" accept="application/pdf,.pdf,application/msword,.doc,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx" hidden>
-    <label class="v8-resume-drop" id="v8ResumeDrop" for="profileGateResumeInput" tabindex="0" aria-label="Browse for a résumé or drop a file here">📄<strong>Drag and drop your résumé here</strong>or click to browse<br><span>PDF, DOC or DOCX (max 10 MB)</span></label>
-    <div class="v8-resume-benefits"><span>◎ More relevant job matches</span><span>▥ Higher match scores</span><span>◷ Save time in your search</span></div>
-    <label class="btn-primary" id="profileGateLink" for="profileGateResumeInput" style="cursor:pointer;display:inline-flex;justify-content:center;align-items:center;">Upload Résumé (Optional) →</label>
+    <label class="v8-resume-drop" id="v8ResumeDrop" for="profileGateResumeInput" tabindex="0" aria-label="Browse for a résumé or drop a file here"><strong>Drag and drop your résumé here</strong>or click to browse<br><span>PDF, DOC or DOCX (max 10 MB) · Optional</span></label>
+    <div class="v8-resume-benefits"><span>More relevant matches</span><span>Higher match scores</span><span>Faster search</span></div>
+    <label class="btn-primary" id="profileGateLink" for="profileGateResumeInput">Upload Résumé</label>
     <div id="profileGateUploadStatus" role="status" aria-live="polite" style="display:none;font-size:13px;color:var(--royal);font-weight:600;margin-top:8px;text-align:center;"></div>
-    <button type="button" class="dismiss" id="profileGateDismiss">Skip for now</button>
+    <button type="button" class="dismiss" id="profileGateDismiss">Skip for Now</button>
   </div>
 </div>
 <div class="linkedin-popover-overlay" id="linkedinPopoverOverlay" onclick="if(event.target === this) this.classList.remove('active')">
@@ -633,6 +633,7 @@
 <script src="rook-pretrial.js"></script>
 <script src="rook-job-classification.js"></script>
 <script src="rook-location-widget.js"></script>
+<script src="rook-match-setup.js?v=1"></script>
 <script src="rook-employer-logos-v8.js?v=2"></script>
 <script>
   // Every job row currently in the HTML is sample/demo data — clearly
@@ -650,8 +651,18 @@
   function initializeIndustryFilters(profile) {
     if (industryFiltersInitialized) return;
     industryFiltersInitialized = true;
-    // Preference affects stored matching scores, never the default result set.
-    showAllIndustries = true;
+    const desired = RookJobClassification.normalizeSelection(profile?.desired_industries);
+    const taxonomySize = (window.RookMatchSetup?.INDUSTRIES || []).length || 9;
+    // Explicit full-taxonomy "All industries" (or legacy empty) keeps the All view.
+    // A real subset preference scopes the first load so new members see relevant jobs.
+    if (!desired.length || desired.length >= taxonomySize) {
+      showAllIndustries = true;
+    } else {
+      showAllIndustries = false;
+      document.querySelectorAll('.dash-filter-category').forEach((box) => {
+        box.checked = desired.some((label) => label.toLowerCase() === String(box.value).toLowerCase());
+      });
+    }
   }
   const industryPreferenceControl = document.getElementById('memberIndustryPreference');
   const industryStatus = document.getElementById('memberIndustryStatus');
@@ -714,8 +725,11 @@
   let lockedJobCtaLabel = 'Subscribe to Unlock';
 
   (async () => {
+    let resolveProfileBootstrap;
+    const profileBootstrap = new Promise((resolve) => { resolveProfileBootstrap = resolve; });
+
     const token = await rookRequireAuth();
-    if (!token) return; // rookRequireAuth already redirected to login
+    if (!token) { resolveProfileBootstrap(null); return; } // rookRequireAuth already redirected to login
 
     // Checks whether this candidate's profile actually has a résumé and a
     // ZIP on file — both required by onboarding going forward, but an
@@ -750,8 +764,8 @@
     (async () => {
       try {
         const res = await rookApiFetch('/profile');
-        if (!res.ok) return;
-        const profile = await res.json();
+        if (!res.ok) { resolveProfileBootstrap(null); return; }
+        let profile = await res.json();
         window.rookCurrentProfile=profile;
         // Get email from session since candidate_profiles doesn't store it
         let sessionEmail = '';
@@ -760,11 +774,11 @@
           sessionEmail = session?.user?.email || '';
         } catch(_) {}
         rookApplySidebarProfile(profile, sessionEmail);
-        if (rookApplyV8TrialState(profile)) return;
+        if (rookApplyV8TrialState(profile)) { resolveProfileBootstrap(profile); return; }
         // V9's no-card trial uses the existing full member dashboard. This
         // adds only its status banner and redirects an expired V9 entitlement
         // to the existing V9 upgrade screen before any locked preview renders.
-        if (rookApplyV9TrialState(profile)) return;
+        if (rookApplyV9TrialState(profile)) { resolveProfileBootstrap(profile); return; }
         // Primary unlock banner: shown only when this candidate does not
         // currently have full access. Purely a display decision — the
         // banner being hidden/shown has no bearing on what data the
@@ -846,6 +860,7 @@
           const job = sessionStorage.getItem('rook_v7_return_job');
           if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(job || '')) {
             sessionStorage.removeItem('rook_v7_return_job');
+            resolveProfileBootstrap(profile);
             window.location.replace('/rook-job-analysis-v8.html?job=' + encodeURIComponent(job));
             return;
           }
@@ -857,9 +872,37 @@
           const firstName = profile.name.trim().split(/\s+/)[0];
           document.getElementById('greetingName').textContent = `${greetingWord()}, ${firstName}`;
         }
-        if (!profile) return; // no profile row at all — rookRequireAuth's routing already sends these candidates to onboarding, not here
+        if (!profile) { resolveProfileBootstrap(null); return; } // no profile row at all — rookRequireAuth's routing already sends these candidates to onboarding, not here
+
+        // Required location → industry setup must finish before the optional
+        // résumé prompt and before jobs load. Skipping résumé must never leave
+        // a paying member on an unconfigured empty dashboard.
+        if (window.RookMatchSetup && RookMatchSetup.needsSetup(profile)) {
+          try {
+            const saved = await RookMatchSetup.run({
+              profile,
+              saveProfile: async (payload) => {
+                const saveRes = await rookApiFetch('/profile', {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(payload),
+                });
+                if (!saveRes.ok) throw new Error('Could not save your preferences. Please try again.');
+                return saveRes.json();
+              },
+            });
+            if (saved) {
+              profile = saved;
+              window.rookCurrentProfile = profile;
+              industryFiltersInitialized = false;
+            }
+          } catch (setupErr) {
+            console.error('Match setup failed', setupErr);
+          }
+        }
+        resolveProfileBootstrap(profile);
+
         const missingResume = !profile.resume_file_path;
-        const missingLocation = !profile.home_lat && !profile.home_zip;
 
         // Dismiss button with sessionStorage — shows again on next visit if résumé still missing
         const dismissBtn = document.getElementById('profileGateDismiss');
@@ -867,6 +910,7 @@
           dismissBtn.addEventListener('click', () => {
             sessionStorage.setItem('rook_v8_resume_prompt_dismissed', '1');
             document.getElementById('profileGateOverlay').classList.remove('active');
+            document.body.classList.remove('profile-gate-open');
           });
         }
 
@@ -878,13 +922,15 @@
           return;
         }
 
-        if (!missingResume && !missingLocation) return;
+        // Location/industry are collected by RookMatchSetup above. The résumé
+        // popup is optional only — never a substitute for preference setup.
+        if (!missingResume) return;
         const title = document.getElementById('profileGateTitle');
         const body  = document.getElementById('profileGateBody');
         const link  = document.querySelector('#profileGateOverlay .btn-primary');
-        if (missingResume && !missingLocation) {
-          title.innerHTML = 'Get even better results<br>with your résumé.';
-          body.textContent = 'Uploading your résumé helps us find the most relevant opportunities and show higher match scores.';
+        {
+          title.textContent = 'Optional: upload your résumé';
+          body.textContent = 'Uploading your résumé is optional. It can improve match scores, but you can skip it and still see jobs based on your location and industry preferences.';
           const fileInput = document.getElementById('profileGateResumeInput');
           const statusEl = document.getElementById('profileGateUploadStatus');
           // Use a real <label for=…> (not input.click()) so the OS file
@@ -892,7 +938,7 @@
           // click() while the dashboard is mid-render was delaying the
           // dialog long enough that it looked broken.
           if (link) {
-            link.textContent = 'Upload Résumé (Optional) →';
+            link.textContent = 'Upload Résumé';
             link.setAttribute('for', 'profileGateResumeInput');
             link.style.cursor = 'pointer';
           }
@@ -975,34 +1021,16 @@
               }
             };
           }
-        } else if (missingResume && missingLocation) {
-          title.textContent = "You're missing a résumé and a primary location";
-          body.textContent = "Without these, we can't score jobs against your background or rank them by real distance.";
-          if (link) {
-            // Location+résumé: send them to settings rather than the file picker.
-            const settings = document.createElement('a');
-            settings.className = 'btn-primary';
-            settings.id = 'profileGateLink';
-            settings.href = 'rook-settings.html?rook_v8=1';
-            settings.textContent = 'Complete my profile';
-            link.replaceWith(settings);
-          }
-        } else {
-          title.textContent = "You're missing a primary job-search location";
-          body.textContent = "Without it, we can't rank jobs by real distance from you — just which state they're in.";
-          if (link) {
-            const settings = document.createElement('a');
-            settings.className = 'btn-primary';
-            settings.id = 'profileGateLink';
-            settings.href = 'rook-settings.html?rook_v8=1';
-            settings.textContent = 'Add location';
-            link.replaceWith(settings);
-          }
         }
-        document.getElementById('profileGateOverlay').classList.add('active');
+        const gate = document.getElementById('profileGateOverlay');
+        gate.classList.add('active');
+        document.body.classList.add('profile-gate-open');
+        // Focus the dismiss control so keyboard / VoiceOver users can skip.
+        document.getElementById('profileGateDismiss')?.focus();
       } catch {
         // Best-effort — if this check itself fails, the dashboard should
         // still work normally rather than get stuck on a silent gate.
+        resolveProfileBootstrap(window.rookCurrentProfile || null);
       }
     })();
 
@@ -1218,7 +1246,9 @@
       if (!profileRes.ok) throw new Error('Profile request failed');
       const profileForLocation = await profileRes.json();
       initializeIndustryFilters(profileForLocation);
-      const preference = RookJobClassification.normalizeSelection(profileForLocation?.desired_industries)[0] || '';
+      const preferred = RookJobClassification.normalizeSelection(profileForLocation?.desired_industries);
+      const taxonomySize = (window.RookMatchSetup?.INDUSTRIES || []).length || 9;
+      const preference = (!preferred.length || preferred.length >= taxonomySize) ? '' : (preferred[0] || '');
       industryPreferenceControl.value = preference;
       industryPreferenceControl.dataset.saved = preference;
 
@@ -1271,7 +1301,10 @@
         const _ms0 = document.getElementById('mobileJobSub');
         if (_mc0) _mc0.textContent = '0';
         if (_ms0) _ms0.textContent = 'No ranked opportunities yet.';
-        showBanner('No jobs match the selected industries. Try All industries or another location.');
+        jobList.innerHTML = '<div role="status" style="text-align:center;padding:44px 20px;border:1px solid #E4E9F2;border-radius:14px;background:#fff;color:#3D4A63;"><p style="margin:0 0 10px;font-size:16px;font-weight:700;color:#0b2858;">No jobs match this search yet</p><p style="margin:0 0 18px;font-size:14px;line-height:1.5;">Try expanding your territory, choosing All industries, or updating your location above.</p><div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;"><button type="button" class="btn btn-primary" id="emptyExpandIndustries">All industries</button><button type="button" class="btn" id="emptyChangeLocation" style="border:1px solid #dce6f2;background:#fff;color:#0b2858;">Change location</button></div></div>';
+        document.getElementById('emptyExpandIndustries')?.addEventListener('click', () => showEveryIndustry());
+        document.getElementById('emptyChangeLocation')?.addEventListener('click', () => document.getElementById('btnChangeLocation')?.click());
+        showBanner('No jobs match these filters. Expand industries or change location to see more opportunities.');
         revealDemo();
         jobList.setAttribute('aria-busy', 'false');
         if (matchesUpdatePending) setMatchesUpdateState('idle');
@@ -1330,6 +1363,9 @@
     }
 
     window.reloadIndustryJobs = loadJobs;
+    // Wait for required match setup (location/industry) before the first
+    // job fetch so we never paint an empty unconfigured dashboard first.
+    await profileBootstrap;
     await loadJobs();
   })();
 
@@ -1341,26 +1377,18 @@
     document.getElementById('statExcellent').textContent = excellent;
     document.getElementById('statStrong').textContent = strong;
 
-    // Real bug this fixes: "New Matches Today" was set to jobs.length —
-    // the total count of jobs the dashboard's main list happened to
-    // fetch, which is capped at a small limit for display purposes.
-    // With thousands of active jobs on the platform, that limit was
-    // essentially always hit regardless of what was actually posted
-    // today, so this always read the same number — reported directly
-    // as "it always says 20." Uses a dedicated backend count instead,
-    // covering every active match for this candidate, not just the
-    // capped subset shown on screen.
-    try {
-      const newTodayRes = await rookApiFetch('/new-matches-today-count');
-      if (newTodayRes.ok) {
-        const { new_today } = await newTodayRes.json();
-        document.getElementById('statNewMatches').textContent = new_today;
-      } else {
-        document.getElementById('statNewMatches').textContent = '—';
-      }
-    } catch {
-      document.getElementById('statNewMatches').textContent = '—';
-    }
+    // Count "New Matches Today" from the same filtered job set shown in
+    // the list (posted since local midnight). The previous unscoped
+    // /new-matches-today-count endpoint counted all US-eligible jobs
+    // platform-wide, so members with zero opportunities still saw a
+    // positive "New Matches Today" number.
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const newToday = jobs.filter((j) => {
+      const posted = new Date(j.date_posted || j.first_seen_at || 0);
+      return !Number.isNaN(posted.getTime()) && posted >= startOfToday;
+    }).length;
+    document.getElementById('statNewMatches').textContent = String(newToday);
 
     // Applications In Progress — now backed by the real applications
     // table (backend/routes/applications.js). "In progress" here means
