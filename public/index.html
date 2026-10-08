@@ -67,16 +67,34 @@
     background:var(--navy);
   }
   .nav-inner{
-    display:flex; align-items:center; justify-content:space-between;
-    padding:18px 32px; max-width:1200px; margin:0 auto;
+    /* 3-column grid keeps ROOK and CTAs from being crushed when the
+       link row is dense — Resources was overlapping the wordmark when
+       the old space-between flex let centered links overflow left. */
+    display:grid;
+    grid-template-columns:auto minmax(0,1fr) auto;
+    align-items:center;
+    column-gap:32px;
+    padding:16px 28px; max-width:1360px; margin:0 auto;
   }
-  .logo{display:flex; align-items:center; gap:12px; font-family:var(--font-display); font-weight:700; font-size:20px; color:#fff;}
-  .logo-text{font-size:36px;}
+  .logo, a.logo{
+    display:flex; align-items:center; gap:10px;
+    font-family:var(--font-display); font-weight:700; font-size:20px; color:#fff;
+    white-space:nowrap; min-width:0;
+    text-decoration:none;
+  }
+  .logo-text{font-size:30px;}
   .logo svg{width:26px; height:26px;}
-  nav.links{display:flex; gap:32px; font-size:14px; font-weight:500; color:#fff;}
-  nav.links a{opacity:0.78; transition:opacity .15s;}
+  nav.links{
+    display:flex; align-items:center; justify-content:center; flex-wrap:nowrap;
+    gap:18px; font-size:13.5px; font-weight:500; color:#fff;
+    min-width:0; overflow:hidden;
+  }
+  nav.links a{
+    opacity:0.78; transition:opacity .15s;
+    white-space:nowrap; flex-shrink:0;
+  }
   nav.links a:hover{opacity:1;}
-  .nav-cta{display:flex; align-items:center; gap:14px;}
+  .nav-cta{display:flex; align-items:center; gap:12px;}
   .btn{
     display:inline-flex; align-items:center; justify-content:center;
     padding:11px 20px; border-radius:999px; font-size:14px; font-weight:600;
@@ -432,7 +450,17 @@
 
   .mobile-menu-btn{display:none; background:none; border:none; width:34px; height:34px; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0;}
   .mobile-menu-btn svg{width:24px; height:24px; color:#fff;}
-  @media(max-width:960px){
+  /* Mid-width desktop: tighten before collapsing the full link row.
+     Resources was previously flush against ROOK and read as one word. */
+  @media(max-width:1360px){
+    .nav-inner{column-gap:24px; padding:16px 22px;}
+    .logo-text{font-size:26px;}
+    nav.links{gap:14px; font-size:13px;}
+    .nav-cta{gap:10px;}
+    .nav-cta .btn-ghost{padding:9px 14px;}
+    .nav-cta .btn-primary{padding:9px 16px;}
+  }
+  @media(max-width:1240px){
     .benefit-grid{grid-template-columns:1fr;}
     .steps, .jobs-grid, .testimonials-grid{grid-template-columns:1fr;}
     .split-grid{grid-template-columns:1fr;}
@@ -451,7 +479,10 @@
        hamburger button on the same line, it visually overlapped the
        Log In button on phone widths. */
     .logo-text{font-size:22px;}
-    .nav-inner{padding:14px 16px; gap:8px;}
+    .nav-inner{
+      display:flex; justify-content:space-between;
+      padding:14px 16px; column-gap:12px; gap:12px;
+    }
     .logo{gap:6px;}
     .nav-cta{gap:6px;}
     .nav-cta .btn-ghost{padding:9px 12px; font-size:12.5px;}
@@ -514,16 +545,16 @@
 
 <header class="nav">
   <div class="nav-inner">
-    <div class="logo" style="gap:8px;">
-      <img src="assets/rook-logo.png" alt="ROOK" style="height:35px; width:35px; border-radius:10px; object-fit:cover; display:block;"><span class="logo-text" style="font-family:var(--font-display); font-weight:700; letter-spacing:-0.02em; color:#EDF3FF; line-height:1;">ROOK</span>
-    </div>
-    <nav class="links">
+    <a href="index.html" class="logo" aria-label="ROOK home">
+      <img src="assets/rook-logo.png" alt="" style="height:35px; width:35px; border-radius:10px; object-fit:cover; display:block;"><span class="logo-text" style="font-family:var(--font-display); font-weight:700; letter-spacing:-0.02em; color:#EDF3FF; line-height:1;">ROOK</span>
+    </a>
+    <nav class="links" aria-label="Primary">
       <a href="/resources/">Resources</a>
       <a href="/news/">Industry News</a>
       <a href="rook-onboarding-v8.html">Find Jobs</a>
       <a href="#seekers">For Job Seekers</a>
       <a href="#employers">For Employers</a>
-      <a href="rook-recruiter-login.html">Post a Job (Free)</a>
+      <a href="rook-recruiter-login.html">Post a Job</a>
       <a href="rook-about.html">About</a>
     </nav>
     <div class="nav-cta">
@@ -536,13 +567,13 @@
     <!-- rm-hamburger: visible only on mobile (max-width:880px), links to mobile menu page -->
     <a href="rook-mobile-menu.html" class="rm-hamburger" aria-label="Menu">☰</a>
   </div>
-  <nav class="mobile-menu" id="mobileMenu">
+  <nav class="mobile-menu" id="mobileMenu" aria-label="Mobile">
     <a href="/resources/">Resources</a>
     <a href="/news/">Industry News</a>
     <a href="rook-onboarding-v8.html">Find Jobs</a>
     <a href="#seekers">For Job Seekers</a>
     <a href="#employers">For Employers</a>
-    <a href="rook-recruiter-login.html">Post a Job (Free)</a>
+    <a href="rook-recruiter-login.html">Post a Job</a>
     <a href="rook-about.html">About</a>
   </nav>
   </header>
