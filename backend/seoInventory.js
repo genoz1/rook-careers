@@ -99,28 +99,76 @@ function buildCollections(rows) {
   }
   return collections;
 }
+const SEO_SELECT='id,employer_id,company_name,source_job_id,source_url,application_url,title_original,title_normalized,description_text,location_raw,location_evidence,job_lat,job_lng,city,state,ai_analysis,status,moderation_status,category,subcategory,sales_type,territory,remote_status,employment_type,date_posted,first_seen_at';
+const SEO_PAGE=1000;
+const SEO_PARALLEL=4;
+
+async function fetchApprovedJobPages(db, select, pageSize=SEO_PAGE, parallel=SEO_PARALLEL) {
+  const page=(start,end)=>db.from('jobs').select(select)
+    .eq('status','active').eq('moderation_status','approved')
+    .order('id',{ascending:true}).range(start,end);
+  const rows=[];
+  // Probe establishes the effective stride. PostgREST may return fewer
+  // than pageSize even when more rows remain — never treat a short page
+  // as EOF until the following page is empty.
+  const first=await page(0,pageSize-1);
+  if(first.error||!Array.isArray(first.data))throw new Error('SEO inventory unavailable');
+  if(!first.data.length)return rows;
+  rows.push(...first.data);
+  let stride=first.data.length;
+  if(stride<pageSize){
+    const probe=await page(stride,stride+pageSize-1);
+    if(probe.error||!Array.isArray(probe.data))throw new Error('SEO inventory unavailable');
+    if(!probe.data.length)return rows;
+    rows.push(...probe.data);
+    stride=Math.min(stride,probe.data.length)||stride;
+  }
+  let offset=rows.length;
+  while(true){
+    const pages=await Promise.all(Array.from({length:parallel},(_,i)=>{
+      const start=offset+i*stride;
+      return page(start,start+stride-1);
+    }));
+    let done=false;
+    for(const {data,error} of pages){
+      if(error||!Array.isArray(data))throw new Error('SEO inventory unavailable');
+      if(!data.length){done=true;break;}
+      rows.push(...data);
+      if(data.length<stride){done=true;break;}
+    }
+    if(done)break;
+    offset+=parallel*stride;
+  }
+  return rows;
+}
+
 // The short server-only cache exposes allowlisted projection getters and counts.
 // Public previews are evaluated only for displayed cards, once per source row.
 // Source rows remain private in the loader closure; never serialize raw records.
+// Stale-while-revalidate: after TTL, HTTP requests keep the last good
+// inventory while a single background rebuild runs — avoids 20s+ cold hits
+// on ordinary category page requests once the process has warmed once.
 function createInventoryLoader(db,{ttl=10*60*1000}={}) {
   let cached,expires=0,pending;
-  return async function load() {
-    if(cached&&Date.now()<expires)return cached;
+  const rebuild=()=>{
     if(pending)return pending;
     pending=(async()=>{
-      const rows=[];
-      for(let offset=0;;){
-        // description_text is only needed for Florida scope hash checks —
-        // keep it, but avoid re-fetching the full inventory on every
-        // category/sitemap hit (shared 10-minute cache).
-        const {data,error}=await db.from('jobs').select('id,employer_id,company_name,source_job_id,source_url,application_url,title_original,title_normalized,description_text,location_raw,location_evidence,job_lat,job_lng,city,state,ai_analysis,status,moderation_status,category,subcategory,sales_type,territory,remote_status,employment_type,date_posted,first_seen_at')
-          .eq('status','active').eq('moderation_status','approved').order('id',{ascending:true}).range(offset,offset+499);
-        if(error||!Array.isArray(data))throw new Error('SEO inventory unavailable');
-        if(!data.length)break;rows.push(...data);offset+=data.length;
-      }
+      // description_text is only needed for Florida scope hash checks.
+      const rows=await fetchApprovedJobPages(db, SEO_SELECT);
       cached=buildCollections(rows);expires=Date.now()+ttl;return cached;
     })();
-    try{return await pending;}finally{pending=null;}
+    return pending.finally(()=>{pending=null;});
   };
+  async function load() {
+    if(cached&&Date.now()<expires)return cached;
+    if(cached){
+      // Serve stale immediately; refresh once in the background.
+      rebuild().catch(()=>{});
+      return cached;
+    }
+    return rebuild();
+  }
+  load.warm=()=>rebuild().catch(err=>{console.warn('[seo-inventory] warm failed:',err.message);return null;});
+  return load;
 }
-module.exports={CATEGORIES,FLORIDA,floridaKind,deduplicate,buildCollections,createInventoryLoader};
+module.exports={CATEGORIES,FLORIDA,floridaKind,deduplicate,buildCollections,createInventoryLoader,fetchApprovedJobPages};

@@ -1,0 +1,82 @@
+{
+  "captured_at": "2026-10-08T14:55:16.414Z",
+  "env": "local-after-repair",
+  "results": [
+    {
+      "path": "/api/jobs?limit=20",
+      "codes": [
+        200,
+        200
+      ],
+      "times": [
+        1.96,
+        0.71
+      ]
+    },
+    {
+      "path": "/api/jobs?limit=20&near_lat=25.76&near_lng=-80.19&near_state=FL",
+      "codes": [
+        200,
+        200
+      ],
+      "times": [
+        0.76,
+        0.62
+      ]
+    },
+    {
+      "path": "/sitemap.xml",
+      "codes": [
+        200,
+        200
+      ],
+      "times": [
+        0.01,
+        0
+      ]
+    },
+    {
+      "path": "/jobs/category/medical-sales-jobs",
+      "codes": [
+        200,
+        200
+      ],
+      "times": [
+        0.19,
+        0
+      ]
+    },
+    {
+      "path": "/robots.txt",
+      "codes": [
+        200,
+        200
+      ],
+      "times": [
+        0.01,
+        0
+      ]
+    }
+  ],
+  "loc": {
+    "with_label": 20,
+    "total": 20,
+    "sample": [
+      {
+        "location_label": "Interventional Solutions - Miami, FL"
+      },
+      {
+        "location_label": "Miami, FL"
+      },
+      {
+        "location_label": "US - Florida - Miami, FL"
+      },
+      {
+        "location_label": "Miami, FL"
+      },
+      {
+        "location_label": "Miami Beach, FL"
+      }
+    ]
+  }
+}

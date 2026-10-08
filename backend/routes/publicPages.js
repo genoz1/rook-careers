@@ -25,12 +25,14 @@ const supabaseAnon = isConfigured
   : null;
 
 const APP_BASE_URL = (process.env.PUBLIC_APP_URL || "https://rookcareers.com").replace(/\/$/, "");
-const {CATEGORIES, FLORIDA, createInventoryLoader} = require("../seoInventory");
+const {CATEGORIES, FLORIDA, createInventoryLoader, fetchApprovedJobPages} = require("../seoInventory");
 const {createCollectionHandler, createRelatedArticleLoader, hasFilters} = require("../seoCollections");
 const loadSeoInventory = createInventoryLoader(supabaseAnon);
 // Sitemap XML is expensive to rebuild (thousands of job URLs). Serve a
 // short-lived in-memory copy so crawlers do not time out on cold hits.
+// After expiry, keep serving the last body while one rebuild runs.
 let sitemapCache = { body: null, expires: 0 };
+let sitemapRebuild = null;
 const SITEMAP_TTL_MS = 15 * 60 * 1000;
 // Disable when the test runner (or an explicit SITEMAP_CACHE=0) asks for
 // deterministic rebuilds — including VM harnesses that stub process.env.
@@ -272,17 +274,7 @@ router.get("/jobs", async (req, res) => {
   }
 });
 
-// GET /sitemap.xml — lists the homepage, the public browse page, and
-// every currently-active job's real crawlable URL. Cached briefly in
-// memory so crawlers are not blocked by a full rebuild on every hit.
-router.get("/sitemap.xml", async (req, res) => {
-  if (!isConfigured) return res.status(503).set("Retry-After", "300").send("Sitemap temporarily unavailable.");
-  if (sitemapCachingEnabled() && sitemapCache.body && Date.now() < sitemapCache.expires) {
-    res.set("Content-Type", "application/xml");
-    res.set("Cache-Control", "public, max-age=300");
-    return res.send(sitemapCache.body);
-  }
-
+async function buildSitemapBody() {
   const staticUrls = [
     `${APP_BASE_URL}/`,
     `${APP_BASE_URL}/jobs`,
@@ -295,57 +287,89 @@ router.get("/sitemap.xml", async (req, res) => {
   ];
   // Category paths come from the static catalog — avoids waiting on the
   // full SEO inventory rebuild (which loads descriptions for every job).
-  // Unqualified collection pages already emit noindex when thin.
   for (const slug of Object.keys(CATEGORIES)) {
     staticUrls.push(`${APP_BASE_URL}/jobs/category/${slug}`);
     if (FLORIDA.includes(slug)) staticUrls.push(`${APP_BASE_URL}/jobs/category/${slug}/florida`);
   }
 
-  const jobUrls = [];
+  let jobs;
   try {
-    // PostgREST can cap a single response even when limit(5000) is requested.
-    // Use small, ordered pages and advance by the number actually returned.
-    let offset = 0;
-    while (true) {
-      const { data: jobs, error } = await supabaseAnon.from("jobs")
-        .select("id, job_lat, job_lng, state, location_raw, location_evidence").eq("status", "active").eq("moderation_status", "approved")
-        .order("id", { ascending: true }).range(offset, offset + 999);
-      if (error || !Array.isArray(jobs)) throw new Error("Sitemap query failed");
-      if (!jobs.length) break;
-      jobUrls.push(...jobs.filter(isUsEligibleJob).map(j => `${APP_BASE_URL}/jobs/${j.id}`));
-      if (jobUrls.length + staticUrls.length > 50000) throw new Error("Sitemap requires splitting");
-      offset += jobs.length;
-    }
-    // Only committed, published Resources articles; topics still in the queue
-    // (or rejected) never become sitemap entries.
-    offset = 0;
-    const now = new Date().toISOString();
-    while (true) {
-      const { data: articles, error } = await supabaseAnon.from("resource_articles")
-        .select("slug, resource_topics!inner(status)").eq("resource_topics.status", "published")
-        .lte("published_at", now).order("slug", { ascending: true }).range(offset, offset + 499);
-      if (error || !Array.isArray(articles)) throw new Error("Resources sitemap query failed");
-      if (!articles.length) break;
-      staticUrls.push(...articles.map(a => `${APP_BASE_URL}/resources/${a.slug}/`));
-      if (jobUrls.length + staticUrls.length > 50000) throw new Error("Sitemap requires splitting");
-      offset += articles.length;
-    }
+    jobs = await fetchApprovedJobPages(
+      supabaseAnon,
+      "id, job_lat, job_lng, state, location_raw, location_evidence"
+    );
   } catch (_) {
-    // Never publish a successful but empty/partial sitemap during an outage.
-    return res.status(503).set("Retry-After", "300").send("Sitemap temporarily unavailable.");
+    throw new Error("Sitemap query failed");
+  }
+  const jobUrls = jobs.filter(isUsEligibleJob).map(j => `${APP_BASE_URL}/jobs/${j.id}`);
+  if (jobUrls.length + staticUrls.length > 50000) throw new Error("Sitemap requires splitting");
+  let offset = 0;
+  const now = new Date().toISOString();
+  while (true) {
+    const { data: articles, error } = await supabaseAnon.from("resource_articles")
+      .select("slug, resource_topics!inner(status)").eq("resource_topics.status", "published")
+      .lte("published_at", now).order("slug", { ascending: true }).range(offset, offset + 499);
+    if (error || !Array.isArray(articles)) throw new Error("Resources sitemap query failed");
+    if (!articles.length) break;
+    staticUrls.push(...articles.map(a => `${APP_BASE_URL}/resources/${a.slug}/`));
+    if (jobUrls.length + staticUrls.length > 50000) throw new Error("Sitemap requires splitting");
+    offset += articles.length;
   }
 
-  // last_seen_at records ingestion checks, not significant page changes.
-  // Omit lastmod until a reliable content-modification timestamp is available.
   const urlEntries = [
     ...staticUrls, ...jobUrls,
   ].map(url => `<url><loc>${escapeHtml(url)}</loc></url>`).join("\n");
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urlEntries}\n</urlset>`;
+}
 
-  const body = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urlEntries}\n</urlset>`;
-  if (sitemapCachingEnabled()) sitemapCache = { body, expires: Date.now() + SITEMAP_TTL_MS };
-  res.set("Content-Type", "application/xml");
-  res.set("Cache-Control", "public, max-age=300");
-  res.send(body);
+function rebuildSitemapCache() {
+  if (sitemapRebuild) return sitemapRebuild;
+  sitemapRebuild = buildSitemapBody()
+    .then((body) => {
+      if (sitemapCachingEnabled()) sitemapCache = { body, expires: Date.now() + SITEMAP_TTL_MS };
+      return body;
+    })
+    .finally(() => { sitemapRebuild = null; });
+  return sitemapRebuild;
+}
+
+// GET /sitemap.xml — lists the homepage, the public browse page, and
+// every currently-active job's real crawlable URL. Cached briefly in
+// memory so crawlers are not blocked by a full rebuild on every hit.
+router.get("/sitemap.xml", async (req, res) => {
+  if (!isConfigured) return res.status(503).set("Retry-After", "300").send("Sitemap temporarily unavailable.");
+  if (sitemapCachingEnabled() && sitemapCache.body && Date.now() < sitemapCache.expires) {
+    res.set("Content-Type", "application/xml");
+    res.set("Cache-Control", "public, max-age=300");
+    return res.send(sitemapCache.body);
+  }
+  if (sitemapCachingEnabled() && sitemapCache.body) {
+    rebuildSitemapCache().catch(() => {});
+    res.set("Content-Type", "application/xml");
+    res.set("Cache-Control", "public, max-age=300");
+    return res.send(sitemapCache.body);
+  }
+
+  try {
+    const body = await rebuildSitemapCache();
+    res.set("Content-Type", "application/xml");
+    res.set("Cache-Control", "public, max-age=300");
+    res.send(body);
+  } catch (_) {
+    return res.status(503).set("Retry-After", "300").send("Sitemap temporarily unavailable.");
+  }
 });
+
+router.warmPublicCaches = async function warmPublicCaches() {
+  if (!isConfigured) return;
+  const tasks = [];
+  if (typeof loadSeoInventory.warm === "function") tasks.push(loadSeoInventory.warm());
+  if (sitemapCachingEnabled()) {
+    tasks.push(rebuildSitemapCache().catch((err) => {
+      console.warn("[sitemap] warm failed:", err.message);
+    }));
+  }
+  await Promise.all(tasks);
+};
 
 module.exports = router;

@@ -31,7 +31,12 @@ test('inventory eligibility, market union, deduplication and genuine Florida sco
 });
 test('full pagination through database caps; short safe cache; failures do not become empty inventory',async()=>{
  const loader=createInventoryLoader(db,{ttl:1});const c=await loader();assert.equal(c['/jobs/category/medical-sales-jobs'].count,65);assert.equal(c['/jobs/category/veterinary-sales-jobs'].count,23);assert(calls>=6);noSecrets(JSON.stringify(c));
- fail=true;await new Promise(r=>setTimeout(r,5));await assert.rejects(loader(),/unavailable/);fail=false;
+ // After TTL, stale-while-revalidate keeps the last good inventory instead of
+ // failing the HTTP request when a background refresh errors.
+ fail=true;await new Promise(r=>setTimeout(r,5));
+ const stale=await loader();
+ assert.equal(stale['/jobs/category/medical-sales-jobs'].count,65);
+ fail=false;
 });
 test('production routing: existing industry, role and Florida pages, privacy, pagination, canonicals, schema, sitemap, filters, private headers and application compatibility',async()=>{
  process.env.SUPABASE_URL='https://test.invalid';process.env.SUPABASE_SERVICE_ROLE_KEY='test';process.env.PUBLIC_APP_URL=PUBLIC;
