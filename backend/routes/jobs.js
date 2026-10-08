@@ -210,14 +210,30 @@ async function loadEmployerHistory(candidateId) {
 // the full /jobs anonymous-browse query, which always fetches up to
 // 200 real job rows plus does an IP geolocation lookup even when a
 // caller only wants the headline number.
+// Also returns new_last_7_days: active approved jobs ROOK first saw in
+// the past week (first_seen_at), not sparse employer date_posted values.
 router.get("/public-job-count", requireConfig, async (req, res) => {
-  const { count, error } = await supabaseAdmin
-    .from("jobs")
-    .select("id", { count: "exact", head: true })
-    .eq("status", "active")
-    .eq("moderation_status", "approved");
-  if (error) return res.status(500).json({ error: error.message });
-  res.json({ total_count: count || 0 });
+  res.set("Cache-Control", "public, max-age=60");
+  const since7d = new Date(Date.now() - 7 * 86400000).toISOString();
+  const [totalResult, weekResult] = await Promise.all([
+    supabaseAdmin
+      .from("jobs")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "active")
+      .eq("moderation_status", "approved"),
+    supabaseAdmin
+      .from("jobs")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "active")
+      .eq("moderation_status", "approved")
+      .gte("first_seen_at", since7d),
+  ]);
+  if (totalResult.error) return res.status(500).json({ error: totalResult.error.message });
+  if (weekResult.error) return res.status(500).json({ error: weekResult.error.message });
+  res.json({
+    total_count: totalResult.count || 0,
+    new_last_7_days: weekResult.count || 0,
+  });
 });
 
 // GET /api/public-employer-count — same pattern as /public-job-count
