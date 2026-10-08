@@ -8,6 +8,7 @@
 **Method notes**
 - Live HTTP/API probes from the audit environment (Cloudflare → DigitalOcean Express).
 - Code-path review for Stripe entitlements, masking, scoring, email, ingestion.
+- Parallel code audits: [Audit masking and entitlements](bc-1fde6d7e-daf4-5735-b0eb-7c43f71d6f9a), [Audit scoring and ingestion](bc-ce523073-62f5-5001-8389-278dd5be4dcb).
 - Stripe is on **live** publishable keys (`pk_live_…`), so end-to-end checkout/unlock could not be exercised with safe test cards. Those items are **UNVERIFIED**, not PASS.
 - Mobile viewport walkthrough was started in parallel; treat mobile layout items as **UNVERIFIED** unless marked with live evidence below.
 - PASS requires direct evidence from this audit. Prior merge history alone is never treated as PASS.
@@ -108,6 +109,7 @@ Highest-risk themes:
 | Acquisition `/api/v8/*` locked projection | **PASS** (masking) | No employer/URLs in bootstrap/session samples |
 | Paying customer full reveal | **UNVERIFIED** | `reveal()` / `hasFullAccess` code paths exist; not live-tested |
 | Client-only masking risk | **PASS** (primary routes) | Redaction/projection performed server-side before response |
+| Supabase anon direct `jobs` read bypass | **PASS** | Live PostgREST with published anon key → `Content-Range: */0` for `jobs`, `candidate_job_matches`, `candidate_profiles` (restrictive `jobs_api_only` behavior) |
 
 ### Findings — masking
 
@@ -162,11 +164,21 @@ Highest-risk themes:
 | Live path uses `scoreLiveJob` + `smoothLocalDistance` | **PASS** (code on main) | `jobs.js` imports `scoreLiveJob`; `liveScoring.js` sets options |
 | Soft-cap 100% → 99 unless `excellent_match` | **PASS** (code + live acquisition) | `matching.js` lines ~1059–1063; Miami sample had 0×100 |
 | Industry / territory / résumé ranking quality | **UNVERIFIED** | Needs paid/test profiles with résumés |
-| Dashboard uses intended config after #72 | **PASS** (code deployed) | Main includes scoring corrections; live soft-cap behavior matches |
+| Dashboard list uses intended config after #72 | **PASS** (code deployed) | Main includes scoring corrections; live soft-cap behavior matches |
+| All scoring call sites use V7 options | **FAIL** | Secondary paths still call bare `scoreJob` (see B10) |
 
 ### Findings — scoring
 
 See **B1** (99% cluster). Remaining résumé/geo edge cases need fixture-driven live checks with test accounts.
+
+#### B10 — Secondary scoring paths still bypass `scoreLiveJob`  
+- **Severity:** MEDIUM  
+- **Component:** `backend/routes/jobs.js`, `backend/scoring/precompute.js`  
+- **Defect:** Detail fallback (`GET /jobs/:id` ~1179), `POST /onboarding/anonymous-preview` (~1581), `GET /onboarding/match-preview` (~1690), and scheduled precompute (~190) call bare `scoreJob(...)` without `smoothLocalDistance` / geography options.  
+- **Evidence:** Code audit ([Audit scoring and ingestion](bc-ce523073-62f5-5001-8389-278dd5be4dcb)); ripgrep on main. Primary list paths (home/explore/anonymous/recruiter) correctly use `scoreLiveJob`.  
+- **Customer impact:** Job-detail or precompute-backed scores can disagree with the ranked list for the same profile.  
+- **Fix:** Route every score through `scoreLiveJob` / `liveScoreOptions`; add a regression that fails on bare `scoreJob(` outside tests.  
+- **Complexity:** Low–Medium
 
 ---
 
@@ -315,9 +327,10 @@ Checkout CSS already stacks plans to 1 column under 620px (code review). Still n
 | Admin API without auth | **PASS** | `/api/admin/employers` → 401 |
 | Admin HTML public exposure | **FAIL** (surface) | Pages return 200; `noindex` only |
 | Secrets in client config | **PASS** (expected) | Anon + publishable only (no service role observed) |
+| Supabase RLS blocks anon job/profile reads | **PASS** | Live anon PostgREST returned zero rows (`*/0`) on jobs/matches/profiles |
 | Rate limit on v8 onboarding | **PASS** (code) | 35/min/IP |
 | Global API rate limit | **UNVERIFIED** / weak | Not universal |
-| Ingestion silent failure detection | **FAIL** (observability) | No public/admin health route found live |
+| Ingestion silent failure detection | **FAIL** (observability) | No public/admin health route found live; watchdog is in-process only |
 | Error reporting (Sentry etc.) | **UNVERIFIED** | |
 
 ### Findings — security/reliability
@@ -380,6 +393,7 @@ Checkout CSS already stacks plans to 1 column under 620px (code review). Still n
 | B7 | MEDIUM | Disallow `/api/jobs` in robots.txt |
 | B8 | MEDIUM | Category H2 = role, not industry |
 | B9 | MEDIUM | Lock down admin HTML |
+| B10 | MEDIUM | Align detail/onboarding/precompute scoring with `scoreLiveJob` |
 
 ### C. Optional enhancements
 
@@ -396,12 +410,14 @@ Checkout CSS already stacks plans to 1 column under 620px (code review). Still n
 - Homepage metadata, canonical, primary nav targets  
 - Live funnel pricing pages (3 paid plans; no free-tier copy on acquisition/pricing/checkout)  
 - Server-side masking for anonymous `/api/jobs`, `/api/jobs/:id`, `/api/v8` preview, public `/jobs/:id` SEO pages  
+- Supabase restrictive RLS: published anon key cannot read jobs/matches/profiles directly  
 - Soft 100% score reserve behavior on live acquisition ranking  
 - Stripe plan amounts and webhook signature wiring (code)  
 - Email “Untitled” / placeholder rejection (code)  
 - Resources + news sitemaps  
 - Admin JSON API auth gate (401 without token)  
 - Presence on main/production of recent ingestion, scoring, and dashboard-loading fixes  
+- Watchdog + six-category discovery + Petco/Chewy policy present in code (live cron success still UNVERIFIED)  
 
 ---
 
@@ -415,8 +431,8 @@ Efficient order (max risk reduction first; combinable packs noted):
    - Settings copy; location labels; score spread on locked ranking.  
 3. **Proof pack:** A6 + A7  
    - Staging payment rehearsal; ingestion health metric + alert.  
-4. **Cleanup pack (combine):** A3 + B2 + B8 + B9 + B4 + B6  
-   - Dead APIs, SEO headings, admin exposure, classification backfill, coupon monitor.
+4. **Cleanup pack (combine):** A3 + B2 + B8 + B9 + B4 + B6 + B10  
+   - Dead APIs, SEO headings, admin exposure, classification backfill, coupon monitor, unify bare `scoreJob` call sites.
 
 Do **not** start a rewrite. Do **not** change prices or business rules except removing obsolete free-trial presentation.
 
