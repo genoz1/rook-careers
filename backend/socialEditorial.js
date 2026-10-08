@@ -1,6 +1,7 @@
 // Reviewed sales-first copy paired with the approved photographic asset library.
 // Static assets are reused; company marketing makes no paid model requests.
 const CATALOG = require('./socialApprovedCatalog.json');
+const { assertNoStalePromoClaims } = require('./socialPromoGuard');
 const INSIGHTS = CATALOG.map(x => [x.id,x.headline,x.body]);
 const VALUES = INSIGHTS;
 const CARD_POINTS = {};
@@ -9,6 +10,7 @@ function selectEditorial(context = {}) {
  // Job posts already carry validated job facts and their own existing graphic.
  if (context.category) {
   const body = 'Explore this sales opportunity on ROOK, a focused destination for medical and veterinary sales jobs. Review the complete job details before applying.';
+  assertNoStalePromoClaims(body, 'editorial job blurb');
   return {linkedin:body,facebook:body,reddit:body,text:body,fallback:false,model:null};
  }
  const day = Math.floor(Date.parse(`${context.dateStr || new Date().toISOString().slice(0,10)}T12:00:00Z`) / 86400000);
@@ -18,6 +20,7 @@ function selectEditorial(context = {}) {
  for(let i=0;i<pool.length;i++) {
   const entry=pool[(day*4 + offset + i) % pool.length];
   if(recent.includes(entry.body.toLowerCase())) continue;
+  assertNoStalePromoClaims(`${entry.headline}\n${entry.body}`, 'approved catalog copy');
   return {topicId:entry.id,graphicId:entry.graphicId,headline:entry.headline,label:'MEDICAL & VETERINARY SALES',kind:'value',points:[],
    linkedin:entry.body,facebook:entry.body,reddit:entry.body,text:entry.body,fallback:false,model:null};
  }

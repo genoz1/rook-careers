@@ -2,6 +2,7 @@ const {createHash}=require('crypto');
 const cheerio=require('cheerio');
 const {validateSchema}=require('../ai/openaiJson');
 const {generateStructuredTextWithResearch,generateStructuredText}=require('./aiText');
+const {assertNoStalePromoClaims}=require('../socialPromoGuard');
 const obj=properties=>({type:'object',additionalProperties:false,properties,required:Object.keys(properties)});
 const str={type:'string'};
 const schema={name:'rook_resource',schema:obj({description:str,body_html:str,image_alt:str,
@@ -46,7 +47,12 @@ function validate(value,topic,existing=[]){
  if(!value.sources.length||value.sources.length>8)throw Error('Sources required');
  for(const s of value.sources){const u=new URL(s.url);if(u.protocol!=='https:'||u.username||u.password||!s.title.trim())throw Error('Invalid source');}
  if(value.social_copy.linkedin===value.social_copy.personal)throw Error('Personal copy must differ');
- for(const copy of Object.values(value.social_copy))if(copy.length<30||copy.length>1800||/https?:\/\//.test(copy))throw Error('Invalid social copy');
+ for(const [channel,copy] of Object.entries(value.social_copy)){
+  if(copy.length<30||copy.length>1800||/https?:\/\//.test(copy))throw Error('Invalid social copy');
+  // Resources posts go out via Buffer/Meta — never pitch free trials or checkout prices.
+  assertNoStalePromoClaims(copy, `${channel} social copy`);
+ }
+ assertNoStalePromoClaims(text, 'resource article body', {allowPricing:true});
  const body_hash=createHash('sha256').update(words(text).join(' ')).digest('hex');
  for(const prior of existing){
   if(prior.slug===topic.slug||prior.body_hash===body_hash||similarity(prior.title,topic.title)>.85)throw Error('Duplicate article');
@@ -55,7 +61,7 @@ function validate(value,topic,existing=[]){
  return {...value,word_count:count,body_hash};
 }
 async function generate(topic,feedback=''){
- const result=await generateStructuredTextWithResearch(`Write a useful, original ROOK Career Resources evergreen article for medical/veterinary sales professionals. The supplied title and search intent are fixed. Research current primary sources. Aim for 1,000–1,800 words when useful; do not pad. Use balanced HTML with p,h2,h3,ul,ol,li,strong,em,a only. Links must be https. Cite relevant primary sources in the prose and sources array. No salaries, numerical statistics, fabricated quotes, interviews, research, employer requirements, customer/partnership/employee claims, or personal professional experience. Do not invent news. Clearly distinguish general guidance from employer-specific requirements. No medical treatment advice. No keyword stuffing or more than three ROOK mentions. No citation artifacts. Description 40–160 characters. Social copy: useful, distinct company LinkedIn, professional personal LinkedIn (no invented experience), Facebook, Instagram; 30–1,800 characters each, no URLs (added by publisher).`,JSON.stringify({topic,feedback}),schema,6500,4);
+ const result=await generateStructuredTextWithResearch(`Write a useful, original ROOK Career Resources evergreen article for medical/veterinary sales professionals. The supplied title and search intent are fixed. Research current primary sources. Aim for 1,000–1,800 words when useful; do not pad. Use balanced HTML with p,h2,h3,ul,ol,li,strong,em,a only. Links must be https. Cite relevant primary sources in the prose and sources array. No salaries, numerical statistics, fabricated quotes, interviews, research, employer requirements, customer/partnership/employee claims, or personal professional experience. Do not invent news. Clearly distinguish general guidance from employer-specific requirements. No medical treatment advice. No keyword stuffing or more than three ROOK mentions. No citation artifacts. Description 40–160 characters. Never mention free trials, free access, credit cards, membership prices, dollar amounts for ROOK plans, or checkout offers — ROOK is paid membership only and pricing lives on the website. Social copy: useful, distinct company LinkedIn, professional personal LinkedIn (no invented experience), Facebook, Instagram; 30–1,800 characters each, no URLs (added by publisher), no free-trial or pricing language.`,JSON.stringify({topic,feedback}),schema,6500,4);
  return result.value;
 }
 async function review(article,topic){

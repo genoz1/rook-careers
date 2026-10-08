@@ -3,11 +3,18 @@
 // free text (description, ai_analysis) — so there is no path for an
 // employer name or unsupported claim to end up in the post copy.
 
+const { assertNoStalePromoClaims } = require('./socialPromoGuard');
+
 function buildPostCopy(candidate, platform = "linkedin") {
   const lines = [];
   if (candidate.post_kind) lines.push(candidate.post_kind === "featured" ? "Featured Job" : "ROOK Match");
   const marketing = candidate.marketingVariants?.[platform] || candidate.marketing;
-  if (marketing) lines.push(marketing);
+  if (marketing) {
+    // Job compensation may include $, but free-trial / "no credit card"
+    // pitches must never ride along in the marketing line.
+    assertNoStalePromoClaims(marketing, 'job marketing copy', { allowPricing: true });
+    lines.push(marketing);
+  }
   if (candidate.employer_display) lines.push(candidate.employer_display);
   lines.push(candidate.title);
 
@@ -31,7 +38,9 @@ function buildPostCopy(candidate, platform = "linkedin") {
       !/^[a-zA-Z0-9_-]{1,160}$/.test(candidate.job_id)) throw Error('Invalid job destination');
   lines.push(require('./socialShortLinks').shortSocialUrl(target, platform, candidate.job_id));
 
-  return lines.join("\n");
+  const text = lines.join("\n");
+  assertNoStalePromoClaims(text, 'job social post', { allowPricing: true });
+  return text;
 }
 
 module.exports = { buildPostCopy };

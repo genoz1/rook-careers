@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const { generateStructuredText } = require('../resources/aiText');
 const { slugify } = require('../resources/catalog');
+const { assertNoStalePromoClaims } = require('../socialPromoGuard');
 
 const ARTICLE_SCHEMA = { name: 'rook_industry_news_article', schema: {
   type: 'object', additionalProperties: false,
@@ -47,7 +48,9 @@ function validateArticle(article, event) {
   for (const channel of ['facebook', 'instagram']) {
     const copy = article.social_copy?.[channel] || '';
     if (copy.length < 30 || copy.length > 1200 || /https?:\/\//i.test(copy)) throw new Error(`${channel} social copy failed validation`);
+    assertNoStalePromoClaims(copy, `${channel} social copy`);
   }
+  assertNoStalePromoClaims(`${article.title}\n${article.description}`, 'industry news metadata');
   return { ...article, word_count: count, body_hash: crypto.createHash('sha256').update(article.body_html).digest('hex') };
 }
 
@@ -55,7 +58,7 @@ async function generateArticle(event, deps = {}) {
   const evidence = evidenceFor(event);
   if (!evidence.length) throw new Error('Eligible event has no attributable source evidence');
   const generator = deps.generate || generateStructuredText;
-  const generationPrompt = 'You are ROOK Careers editorial. Write an original, concise, event-centered industry news brief for medical and veterinary sales professionals. Use only the supplied RSS evidence. Never invent, infer, predict, quote, or add a number not present in the evidence. Attribute claims to the named publishers. Do not mention job openings. The title must be 20-110 characters. The description must be 70-180 characters. The body_html must be 300-700 words and contain at least two h2 section headings. Return body_html using only p, h2, h3, ul, ol, li, strong, and em tags, with no attributes or links. Each social_copy value must be 30-1200 characters and contain no URL.';
+  const generationPrompt = 'You are ROOK Careers editorial. Write an original, concise, event-centered industry news brief for medical and veterinary sales professionals. Use only the supplied RSS evidence. Never invent, infer, predict, quote, or add a number not present in the evidence. Attribute claims to the named publishers. Do not mention job openings. Never mention free trials, free access, credit cards, membership prices, or ROOK checkout offers. The title must be 20-110 characters. The description must be 70-180 characters. The body_html must be 300-700 words and contain at least two h2 section headings. Return body_html using only p, h2, h3, ul, ol, li, strong, and em tags, with no attributes or links. Each social_copy value must be 30-1200 characters, contain no URL, and contain no free-trial or pricing language.';
   let article;
   let checked;
   let validationError;

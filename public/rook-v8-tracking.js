@@ -1,7 +1,9 @@
-// V7 funnel tracking. Existing Google tags remain the only Google loaders.
+// Current paid-funnel Meta + GA tracking. Pixel 1597398388509281.
+// Paid conversion uses Purchase (not Subscribe/StartTrial).
 (function () {
   if (window.rookTrackFunnelEvent) return;
   var pixel = '1597398388509281';
+  var planValues = { two_day: 5.99, monthly: 9.99, three_month: 39.99 };
   var meta = {
     onboarding_started: ['trackSingleCustom', 'onboarding_started'],
     v7_questions_completed: ['trackSingleCustom', 'v7_questions_completed'],
@@ -10,11 +12,16 @@
     v7_signup_started: ['trackSingleCustom', 'v7_signup_started'],
     v7_account_created: ['trackSingle', 'CompleteRegistration'],
     v7_checkout_started: ['trackSingle', 'InitiateCheckout'],
-    v7_trial_activated: ['trackSingle', 'StartTrial'],
+    // Current acquisition / checkout events (served via rook-checkout-current).
+    // One ViewContent per visit when masked roles render — avoid double-firing
+    // with acquisition_landing_viewed.
+    protected_dashboard_viewed: ['trackSingle', 'ViewContent'],
+    checkout_started: ['trackSingle', 'InitiateCheckout'],
+    successful_paid_conversion: ['trackSingle', 'Purchase'],
     v8_signup_started: ['trackSingleCustom', 'v8_signup_started'],
     v8_account_created: ['trackSingle', 'CompleteRegistration'],
-    v8_checkout_started: ['trackSingle', 'InitiateCheckout'],
-    v8_trial_started: ['trackSingle', 'StartTrial']
+    v8_checkout_started: ['trackSingle', 'InitiateCheckout']
+    // Intentionally no StartTrial / Subscribe mappings — ROOK is paid-only.
   };
   var seen = Object.create(null);
   var currentEvents = ['acquisition_landing_viewed','protected_dashboard_viewed','ip_geolocation_success','ip_geolocation_failure','change_location_clicked','location_changed','anonymous_job_interaction','pricing_paywall_viewed','membership_plan_selected','checkout_viewed','checkout_started','successful_paid_conversion'];
@@ -61,10 +68,19 @@
       var resourceSlug = sessionStorage.getItem('rook_resource_origin');
       if (resourceSlug && /^[a-z0-9-]{1,110}$/.test(resourceSlug) && typeof window.gtag === 'function') {
         if (name === 'v7_signup_started') window.gtag('event','resource_signup_start',{resource_slug:resourceSlug});
-        if (name === 'v7_trial_activated') window.gtag('event','resource_trial_start',{resource_slug:resourceSlug});
       }
-      // Never forward account IDs, UTMs, form values or other event parameters to Meta.
-      if (mapping) window.fbq(mapping[0], pixel, mapping[1]);
+      // Never forward account IDs, UTMs, or form values to Meta. Purchase may
+      // include only plan value/currency for ROAS.
+      if (mapping) {
+        if (mapping[1] === 'Purchase') {
+          var amount = planValues[params && params.plan];
+          var payload = { currency: 'USD' };
+          if (typeof amount === 'number') payload.value = amount;
+          window.fbq(mapping[0], pixel, 'Purchase', payload);
+        } else {
+          window.fbq(mapping[0], pixel, mapping[1]);
+        }
+      }
     } catch (_) { /* Tracking must never interrupt the funnel. */ }
   };
 })();

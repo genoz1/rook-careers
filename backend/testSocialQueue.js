@@ -157,6 +157,7 @@ test('existing scheduled slot counts even when created outside this worker',()=>
 test('personal copy retains validation against unsupported claims',()=>{
  validatePersonalText(personalCopy);
  assert.throws(()=>validatePersonalText('I guarantee a salary of $100000. What would you earn?'));
+ assert.throws(()=>validatePersonalText('I would start a free trial before applying. What would you try first?'));
 });
 test('recent-post protection catches overlap beyond exact strings',()=>{
  assert.ok(similarity('Compare responsibilities and decisions in possible roles.','Consider comparing the decisions and responsibilities involved in a role.')>=0.65);
