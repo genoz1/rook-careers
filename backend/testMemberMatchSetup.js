@@ -118,6 +118,15 @@ test('résumé popup CSS keeps controls clickable and above page chrome', () => 
   assert.doesNotMatch(css, /font:[^;]*Caveat/);
 });
 
+test('industry step uses a compact two-column layout that avoids card scrolling', () => {
+  const setup = fs.readFileSync(path.join(root, 'public/rook-match-setup.js'), 'utf8');
+  assert.match(setup, /setCardMode\('industry'\)/);
+  assert.match(setup, /match-setup-industry-grid/);
+  assert.match(css, /\.match-setup-card\.is-industry/);
+  assert.match(css, /grid-template-columns:\s*repeat\(2,/);
+  assert.match(css, /\.match-setup-card\.is-industry\{[^}]*overflow:\s*hidden/);
+});
+
 test('New Matches Today uses the loaded job set, not an unscoped platform count', () => {
   const start = dashboard.indexOf('async function updateStats(jobs)');
   const end = dashboard.indexOf('function isRemoteJob', start);

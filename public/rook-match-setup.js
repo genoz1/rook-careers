@@ -128,7 +128,15 @@
     el.textContent = msg;
   }
 
+  function setCardMode(mode) {
+    const card = document.querySelector('#matchSetupOverlay .match-setup-card');
+    if (!card) return;
+    card.classList.toggle('is-industry', mode === 'industry');
+    card.classList.toggle('is-location', mode === 'location');
+  }
+
   function renderLocationStep(state) {
+    setCardMode('location');
     const body = document.getElementById('matchSetupBody');
     const prefill = state.location?.label
       || [state.location?.city, state.location?.state].filter(Boolean).join(', ')
@@ -206,18 +214,18 @@
   }
 
   function renderIndustryStep(state) {
+    setCardMode('industry');
     const body = document.getElementById('matchSetupBody');
     const selected = new Set(state.industries || []);
     const allSelected = !!state.allIndustries;
     body.innerHTML = `
-      <fieldset class="match-setup-fieldset">
-        <legend>Which sales industries interest you?</legend>
-        <p class="match-setup-hint">Select one or more, or choose All industries.</p>
+      <fieldset class="match-setup-fieldset match-setup-industry-fieldset">
+        <legend class="visually-hidden">Sales industries</legend>
         <label class="match-setup-check match-setup-all">
           <input type="checkbox" id="matchSetupAllIndustries" ${allSelected ? 'checked' : ''}>
           All industries
         </label>
-        <div class="match-setup-checks" id="matchSetupIndustries">
+        <div class="match-setup-checks match-setup-industry-grid" id="matchSetupIndustries">
           ${INDUSTRIES.map((ind) => {
             const checked = !allSelected && selected.has(ind.value) ? 'checked' : '';
             return `<label class="match-setup-check"><input type="checkbox" value="${esc(ind.value)}" ${checked} ${allSelected ? 'disabled' : ''}> ${esc(ind.label)}</label>`;
@@ -228,7 +236,7 @@
     document.getElementById('matchSetupStepLabel').textContent = state.skipLocation ? 'Step 1 of 1' : 'Step 2 of 2';
     document.getElementById('matchSetupTitle').textContent = 'Which industries interest you?';
     document.getElementById('matchSetupLead').textContent =
-      'We use this to rank medical and veterinary sales roles. You can change it anytime.';
+      'Select one or more — or All industries. You can change this anytime.';
 
     const allBox = document.getElementById('matchSetupAllIndustries');
     const boxes = () => Array.from(document.querySelectorAll('#matchSetupIndustries input[type="checkbox"]'));
