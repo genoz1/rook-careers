@@ -410,7 +410,7 @@
     </div>
     <div id="memberIndustryStatus" class="v8-industry-status" role="status" aria-live="polite" hidden>
       <span class="v8-industry-spinner" aria-hidden="true"></span>
-      <span id="memberIndustryStatusText">Updating matches for your industry preference…</span>
+      <span id="memberIndustryStatusText">Updating your matches…</span>
     </div>
     <!-- Inline location editor — hidden until "Change" is clicked -->
     <div id="locationEditor" style="display:none; margin-bottom:16px; padding:14px; background:#fff; border:1.5px solid #0877d1; border-radius:13px; position:relative;">
@@ -656,16 +656,26 @@
   const industryPreferenceControl = document.getElementById('memberIndustryPreference');
   const industryStatus = document.getElementById('memberIndustryStatus');
   const industryStatusText = document.getElementById('memberIndustryStatusText');
-  let industryUpdatePending = false;
-  function setIndustryUpdateState(state) {
-    industryUpdatePending = state === 'working';
-    industryPreferenceControl.disabled = industryUpdatePending;
+  let matchesUpdatePending = false;
+  function setMatchesUpdateState(state, message) {
+    matchesUpdatePending = state === 'working';
+    industryPreferenceControl.disabled = matchesUpdatePending;
+    const btnChangeLocation = document.getElementById('btnChangeLocation');
+    if (btnChangeLocation) btnChangeLocation.disabled = matchesUpdatePending;
     industryStatus.hidden = state === 'idle';
     industryStatus.classList.toggle('is-error', state === 'error');
-    industryStatusText.textContent = state === 'error'
-      ? 'Could not update matches. Please try again.'
-      : 'Updating matches for your industry preference…';
-    document.getElementById('jobList').setAttribute('aria-busy', String(industryUpdatePending));
+    if (state === 'error') {
+      industryStatusText.textContent = message || 'Could not update matches. Please try again.';
+    } else if (state === 'working') {
+      industryStatusText.textContent = message || 'Updating your matches…';
+    }
+    document.getElementById('jobList').setAttribute('aria-busy', String(matchesUpdatePending));
+  }
+  function setIndustryUpdateState(state) {
+    setMatchesUpdateState(
+      state,
+      state === 'working' ? 'Updating matches for your industry preference…' : undefined
+    );
   }
   industryPreferenceControl.addEventListener('change', async () => {
     const value = industryPreferenceControl.value;
@@ -1090,7 +1100,11 @@
         btnSave.disabled = true;
         btnSave.textContent = 'Saving…';
         const statusEl = document.getElementById('dashLocStatus');
-        if (statusEl) statusEl.textContent = 'Saving location and refreshing matches…';
+        if (statusEl) statusEl.textContent = 'Saving location…';
+        const placeLabel = pendingLocation.label
+          || [pendingLocation.city, pendingLocation.state].filter(Boolean).join(', ')
+          || pendingLocation.zip
+          || 'your new location';
         try {
           const payload = {
             home_city:  pendingLocation.city  || null,
@@ -1107,17 +1121,33 @@
           });
           if (!saveRes.ok) throw new Error('Save failed');
           // Update the label in the row before closing
-          document.getElementById('locationLabel').textContent = pendingLocation.label || pendingLocation.zip || '—';
+          document.getElementById('locationLabel').textContent = placeLabel;
           editor.style.display = 'none';
           row.style.display = 'flex';
           btnSave.textContent = 'Save & Refresh';
           if (statusEl) statusEl.textContent = '';
-          // Reload jobs with new location
-          await loadJobs();
+          // Keep a visible banner while /jobs re-ranks — skeletons alone
+          // feel frozen after the editor closes. Pass the just-saved
+          // coords so /jobs can start without waiting on another /profile.
+          setMatchesUpdateState('working', `Finding opportunities near ${placeLabel}…`);
+          const greetingSub = document.getElementById('greetingSubtitle');
+          if (greetingSub) greetingSub.textContent = `Finding opportunities near ${placeLabel}…`;
+          const mobileSub = document.getElementById('mobileJobSub');
+          if (mobileSub) mobileSub.textContent = `Loading opportunities near ${placeLabel}…`;
+          await loadJobs({
+            locationHint: {
+              lat: pendingLocation.lat,
+              lng: pendingLocation.lng,
+              state: pendingLocation.state,
+              city: pendingLocation.city,
+              label: placeLabel,
+            },
+          });
         } catch (err) {
           if (statusEl) statusEl.textContent = 'Could not save. Try again.';
           btnSave.disabled = false;
           btnSave.textContent = 'Save & Refresh';
+          setMatchesUpdateState('idle');
         }
       });
     })();
@@ -1155,7 +1185,8 @@
       setTimeout(poll, 4000);
     }
 
-    async function loadJobs() {
+    async function loadJobs(options = {}) {
+    const locationHint = options.locationHint || null;
     const requestVersion = ++jobsLoadVersion;
     // Show the busy state immediately on first load and on every
     // location/industry refresh so the previous list doesn't look frozen
@@ -1163,6 +1194,12 @@
     jobList.style.display = 'none';
     loading.style.display = '';
     jobList.setAttribute('aria-busy', 'true');
+    if (locationHint && !matchesUpdatePending) {
+      const place = locationHint.label
+        || [locationHint.city, locationHint.state].filter(Boolean).join(', ')
+        || 'your new location';
+      setMatchesUpdateState('working', `Finding opportunities near ${place}…`);
+    }
     try {
       // Kicked off in parallel here, awaited just before rendering
       // below — overlaps with the rest of this function's own fetches
@@ -1172,7 +1209,22 @@
       // ranked list — kick it off alongside profile/jobs and fold in
       // after first paint if it finishes later.
       const recruiterPromise = rookApiFetch('/recruiter-jobs').catch(() => null);
-      const profileRes = await rookApiFetch('/profile');
+      const profilePromise = rookApiFetch('/profile');
+      const industriesParam = encodeURIComponent(showAllIndustries ? 'all' : selectedIndustries().join(','));
+
+      // After a city save we already know lat/lng — start /jobs immediately
+      // instead of waiting for another /profile round-trip (or ZIP geocode).
+      let jobsPromise = null;
+      if (locationHint?.lat != null && locationHint?.lng != null) {
+        let hintUrl = `/jobs?limit=300&near_lat=${locationHint.lat}&near_lng=${locationHint.lng}`;
+        if (locationHint.state) {
+          hintUrl += '&near_state=' + encodeURIComponent(locationHint.state);
+        }
+        hintUrl += '&industries=' + industriesParam;
+        jobsPromise = rookApiFetch(hintUrl);
+      }
+
+      const profileRes = await profilePromise;
       if (!profileRes.ok) throw new Error('Profile request failed');
       const profileForLocation = await profileRes.json();
       initializeIndustryFilters(profileForLocation);
@@ -1183,33 +1235,38 @@
       // Update the Primary Job-Search Location label in the UI
       updateLocationLabel(profileForLocation);
 
-      // Build the jobs URL.
-      // Prefer stored home_lat/home_lng (populated for all new users and
-      // for existing users whose profile was re-saved after the migration).
-      // Fall back to geocoding from home_zip for existing users who have a
-      // saved ZIP but home_lat/home_lng haven't been populated yet.
-      let jobsUrl = '/jobs?limit=300';
-      const hasStoredCoords = profileForLocation?.home_lat != null && profileForLocation?.home_lng != null;
-      if (hasStoredCoords) {
-        jobsUrl = `/jobs?limit=300&near_lat=${profileForLocation.home_lat}&near_lng=${profileForLocation.home_lng}`;
-      } else if (profileForLocation?.home_zip) {
-        // Legacy fallback: geocode the saved ZIP
-        const geoRes = await rookApiFetch('/geocode?q=' + encodeURIComponent(profileForLocation.home_zip));
-        if (geoRes.ok) {
-          const geo = await geoRes.json();
-          jobsUrl = `/jobs?limit=300&near_lat=${geo.lat}&near_lng=${geo.lng}`;
+      if (!jobsPromise) {
+        // Build the jobs URL from the profile when we don't have a fresh hint.
+        // Prefer stored home_lat/home_lng (populated for all new users and
+        // for existing users whose profile was re-saved after the migration).
+        // Fall back to geocoding from home_zip for existing users who have a
+        // saved ZIP but home_lat/home_lng haven't been populated yet.
+        let jobsUrl = '/jobs?limit=300';
+        const hasStoredCoords = profileForLocation?.home_lat != null && profileForLocation?.home_lng != null;
+        if (hasStoredCoords) {
+          jobsUrl = `/jobs?limit=300&near_lat=${profileForLocation.home_lat}&near_lng=${profileForLocation.home_lng}`;
+        } else if (profileForLocation?.home_zip) {
+          // Legacy fallback: geocode the saved ZIP
+          const geoRes = await rookApiFetch('/geocode?q=' + encodeURIComponent(profileForLocation.home_zip));
+          if (geoRes.ok) {
+            const geo = await geoRes.json();
+            jobsUrl = `/jobs?limit=300&near_lat=${geo.lat}&near_lng=${geo.lng}`;
+          }
         }
+        if (profileForLocation?.home_state) {
+          jobsUrl += '&near_state=' + encodeURIComponent(profileForLocation.home_state);
+        }
+        jobsUrl += '&industries=' + industriesParam;
+        jobsPromise = rookApiFetch(jobsUrl);
       }
-      if (profileForLocation?.home_state) {
-        jobsUrl += '&near_state=' + encodeURIComponent(profileForLocation.home_state);
-      }
-      jobsUrl += '&industries=' + encodeURIComponent(showAllIndustries ? 'all' : selectedIndustries().join(','));
-      const res = await rookApiFetch(jobsUrl);
+
+      const res = await jobsPromise;
       if (!res.ok) throw new Error('API returned ' + res.status);
       const data = await res.json();
       const jobs = Array.isArray(data) ? data : (data.jobs || []); // Array.isArray fallback covers any cached/older response shape
 
       if (Array.isArray(data) === false && data.scoring_in_progress) {
+        if (matchesUpdatePending) setMatchesUpdateState('idle');
         pollScoringStatus();
         return;
       }
@@ -1227,7 +1284,7 @@
         showBanner('No jobs match the selected industries. Try All industries or another location.');
         revealDemo();
         jobList.setAttribute('aria-busy', 'false');
-        if (industryUpdatePending) setIndustryUpdateState('idle');
+        if (matchesUpdatePending) setMatchesUpdateState('idle');
         return;
       }
 
@@ -1244,7 +1301,7 @@
       updateStats(jobs);
       revealDemo();
       jobList.setAttribute('aria-busy', 'false');
-      if (industryUpdatePending) setIndustryUpdateState('idle');
+      if (matchesUpdatePending) setMatchesUpdateState('idle');
 
       // Fold recruiter-posted extras in after first paint so a slow
       // /recruiter-jobs response cannot stall the ranked list.
@@ -1271,7 +1328,14 @@
       showBanner('We’re having trouble loading your matches right now. Please try again.');
       showJobsLoadError();
       jobList.setAttribute('aria-busy', 'false');
-      if (industryUpdatePending) setIndustryUpdateState('error');
+      if (matchesUpdatePending) {
+        setMatchesUpdateState(
+          'error',
+          locationHint
+            ? 'Could not load opportunities for that location. Please try again.'
+            : undefined
+        );
+      }
     }
     }
 
