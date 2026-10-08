@@ -35,6 +35,8 @@ test('sitemap uses an in-memory cache and avoids SEO inventory rebuild', () => {
 test('SEO inventory cache TTL is at least five minutes', () => {
   const src = fs.readFileSync(path.join(root, 'backend/seoInventory.js'), 'utf8');
   assert.match(src, /ttl=10\s*\*\s*60\s*\*\s*1000|ttl=\d{5,}/);
+  // Heavy description_text pages timed out under parallel PostgREST reads.
+  assert.doesNotMatch(src, /SEO_SELECT='[^']*description_text/);
 });
 
 test('settings and auth sidebars never say Free Trial', () => {

@@ -44,7 +44,9 @@ function floridaKind(job) {
   const e=job.location_evidence;
   // Reject stale, unvalidated, legacy, inferred and nationwide evidence.
   if(e?.version!==VERSION || e.status!=='validated' || clean(e.source_location)!==clean(job.location_raw) || clean(e.source_title)!==clean(job.title_original)) return null;
-  if(e.source_description_hash && e.source_description_hash!==descriptionHash(job.description_text)) return null;
+  // Skip hash check when description_text was omitted from the SEO select
+  // (keeps inventory reads under PostgREST statement timeouts).
+  if(job.description_text!=null && e.source_description_hash && e.source_description_hash!==descriptionHash(job.description_text)) return null;
   const s=e.scope;
   if(s?.kind==='territory' && (s.states||[]).some(state=>resolveUsStateCode(state)==='FL')) return 'territory';
   if(s?.kind==='local' && (e.locations||[]).some(p=>validPoint(p)&&resolveUsStateCode(p.state)==='FL')) return 'local';
@@ -99,7 +101,10 @@ function buildCollections(rows) {
   }
   return collections;
 }
-const SEO_SELECT='id,employer_id,company_name,source_job_id,source_url,application_url,title_original,title_normalized,description_text,location_raw,location_evidence,job_lat,job_lng,city,state,ai_analysis,status,moderation_status,category,subcategory,sales_type,territory,remote_status,employment_type,date_posted,first_seen_at';
+// Omit description_text: parallel pages that include full descriptions
+// hit Supabase statement timeouts (~10s) and leave category routes 503/504.
+// Florida hash checks are skipped when description_text is absent.
+const SEO_SELECT='id,employer_id,company_name,source_job_id,source_url,application_url,title_original,title_normalized,location_raw,location_evidence,job_lat,job_lng,city,state,ai_analysis,status,moderation_status,category,subcategory,sales_type,territory,remote_status,employment_type,date_posted,first_seen_at';
 const SEO_PAGE=1000;
 const SEO_PARALLEL=4;
 
