@@ -1,0 +1,21 @@
+{
+  "scores": [
+    {
+      "id": "a",
+      "score": 99
+    },
+    {
+      "id": "b",
+      "score": null,
+      "reason": "ineligible"
+    },
+    {
+      "id": "c",
+      "score": 51
+    },
+    {
+      "id": "d",
+      "score": 90
+    }
+  ]
+}

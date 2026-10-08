@@ -202,4 +202,14 @@ app.listen(PORT, () => {
         .catch(err => console.warn(`[boot] cache warm failed: ${err.message}`));
     }, 5000);
   }
+  // Warm SEO inventory + sitemap so category/sitemap cold hits are not the
+  // first request after a deploy (shared bottleneck: full job inventory IO).
+  setTimeout(() => {
+    const publicPages = require("./backend/routes/publicPages");
+    if (typeof publicPages.warmPublicCaches === "function") {
+      publicPages.warmPublicCaches()
+        .then(() => console.log("[boot] public SEO/sitemap caches warmed"))
+        .catch(err => console.warn(`[boot] public cache warm failed: ${err.message}`));
+    }
+  }, 2500);
 });

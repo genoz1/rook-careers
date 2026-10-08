@@ -31,7 +31,12 @@ test('inventory eligibility, market union, deduplication and genuine Florida sco
 });
 test('full pagination through database caps; short safe cache; failures do not become empty inventory',async()=>{
  const loader=createInventoryLoader(db,{ttl:1});const c=await loader();assert.equal(c['/jobs/category/medical-sales-jobs'].count,65);assert.equal(c['/jobs/category/veterinary-sales-jobs'].count,23);assert(calls>=6);noSecrets(JSON.stringify(c));
- fail=true;await new Promise(r=>setTimeout(r,5));await assert.rejects(loader(),/unavailable/);fail=false;
+ // After TTL, stale-while-revalidate keeps the last good inventory instead of
+ // failing the HTTP request when a background refresh errors.
+ fail=true;await new Promise(r=>setTimeout(r,5));
+ const stale=await loader();
+ assert.equal(stale['/jobs/category/medical-sales-jobs'].count,65);
+ fail=false;
 });
 test('production routing: existing industry, role and Florida pages, privacy, pagination, canonicals, schema, sitemap, filters, private headers and application compatibility',async()=>{
  process.env.SUPABASE_URL='https://test.invalid';process.env.SUPABASE_SERVICE_ROLE_KEY='test';process.env.PUBLIC_APP_URL=PUBLIC;
@@ -40,7 +45,7 @@ test('production routing: existing industry, role and Florida pages, privacy, pa
  const express=require('express');let app;
  // Execute real server routing/static configuration without starting background workers.
  function fakeExpress(){app=express();app.listen=()=>null;return app;}Object.assign(fakeExpress,express);
- vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../server.js'),'utf8'),{require(name){if(name==='express')return fakeExpress;if(name==='dotenv')return {config(){}};if(name==='path')return path;if(name==='./backend/routes/publicPages')return require('./routes/publicPages');if(name==='./backend/publicSeo')return require('./publicSeo');if(name==='./backend/socialShortLinks')return {createRouter:()=>express.Router()};if(name==='./backend/resources/routes')return {createRouter:()=>express.Router()};if(name==='fs')return fs;return express.Router();},__dirname:path.join(__dirname,'..'),process:{env:process.env,on(){}},console,URLSearchParams});
+ vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../server.js'),'utf8'),{require(name){if(name==='express')return fakeExpress;if(name==='dotenv')return {config(){}};if(name==='path')return path;if(name==='./backend/routes/publicPages')return require('./routes/publicPages');if(name==='./backend/publicSeo')return require('./publicSeo');if(name==='./backend/socialShortLinks')return {createRouter:()=>express.Router()};if(name==='./backend/resources/routes')return {createRouter:()=>express.Router()};if(name==='./backend/industryNews/config')return {getFlags:()=>({industryNews:false})};if(name==='fs')return fs;return express.Router();},__dirname:path.join(__dirname,'..'),process:{env:process.env,on(){}},console,URLSearchParams});
  const server=express.application.listen.call(app,0,'127.0.0.1');await new Promise(r=>server.once('listening',r));const origin='http://127.0.0.1:'+server.address().port;
  const get=p=>fetch(origin+p,{redirect:'manual'});
  try {
@@ -60,7 +65,9 @@ test('production routing: existing industry, role and Florida pages, privacy, pa
   for(const p of ['/jobs/category/no-such-category','/jobs/category/medical-sales-jobs/florida/orlando','/jobs/category/medical-sales-jobs/texas','/jobs/category/veterinary-sales-jobs/florida','/not-a-rook-page','/jobs/category/medical-sales-jobs?page=0','/jobs/category/medical-sales-jobs?page=999'])assert.equal((await get(p)).status,404,p);
   const alias=await get('/jobs/category/animal-health-sales-jobs');assert.equal(alias.status,301);assert.equal(alias.headers.get('location'),'/jobs/category/veterinary-sales-jobs');
   const home=await get('/index.html?utm_source=test');assert.equal(home.status,301);assert.equal(home.headers.get('location'),'/?utm_source=test');
-  for(const file of ['rook-dashboard-v7.html','rook-dashboard.html','rook-onboarding-v7-signup.html','rook-checkout-v7.html','rook-login.html','rook-search.html']){const r=await get('/'+file);assert.equal(r.status,200,file);assert.equal(r.headers.get('x-robots-tag'),'noindex, follow');}
+  for(const file of ['rook-dashboard-v7.html','rook-dashboard.html','rook-login.html','rook-search.html']){const r=await get('/'+file);assert.equal(r.status,200,file);assert.equal(r.headers.get('x-robots-tag'),'noindex, follow');}
+  // Retired acquisition checkout/signup HTML is redirected into the current funnel.
+  for(const file of ['rook-onboarding-v7-signup.html','rook-checkout-v7.html']){const r=await get('/'+file);assert.equal(r.status,302,file);assert.match(r.headers.get('location')||'',/rook-(onboarding|checkout)-v8\.html/);}
   for(const file of ['rook-onboarding.html',...[2,3,4,5,6,7].map(v=>`rook-onboarding-v${v}.html`)]){
     const r=await get('/'+file+'?utm_source=google&gclid=test%2Bvalue');
     assert.equal(r.status,302,file);
@@ -71,7 +78,9 @@ test('production routing: existing industry, role and Florida pages, privacy, pa
   }
   const ad=await get('/medical-sales/free-trial?utm_source=google');assert.equal(ad.status,302);assert.equal(ad.headers.get('location'),'/rook-onboarding-v8.html?utm_source=google');
   for(const file of ['','rook-browse.html','rook-about.html','rook-employers.html','rook-companies.html']){const r=await get('/'+file);assert.equal(r.status,200);assert((await r.text()).includes(`rel="canonical" href="${PUBLIC}/${file}"`));}
-  const map=await(await get('/sitemap.xml')).text();for(const slug of Object.keys(CATEGORIES)){assert.equal(map.includes(PUBLIC+'/jobs/category/'+slug+'</loc>'),buildCollections(rows)['/jobs/category/'+slug].qualified);if(FLORIDA.includes(slug))assert(map.includes(PUBLIC+'/jobs/category/'+slug+'/florida</loc>'));}assert(!map.includes('/animal-health-sales-jobs'));assert(map.includes('/jobs/'+rows[0].id));noSecrets(map);
+  // Category catalog paths are listed statically (thin pages remain noindex).
+  // This avoids rebuilding the full SEO inventory on every sitemap request.
+  const map=await(await get('/sitemap.xml')).text();for(const slug of Object.keys(CATEGORIES)){assert(map.includes(PUBLIC+'/jobs/category/'+slug+'</loc>'),slug);if(FLORIDA.includes(slug))assert(map.includes(PUBLIC+'/jobs/category/'+slug+'/florida</loc>'),slug+'/florida');}assert(!map.includes('/animal-health-sales-jobs'));assert(map.includes('/jobs/'+rows[0].id));noSecrets(map);
   for(const p of ['/jobs/'+rows[0].id,'/api/jobs/'+rows[0].id]){if(p.startsWith('/api'))continue;const r=await get(p);assert.equal(r.status,200);noSecrets(await r.text());}
   assert.equal((await get('/jobs/00000000-0000-0000-0000-000000000000')).status,404);
   fail=true;assert.equal((await get('/jobs/'+rows[0].id)).status,503);fail=false;
@@ -89,10 +98,12 @@ test('existing role collections count matching eligible jobs and employers, not 
  const unrelated=job(702);unrelated.title_original='Field Sales Representative';
  const pending={...job(703),title_original:t.title_original,moderation_status:'pending'};
  const inactive={...job(704),title_original:k.title_original,status:'expired'};
- const unclassified={...job(705,[]),title_original:k.title_original};
+ // Role pages require classified labels; a title with no market evidence must
+ // not inflate counts even when the wording matches the role pattern.
+ const unclassified={...job(705,[]),title_original:'Key Account Manager',ai_analysis:null,category:null,subcategory:null,industry:null};
  const c=buildCollections([t,k,unrelated,pending,inactive,unclassified]);
  for(const slug of ['territory-sales-manager-jobs','key-account-manager-jobs']){
-   assert.equal(c['/jobs/category/'+slug].count,1);assert.equal(c['/jobs/category/'+slug].employerCount,1);
+   assert.equal(c['/jobs/category/'+slug].count,1,slug);assert.equal(c['/jobs/category/'+slug].employerCount,1,slug);
  }
 });
 test('pharmaceutical collection uses classified active inventory and distinct matching employers',()=>{

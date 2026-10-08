@@ -461,3 +461,82 @@ router.get("/admin/admanager/ga4", async (req, res) => {
   res.set("Cache-Control", "no-store");
   return res.json(await require("../admanager/ga4").getReport(period));
 });
+
+// GET /api/admin/ingestion-health
+// Actionable snapshot of scheduled ingestion for ops. Auth: admin email
+// session, or INGESTION_HEALTH_TOKEN / AD_MANAGER_TEST_TOKEN for monitors.
+function summarizeIngestionHealth(runs, employers, watchdog, now = Date.now()) {
+  const scheduled = (runs || []).filter((r) => !r.summary?.manual);
+  const newest = scheduled[0] || null;
+  const lastSuccess = scheduled.find((r) => r.status === "completed" || r.status === "success") || null;
+  const gapMinutes = Number(process.env.INGESTION_MAX_GAP_MINUTES || 1200);
+  const maxGapMs = (Number.isFinite(gapMinutes) ? gapMinutes : 1200) * 60000;
+  const newestStarted = newest ? Date.parse(newest.started_at) : NaN;
+  const stale = !newest || !Number.isFinite(newestStarted) || (now - newestStarted > maxGapMs);
+  const summary = newest?.summary || {};
+  return {
+    ok: !stale && newest?.status !== "failed" && !watchdog?.problem,
+    checked_at: new Date(now).toISOString(),
+    last_run: newest ? {
+      id: newest.id,
+      status: newest.status,
+      started_at: newest.started_at,
+      ended_at: newest.ended_at || null,
+      employers_checked: summary.employers_checked ?? summary.checked ?? null,
+      jobs_inserted: summary.jobs_inserted ?? summary.inserted ?? null,
+      jobs_updated: summary.jobs_updated ?? summary.updated ?? null,
+      failed_sources: summary.failed ?? summary.failures ?? null,
+    } : null,
+    last_successful_run: lastSuccess ? {
+      id: lastSuccess.id,
+      started_at: lastSuccess.started_at,
+      ended_at: lastSuccess.ended_at || null,
+    } : null,
+    employers: {
+      active: employers?.active ?? null,
+      never_checked: employers?.never_checked ?? null,
+      held: employers?.held ?? null,
+    },
+    watchdog: watchdog ? {
+      problem: watchdog.problem || null,
+      last_checked_at: watchdog.last_checked_at || null,
+      failure_count: watchdog.failure_count || 0,
+      emailed_at: watchdog.emailed_at || null,
+    } : null,
+    stale_ingestion: stale,
+  };
+}
+
+async function requireIngestionHealthAuth(req, res, next) {
+  const token = process.env.INGESTION_HEALTH_TOKEN || process.env.AD_MANAGER_TEST_TOKEN;
+  if (token && (req.query.token === token || req.get("X-ROOK-Health-Token") === token)) return next();
+  return requireAuth(req, res, () => requireAdmin(req, res, next));
+}
+
+router.get("/admin/ingestion-health", requireConfig, requireIngestionHealthAuth, async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const [{ data: runs, error: runError }, { data: watchdog, error: watchError }] = await Promise.all([
+      supabaseAdmin.from("ingestion_runs").select("id,started_at,ended_at,status,summary")
+        .order("started_at", { ascending: false }).limit(25),
+      supabaseAdmin.from("ingestion_watchdog_state").select("*").eq("id", 1).maybeSingle(),
+    ]);
+    if (runError) throw runError;
+    if (watchError) throw watchError;
+    const [{ count: active }, { count: neverChecked }, { count: held }] = await Promise.all([
+      supabaseAdmin.from("employers").select("id", { count: "exact", head: true }).eq("active", true),
+      supabaseAdmin.from("employers").select("id", { count: "exact", head: true }).eq("active", true).is("last_checked_at", null),
+      supabaseAdmin.from("employers").select("id", { count: "exact", head: true }).eq("active", true).not("ingestion_hold_reason", "is", null),
+    ]);
+    return res.json(summarizeIngestionHealth(runs || [], {
+      active: active ?? 0,
+      never_checked: neverChecked ?? 0,
+      held: held ?? 0,
+    }, watchdog || null));
+  } catch (error) {
+    console.error("[ingestion-health]", error.message);
+    return res.status(503).json({ ok: false, error: "Unable to read ingestion health." });
+  }
+});
+
+module.exports.summarizeIngestionHealth = summarizeIngestionHealth;

@@ -20,7 +20,7 @@
 // the columns present in the payload, so those user-set fields are
 // preserved automatically on conflict, not overwritten.
 
-const { scoreJob } = require("../matching");
+const { scoreLiveJob } = require("../liveScoring");
 const { distanceMiles } = require("../geocoding");
 
 // Increment whenever scoring logic changes requiring all stored scores
@@ -187,7 +187,7 @@ async function scoreAndStoreForCandidate(supabase, profile, activeJobs = null) {
 
   const now = new Date().toISOString();
   const rows = jobsToScore.map((job) => {
-    const match = scoreJob(job, profile);
+    const match = scoreLiveJob(job, profile);
     return {
       candidate_id: profile.id,
       job_id: job.id,

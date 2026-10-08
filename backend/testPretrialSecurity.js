@@ -16,9 +16,14 @@ test('all locked projectors omit arbitrary source fields and nested text without
  const original=JSON.stringify(canary);
  const base=project(canary,2);
  assert.deepEqual(Object.keys(base).sort(),permitted);assert.equal(base.id,'locked-2');
- assert(!/HiddenEmployer|BrandXYZ|DistinctCity|Unique|ReqSecret|secret\.example|private-job-id|future secret/.test(JSON.stringify(base)));
+ // Validated city/state may appear as location_label; scrub those before the
+ // identity leak scan so useful geography is not mistaken for employer text.
+ assert.equal(base.location_label,'DistinctCity, FL');
+ assert.equal(base.territory_type,'DistinctCity, FL');
+ const baseIdentity=JSON.stringify({...base,location_label:null,territory_type:null});
+ assert(!/HiddenEmployer|BrandXYZ|DistinctCity|Unique|ReqSecret|secret\.example|private-job-id|future secret/.test(baseIdentity));
  assert.equal(base.match.preference_fit,100);assert.equal(base.match.candidate_fit,null);
- assert.equal(base.role_type,'Oncology Account Manager');assert.equal(base.location_label,null);assert.equal(base.territory_type,null);
+ assert.equal(base.role_type,'Oncology Account Manager');
  const locked=redactForNonSubscriber(canary,2);
  assert.deepEqual(Object.keys(locked).sort(),permittedDashboard);assert.equal(locked.role_type,'Oncology Account Manager');
  assert.deepEqual(Object.keys(locked.masked_lines).sort(),['employer','title']);
@@ -27,7 +32,8 @@ test('all locked projectors omit arbitrary source fields and nested text without
  for(const words of Object.values(dashboard.masked_lines))assert(words.length>=2&&words.length<=3&&words.every(word=>/^[a-z]{4,9}$/.test(word)));
  const generated=new Set(Array.from({length:8},()=>JSON.stringify(preview(canary,2).masked_lines)));
  assert(generated.size>1,'synthetic masks should vary across responses');
- assert(!/HiddenEmployer|BrandXYZ|DistinctCity|Unique|ReqSecret|secret\.example|private-job-id|future secret/.test(JSON.stringify(dashboard)));
+ const dashIdentity=JSON.stringify({...dashboard,location_label:null,territory_type:null});
+ assert(!/HiddenEmployer|BrandXYZ|DistinctCity|Unique|ReqSecret|secret\.example|private-job-id|future secret/.test(dashIdentity));
  assert(!JSON.stringify(project(canary)).includes('masked_lines'),'non-dashboard projection must not receive visual masks');
  assert.equal(project({...canary,geographic_eligibility:{kind:'secret free-form text'}}).geography_kind,null);
  assert.equal(project({...canary,geographic_eligibility:{kind:'territory'}}).geography_kind,'territory');

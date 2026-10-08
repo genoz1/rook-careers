@@ -81,7 +81,8 @@
     "test-industry-news": "node --test backend/industryNews/test/*.test.js",
     "industry-news:discover": "node backend/industryNews/worker.js discover",
     "industry-news:report": "node backend/industryNews/worker.js report",
-    "industry-news:publish": "node backend/industryNews/runPublication.js"
+    "industry-news:publish": "node backend/industryNews/runPublication.js",
+    "test-production-readiness-repairs": "node --test backend/testProductionReadinessRepairs.js"
   },
   "engines": {
     "node": ">=18.0.0"

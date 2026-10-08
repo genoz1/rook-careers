@@ -1,10 +1,11 @@
 User-agent: *
 Allow: /
 Disallow: /api/
-Allow: /api/jobs
-Allow: /api/public-job-count
+
+# Public HTML job previews and marketing pages remain crawlable.
+# JSON API routes are not for indexing — crawling /api/jobs caused
+# expensive full-inventory work without SEO value.
 
 Sitemap: https://rookcareers.com/sitemap.xml
-
 Sitemap: https://rookcareers.com/resources/sitemap.xml
 Sitemap: https://rookcareers.com/news/sitemap.xml

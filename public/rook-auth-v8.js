@@ -138,16 +138,12 @@ function rookApplySidebarProfile(profile) {
     document.querySelectorAll('.side-foot .avatar').forEach((el) => { el.textContent = initials; });
     document.querySelectorAll('.side-foot .n').forEach((el) => { el.textContent = displayName; });
   }
-  // Trial added: a trialing candidate has full access (same as
-  // 'active', per matching.js's hasFullAccess) but the sidebar should
-  // say so plainly rather than either calling it a paid "Professional
-  // Plan" (it isn't paid yet) or "No Active Subscription" (which reads
-  // as no access, and they do have full access).
+  // Paid membership only — never label access as a free trial.
   const statusLabel = profile.subscription_status === 'active'
-    ? 'Professional Plan'
+    ? (profile.subscription_cancel_at ? 'Membership (timed access)' : 'Monthly membership')
     : profile.subscription_status === 'trialing'
-      ? 'Free Trial'
-      : 'No Active Subscription';
+      ? 'Membership'
+      : 'No Active Membership';
   document.querySelectorAll('.side-foot .r').forEach((el) => { el.textContent = statusLabel; });
 }
 

@@ -62,15 +62,17 @@ test('a successful one-time payment grants the new purchaser an expiring entitle
   assert.equal(conversions[0].event_key,'first_paid_user-pass');
 });
 
-test('anonymous preview never reveals any source identity, title, URL, location, or ID',()=>{
+test('anonymous preview never reveals any source identity, title, URL, or ID',()=>{
   const raw={id:'real-id',company_name:'Secret Employer',title_original:'Unique Secret Title 9988',location_raw:'Exact City, FL',
-    application_url:'https://secret.example/apply',source_url:'https://secret.example/source',category:'field sales',
+    city:'Exact City',state:'FL',application_url:'https://secret.example/apply',source_url:'https://secret.example/source',category:'field sales',
     date_posted:'2026-10-01',match:{overall_score:81},ai_analysis:{product_categories:['Medical Device']}};
   const response=onboarding.previewResponse({home_location_label:'Nearby, FL',desired_industries:[]},[raw],false);
   const serialized=JSON.stringify(response);
-  for(const secret of ['real-id','Secret Employer','Unique Secret Title 9988','Exact City','secret.example'])assert.equal(serialized.includes(secret),false);
+  // City/state may appear as a safe location label; employer, exact title, IDs and URLs must not.
+  for(const secret of ['real-id','Secret Employer','Unique Secret Title 9988','secret.example'])assert.equal(serialized.includes(secret),false);
   assert.equal(response.jobs[0].subscription_required,true);
   assert.match(response.jobs[0].id,/^locked-/);
+  assert.equal(response.jobs[0].location_label,'Exact City, FL');
   const safe=project(raw,0,{dashboard:true});assert.equal(safe.company_name,undefined);
 });
 
