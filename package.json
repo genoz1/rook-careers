@@ -64,6 +64,7 @@
     "test-ad-manager": "node backend/admanager/test.js",
     "test-industry-location": "node backend/testIndustryLocation.js && node backend/testV7Location.js",
     "test-geo-job-pool": "node --test backend/testGeoJobPool.js",
+    "test-dashboard-jobs-speed": "node --test backend/testDashboardJobsSpeed.js backend/testGeoJobPool.js",
     "test-employer-source-policy": "node --test backend/testEmployerSourcePolicy.js",
     "test-scoring-matching-corrections": "node --test backend/testScoringMatchingCorrections.js",
     "cleanup-blocked-retail": "node backend/scripts/cleanupBlockedRetailEmployers.js",

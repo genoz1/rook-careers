@@ -697,8 +697,12 @@
         body: JSON.stringify({ desired_industries: value ? [value] : [] }),
       });
       if (!response.ok) throw new Error('Preference could not be saved');
+      const saved = await response.json();
+      window.rookCurrentProfile = saved;
+      industryPreferenceControl.dataset.saved = value;
       if (!window.reloadIndustryJobs) throw new Error('Job reload unavailable');
-      await window.reloadIndustryJobs();
+      // Reuse the PUT response — skip a second /profile round-trip before /jobs.
+      await window.reloadIndustryJobs({ profileHint: saved });
     } catch {
       industryPreferenceControl.value = industryPreferenceControl.dataset.saved || '';
       showBanner('Could not save your industry preference. Please try again.');
@@ -706,16 +710,23 @@
     }
   });
   document.getElementById('memberJobSearch').addEventListener('input', applyRecruiterToggle);
+  // Checkbox filters operate on the already-loaded pool (client-side). A full
+  // /jobs refetch is only needed when expanding beyond a previously scoped
+  // server fetch (e.g. Veterinary-only → All industries).
+  let jobsFetchedAsAll = true;
   function changeIndustryFilter() {
     industryFiltersInitialized = true;
     showAllIndustries = false;
     applyRecruiterToggle();
-    window.reloadIndustryJobs?.();
   }
   function showEveryIndustry() {
     industryFiltersInitialized = true;
     showAllIndustries = true;
     document.querySelectorAll('.dash-filter-category').forEach(box => { box.checked = true; });
+    if (jobsFetchedAsAll) {
+      applyRecruiterToggle();
+      return;
+    }
     window.reloadIndustryJobs?.();
   }
 
@@ -1138,6 +1149,8 @@
             body: JSON.stringify(payload),
           });
           if (!saveRes.ok) throw new Error('Save failed');
+          const savedProfile = await saveRes.json().catch(() => null);
+          if (savedProfile) window.rookCurrentProfile = savedProfile;
           // Update the label in the row before closing
           document.getElementById('locationLabel').textContent = placeLabel;
           editor.style.display = 'none';
@@ -1153,6 +1166,7 @@
           const mobileSub = document.getElementById('mobileJobSub');
           if (mobileSub) mobileSub.textContent = `Loading opportunities near ${placeLabel}…`;
           await loadJobs({
+            profileHint: savedProfile || window.rookCurrentProfile,
             locationHint: {
               lat: pendingLocation.lat,
               lng: pendingLocation.lng,
@@ -1205,6 +1219,7 @@
 
     async function loadJobs(options = {}) {
     const locationHint = options.locationHint || null;
+    const profileHint = options.profileHint || window.rookCurrentProfile || null;
     const requestVersion = ++jobsLoadVersion;
     // Show the busy state immediately on first load and on every
     // location/industry refresh so the previous list doesn't look frozen
@@ -1227,24 +1242,43 @@
       // ranked list — kick it off alongside profile/jobs and fold in
       // after first paint if it finishes later.
       const recruiterPromise = rookApiFetch('/recruiter-jobs').catch(() => null);
-      const profilePromise = rookApiFetch('/profile');
       const industriesParam = encodeURIComponent(showAllIndustries ? 'all' : selectedIndustries().join(','));
+      jobsFetchedAsAll = showAllIndustries || industriesParam === 'all';
 
-      // After a city save we already know lat/lng — start /jobs immediately
-      // instead of waiting for another /profile round-trip (or ZIP geocode).
+      function jobsUrlFor(coords, stateHint) {
+        let url = '/jobs?limit=300';
+        if (coords?.lat != null && coords?.lng != null) {
+          url = `/jobs?limit=300&near_lat=${coords.lat}&near_lng=${coords.lng}`;
+        }
+        if (stateHint) url += '&near_state=' + encodeURIComponent(stateHint);
+        url += '&industries=' + industriesParam;
+        return url;
+      }
+
+      // Start /jobs immediately from a location hint or the cached profile.
+      // Waiting on another /profile round-trip before ranking was the main
+      // idle delay after industry/location changes.
       let jobsPromise = null;
       if (locationHint?.lat != null && locationHint?.lng != null) {
-        let hintUrl = `/jobs?limit=300&near_lat=${locationHint.lat}&near_lng=${locationHint.lng}`;
-        if (locationHint.state) {
-          hintUrl += '&near_state=' + encodeURIComponent(locationHint.state);
-        }
-        hintUrl += '&industries=' + industriesParam;
-        jobsPromise = rookApiFetch(hintUrl);
+        jobsPromise = rookApiFetch(jobsUrlFor(
+          { lat: locationHint.lat, lng: locationHint.lng },
+          locationHint.state
+        ));
+      } else if (profileHint?.home_lat != null && profileHint?.home_lng != null) {
+        jobsPromise = rookApiFetch(jobsUrlFor(
+          { lat: profileHint.home_lat, lng: profileHint.home_lng },
+          profileHint.home_state
+        ));
       }
+
+      const profilePromise = profileHint
+        ? Promise.resolve({ ok: true, json: async () => profileHint })
+        : rookApiFetch('/profile');
 
       const profileRes = await profilePromise;
       if (!profileRes.ok) throw new Error('Profile request failed');
       const profileForLocation = await profileRes.json();
+      window.rookCurrentProfile = profileForLocation;
       initializeIndustryFilters(profileForLocation);
       const preferred = RookJobClassification.normalizeSelection(profileForLocation?.desired_industries);
       const taxonomySize = (window.RookMatchSetup?.INDUSTRIES || []).length || 9;
@@ -1261,23 +1295,27 @@
         // for existing users whose profile was re-saved after the migration).
         // Fall back to geocoding from home_zip for existing users who have a
         // saved ZIP but home_lat/home_lng haven't been populated yet.
-        let jobsUrl = '/jobs?limit=300';
         const hasStoredCoords = profileForLocation?.home_lat != null && profileForLocation?.home_lng != null;
         if (hasStoredCoords) {
-          jobsUrl = `/jobs?limit=300&near_lat=${profileForLocation.home_lat}&near_lng=${profileForLocation.home_lng}`;
+          jobsPromise = rookApiFetch(jobsUrlFor(
+            { lat: profileForLocation.home_lat, lng: profileForLocation.home_lng },
+            profileForLocation.home_state
+          ));
         } else if (profileForLocation?.home_zip) {
           // Legacy fallback: geocode the saved ZIP
           const geoRes = await rookApiFetch('/geocode?q=' + encodeURIComponent(profileForLocation.home_zip));
           if (geoRes.ok) {
             const geo = await geoRes.json();
-            jobsUrl = `/jobs?limit=300&near_lat=${geo.lat}&near_lng=${geo.lng}`;
+            jobsPromise = rookApiFetch(jobsUrlFor(
+              { lat: geo.lat, lng: geo.lng },
+              profileForLocation.home_state
+            ));
+          } else {
+            jobsPromise = rookApiFetch(jobsUrlFor(null, profileForLocation.home_state));
           }
+        } else {
+          jobsPromise = rookApiFetch(jobsUrlFor(null, profileForLocation?.home_state));
         }
-        if (profileForLocation?.home_state) {
-          jobsUrl += '&near_state=' + encodeURIComponent(profileForLocation.home_state);
-        }
-        jobsUrl += '&industries=' + industriesParam;
-        jobsPromise = rookApiFetch(jobsUrl);
       }
 
       const res = await jobsPromise;

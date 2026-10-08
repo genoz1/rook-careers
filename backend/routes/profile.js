@@ -320,13 +320,23 @@ router.put("/profile", requireConfig, requireAuth, async (req, res) => {
   // couple of seconds, and there's no reason to make the save itself
   // feel slow for that — a page loaded a few seconds later will already
   // see fresh scores either way.
-  scoreAndStoreForCandidate(supabaseAdmin, data)
+  //
+  // Preference-only edits (industry/territory) are followed immediately by
+  // a live /jobs request. Defer the background inventory rescore briefly so
+  // it does not contend with that interactive path for DB/CPU.
+  const edited = Object.keys(payload).filter((k) => k !== "user_id" && k !== "updated_at");
+  const preferenceOnly = edited.length > 0 && edited.every((k) =>
+    ["desired_industries", "territory_size_preferences", "territory_size_preference", "work_style"].includes(k)
+  );
+  const runRescore = () => scoreAndStoreForCandidate(supabaseAdmin, data)
     .then(({ scoredCount }) => {
       console.log(`Rescore after profile update succeeded for candidate ${data.id}: ${scoredCount} job(s) scored.`);
     })
     .catch((err) => {
       console.error(`Rescore after profile update failed for candidate ${data.id}: ${err.message}`);
     });
+  if (preferenceOnly) setTimeout(runRescore, 2500);
+  else runRescore();
 });
 
 // POST /api/profile/rescore

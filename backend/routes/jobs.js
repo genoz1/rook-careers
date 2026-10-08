@@ -168,8 +168,24 @@ function matchFromRow(row) {
 // unused payload size changes.
 function stripUnusedDescriptionFields(job) {
   if (job.subscription_required) return job;
-  const { description_html, description_text, description_preview, location_evidence, extraction_evidence, ...rest } = job;
-  return {...rest, territory_locations: require('../../public/rook-territory-location').territories(job), industry_classification: classify(job)};
+  // Compute list-facing projections before dropping the heavy source blobs.
+  // ai_analysis alone is often several KB per row — with limit=300 that was
+  // megabytes of JSON the dashboard never renders (it uses industry_classification).
+  const territory_locations = require('../../public/rook-territory-location').territories(job);
+  const industry_classification = classify(job);
+  const {
+    description_html, description_text, description_preview,
+    location_evidence, extraction_evidence, ai_analysis,
+    required_skills, preferred_skills, required_experience, preferred_experience,
+    degree_required, certifications, recruiter_name, recruiter_email,
+    recruiter_company, recruiter_contact_method, recruiter_id,
+    source_job_id, source_verified, moderation_status, status,
+    created_at, updated_at, last_seen_at, region, territory,
+    category, subcategory, industry, product_type, sales_type,
+    experience_min_years, experience_max_years, travel_percentage, overnight_travel,
+    ...rest
+  } = job;
+  return { ...rest, territory_locations, industry_classification };
 }
 
 // Builds the employer_note map (spec factor #43, employer-history
@@ -803,15 +819,27 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
     // state supplements empty so we don't inject the candidate's home-state
     // inventory into a different city's explore results.
     const exploredState = typeof req.query.near_state === "string" ? req.query.near_state : null;
-    const { data: exploreJobs, error: exploreError } = await fetchGeoScopedJobPool({
-      createQuery: exploreQuery,
-      lat: nearLat,
-      lng: nearLng,
-      homeState: exploredState,
-      allowBroad: allowsBroadLocations(profile),
-      radiusMiles: EXPLORE_RADIUS_MILES,
-    });
-    if (exploreError) return res.status(500).json({ error: exploreError.message });
+    // Pool + saved flags + employer history in parallel — sequential awaits
+    // used to add a round-trip after every location change.
+    const [exploreResult, savedResult, history] = await Promise.all([
+      fetchGeoScopedJobPool({
+        createQuery: exploreQuery,
+        lat: nearLat,
+        lng: nearLng,
+        homeState: exploredState,
+        allowBroad: allowsBroadLocations(profile),
+        radiusMiles: EXPLORE_RADIUS_MILES,
+      }),
+      supabaseAdmin
+        .from("candidate_job_matches")
+        .select("job_id")
+        .eq("candidate_id", profile.id)
+        .eq("saved", true),
+      loadEmployerHistory(profile.id),
+    ]);
+    if (exploreResult.error) return res.status(500).json({ error: exploreResult.error.message });
+    const exploreJobs = exploreResult.data;
+    const { appStatusByJob, noteFor } = history;
 
     // Scores against a location-shifted COPY of the real profile — every
     // other preference (industry, comp, experience, exclusions) stays
@@ -829,17 +857,7 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
       .sort((a, b) => (b.match?.overall_score ?? -1) - (a.match?.overall_score ?? -1));
     if (!keyword) scored = scored.slice(0, Number(limit));
 
-    const { appStatusByJob, noteFor } = await loadEmployerHistory(profile.id);
-    // saved status lives on candidate_job_matches, which this live-scoring
-    // path doesn't read from (it's tied to the candidate's real home
-    // location, not the explored one) - a lightweight separate lookup
-    // for just the saved job_ids, rather than the full scored rows.
-    const { data: savedRows } = await supabaseAdmin
-      .from("candidate_job_matches")
-      .select("job_id")
-      .eq("candidate_id", profile.id)
-      .eq("saved", true);
-    const savedJobIds = new Set((savedRows || []).map((r) => r.job_id));
+    const savedJobIds = new Set((savedResult.data || []).map((r) => r.job_id));
 
     const results = scored.map((job) => ({
       ...attachDistance(job, exploredProfile),
@@ -885,22 +903,29 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
   // Do NOT skip the box when allowsBroadLocations is true — that used to
   // scan the full active inventory (~5k+ rows, multi-second). Broad prefs
   // get a capped remote supplement instead.
-  let allMatchingJobs;
+  // Fetch the ranked pool, save/dismiss flags, and employer history together.
+  // These are independent Supabase reads — awaiting them one-by-one added
+  // 200–800ms of idle latency on every dashboard load and preference change.
+  const statusPromise = supabaseAdmin
+    .from("candidate_job_matches")
+    .select("job_id, saved, dismissed")
+    .eq("candidate_id", profile.id);
+  const historyPromise = loadEmployerHistory(profile.id);
+
+  let poolPromise;
   if (profile.home_lat != null && profile.home_lng != null && !keyword) {
     const createLiveQuery = () => {
       let q = createSelectedJobQuery();
       if (state) q = q.eq("state", state);
       return q;
     };
-    const liveResult = await fetchGeoScopedJobPool({
+    poolPromise = fetchGeoScopedJobPool({
       createQuery: createLiveQuery,
       lat: profile.home_lat,
       lng: profile.home_lng,
       homeState: profile.home_state || null,
       allowBroad: allowsBroadLocations(profile),
     });
-    if (liveResult.error) return res.status(500).json({ error: liveResult.error.message });
-    allMatchingJobs = liveResult.data;
   } else {
     let liveQuery = supabaseAdmin
       .from("jobs")
@@ -913,17 +938,16 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
       liveQuery = liveQuery.or(`title_original.ilike.%${keyword}%,company_name.ilike.%${keyword}%`);
     }
 
-    const { data, error: liveError } = await selectedJobPool(liveQuery);
-    if (liveError) return res.status(500).json({ error: liveError.message });
-    allMatchingJobs = data;
+    poolPromise = selectedJobPool(liveQuery).then(({ data, error }) => ({ data, error }));
   }
 
-  const { data: statusRows } = await supabaseAdmin
-    .from("candidate_job_matches")
-    .select("job_id, saved, dismissed")
-    .eq("candidate_id", profile.id);
-  const savedJobIds = new Set((statusRows || []).filter((r) => r.saved).map((r) => r.job_id));
-  const dismissedJobIds = new Set((statusRows || []).filter((r) => r.dismissed).map((r) => r.job_id));
+  const [liveResult, statusResult, history] = await Promise.all([poolPromise, statusPromise, historyPromise]);
+  if (liveResult.error) return res.status(500).json({ error: liveResult.error.message });
+  const allMatchingJobs = liveResult.data;
+  const statusRows = statusResult.data || [];
+  const savedJobIds = new Set(statusRows.filter((r) => r.saved).map((r) => r.job_id));
+  const dismissedJobIds = new Set(statusRows.filter((r) => r.dismissed).map((r) => r.job_id));
+  const { appStatusByJob, noteFor } = history;
 
   // Title-location sanity check — same as anonymous preview.
   // Filters jobs where stored coordinates are wrong (e.g. "South Florida"
@@ -994,8 +1018,6 @@ router.get("/jobs", requireConfig, optionalAuth, async (req, res) => {
       return aDist - bDist;
     });
   if (!keyword) rows = rows.slice(0, Number(limit));
-
-  const { appStatusByJob, noteFor } = await loadEmployerHistory(profile.id);
 
   const results = rows.map((row) => ({
     ...attachDistance(row.jobs, profile),
