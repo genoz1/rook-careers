@@ -24,6 +24,7 @@ const {
 function parseArgs(argv) {
   const args = {
     write: argv.includes("--write"),
+    force: argv.includes("--force"),
     sinceHours: 24,
     limit: Number(process.env.LINKEDIN_PRESENCE_LIMIT || 400),
     delayMs: Number(process.env.LINKEDIN_PRESENCE_DELAY_MS || 2000),
@@ -70,10 +71,10 @@ async function fetchJobs(supabase, args) {
       .range(from, to);
     if (error) throw new Error(error.message);
     if (!data?.length) break;
-    // Skip jobs already checked in the last 20 hours unless forced via --ids
+    // Skip jobs already checked in the last 20 hours unless --force / --ids
     for (const job of data) {
       const checkedAt = job.location_evidence?.linkedin_presence?.checked_at;
-      if (checkedAt && Date.now() - Date.parse(checkedAt) < 20 * 3600 * 1000) continue;
+      if (!args.force && checkedAt && Date.now() - Date.parse(checkedAt) < 20 * 3600 * 1000) continue;
       jobs.push(job);
       if (jobs.length >= args.limit) break;
     }

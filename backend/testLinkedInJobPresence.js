@@ -66,6 +66,20 @@ test("company-only / wrong brand family is not_on_linkedin (badge on)", () => {
   assert.equal(shouldShowNotOnLinkedInBadge(result), true);
 });
 
+test("ambiguous weak_title overlaps stay possible (no badge)", () => {
+  const job = {
+    company_name: "Align Technology",
+    title_original: "Territory Manager - Brea, CA",
+    state: "CA",
+  };
+  const cards = [
+    { title: "Sales Representative", company: "Other Co", loc: "Brea, CA", href: "https://www.linkedin.com/jobs/view/3" },
+  ];
+  const result = classifyPresence(job, cards);
+  assert.equal(result.status, "possible");
+  assert.equal(shouldShowNotOnLinkedInBadge(result), false);
+});
+
 test("empty LinkedIn results are not_on_linkedin", () => {
   const result = classifyPresence(
     { company_name: "Obscure Device Co", title_original: "Territory Manager" },

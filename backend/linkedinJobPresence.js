@@ -208,25 +208,32 @@ function classifyPresence(job, cards) {
       loc_tier: best.loc_tier,
     };
   }
-  if (best.why === "weak_title" && best.company >= 0.85) {
+  // High-confidence absence only — badge must not fire on ambiguous title
+  // overlaps (e.g. many "Territory Manager" roles) or near-miss brands.
+  if (
+    best.why === "company_only" ||
+    best.why === "company_mismatch" ||
+    best.why === "no_match" ||
+    best.why === "no_results"
+  ) {
     return {
-      status: "possible",
-      tier: "possible_different_role",
+      status: "not_on_linkedin",
+      tier: "not_on_linkedin",
       score: best.score,
       why: best.why,
       match,
-      match_url,
+      match_url: null,
       cards_seen: cards.length,
       loc_tier: best.loc_tier,
     };
   }
   return {
-    status: "not_on_linkedin",
-    tier: "not_on_linkedin",
+    status: "possible",
+    tier: "possible_different_role",
     score: best.score,
     why: best.why,
     match,
-    match_url: null,
+    match_url,
     cards_seen: cards.length,
     loc_tier: best.loc_tier,
   };
