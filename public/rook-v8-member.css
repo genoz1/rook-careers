@@ -199,15 +199,31 @@ body.match-setup-open,body.profile-gate-open{overflow:hidden;touch-action:none}
 .v8-badges{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin:8px 0 3px}
 .v8-badges .rec-badge,.v8-industry-tag{display:inline-flex;align-items:center;border-radius:99px;padding:3px 7px;font-size:9.5px;line-height:1.25}
 .v8-industry-tag{background:#eaf2fb;color:#2864a1;font-weight:600}
-/* Not on LinkedIn — badge only (never changes card background; Just Posted yellow stays). */
+/* Not on LinkedIn — polished LinkedIn-mark pill, always inside the card
+   (never hangs off an edge; wraps under the title on narrow screens). */
 .not-on-linkedin-badge{
-  display:inline-flex;align-items:center;gap:5px;
-  font-size:11px;font-weight:800;letter-spacing:0.03em;text-transform:uppercase;
-  padding:5px 11px;border-radius:8px;margin-bottom:6px;
-  background:#E7F6F2;color:#0A5C4F;border:1.5px solid #0A5C4F;
-  line-height:1.2;white-space:nowrap;
+  display:inline-flex;align-items:center;gap:7px;
+  max-width:100%;box-sizing:border-box;
+  padding:4px 11px 4px 5px;border-radius:999px;
+  background:#0A66C2;color:#fff;
+  font-size:11.5px;font-weight:700;letter-spacing:0.01em;line-height:1.2;
+  white-space:nowrap;vertical-align:middle;
+  box-shadow:0 1px 2px rgba(10,102,194,.28);
 }
-.v8-card-head-right .not-on-linkedin-badge{align-self:flex-end}
+.not-on-linkedin-badge__logo{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:18px;height:18px;flex:0 0 18px;border-radius:3px;
+  background:#fff;color:#0A66C2;
+}
+.not-on-linkedin-badge__logo svg{display:block;width:11px;height:11px}
+.not-on-linkedin-badge__text{overflow:hidden;text-overflow:ellipsis}
+.v8-title-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+.v8-title-row h4{margin:0;min-width:0;overflow-wrap:anywhere}
+@media(max-width:620px){
+  .not-on-linkedin-badge{font-size:10.5px;padding:3px 9px 3px 4px;gap:6px}
+  .not-on-linkedin-badge__logo{width:16px;height:16px;flex-basis:16px;border-radius:2.5px}
+  .not-on-linkedin-badge__logo svg{width:10px;height:10px}
+}
 .job-list .job-row .category-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:5px;padding:10px 0;margin:9px 0;border-top:1px solid #e4ebf3;border-bottom:1px solid #e4ebf3}
 .job-list .job-row .category-grid>div{font-size:11px!important}
 .job-list .job-row .job-actions{display:flex;flex-direction:row;align-items:center;flex-wrap:wrap;gap:5px;width:100%;border-top:1px solid #e4ebf3;margin-top:auto;padding-top:10px}

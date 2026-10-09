@@ -124,13 +124,16 @@ test("dashboard and search mark up Not on LinkedIn badge without recoloring card
   const css = fs.readFileSync(path.join(__dirname, "../public/rook-v8-member.css"), "utf8");
   const search = fs.readFileSync(path.join(__dirname, "../public/rook-search.html"), "utf8");
   assert.match(dash, /not-on-linkedin-badge/);
+  assert.match(dash, /not-on-linkedin-badge__logo/);
   assert.match(dash, /linkedin_not_on_linkedin/);
   assert.match(dash, /Not on LinkedIn/);
+  assert.match(dash, /v8-title-row/);
   assert.match(css, /\.not-on-linkedin-badge/);
-  assert.match(search, /not-on-linkedin-badge/);
+  assert.match(css, /#0A66C2/);
+  assert.match(css, /never hangs off/);
+  assert.match(search, /not-on-linkedin-badge__logo/);
   // Card yellow "Just Posted" tint must stay independent of the LinkedIn badge
   assert.match(dash, /Card background stays on the existing Just Posted/);
-  assert.match(css, /never changes card background/);
 });
 
 test("ingest spawns presence checker after inserts", () => {

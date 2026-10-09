@@ -304,6 +304,25 @@
     .mobile-filters-toggle{display:none !important;}
   }
 
+  /* Not on LinkedIn — same polished pill as the member dashboard */
+  .not-on-linkedin-badge{
+    display:inline-flex;align-items:center;gap:7px;max-width:100%;box-sizing:border-box;
+    padding:4px 11px 4px 5px;border-radius:999px;background:#0A66C2;color:#fff;
+    font-size:11.5px;font-weight:700;letter-spacing:0.01em;line-height:1.2;white-space:nowrap;
+    box-shadow:0 1px 2px rgba(10,102,194,.28);vertical-align:middle;
+  }
+  .not-on-linkedin-badge__logo{
+    display:inline-flex;align-items:center;justify-content:center;
+    width:18px;height:18px;flex:0 0 18px;border-radius:3px;background:#fff;color:#0A66C2;
+  }
+  .not-on-linkedin-badge__logo svg{display:block;width:11px;height:11px}
+  .not-on-linkedin-badge__text{overflow:hidden;text-overflow:ellipsis}
+  @media(max-width:620px){
+    .not-on-linkedin-badge{font-size:10.5px;padding:3px 9px 3px 4px;gap:6px}
+    .not-on-linkedin-badge__logo{width:16px;height:16px;flex-basis:16px}
+    .not-on-linkedin-badge__logo svg{width:10px;height:10px}
+  }
+
 </style>
 <link rel="stylesheet" href="rook-mobile.css">
 </head>
@@ -1173,7 +1192,7 @@
     const notOnLinkedInBadge = (job.linkedin_not_on_linkedin === true
       || job.linkedin_presence_status === 'not_on_linkedin'
       || job.linkedin_presence_status === 'possible')
-      ? `<span class="not-on-linkedin-badge" style="display:inline-flex;align-items:center;font-size:10.5px;font-weight:800;padding:3px 9px;border-radius:8px;background:#E7F6F2;color:#0A5C4F;border:1.5px solid #0A5C4F;text-transform:uppercase;letter-spacing:0.03em;margin-left:8px;">Not on LinkedIn</span>`
+      ? `<span class="not-on-linkedin-badge" title="We could not find this role on LinkedIn job search"><span class="not-on-linkedin-badge__logo" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path fill="currentColor" d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.446-2.136 2.94v5.666H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 11.001-4.124 2.062 2.062 0 010 4.124zM7.114 20.452H3.559V9h3.555v11.452z"/></svg></span><span class="not-on-linkedin-badge__text">Not on LinkedIn</span></span>`
       : '';
     const companyLine = job.subscription_required
       ? `<span style="color:#7C3AED; font-weight:600;">🔒 Subscribe to see who's hiring</span> — ${escapeHtml(job.location_raw || '')} ${comp ? '&nbsp;·&nbsp; ' + escapeHtml(comp) : ''}`
@@ -1192,7 +1211,7 @@
     return `
       <div class="job-row" style="${rowStyle}">
         <div class="job-info">
-          <h4>${escapeHtml(job.title_original || job.title_normalized || 'Untitled role')}${newBadge}${notOnLinkedInBadge}${recruiterBadge}</h4>
+          <h4 style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${escapeHtml(job.title_original || job.title_normalized || 'Untitled role')}${notOnLinkedInBadge}${newBadge}${recruiterBadge}</h4>
           <div class="company">${companyLine}</div>
           ${nearDistance}
           ${tags ? `<div class="tag-row">${tags}${expandToggle}</div>` : ''}

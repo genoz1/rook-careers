@@ -309,7 +309,7 @@
   .rook-tour-next{background:#1463ff;color:#fff}
   @media(max-width:900px){.rook-tour-card{left:16px!important;right:16px!important;bottom:98px!important;top:auto!important;width:auto}.rook-tour-highlight{z-index:1004!important}}
 </style>
-<link rel="stylesheet" href="rook-v8-member.css?v=9">
+<link rel="stylesheet" href="rook-v8-member.css?v=10">
 <link rel="stylesheet" href="rook-employer-logos-v8.css?v=2">
 </head>
 <body>
@@ -1713,11 +1713,13 @@
         : '';
 
     // Badge unless we verified the role is on LinkedIn (includes "possible").
+    // Markup mirrors Remote Rocketship: LinkedIn "in" mark + pill, inline with
+    // the title so it stays inside the card on mobile (never hangs off).
     const notOnLinkedIn = job.linkedin_not_on_linkedin === true
       || job.linkedin_presence_status === 'not_on_linkedin'
       || job.linkedin_presence_status === 'possible';
     const notOnLinkedInBadge = notOnLinkedIn
-      ? `<span class="not-on-linkedin-badge" title="We could not find this role on LinkedIn job search">Not on LinkedIn</span>`
+      ? `<span class="not-on-linkedin-badge" title="We could not find this role on LinkedIn job search"><span class="not-on-linkedin-badge__logo" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path fill="currentColor" d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.446-2.136 2.94v5.666H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 11.001-4.124 2.062 2.062 0 010 4.124zM7.114 20.452H3.559V9h3.555v11.452z"/></svg></span><span class="not-on-linkedin-badge__text">Not on LinkedIn</span></span>`
       : '';
 
     const recruiterBadge = isRecruiterPosted
@@ -1793,15 +1795,15 @@
        <div class="v8-card-face v8-card-front">
         <div class="v8-card-head">
           <div class="score-ring" style="--pct:${scorePct};" aria-label="${scoreBasis}: ${scoreDisplay}"><span>${scoreDisplay}</span></div>
-          <div class="v8-card-head-right">${justPostedBadge}${notOnLinkedInBadge}<span class="v8-posted">${job.date_posted ? 'Posted ' + escapeHtml(job.date_posted) : escapeHtml(job.freshness_label || '')}</span></div>
+          <div class="v8-card-head-right">${justPostedBadge}<span class="v8-posted">${job.date_posted ? 'Posted ' + escapeHtml(job.date_posted) : escapeHtml(job.freshness_label || '')}</span></div>
         </div>
         <div class="job-info">
           <div class="v8-employer-identity">
             ${job.subscription_required ? '' : RookV8EmployerLogo.render(companyName)}
             <div class="v8-identity-copy">
-              <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-                <h4 style="margin:0;">${escapeHtml(job.title_original || job.title_normalized || 'Untitled role')}</h4>
-                ${newBadge}
+              <div class="v8-title-row">
+                <h4>${escapeHtml(job.title_original || job.title_normalized || 'Untitled role')}</h4>
+                ${notOnLinkedInBadge}${newBadge}
               </div>
               <div class="v8-employer">${escapeHtml(companyName)}</div>
               <div class="v8-place">${escapeHtml(job.location_raw || '')}${(!isRemoteJob(job) && job.distance_miles != null) ? ' · ' + Math.round(job.distance_miles) + ' mi away' : ''}</div>
