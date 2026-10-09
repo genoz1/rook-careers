@@ -6,6 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "ingest": "node backend/ingest.js",
+    "linkedin-presence": "node backend/scripts/checkLinkedInPresence.js",
+    "test-linkedin-presence": "node --test backend/testLinkedInJobPresence.js",
     "ingest-adzuna": "node backend/ingestAdzuna.js",
     "discover-employers": "node backend/runScheduledDiscovery.js",
     "discover-employers-market-shadow": "node backend/runMarketDiscovery.js --shadow",

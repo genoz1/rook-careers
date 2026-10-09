@@ -309,13 +309,14 @@
   .rook-tour-next{background:#1463ff;color:#fff}
   @media(max-width:900px){.rook-tour-card{left:16px!important;right:16px!important;bottom:98px!important;top:auto!important;width:auto}.rook-tour-highlight{z-index:1004!important}}
 </style>
-<link rel="stylesheet" href="rook-v8-member.css?v=8">
+<link rel="stylesheet" href="rook-brand.css?v=1">
+<link rel="stylesheet" href="rook-v8-member.css?v=21">
 <link rel="stylesheet" href="rook-employer-logos-v8.css?v=2">
 </head>
 <body>
 <div class="profile-gate-overlay" id="profileGateOverlay" aria-modal="true" role="dialog" aria-labelledby="profileGateTitle">
   <div class="profile-gate-card">
-    <img class="v8-resume-brand" src="assets/rook-full-logo-900.png" alt="ROOK — Smarter Careers. Better Matches.">
+    <img class="v8-resume-brand rook-lockup" src="assets/rook-logo-circle-256.png" alt="ROOK Medical Sales Careers">
     <h2 id="profileGateTitle">Optional: upload your résumé</h2>
     <p id="profileGateBody">Uploading your résumé is optional. It can improve match scores, but you can skip it and still see jobs based on your location and industry preferences.</p>
     <input type="file" id="profileGateResumeInput" accept="application/pdf,.pdf,application/msword,.doc,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx" hidden>
@@ -341,9 +342,10 @@
   </div>
 </div>
 <div class="mobile-app-bar">
-  <div class="logo" style="gap:8px;">
-    <img src="assets/rook-full-logo-900.png" alt="ROOK" class="v8-official-logo">
-  </div>
+  <a href="rook-dashboard-v8.html" class="rook-brand rook-brand--compact rook-brand--light" aria-label="ROOK home">
+    <img class="rook-brand__mark" src="assets/rook-logo-circle-96.png" alt="">
+    <span class="rook-brand__word"><strong>ROOK</strong><small>Medical Sales</small></span>
+  </a>
   <a href="rook-mobile-menu.html?rook_v8=1" class="mobile-menu-btn" aria-label="Menu" style="display:grid;place-items:center;width:38px;height:38px;border-radius:13px;background:linear-gradient(145deg,#062d55,#0877d1);color:#fff;font-size:18px;font-weight:900;text-decoration:none;">☰</a>
 </div>
 
@@ -352,9 +354,10 @@
     <button type="button" onclick="document.querySelector('.sidebar').classList.remove('mobile-open')" aria-label="Close menu" class="mobile-close-btn">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><path d="M18 6L6 18M6 6l12 12"/></svg>
     </button>
-    <div class="logo" style="gap:8px;">
-      <img src="assets/rook-full-logo-900.png" alt="ROOK" class="v8-official-logo">
-    </div>
+    <a href="rook-dashboard-v8.html" class="rook-brand rook-brand--light" aria-label="ROOK home" style="margin-bottom:28px;padding:0 6px;">
+      <img class="rook-brand__mark" src="assets/rook-logo-circle-96.png" alt="">
+      <span class="rook-brand__word"><strong>ROOK</strong><small>Medical Sales</small></span>
+    </a>
     <nav class="side-nav">
       <a href="/resources/">Resources</a>
       <a href="rook-dashboard-v8.html" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l9-9 9 9M5 10v10h14V10"/></svg>Dashboard<span class="count" id="sidebarJobCount">—</span></a>
@@ -389,15 +392,15 @@
          lets the candidate change it inline. Changing it saves to the profile,
          rescores, and reloads the job list. Does NOT affect the Find Jobs page
          (temporary location searches there are independent). -->
-    <div class="stat-grid">
-      <div class="stat-card"><div class="num" id="statNewMatches">—</div><div class="lbl">New Matches Today</div></div>
-      <div class="stat-card accent"><div class="num" id="statExcellent">—</div><div class="lbl">Excellent Matches (85%+)</div></div>
-      <div class="stat-card"><div class="num" id="statStrong">—</div><div class="lbl">Strong Matches (75–84%)</div></div>
-      <div class="stat-card"><div class="num" id="statApplications">—</div><div class="lbl">Applications In Progress</div></div>
+    <div class="v8-stat-strip" aria-label="Match summary">
+      <span><b id="statNewMatches">—</b> new today</span>
+      <span><b id="statExcellent">—</b> excellent</span>
+      <span><b id="statStrong">—</b> strong</span>
+      <span><b id="statApplications">—</b> applications</span>
     </div>
 
     <div class="v8-search-row"><div id="locationRow" style="display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:16px; padding:10px 14px; background:#f3f8fc; border:1px solid #dce7f0; border-radius:13px;">
-      <span style="font-size:13px; font-weight:700; color:#47637c; white-space:nowrap; flex-shrink:0;">📍 Primary Job-Search Location:</span>
+      <span class="v8-loc-label">Primary location</span>
       <span id="locationLabel" style="font-size:13px; font-weight:700; color:#062d55; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">—</span>
       <button id="btnChangeLocation" style="font-size:12px; font-weight:700; color:#0877d1; background:none; border:1.5px solid #c4ddf5; border-radius:8px; padding:5px 11px; cursor:pointer; flex-shrink:0;">Change</button>
     </div>
@@ -409,7 +412,7 @@
     <input id="memberJobSearch" type="search" placeholder="Search jobs, titles or companies…" aria-label="Search jobs, titles or companies">
     </div>
     <div id="memberIndustryStatus" class="v8-industry-status" role="status" aria-live="polite" hidden>
-      <span class="v8-industry-spinner" aria-hidden="true"></span>
+      <span class="rook-loader rook-loader--sm" aria-hidden="true"><span class="rook-loader__ring"></span><img class="rook-loader__mark" src="assets/rook-logo-circle-64.png" alt=""></span>
       <span id="memberIndustryStatusText">Updating your matches…</span>
     </div>
     <!-- Inline location editor — hidden until "Change" is clicked -->
@@ -500,35 +503,13 @@
     </div></details>
 
     <div id="jobListLoading" aria-live="polite">
-      <div class="skeleton-row" style="display:flex; gap:16px; align-items:center; padding:18px; border:1px solid #E4E9F2; border-radius:12px; margin-bottom:12px;">
-        <div class="skel-shimmer" style="width:56px; height:56px; border-radius:50%; flex-shrink:0;"></div>
-        <div style="flex:1; min-width:0;">
-          <div class="skel-shimmer" style="height:16px; width:55%; border-radius:4px; margin-bottom:10px;"></div>
-          <div class="skel-shimmer" style="height:12px; width:75%; border-radius:4px; margin-bottom:10px;"></div>
-          <div class="skel-shimmer" style="height:11px; width:40%; border-radius:4px;"></div>
+      <div class="rook-loader-block">
+        <div class="rook-loader rook-loader--lg" aria-hidden="true">
+          <span class="rook-loader__ring"></span>
+          <img class="rook-loader__mark" src="assets/rook-logo-circle-180.png" alt="">
         </div>
+        <div>Finding your best matches…</div>
       </div>
-      <div class="skeleton-row" style="display:flex; gap:16px; align-items:center; padding:18px; border:1px solid #E4E9F2; border-radius:12px; margin-bottom:12px;">
-        <div class="skel-shimmer" style="width:56px; height:56px; border-radius:50%; flex-shrink:0;"></div>
-        <div style="flex:1; min-width:0;">
-          <div class="skel-shimmer" style="height:16px; width:48%; border-radius:4px; margin-bottom:10px;"></div>
-          <div class="skel-shimmer" style="height:12px; width:65%; border-radius:4px; margin-bottom:10px;"></div>
-          <div class="skel-shimmer" style="height:11px; width:35%; border-radius:4px;"></div>
-        </div>
-      </div>
-      <div class="skeleton-row" style="display:flex; gap:16px; align-items:center; padding:18px; border:1px solid #E4E9F2; border-radius:12px; margin-bottom:12px;">
-        <div class="skel-shimmer" style="width:56px; height:56px; border-radius:50%; flex-shrink:0;"></div>
-        <div style="flex:1; min-width:0;">
-          <div class="skel-shimmer" style="height:16px; width:60%; border-radius:4px; margin-bottom:10px;"></div>
-          <div class="skel-shimmer" style="height:12px; width:70%; border-radius:4px; margin-bottom:10px;"></div>
-          <div class="skel-shimmer" style="height:11px; width:38%; border-radius:4px;"></div>
-        </div>
-      </div>
-      <div style="text-align:center; padding:8px 20px 4px; color:#5B6B85; font-size:13px;">Finding your best matches…</div>
-      <style>
-        .skel-shimmer{background:linear-gradient(90deg,#EAEEF5 25%,#F4F6FA 37%,#EAEEF5 63%); background-size:400% 100%; animation:skelShimmer 1.4s ease infinite;}
-        @keyframes skelShimmer{0%{background-position:100% 50%;}100%{background-position:0 50%;}}
-      </style>
     </div>
 
     <div class="job-list" id="jobList" data-demo="false" style="display:none;">
@@ -648,21 +629,31 @@
   function selectedIndustries() {
     return Array.from(document.querySelectorAll('.dash-filter-category:checked'), el => el.value);
   }
-  function initializeIndustryFilters(profile) {
-    if (industryFiltersInitialized) return;
-    industryFiltersInitialized = true;
-    const desired = RookJobClassification.normalizeSelection(profile?.desired_industries);
+  // Keep the Industry Preference dropdown, More-filters checkboxes, and
+  // GET /jobs?industries= in lockstep. Reported directly: switching
+  // Veterinary → Diagnostics saved the preference and reloaded jobs, but
+  // checkboxes/`showAllIndustries` stayed on Veterinary — so /jobs only
+  // returned the Vet pool and the first paint was ~3 dual-category
+  // excellent/strong matches until a later full refresh showed Diagnostics.
+  function syncIndustryFiltersFromSelection(desiredLabels) {
+    const desired = RookJobClassification.normalizeSelection(desiredLabels);
     const taxonomySize = (window.RookMatchSetup?.INDUSTRIES || []).length || 9;
-    // Explicit full-taxonomy "All industries" (or legacy empty) keeps the All view.
-    // A real subset preference scopes the first load so new members see relevant jobs.
+    industryFiltersInitialized = true;
     if (!desired.length || desired.length >= taxonomySize) {
       showAllIndustries = true;
+      document.querySelectorAll('.dash-filter-category').forEach((box) => { box.checked = true; });
     } else {
       showAllIndustries = false;
       document.querySelectorAll('.dash-filter-category').forEach((box) => {
         box.checked = desired.some((label) => label.toLowerCase() === String(box.value).toLowerCase());
       });
     }
+  }
+  function initializeIndustryFilters(profile) {
+    if (industryFiltersInitialized) return;
+    // Explicit full-taxonomy "All industries" (or legacy empty) keeps the All view.
+    // A real subset preference scopes the first load so new members see relevant jobs.
+    syncIndustryFiltersFromSelection(profile?.desired_industries);
   }
   const industryPreferenceControl = document.getElementById('memberIndustryPreference');
   const industryStatus = document.getElementById('memberIndustryStatus');
@@ -691,6 +682,11 @@
   industryPreferenceControl.addEventListener('change', async () => {
     const value = industryPreferenceControl.value;
     setIndustryUpdateState('working');
+    // Sync filters BEFORE /jobs so the fetch uses Diagnostics (etc.), not the
+    // previous Veterinary checkbox scope. Also clear the old list so a slow
+    // recruiter merge cannot append onto the wrong industry pool.
+    syncIndustryFiltersFromSelection(value ? [value] : []);
+    currentJobs = [];
     try {
       const response = await rookApiFetch('/profile', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
@@ -705,6 +701,9 @@
       await window.reloadIndustryJobs({ profileHint: saved });
     } catch {
       industryPreferenceControl.value = industryPreferenceControl.dataset.saved || '';
+      syncIndustryFiltersFromSelection(
+        industryPreferenceControl.value ? [industryPreferenceControl.value] : []
+      );
       showBanner('Could not save your industry preference. Please try again.');
       setIndustryUpdateState('error');
     }
@@ -1701,14 +1700,26 @@
     const firstSeen = job.first_seen_at ? new Date(job.first_seen_at) : null;
     const hoursOld = firstSeen ? (Date.now() - firstSeen.getTime()) / (1000 * 60 * 60) : 999;
     const justPostedBadge = hoursOld <= 72
-      ? `<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;background:#FFF3E0;color:#E65100;border:1px solid #FFB74D;margin-bottom:6px;">🔥 Just Posted</span>`
+      ? `<span class="rook-pill rook-pill-fresh" style="margin-bottom:6px;">Just Posted</span>`
       : '';
 
+    // Card background stays on the existing Just Posted / recruiter rules —
+    // "Not on LinkedIn" is a badge only so it never fights the yellow tint.
     const rowStyle = (isRecruiterPosted || isAgencySourced)
       ? 'border-left:4px solid #7C3AED; background:#FAF8FF;'
       : hoursOld <= 72
         ? 'border-left:4px solid #FB8C00; background:#FFFBF5;'
         : '';
+
+    // Badge unless we verified the role is on LinkedIn (includes "possible").
+    // Markup mirrors Remote Rocketship: LinkedIn "in" mark + pill, inline with
+    // the title so it stays inside the card on mobile (never hangs off).
+    const notOnLinkedIn = job.linkedin_not_on_linkedin === true
+      || job.linkedin_presence_status === 'not_on_linkedin'
+      || job.linkedin_presence_status === 'possible';
+    const notOnLinkedInBadge = notOnLinkedIn
+      ? `<span class="not-on-linkedin-badge" title="We could not find this role on LinkedIn job search"><span class="not-on-linkedin-badge__logo" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path fill="currentColor" d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.446-2.136 2.94v5.666H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 11.001-4.124 2.062 2.062 0 010 4.124zM7.114 20.452H3.559V9h3.555v11.452z"/></svg></span><span class="not-on-linkedin-badge__text">Not on LinkedIn</span></span>`
+      : '';
 
     const recruiterBadge = isRecruiterPosted
       ? `<span style="font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:99px; background:#7C3AED18; color:#7C3AED; text-transform:uppercase; letter-spacing:0.02em;">Posted by Recruiter</span>`
@@ -1760,15 +1771,21 @@
         </button>`
       : '';
 
+    const analysisBtn = `<a href="rook-job-analysis-v8.html?job=${escapeHtml(job.id)}" class="btn btn-primary btn-sm">View Analysis</a>`;
+    const secondaryBtn = job.subscription_required
+      ? primaryActionBtn
+      : `<button type="button" class="btn btn-outline btn-sm v8-save-action" onclick="toggleSave('${escapeHtml(job.id)}', this)">${savedLabel}</button>`;
     const actions = `<div class="job-actions">
-          <a href="rook-job-analysis-v8.html?job=${escapeHtml(job.id)}" class="btn btn-outline btn-sm">View Analysis</a>
-          ${primaryActionBtn}
-          ${linkedinBtn}
-          <button type="button" class="btn btn-outline btn-sm v8-save-action" onclick="toggleSave('${escapeHtml(job.id)}', this)">${savedLabel}</button>
+          ${analysisBtn}
+          ${secondaryBtn}
           <div class="job-actions-overflow">
             <button type="button" class="btn-icon" onclick="this.nextElementSibling.classList.toggle('open')" aria-label="More actions">⋯</button>
             <div class="overflow-menu">
-              <button type="button" onclick="markApplied('${escapeHtml(job.id)}', this)" ${isApplied ? 'disabled' : ''}>${isApplied ? 'Applied ✓' : 'Mark Applied'}</button>
+              ${job.subscription_required ? '' : (isRecruiterPosted
+                ? `<a href="rook-apply.html?job=${escapeHtml(job.id)}&rook_v8=1">Apply Now</a>`
+                : `<a href="${job.source_url || '#'}" target="_blank" rel="noopener">View Original</a>`)}
+              ${companyForLinkedIn ? `<button type="button" class="linkedin-btn" data-company="${escapeHtml(companyForLinkedIn)}" data-title="${escapeHtml(job.title_original || job.title_normalized || '')}" onclick="showLinkedInPopover(this)">Find Contacts</button>` : ''}
+              <button type="button" onclick="markApplied('${escapeHtml(job.id)}', this)" ${isApplied ? 'disabled' : ''}>${isApplied ? 'Applied' : 'Mark Applied'}</button>
               <button type="button" onclick="dismissJob('${escapeHtml(job.id)}', this)">Not interested</button>
             </div>
           </div>
@@ -1789,21 +1806,21 @@
           <div class="v8-employer-identity">
             ${job.subscription_required ? '' : RookV8EmployerLogo.render(companyName)}
             <div class="v8-identity-copy">
-              <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-                <h4 style="margin:0;">${escapeHtml(job.title_original || job.title_normalized || 'Untitled role')}</h4>
-                ${newBadge}
+              <div class="v8-title-row">
+                <h4>${escapeHtml(job.title_original || job.title_normalized || 'Untitled role')}</h4>
+                ${notOnLinkedInBadge}${hoursOld <= 72 ? '' : newBadge}
               </div>
               <div class="v8-employer">${escapeHtml(companyName)}</div>
               <div class="v8-place">${escapeHtml(job.location_raw || '')}${(!isRemoteJob(job) && job.distance_miles != null) ? ' · ' + Math.round(job.distance_miles) + ' mi away' : ''}</div>
             </div>
           </div>
-          <div class="v8-badges">${recBadge}${recruiterBadge}${industryLabels.slice(0, 3).map(label => `<span class="v8-industry-tag">${escapeHtml(label)}</span>`).join('')}</div>
+          <div class="v8-badges">${recBadge}${recruiterBadge}</div>
           ${!completeMatch && displayScore != null ? `<span class="score-basis" style="font-size:12px;font-weight:700;color:#5B6B85;">${scoreBasis === 'Preference fit only' ? 'Based on your onboarding answers' : scoreBasis}</span>` : ''}
           ${comp ? `<div class="v8-comp">${escapeHtml(comp)}</div>` : ''}
           ${employerNote}
           ${isApplied ? `<div style="font-size:11.5px; color:#00806E; font-weight:600; margin-top:4px;">✓ Application status: ${escapeHtml(job.application_status)}</div>` : ''}
         </div>
-        <button type="button" class="v8-flip-control" aria-expanded="false" onclick="toggleMatchCard(this)">Match Details ↻</button>
+        <button type="button" class="v8-flip-control" aria-expanded="false" onclick="toggleMatchCard(this)">Match details</button>
         ${actions}
        </div>
        <div class="v8-card-face v8-card-back" aria-hidden="true" inert>
@@ -1811,7 +1828,7 @@
          <div class="v8-back-title">${escapeHtml(job.title_original || job.title_normalized || 'Untitled role')}</div>
          <div class="category-grid-wrap">${renderCategoryRows(match?.categories)}</div>
          ${fitDetails ? `<div class="v8-back-fit">${fitDetails}</div>` : ''}
-         <button type="button" class="v8-flip-control" aria-expanded="true" onclick="toggleMatchCard(this)">Back to Job ↻</button>
+         <button type="button" class="v8-flip-control" aria-expanded="true" onclick="toggleMatchCard(this)">Back to job</button>
          ${actions}
        </div>
       </div>`;

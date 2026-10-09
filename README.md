@@ -114,6 +114,28 @@ added at least one employer row in Supabase (see the setup guide, Section 5):
 npm run ingest
 ```
 
+### LinkedIn presence badge (daily new jobs)
+
+After overnight ingest, ROOK can guest-search LinkedIn for each **newly
+ingested** job and stamp a **Not on LinkedIn** badge on member job cards
+for every job that is **not verified on LinkedIn** (including ambiguous
+/ possible misses). Jobs confirmed on LinkedIn get no badge. Badge only —
+does not recolor the yellow Just Posted cards.
+
+```bash
+# Dry run (last 24h of first_seen_at)
+npm run linkedin-presence -- --since-hours=24
+
+# Write results onto jobs.location_evidence.linkedin_presence
+npm run linkedin-presence -- --since-hours=24 --write
+
+npm run test-linkedin-presence
+```
+
+Scheduled ingest also spawns this check when it inserts jobs
+(`LINKEDIN_PRESENCE_AFTER_INGEST=0` disables). Prefer a separate App
+Platform job after ingest if you want an independent schedule.
+
 ## Deploying to DigitalOcean App Platform
 
 Full walkthrough with screenshot-level detail is in

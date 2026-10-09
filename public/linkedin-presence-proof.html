@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Not on LinkedIn badge — proof</title>
+  <link rel="stylesheet" href="rook-v8-member.css?v=14">
+  <style>
+    body{margin:0;background:#f3f8ff;font-family:Inter,system-ui,sans-serif;color:#0b2858}
+    .wrap{max-width:920px;margin:0 auto;padding:28px 18px 60px}
+    h1{font-size:28px;margin:0 0 8px}
+    .sub{color:#526581;margin:0 0 22px;line-height:1.45;max-width:62ch}
+    .grid{display:grid;gap:14px}
+    @media(min-width:720px){.grid{grid-template-columns:1fr 1fr}}
+    .job-row{background:#fff;border:1px solid #dce6f2;border-radius:15px;padding:15px;box-shadow:0 4px 15px #203d6010}
+    .job-row.just{border-left:4px solid #FB8C00;background:#FFFBF5}
+    .v8-card-head{display:flex;justify-content:space-between;gap:8px;margin-bottom:10px;align-items:center}
+    .v8-card-head-right{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+    .just-posted{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;background:#FFF3E0;color:#E65100;border:1px solid #FFB74D}
+    .v8-employer{margin-top:5px;font-size:12.5px;font-weight:700;color:#344d73}
+    .v8-place{margin-top:3px;font-size:11.5px;color:#60738f}
+    .narrow{max-width:360px;margin-top:28px;padding:14px;border:1px dashed #9bb4d0;border-radius:16px;background:#eef4fb}
+    .narrow h2{font-size:15px;margin:0 0 10px;color:#3a567c}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Not on LinkedIn badge</h1>
+    <p class="sub">LinkedIn “in” mark + blue pill, inline with the title (Remote Rocketship pattern). Stays inside the card and wraps under the title on narrow screens — no hang-off.</p>
+
+    <div class="grid">
+      <div class="job-row just">
+        <div class="v8-card-head">
+          <div class="score-ring" style="--pct:84;width:51px;height:51px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:conic-gradient(#00806e calc(84*1%),#e8eef5 0);font-weight:800;font-size:13px"><span style="background:#fff;width:39px;height:39px;border-radius:50%;display:grid;place-items:center">84%</span></div>
+          <div class="v8-card-head-right"><span class="just-posted">🔥 Just Posted</span></div>
+        </div>
+        <div class="v8-title-row">
+          <h4 style="margin:0;font-size:16px">Executive Oncology Sales Representative – Head &amp; Neck</h4>
+          <span class="not-on-linkedin-badge" title="We could not find this role on LinkedIn job search"><span class="not-on-linkedin-badge__logo" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path fill="currentColor" d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.446-2.136 2.94v5.666H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 11.001-4.124 2.062 2.062 0 010 4.124zM7.114 20.452H3.559V9h3.555v11.452z"/></svg></span><span class="not-on-linkedin-badge__text">Not on LinkedIn</span></span>
+        </div>
+        <div class="v8-employer">Johnson &amp; Johnson MedTech</div>
+        <div class="v8-place">Knoxville, TN | Nashville, TN</div>
+      </div>
+
+      <div class="job-row just">
+        <div class="v8-card-head">
+          <div class="score-ring" style="--pct:79;width:51px;height:51px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:conic-gradient(#1463ff calc(79*1%),#e8eef5 0);font-weight:800;font-size:13px"><span style="background:#fff;width:39px;height:39px;border-radius:50%;display:grid;place-items:center">79%</span></div>
+          <div class="v8-card-head-right"><span class="just-posted">🔥 Just Posted</span></div>
+        </div>
+        <div class="v8-title-row">
+          <h4 style="margin:0;font-size:16px">Territory Manager - Brea, CA</h4>
+          <span class="not-on-linkedin-badge"><span class="not-on-linkedin-badge__logo" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path fill="currentColor" d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.446-2.136 2.94v5.666H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 11.001-4.124 2.062 2.062 0 010 4.124zM7.114 20.452H3.559V9h3.555v11.452z"/></svg></span><span class="not-on-linkedin-badge__text">Not on LinkedIn</span></span>
+        </div>
+        <div class="v8-employer">Align Technology</div>
+        <div class="v8-place">Brea, CA</div>
+      </div>
+    </div>
+
+    <div class="narrow" aria-label="Mobile width preview">
+      <h2>Mobile width (~360px) — wraps under title, stays inside card</h2>
+      <div class="job-row just" style="margin:0">
+        <div class="v8-card-head">
+          <div style="width:44px;height:44px;border-radius:50%;background:#e8eef5;display:grid;place-items:center;font-weight:800;font-size:12px">91%</div>
+          <div class="v8-card-head-right"><span class="just-posted">🔥 Just Posted</span></div>
+        </div>
+        <div class="v8-title-row">
+          <h4 style="margin:0;font-size:15px">Sr Associate, Strategic Partnerships &amp; Business Development</h4>
+          <span class="not-on-linkedin-badge"><span class="not-on-linkedin-badge__logo" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path fill="currentColor" d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.446-2.136 2.94v5.666H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 11.001-4.124 2.062 2.062 0 010 4.124zM7.114 20.452H3.559V9h3.555v11.452z"/></svg></span><span class="not-on-linkedin-badge__text">Not on LinkedIn</span></span>
+        </div>
+        <div class="v8-employer">Embark Veterinary</div>
+        <div class="v8-place">Boston, MA</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

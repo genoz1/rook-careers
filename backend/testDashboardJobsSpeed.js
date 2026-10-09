@@ -51,3 +51,18 @@ test('dashboard starts /jobs from cached profile without waiting on /profile', (
   assert.doesNotMatch(changeFn, /reloadIndustryJobs/);
   assert.match(changeFn, /applyRecruiterToggle/);
 });
+
+test('industry preference change syncs filters before reloading jobs', () => {
+  assert.match(dashboard, /function syncIndustryFiltersFromSelection/);
+  const preferenceHandler = dashboard.slice(
+    dashboard.indexOf("industryPreferenceControl.addEventListener('change'"),
+    dashboard.indexOf("document.getElementById('memberJobSearch')")
+  );
+  // Must re-scope checkboxes/showAllIndustries to the new preference before /jobs,
+  // otherwise Veterinary→Diagnostics keeps fetching the old Veterinary pool.
+  const syncAt = preferenceHandler.indexOf('syncIndustryFiltersFromSelection(value ? [value] : [])');
+  const reloadAt = preferenceHandler.indexOf('reloadIndustryJobs({ profileHint: saved })');
+  assert.ok(syncAt >= 0, 'preference change syncs industry filters');
+  assert.ok(reloadAt > syncAt, 'filter sync happens before job reload');
+  assert.match(preferenceHandler, /currentJobs = \[\]/);
+});
