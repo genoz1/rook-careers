@@ -114,7 +114,7 @@ async function main() {
       ...record,
     });
 
-    const badge = record.status === "not_on_linkedin" ? " BADGE" : "";
+    const badge = record.status === "not_on_linkedin" || record.status === "possible" ? " BADGE" : "";
     console.log(
       `[${i + 1}/${jobs.length}] ${record.status}${badge} | ${job.company_name} | ${String(job.title_original || "").slice(0, 70)} | ${record.why}`
     );
@@ -137,11 +137,13 @@ async function main() {
   }
 
   console.log("\nSummary:", counts);
-  const badgeExamples = results.filter((r) => r.status === "not_on_linkedin").slice(0, 20);
+  const badgeExamples = results
+    .filter((r) => r.status === "not_on_linkedin" || r.status === "possible")
+    .slice(0, 20);
   if (badgeExamples.length) {
-    console.log("\nBadge examples (not_on_linkedin):");
+    console.log("\nBadge examples (not verified on LinkedIn):");
     for (const r of badgeExamples) {
-      console.log(`- ${r.company} — ${r.title} (${r.why})`);
+      console.log(`- [${r.status}] ${r.company} — ${r.title} (${r.why})`);
     }
   }
 

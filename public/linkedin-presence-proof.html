@@ -1,101 +1,271 @@
 <!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Not on LinkedIn badge — last night proof</title>
-  <link rel="stylesheet" href="rook-v8-member.css?v=9">
-  <style>
-    body{margin:0;background:#f3f8ff;font-family:Inter,system-ui,sans-serif;color:#0b2858}
-    .wrap{max-width:920px;margin:0 auto;padding:28px 18px 60px}
-    h1{font-size:28px;margin:0 0 8px}
-    .sub{color:#526581;margin:0 0 22px;line-height:1.45;max-width:62ch}
-    .stats{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:22px}
-    .stat{background:#fff;border:1px solid #d7e0eb;border-radius:12px;padding:12px 16px;min-width:120px}
-    .stat b{display:block;font-size:22px}
-    .job-row{background:#fff;border:1px solid #d7e0eb;border-radius:16px;padding:16px 18px;margin-bottom:12px}
-    .job-row.just{border-left:4px solid #FB8C00;background:#FFFBF5}
-    .v8-card-head{display:flex;justify-content:space-between;gap:12px;margin-bottom:10px}
-    .v8-card-head-right{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
-    .just-posted{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;background:#FFF3E0;color:#E65100;border:1px solid #FFB74D}
-    h3{margin:0;font-size:17px;line-height:1.3}
-    .company{margin-top:4px;font-weight:700;color:#344d73}
-    .place,.why{margin-top:4px;font-size:13px;color:#60738f}
-  </style>
-</head>
-<body>
-  <div class="wrap">
-    <h1>Not on LinkedIn — last-night ingest proof</h1>
-    <p class="sub">Checked 99 jobs first seen in the last 24 hours via LinkedIn guest search ($0). Badge only on high-confidence absences. Yellow Just Posted card tint is unchanged.</p>
-    <div class="stats">
-      <div class="stat"><b>3</b>Not on LinkedIn</div>
-      <div class="stat"><b>82</b>On LinkedIn</div>
-      <div class="stat"><b>14</b>Possible / no badge</div>
-    </div>
-
-    <h2>Badge examples</h2>
-
-    <div class="job-row just">
-      <div class="v8-card-head">
-        <div></div>
-        <div class="v8-card-head-right">
-          <span class="just-posted">🔥 Just Posted</span>
-          <span class="not-on-linkedin-badge">Not on LinkedIn</span>
-        </div>
-      </div>
-      <h3>Executive Oncology Sales Representative – Head &amp; Neck (Knoxville and Nashville, TN)</h3>
-      <div class="company">Johnson &amp; Johnson MedTech | Circulatory Restoration</div>
-      <div class="place">Knoxville, TN | Nashville, TN</div>
-      <div class="why">why: no_match on LinkedIn guest search</div>
-    </div>
-
-    <div class="job-row just">
-      <div class="v8-card-head">
-        <div></div>
-        <div class="v8-card-head-right">
-          <span class="just-posted">🔥 Just Posted</span>
-          <span class="not-on-linkedin-badge">Not on LinkedIn</span>
-        </div>
-      </div>
-      <h3>Sr Associate, Strategic Partnerships &amp; Business Development</h3>
-      <div class="company">Embark Veterinary</div>
-      <div class="place">Boston, MA</div>
-      <div class="why">why: no_match on LinkedIn guest search</div>
-    </div>
-
-    <div class="job-row just">
-      <div class="v8-card-head">
-        <div></div>
-        <div class="v8-card-head-right">
-          <span class="just-posted">🔥 Just Posted</span>
-          <span class="not-on-linkedin-badge">Not on LinkedIn</span>
-        </div>
-      </div>
-      <h3>SSD - Service Account Manager - Southern Territory</h3>
-      <div class="company">Agilent Technologies</div>
-      <div class="place">US-FL-Remote | US-GA-Remote</div>
-      <div class="why">why: company_only (Agilent roles found, not this one)</div>
-    </div>
-
-    <h2 style="margin-top:28px">Also on LinkedIn (no badge)</h2>
-
-    <div class="job-row just">
-      <div class="v8-card-head-right" style="align-items:flex-start;margin-bottom:8px">
-        <span class="just-posted">🔥 Just Posted</span>
-      </div>
-      <h3>Territory Manager - Morgantown, WV</h3>
-      <div class="company">ZOLL Medical</div>
-      <div class="why">matched on LinkedIn — no badge</div>
-    </div>
-
-    <div class="job-row just">
-      <div class="v8-card-head-right" style="align-items:flex-start;margin-bottom:8px">
-        <span class="just-posted">🔥 Just Posted</span>
-      </div>
-      <h3>Clinical Sales Representative</h3>
-      <div class="company">Intuitive Surgical</div>
-      <div class="why">matched on LinkedIn — no badge</div>
-    </div>
-  </div>
-</body>
-</html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Not on LinkedIn badge — last night proof</title>
+<link rel="stylesheet" href="rook-v8-member.css?v=9">
+<style>
+body{margin:0;background:#f3f8ff;font-family:Inter,system-ui,sans-serif;color:#0b2858}
+.wrap{max-width:920px;margin:0 auto;padding:28px 18px 60px}
+h1{font-size:28px;margin:0 0 8px}.sub{color:#526581;margin:0 0 22px;line-height:1.45;max-width:62ch}
+.stats{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:22px}
+.stat{background:#fff;border:1px solid #d7e0eb;border-radius:12px;padding:12px 16px;min-width:120px}
+.stat b{display:block;font-size:22px}
+.job-row{background:#fff;border:1px solid #d7e0eb;border-radius:16px;padding:16px 18px;margin-bottom:12px}
+.job-row.just{border-left:4px solid #FB8C00;background:#FFFBF5}
+.v8-card-head{display:flex;justify-content:space-between;gap:12px;margin-bottom:10px}
+.v8-card-head-right{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.just-posted{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;background:#FFF3E0;color:#E65100;border:1px solid #FFB74D}
+h3{margin:0;font-size:17px;line-height:1.3}.company{margin-top:4px;font-weight:700;color:#344d73}
+.place,.why{margin-top:4px;font-size:13px;color:#60738f}
+</style></head><body><div class="wrap">
+<h1>Not on LinkedIn — last-night ingest proof</h1>
+<p class="sub">Checked 99 jobs first seen in the last 24 hours. Badge on every job not verified on LinkedIn (not_on_linkedin + possible). Only verified on-LinkedIn jobs skip the badge. Yellow Just Posted tint unchanged.</p>
+<div class="stats">
+<div class="stat"><b>17</b>Get the badge</div>
+<div class="stat"><b>82</b>On LinkedIn (no badge)</div>
+<div class="stat"><b>14</b>of badge are “possible”</div>
+</div>
+<h2>Badge examples (17)</h2>
+<div class="job-row just">
+  <div class="v8-card-head"><div></div>
+  <div class="v8-card-head-right">
+    <span class="just-posted">🔥 Just Posted</span>
+    <span class="not-on-linkedin-badge">Not on LinkedIn</span>
+  </div></div>
+  <h3>Territory Sales Manager, Columbus</h3>
+  <div class="company">LifeLearn Animal Health</div>
+  <div class="place">Columbus, Ohio, USA | Remote, USA</div>
+  <div class="why">status: possible · why: weak_title</div>
+</div>
+<div class="job-row just">
+  <div class="v8-card-head"><div></div>
+  <div class="v8-card-head-right">
+    <span class="just-posted">🔥 Just Posted</span>
+    <span class="not-on-linkedin-badge">Not on LinkedIn</span>
+  </div></div>
+  <h3>Sales Manager</h3>
+  <div class="company">LifeLearn Animal Health</div>
+  <div class="place"></div>
+  <div class="why">status: possible · why: weak_title</div>
+</div>
+<div class="job-row just">
+  <div class="v8-card-head"><div></div>
+  <div class="v8-card-head-right">
+    <span class="just-posted">🔥 Just Posted</span>
+    <span class="not-on-linkedin-badge">Not on LinkedIn</span>
+  </div></div>
+  <h3>Territory Sales Manager, Cleveland</h3>
+  <div class="company">LifeLearn Animal Health</div>
+  <div class="place">Cleveland, Ohio, USA | Remote, USA</div>
+  <div class="why">status: possible · why: weak_title</div>
+</div>
+<div class="job-row just">
+  <div class="v8-card-head"><div></div>
+  <div class="v8-card-head-right">
+    <span class="just-posted">🔥 Just Posted</span>
+    <span class="not-on-linkedin-badge">Not on LinkedIn</span>
+  </div></div>
+  <h3>Territory Sales Manager, Columbus</h3>
+  <div class="company">LifeLearn Animal Health</div>
+  <div class="place"></div>
+  <div class="why">status: possible · why: weak_title</div>
+</div>
+<div class="job-row just">
+  <div class="v8-card-head"><div></div>
+  <div class="v8-card-head-right">
+    <span class="just-posted">🔥 Just Posted</span>
+    <span class="not-on-linkedin-badge">Not on LinkedIn</span>
+  </div></div>
+  <h3>Territory Sales Manager, Cleveland</h3>
+  <div class="company">LifeLearn Animal Health</div>
+  <div class="place"></div>
+  <div class="why">status: possible · why: weak_title</div>
+</div>
+<div class="job-row just">
+  <div class="v8-card-head"><div></div>
+  <div class="v8-card-head-right">
+    <span class="just-posted">🔥 Just Posted</span>
+    <span class="not-on-linkedin-badge">Not on LinkedIn</span>
+  </div></div>
+  <h3>Account Manager Vascular (m/w/d)</h3>
+  <div class="company">Boston Scientific</div>
+  <div class="place"></div>
+  <div class="why">status: possible · why: weak_title</div>
+</div>
+<div class="job-row just">
+  <div class="v8-card-head"><div></div>
+  <div class="v8-card-head-right">
+    <span class="just-posted">🔥 Just Posted</span>
+    <span class="not-on-linkedin-badge">Not on LinkedIn</span>
+  </div></div>
+  <h3>Executive Oncology Sales Representative – Head &amp; Neck (Knoxville and Nashville, TN) – Johnson &amp; Johnson Innovative Medicine</h3>
+  <div class="company">Johnson &amp; Johnson MedTech | Circulatory Restoration</div>
+  <div class="place">Knoxville, Tennessee, United States | Nashville, Tennessee, United States</div>
+  <div class="why">status: not_on_linkedin · why: no_match</div>
+</div>
+<div class="job-row just">
+  <div class="v8-card-head"><div></div>
+  <div class="v8-card-head-right">
+    <span class="just-posted">🔥 Just Posted</span>
+    <span class="not-on-linkedin-badge">Not on LinkedIn</span>
+  </div></div>
+  <h3>Senior Director, Business Development, Immunology Acquisitions</h3>
+  <div class="company">Johnson &amp; Johnson MedTech | Circulatory Restoration</div>
+  <div class="place">New Brunswick, New Jersey, United States of America</div>
+  <div class="why">status: possible · why: weak_title</div>
+</div>
+<div class="job-row just">
+  <div class="v8-card-head"><div></div>
+  <div class="v8-card-head-right">
+    <span class="just-posted">🔥 Just Posted</span>
+    <span class="not-on-linkedin-badge">Not on LinkedIn</span>
+  </div></div>
+  <h3>Territory Sales Rep - Dental Primary Location: Tucson, Arizona</h3>
+  <div class="company">Elite Science LLC</div>
+  <div class="place">Tucson, Arizona, US</div>
+  <div class="why">status: possible · why: weak_title</div>
+</div>
+<div class="job-row just">
+  <div class="v8-card-head"><div></div>
+  <div class="v8-card-head-right">
+    <span class="just-posted">🔥 Just Posted</span>
+    <span class="not-on-linkedin-badge">Not on LinkedIn</span>
+  </div></div>
+  <h3>Territory Manager - Medical Device OEM (New Jersey)</h3>
+  <div class="company">CVRx</div>
+  <div class="place">New Jersey</div>
+  <div class="why">status: possible · why: weak_title</div>
+</div>
+<div class="job-row just">
+  <div class="v8-card-head"><div></div>
+  <div class="v8-card-head-right">
+    <span class="just-posted">🔥 Just Posted</span>
+    <span class="not-on-linkedin-badge">Not on LinkedIn</span>
+  </div></div>
+  <h3>Sr Associate, Strategic Partnerships &amp; Business Development</h3>
+  <div class="company">Embark Veterinary</div>
+  <div class="place">Boston, MA</div>
+  <div class="why">status: not_on_linkedin · why: no_match</div>
+</div>
+<div class="job-row just">
+  <div class="v8-card-head"><div></div>
+  <div class="v8-card-head-right">
+    <span class="just-posted">🔥 Just Posted</span>
+    <span class="not-on-linkedin-badge">Not on LinkedIn</span>
+  </div></div>
+  <h3>Territory Manager - Brea, CA</h3>
+  <div class="company">Align Technology</div>
+  <div class="place">US-California-Field based</div>
+  <div class="why">status: possible · why: weak_title</div>
+</div>
+<div class="job-row just">
+  <div class="v8-card-head"><div></div>
+  <div class="v8-card-head-right">
+    <span class="just-posted">🔥 Just Posted</span>
+    <span class="not-on-linkedin-badge">Not on LinkedIn</span>
+  </div></div>
+  <h3>Territory Manager - West Hollywood, CA</h3>
+  <div class="company">Align Technology</div>
+  <div class="place">US-California-Field based</div>
+  <div class="why">status: possible · why: weak_title</div>
+</div>
+<div class="job-row just">
+  <div class="v8-card-head"><div></div>
+  <div class="v8-card-head-right">
+    <span class="just-posted">🔥 Just Posted</span>
+    <span class="not-on-linkedin-badge">Not on LinkedIn</span>
+  </div></div>
+  <h3>Territory Manager - Vallejo, CA</h3>
+  <div class="company">Align Technology</div>
+  <div class="place">US-California-Field based</div>
+  <div class="why">status: possible · why: weak_title</div>
+</div>
+<div class="job-row just">
+  <div class="v8-card-head"><div></div>
+  <div class="v8-card-head-right">
+    <span class="just-posted">🔥 Just Posted</span>
+    <span class="not-on-linkedin-badge">Not on LinkedIn</span>
+  </div></div>
+  <h3>SSD - Service Account Manager - Southern Territory</h3>
+  <div class="company">Agilent Technologies</div>
+  <div class="place">US-FL-Remote Location | US-GA-Remote Location</div>
+  <div class="why">status: not_on_linkedin · why: company_only</div>
+</div>
+<div class="job-row just">
+  <div class="v8-card-head"><div></div>
+  <div class="v8-card-head-right">
+    <span class="just-posted">🔥 Just Posted</span>
+    <span class="not-on-linkedin-badge">Not on LinkedIn</span>
+  </div></div>
+  <h3>Veterinary District Sales Manager – Fountain Valley, CA (Royal Canin)</h3>
+  <div class="company">Royal Canin</div>
+  <div class="place">USA-California-Fountain Valley | USA-California-Garden Grove | USA-California-Irvine</div>
+  <div class="why">status: possible · why: weak_title</div>
+</div>
+<div class="job-row just">
+  <div class="v8-card-head"><div></div>
+  <div class="v8-card-head-right">
+    <span class="just-posted">🔥 Just Posted</span>
+    <span class="not-on-linkedin-badge">Not on LinkedIn</span>
+  </div></div>
+  <h3>Associate Territory Manager</h3>
+  <div class="company">Prestige Recruiting Group</div>
+  <div class="place">US</div>
+  <div class="why">status: possible · why: weak_title</div>
+</div>
+<h2 style="margin-top:28px">Verified on LinkedIn (no badge)</h2>
+<div class="job-row just">
+  <div class="v8-card-head"><div></div>
+  <div class="v8-card-head-right">
+    <span class="just-posted">🔥 Just Posted</span>
+    
+  </div></div>
+  <h3>Neuroscience Sales Representative (Charleston, SC) – Johnson &amp; Johnson Innovative Medicine</h3>
+  <div class="company">Johnson &amp; Johnson MedTech | Circulatory Restoration</div>
+  <div class="place">Charleston, South Carolina, United States</div>
+  <div class="why">verified on LinkedIn — no badge</div>
+</div>
+<div class="job-row just">
+  <div class="v8-card-head"><div></div>
+  <div class="v8-card-head-right">
+    <span class="just-posted">🔥 Just Posted</span>
+    
+  </div></div>
+  <h3>Senior Immunology Sales Specialist, Gastroenterology (Orlando, FL) – Johnson &amp; Johnson Innovative Medicine</h3>
+  <div class="company">Johnson &amp; Johnson MedTech | Circulatory Restoration</div>
+  <div class="place">Orlando, Florida, United States of America</div>
+  <div class="why">verified on LinkedIn — no badge</div>
+</div>
+<div class="job-row just">
+  <div class="v8-card-head"><div></div>
+  <div class="v8-card-head-right">
+    <span class="just-posted">🔥 Just Posted</span>
+    
+  </div></div>
+  <h3>Area Sales Leader - Monarch Urology - Delta Plains</h3>
+  <div class="company">Johnson &amp; Johnson MedTech | Circulatory Restoration</div>
+  <div class="place">Tennessee (Any City) | Kentucky (Any City) | Missouri (Any City) | Oklahoma (Any City) | Arkansas (Any City) | Mississippi (Any City)</div>
+  <div class="why">verified on LinkedIn — no badge</div>
+</div>
+<div class="job-row just">
+  <div class="v8-card-head"><div></div>
+  <div class="v8-card-head-right">
+    <span class="just-posted">🔥 Just Posted</span>
+    
+  </div></div>
+  <h3>Manager, Inside Sales</h3>
+  <div class="company">Johnson &amp; Johnson MedTech | Circulatory Restoration</div>
+  <div class="place">Santa Clara, California, United States of America | Cincinnati, Ohio, United States of America</div>
+  <div class="why">verified on LinkedIn — no badge</div>
+</div>
+<div class="job-row just">
+  <div class="v8-card-head"><div></div>
+  <div class="v8-card-head-right">
+    <span class="just-posted">🔥 Just Posted</span>
+    
+  </div></div>
+  <h3>Regional Sales Director - Shockwave Medical (Nashville/Lexington)</h3>
+  <div class="company">Johnson &amp; Johnson MedTech | Circulatory Restoration</div>
+  <div class="place">Nashville, Tennessee, United States | Lexington, Kentucky, United States</div>
+  <div class="why">verified on LinkedIn — no badge</div>
+</div>
+</div></body></html>

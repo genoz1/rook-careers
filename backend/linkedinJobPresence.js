@@ -1,6 +1,6 @@
-// LinkedIn job-board presence — guest search + high-confidence match.
+// LinkedIn job-board presence — guest search match.
 // $0 path: public LinkedIn /jobs/search HTML (no API key, no login).
-// Badge only when status === 'not_on_linkedin' (high confidence).
+// Badge for every checked job except those verified on LinkedIn.
 
 const cheerio = require("cheerio");
 
@@ -340,7 +340,9 @@ function shouldShowNotOnLinkedInBadge(jobOrPresence) {
         jobOrPresence?.linkedin_presence?.status ||
         jobOrPresence?.location_evidence?.linkedin_presence?.status ||
         jobOrPresence?.status;
-  return status === "not_on_linkedin";
+  // Only verified on-LinkedIn jobs skip the badge. "possible" and
+  // "not_on_linkedin" both earn it; unchecked/error do not claim absence.
+  return status === "not_on_linkedin" || status === "possible";
 }
 
 function mergePresenceIntoEvidence(locationEvidence, presence) {
@@ -352,14 +354,15 @@ function mergePresenceIntoEvidence(locationEvidence, presence) {
 function projectPresenceFields(job) {
   const presence = job?.linkedin_presence || job?.location_evidence?.linkedin_presence || null;
   if (!presence) {
+    const status = job?.linkedin_presence_status || null;
     return {
-      linkedin_presence_status: job?.linkedin_presence_status || null,
-      linkedin_not_on_linkedin: job?.linkedin_not_on_linkedin === true,
+      linkedin_presence_status: status,
+      linkedin_not_on_linkedin: shouldShowNotOnLinkedInBadge(status || job),
     };
   }
   return {
     linkedin_presence_status: presence.status || null,
-    linkedin_not_on_linkedin: presence.status === "not_on_linkedin",
+    linkedin_not_on_linkedin: shouldShowNotOnLinkedInBadge(presence),
   };
 }
 

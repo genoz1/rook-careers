@@ -117,8 +117,10 @@ npm run ingest
 ### LinkedIn presence badge (daily new jobs)
 
 After overnight ingest, ROOK can guest-search LinkedIn for each **newly
-ingested** job and stamp a high-confidence **Not on LinkedIn** badge on
-member job cards (badge only — does not recolor the yellow Just Posted cards).
+ingested** job and stamp a **Not on LinkedIn** badge on member job cards
+for every job that is **not verified on LinkedIn** (including ambiguous
+/ possible misses). Jobs confirmed on LinkedIn get no badge. Badge only —
+does not recolor the yellow Just Posted cards.
 
 ```bash
 # Dry run (last 24h of first_seen_at)

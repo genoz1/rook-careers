@@ -66,7 +66,7 @@ test("company-only / wrong brand family is not_on_linkedin (badge on)", () => {
   assert.equal(shouldShowNotOnLinkedInBadge(result), true);
 });
 
-test("ambiguous weak_title overlaps stay possible (no badge)", () => {
+test("ambiguous weak_title stays possible but still gets the badge", () => {
   const job = {
     company_name: "Align Technology",
     title_original: "Territory Manager - Brea, CA",
@@ -78,7 +78,16 @@ test("ambiguous weak_title overlaps stay possible (no badge)", () => {
   const result = classifyPresence(job, cards);
   assert.equal(result.why, "weak_title");
   assert.equal(result.status, "possible");
-  assert.equal(shouldShowNotOnLinkedInBadge(result), false);
+  // Only verified on-LinkedIn jobs skip the badge.
+  assert.equal(shouldShowNotOnLinkedInBadge(result), true);
+});
+
+test("verified on_linkedin is the only status that skips the badge", () => {
+  assert.equal(shouldShowNotOnLinkedInBadge("on_linkedin"), false);
+  assert.equal(shouldShowNotOnLinkedInBadge("not_on_linkedin"), true);
+  assert.equal(shouldShowNotOnLinkedInBadge("possible"), true);
+  assert.equal(shouldShowNotOnLinkedInBadge("error"), false);
+  assert.equal(shouldShowNotOnLinkedInBadge(null), false);
 });
 
 test("empty LinkedIn results are not_on_linkedin", () => {

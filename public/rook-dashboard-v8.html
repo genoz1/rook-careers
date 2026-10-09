@@ -1712,7 +1712,10 @@
         ? 'border-left:4px solid #FB8C00; background:#FFFBF5;'
         : '';
 
-    const notOnLinkedIn = job.linkedin_not_on_linkedin === true || job.linkedin_presence_status === 'not_on_linkedin';
+    // Badge unless we verified the role is on LinkedIn (includes "possible").
+    const notOnLinkedIn = job.linkedin_not_on_linkedin === true
+      || job.linkedin_presence_status === 'not_on_linkedin'
+      || job.linkedin_presence_status === 'possible';
     const notOnLinkedInBadge = notOnLinkedIn
       ? `<span class="not-on-linkedin-badge" title="We could not find this role on LinkedIn job search">Not on LinkedIn</span>`
       : '';
