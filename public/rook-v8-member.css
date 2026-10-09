@@ -204,11 +204,15 @@ body.match-setup-open,body.profile-gate-open{overflow:hidden;touch-action:none}
 .not-on-linkedin-badge{
   display:inline-flex;align-items:center;gap:6px;
   max-width:100%;box-sizing:border-box;
-  padding:3px 10px 3px 3px;border-radius:999px;
+  padding:4px 10px 4px 4px;border-radius:999px;
   background:#0A66C2;color:#fff;
-  font-size:11.5px;font-weight:700;letter-spacing:0.01em;
+  font-size:11.5px;font-weight:700;letter-spacing:0.01em;line-height:1;
   white-space:nowrap;vertical-align:middle;
   box-shadow:0 1px 2px rgba(10,102,194,.28);
+}
+.not-on-linkedin-badge__logo,
+.not-on-linkedin-badge__text{
+  position:relative;top:0.5px; /* optical vertical center in the pill */
 }
 .not-on-linkedin-badge__logo{
   display:inline-grid;place-items:center;
@@ -217,8 +221,7 @@ body.match-setup-open,body.profile-gate-open{overflow:hidden;touch-action:none}
 }
 .not-on-linkedin-badge__logo svg{display:block;width:11px;height:11px}
 .not-on-linkedin-badge__text{
-  display:inline-grid;place-items:center start;
-  height:18px;line-height:18px;font-size:inherit;
+  display:block;line-height:18px;height:18px;font-size:inherit;
   overflow:hidden;text-overflow:ellipsis;
 }
 .v8-title-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
