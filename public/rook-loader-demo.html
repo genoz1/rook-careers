@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex">
+  <title>ROOK loader preview</title>
+  <link rel="stylesheet" href="rook-brand.css?v=1">
+  <style>
+    body{
+      min-height:100vh;margin:0;display:grid;place-items:center;
+      background:linear-gradient(160deg,#071E41 0%,#0B2858 45%,#1463FF 140%);
+      color:#fff;font-family:var(--rook-font);
+    }
+    .wrap{text-align:center;padding:32px}
+    h1{margin:0 0 8px;font-size:22px;font-weight:700;letter-spacing:-0.02em}
+    p{margin:0 0 28px;color:#9CC4FF;font-size:14px;font-weight:600}
+    .row{display:flex;gap:36px;align-items:flex-end;justify-content:center;flex-wrap:wrap}
+    .item{display:flex;flex-direction:column;align-items:center;gap:12px}
+    .item span{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#AEB9CF}
+    .panel{
+      margin-top:36px;background:#fff;color:#0b2858;border-radius:18px;
+      padding:28px 24px;min-width:min(360px,90vw);
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>ROOK loading mark</h1>
+    <p>Orbiting ring around the circular logo</p>
+    <div class="row">
+      <div class="item">
+        <div class="rook-loader rook-loader--sm" aria-hidden="true">
+          <span class="rook-loader__ring"></span>
+          <img class="rook-loader__mark" src="assets/rook-logo-circle-64.png" alt="">
+        </div>
+        <span>Small</span>
+      </div>
+      <div class="item">
+        <div class="rook-loader" aria-hidden="true">
+          <span class="rook-loader__ring"></span>
+          <img class="rook-loader__mark" src="assets/rook-logo-circle-96.png" alt="">
+        </div>
+        <span>Default</span>
+      </div>
+      <div class="item">
+        <div class="rook-loader rook-loader--lg" aria-hidden="true">
+          <span class="rook-loader__ring"></span>
+          <img class="rook-loader__mark" src="assets/rook-logo-circle-180.png" alt="">
+        </div>
+        <span>Large</span>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="rook-loader-block" style="padding:8px">
+        <div class="rook-loader rook-loader--lg" aria-hidden="true">
+          <span class="rook-loader__ring"></span>
+          <img class="rook-loader__mark" src="assets/rook-logo-circle-180.png" alt="">
+        </div>
+        <div>Finding your best matches…</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
