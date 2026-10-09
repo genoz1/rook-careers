@@ -648,21 +648,31 @@
   function selectedIndustries() {
     return Array.from(document.querySelectorAll('.dash-filter-category:checked'), el => el.value);
   }
-  function initializeIndustryFilters(profile) {
-    if (industryFiltersInitialized) return;
-    industryFiltersInitialized = true;
-    const desired = RookJobClassification.normalizeSelection(profile?.desired_industries);
+  // Keep the Industry Preference dropdown, More-filters checkboxes, and
+  // GET /jobs?industries= in lockstep. Reported directly: switching
+  // Veterinary → Diagnostics saved the preference and reloaded jobs, but
+  // checkboxes/`showAllIndustries` stayed on Veterinary — so /jobs only
+  // returned the Vet pool and the first paint was ~3 dual-category
+  // excellent/strong matches until a later full refresh showed Diagnostics.
+  function syncIndustryFiltersFromSelection(desiredLabels) {
+    const desired = RookJobClassification.normalizeSelection(desiredLabels);
     const taxonomySize = (window.RookMatchSetup?.INDUSTRIES || []).length || 9;
-    // Explicit full-taxonomy "All industries" (or legacy empty) keeps the All view.
-    // A real subset preference scopes the first load so new members see relevant jobs.
+    industryFiltersInitialized = true;
     if (!desired.length || desired.length >= taxonomySize) {
       showAllIndustries = true;
+      document.querySelectorAll('.dash-filter-category').forEach((box) => { box.checked = true; });
     } else {
       showAllIndustries = false;
       document.querySelectorAll('.dash-filter-category').forEach((box) => {
         box.checked = desired.some((label) => label.toLowerCase() === String(box.value).toLowerCase());
       });
     }
+  }
+  function initializeIndustryFilters(profile) {
+    if (industryFiltersInitialized) return;
+    // Explicit full-taxonomy "All industries" (or legacy empty) keeps the All view.
+    // A real subset preference scopes the first load so new members see relevant jobs.
+    syncIndustryFiltersFromSelection(profile?.desired_industries);
   }
   const industryPreferenceControl = document.getElementById('memberIndustryPreference');
   const industryStatus = document.getElementById('memberIndustryStatus');
@@ -691,6 +701,11 @@
   industryPreferenceControl.addEventListener('change', async () => {
     const value = industryPreferenceControl.value;
     setIndustryUpdateState('working');
+    // Sync filters BEFORE /jobs so the fetch uses Diagnostics (etc.), not the
+    // previous Veterinary checkbox scope. Also clear the old list so a slow
+    // recruiter merge cannot append onto the wrong industry pool.
+    syncIndustryFiltersFromSelection(value ? [value] : []);
+    currentJobs = [];
     try {
       const response = await rookApiFetch('/profile', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
@@ -705,6 +720,9 @@
       await window.reloadIndustryJobs({ profileHint: saved });
     } catch {
       industryPreferenceControl.value = industryPreferenceControl.dataset.saved || '';
+      syncIndustryFiltersFromSelection(
+        industryPreferenceControl.value ? [industryPreferenceControl.value] : []
+      );
       showBanner('Could not save your industry preference. Please try again.');
       setIndustryUpdateState('error');
     }
