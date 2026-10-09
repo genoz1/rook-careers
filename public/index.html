@@ -553,8 +553,8 @@
       <div class="eyebrow"><span class="dot"></span> Built exclusively for medical &amp; veterinary sales</div>
       <h1 class="hero-h">Medical Sales Jobs.<br><span class="accent">Without the Endless Searching.</span></h1>
       <p class="hero-sub">ROOK collects current medical and veterinary sales jobs directly from employers and matches them to your territory and experience — see yours in about 2 minutes.</p>
-      <p class="hero-fresh" id="heroFresh">
-        <span class="hero-fresh-num" id="statNewJobs7d">—</span>
+      <p class="hero-fresh" id="heroFresh" hidden>
+        <span class="hero-fresh-num" id="statNewJobs7d"></span>
         <span class="hero-fresh-label">new jobs added in the past 7 days</span>
       </p>
       <div style="margin-bottom:0;">
@@ -963,7 +963,9 @@
       document.getElementById('statJobCount').textContent = data.total_count.toLocaleString() + '+';
     }
     if (Number(data.new_last_7_days) > 0) {
+      const fresh = document.getElementById('heroFresh');
       document.getElementById('statNewJobs7d').textContent = Number(data.new_last_7_days).toLocaleString() + '+';
+      if (fresh) fresh.hidden = false;
     }
   } catch (err) {
     console.error('Could not load homepage job count:', err);
