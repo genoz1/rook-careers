@@ -306,24 +306,25 @@
 
   /* Not on LinkedIn — same polished pill as the member dashboard */
   .not-on-linkedin-badge{
-    display:inline-flex;align-items:center;justify-content:flex-start;gap:7px;
-    max-width:100%;box-sizing:border-box;height:26px;padding:0 11px 0 4px;border-radius:999px;
-    background:#0A66C2;color:#fff;font-size:11.5px;font-weight:700;letter-spacing:0.01em;
-    line-height:1;white-space:nowrap;box-shadow:0 1px 2px rgba(10,102,194,.28);vertical-align:middle;
+    display:inline-flex;align-items:center;gap:6px;max-width:100%;box-sizing:border-box;
+    padding:3px 10px 3px 3px;border-radius:999px;background:#0A66C2;color:#fff;
+    font-size:11.5px;font-weight:700;letter-spacing:0.01em;white-space:nowrap;
+    box-shadow:0 1px 2px rgba(10,102,194,.28);vertical-align:middle;
   }
   .not-on-linkedin-badge__logo{
-    display:inline-flex;align-items:center;justify-content:center;
-    width:18px;height:18px;flex:0 0 18px;border-radius:3px;background:#fff;color:#0A66C2;line-height:0;
+    display:inline-grid;place-items:center;width:18px;height:18px;flex:0 0 18px;
+    border-radius:3px;background:#fff;color:#0A66C2;line-height:0;
   }
   .not-on-linkedin-badge__logo svg{display:block;width:11px;height:11px}
   .not-on-linkedin-badge__text{
-    display:block;line-height:1;overflow:hidden;text-overflow:ellipsis;
-    transform:translateY(-0.5px);
+    display:inline-grid;place-items:center start;height:18px;line-height:18px;
+    overflow:hidden;text-overflow:ellipsis;
   }
   @media(max-width:620px){
-    .not-on-linkedin-badge{height:24px;font-size:10.5px;padding:0 9px 0 3px;gap:6px}
+    .not-on-linkedin-badge{font-size:10.5px;padding:3px 9px 3px 3px;gap:5px}
     .not-on-linkedin-badge__logo{width:16px;height:16px;flex-basis:16px}
     .not-on-linkedin-badge__logo svg{width:10px;height:10px}
+    .not-on-linkedin-badge__text{height:16px;line-height:16px}
   }
 
 </style>
