@@ -459,6 +459,7 @@
       <div class="filter-row" id="tierFilters">
         <span class="chip active" onclick="setTierFilter('all', this)">All</span>
         <span class="chip" onclick="setTierFilter('new', this)">New</span>
+        <span class="chip" onclick="setTierFilter('not_on_linkedin', this)">Not on LinkedIn</span>
         <span class="chip" onclick="setTierFilter('excellent', this)">Excellent Match</span>
         <span class="chip" onclick="setTierFilter('strong', this)">Strong Match</span>
         <span class="chip" onclick="setTierFilter('saved', this)">Saved</span>
@@ -1531,6 +1532,10 @@
       visible = visible.filter((j) => j.saved);
     } else if (currentTierFilter === 'new') {
       visible = visible.filter(isNewJob);
+    } else if (currentTierFilter === 'not_on_linkedin') {
+      visible = visible.filter((j) => j.linkedin_not_on_linkedin === true
+        || j.linkedin_presence_status === 'not_on_linkedin'
+        || j.linkedin_presence_status === 'possible');
     }
 
     if (!showAllIndustries) {

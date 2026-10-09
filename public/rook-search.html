@@ -415,6 +415,7 @@
       <div class="check-row" id="recruiterPostedFilterRow"><input type="checkbox" id="showRecruiterFilter" checked> Show recruiter-posted jobs</div>
       <p id="recruiterPostedFilterHelp" style="font-size:12px;line-height:1.5;color:#5B6B85;">Recruiter-posted jobs are listings only. Recruiters cannot see ROOK job seekers.</p>
       <div class="check-row"><input type="checkbox" id="remoteOnlyFilter"> Remote only</div>
+      <div class="check-row"><input type="checkbox" id="notOnLinkedInFilter"> Only roles not on LinkedIn</div>
     </div>
     <a href="#" class="clear-link" onclick="clearAllFilters(); return false;">Clear all filters</a>
   </aside>
@@ -714,6 +715,7 @@
         keywordDebounce = setTimeout(() => loadJobs(e.target.value.trim()), 400);
       });
       document.getElementById('remoteOnlyFilter').addEventListener('change', applyFiltersAndRender);
+      document.getElementById('notOnLinkedInFilter')?.addEventListener('change', applyFiltersAndRender);
       document.querySelectorAll('.filter-industry').forEach((el) => el.addEventListener('change', () => loadJobs(document.getElementById('filterKeyword').value.trim())));
       document.querySelectorAll('.filter-travel').forEach((el) => el.addEventListener('change', applyFiltersAndRender));
       document.getElementById('filterComp').addEventListener('input', applyFiltersAndRender);
@@ -1000,6 +1002,7 @@
     updateMobileFiltersBadge();
     const keyword = document.getElementById('filterKeyword').value.trim().toLowerCase();
     const remoteOnly = document.getElementById('remoteOnlyFilter').checked;
+    const notOnLinkedInOnly = document.getElementById('notOnLinkedInFilter')?.checked;
     const selectedIndustries = Array.from(document.querySelectorAll('.filter-industry:checked')).map((el) => el.value.toLowerCase());
     const selectedTravel = Array.from(document.querySelectorAll('.filter-travel:checked')).map((el) => el.value);
     const minComp = Number(document.getElementById('filterComp').value) * 1000;
@@ -1017,6 +1020,13 @@
         const loc = (job.location_raw || '').toLowerCase();
         const isRemote = /remote/.test(loc) || job.remote_status === 'remote';
         if (!isRemote) return false;
+      }
+
+      if (notOnLinkedInOnly) {
+        const badge = job.linkedin_not_on_linkedin === true
+          || job.linkedin_presence_status === 'not_on_linkedin'
+          || job.linkedin_presence_status === 'possible';
+        if (!badge) return false;
       }
 
       if (selectedIndustries.length > 0) {
@@ -1138,6 +1148,8 @@
   function clearAllFilters() {
     document.getElementById('filterKeyword').value = '';
     document.getElementById('remoteOnlyFilter').checked = false;
+    const notOnLi = document.getElementById('notOnLinkedInFilter');
+    if (notOnLi) notOnLi.checked = false;
     document.getElementById('radiusSelect').value = '0';
     document.querySelectorAll('.filter-industry, .filter-travel').forEach((el) => (el.checked = false));
     document.getElementById('filterComp').value = 0;

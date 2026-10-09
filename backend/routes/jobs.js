@@ -230,28 +230,143 @@ async function loadEmployerHistory(candidateId) {
 // caller only wants the headline number.
 // Also returns new_last_7_days: active approved jobs ROOK first saw in
 // the past week (first_seen_at), not sparse employer date_posted values.
+// LinkedIn absence rate uses only jobs we actually checked this week
+// (location_evidence.linkedin_presence.status). Badge statuses match
+// the card rule: not_on_linkedin + possible. Unchecked rows are excluded
+// from the denominator so we never invent a % from missing data.
 router.get("/public-job-count", requireConfig, async (req, res) => {
   res.set("Cache-Control", "public, max-age=60");
   const since7d = new Date(Date.now() - 7 * 86400000).toISOString();
-  const [totalResult, weekResult] = await Promise.all([
-    supabaseAdmin
-      .from("jobs")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "active")
-      .eq("moderation_status", "approved"),
-    supabaseAdmin
-      .from("jobs")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "active")
-      .eq("moderation_status", "approved")
-      .gte("first_seen_at", since7d),
+  const activeApproved = (q) => q.eq("status", "active").eq("moderation_status", "approved");
+  const [totalResult, weekResult, checkedResult, notOnResult] = await Promise.all([
+    activeApproved(
+      supabaseAdmin.from("jobs").select("id", { count: "exact", head: true })
+    ),
+    activeApproved(
+      supabaseAdmin.from("jobs").select("id", { count: "exact", head: true }).gte("first_seen_at", since7d)
+    ),
+    activeApproved(
+      supabaseAdmin
+        .from("jobs")
+        .select("id", { count: "exact", head: true })
+        .gte("first_seen_at", since7d)
+        .or(
+          "location_evidence->linkedin_presence->>status.eq.not_on_linkedin," +
+          "location_evidence->linkedin_presence->>status.eq.possible," +
+          "location_evidence->linkedin_presence->>status.eq.on_linkedin"
+        )
+    ),
+    activeApproved(
+      supabaseAdmin
+        .from("jobs")
+        .select("id", { count: "exact", head: true })
+        .gte("first_seen_at", since7d)
+        .or(
+          "location_evidence->linkedin_presence->>status.eq.not_on_linkedin," +
+          "location_evidence->linkedin_presence->>status.eq.possible"
+        )
+    ),
   ]);
   if (totalResult.error) return res.status(500).json({ error: totalResult.error.message });
   if (weekResult.error) return res.status(500).json({ error: weekResult.error.message });
+  if (checkedResult.error) return res.status(500).json({ error: checkedResult.error.message });
+  if (notOnResult.error) return res.status(500).json({ error: notOnResult.error.message });
+  const linkedinChecked = checkedResult.count || 0;
+  const linkedinNotOn = notOnResult.count || 0;
+  // Need a meaningful sample before claiming a percentage publicly.
+  const linkedinNotOnPct = linkedinChecked >= 20
+    ? Math.round((100 * linkedinNotOn) / linkedinChecked)
+    : null;
   res.json({
     total_count: totalResult.count || 0,
     new_last_7_days: weekResult.count || 0,
+    linkedin_checked_last_7_days: linkedinChecked,
+    linkedin_not_on_last_7_days: linkedinNotOn,
+    linkedin_not_on_pct: linkedinNotOnPct,
   });
+});
+
+// GET /api/public-live-finds — recent career-site finds for marketing
+// surfaces. Same masking contract as pretrial cards: generalized role +
+// location + freshness only. Employer names stay locked.
+const LIVE_FINDS_SELECT = [
+  "id",
+  "title_original",
+  "title_normalized",
+  "location_raw",
+  "city",
+  "state",
+  "territory",
+  "remote_status",
+  "location_evidence",
+  "ai_analysis",
+  "industry",
+  "category",
+  "subcategory",
+  "sales_type",
+  "date_posted",
+  "first_seen_at",
+].join(",");
+const liveFindsCache = { at: 0, payload: null };
+const LIVE_FINDS_TTL_MS = 60 * 1000;
+
+function relativeFindLabel(iso) {
+  const ms = Date.now() - new Date(iso || 0).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return "Just now";
+  const mins = Math.floor(ms / 60000);
+  if (mins < 1) return "Just now";
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return "1 day ago";
+  if (days < 7) return `${days} days ago`;
+  return freshness({ first_seen_at: iso, date_posted: iso }, Date.now(), true) || "Recently found";
+}
+
+router.get("/public-live-finds", requireConfig, async (req, res) => {
+  res.set("Cache-Control", "public, max-age=60");
+  if (liveFindsCache.payload && Date.now() - liveFindsCache.at < LIVE_FINDS_TTL_MS) {
+    return res.json(liveFindsCache.payload);
+  }
+  const limit = Math.min(12, Math.max(4, Number(req.query.limit) || 8));
+  const { data, error } = await supabaseAdmin
+    .from("jobs")
+    .select(LIVE_FINDS_SELECT)
+    .eq("status", "active")
+    .eq("moderation_status", "approved")
+    .order("first_seen_at", { ascending: false })
+    .limit(40);
+  if (error) return res.status(500).json({ error: error.message });
+
+  const finds = [];
+  const seen = new Set();
+  for (const job of data || []) {
+    if (!isUsEligibleJob(job)) continue;
+    const role = generalizedRole(job);
+    if (!role) continue;
+    const location = safeLocationLabel(job) || (job.remote_status === "remote" ? "Remote · US" : "United States");
+    const industryLabels = (classify(job).labels || []).slice(0, 2);
+    const key = `${role.toLowerCase()}|${location.toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const presence = projectPresenceFields(job);
+    finds.push({
+      role_title: role,
+      location_label: location,
+      industry_labels: industryLabels,
+      found_ago_label: relativeFindLabel(job.first_seen_at || job.date_posted),
+      freshness_label: freshness(job, Date.now(), true) || freshness(job),
+      employer_hidden: true,
+      linkedin_not_on_linkedin: presence.linkedin_not_on_linkedin === true,
+    });
+    if (finds.length >= limit) break;
+  }
+
+  const payload = { finds, cached_for_seconds: LIVE_FINDS_TTL_MS / 1000 };
+  liveFindsCache.at = Date.now();
+  liveFindsCache.payload = payload;
+  res.json(payload);
 });
 
 // GET /api/public-featured-jobs — a few masked marketing cards for the

@@ -111,9 +111,40 @@ $('locationForm').onsubmit=async e=>{
   }
 };
 $('jobSearch').oninput=render;
+async function loadLinkedInProof(){
+  const el=$('linkedinProof'); if(!el) return;
+  try{
+    const r=await fetch('/api/public-job-count',{cache:'no-store'});
+    if(!r.ok) return;
+    const data=await r.json();
+    const pct=Number(data.linkedin_not_on_pct);
+    if(!(pct>0)) return;
+    el.innerHTML=`<strong>${pct}%</strong> of roles we checked this week aren’t on LinkedIn`;
+    el.hidden=false;
+  }catch(_){}
+}
+async function loadLiveFinds(){
+  const wrap=$('liveFinds'), list=$('liveFindsList');
+  if(!wrap||!list) return;
+  try{
+    const r=await fetch('/api/public-live-finds?limit=5',{cache:'no-store'});
+    if(!r.ok) return;
+    const data=await r.json();
+    const finds=Array.isArray(data.finds)?data.finds:[];
+    if(!finds.length) return;
+    list.innerHTML=finds.map(f=>{
+      const meta=[f.location_label,(f.industry_labels||[]).slice(0,1).join('')].filter(Boolean).join(' · ');
+      const badge=f.linkedin_not_on_linkedin?' · Not on LinkedIn':'';
+      return `<li class="live-find"><span class="live-find-ago">${esc(f.found_ago_label||'Recently')}</span><div><div class="live-find-role">New ${esc(f.role_title||'medical sales role')} found</div><div class="live-find-meta">${esc(meta)}${badge}</div></div><span class="live-find-lock">Employer hidden</span></li>`;
+    }).join('');
+    wrap.hidden=false;
+  }catch(_){}
+}
 async function init(){
   track('acquisition_landing_viewed');
   skeletons();
+  loadLinkedInProof();
+  loadLiveFinds();
   const {data:{session}}=await rookSupabase.auth.getSession();
   if(session)try{
     const r=await rookApiFetch('/profile');
