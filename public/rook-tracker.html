@@ -110,13 +110,15 @@
     .board{grid-template-columns:1fr 1fr 1fr;}
   }
 </style>
+<link rel="stylesheet" href="rook-brand.css?v=1">
 </head>
 <body>
 
 <div class="mobile-app-bar">
-  <div class="logo" style="gap:8px;">
-    <img src="assets/rook-icon-192.png" alt="ROOK"><span style="font-family:var(--font-display); font-weight:700; letter-spacing:-0.02em; color:#EDF3FF; line-height:1;">ROOK</span>
-  </div>
+  <a href="rook-dashboard-v8.html" class="rook-brand rook-brand--compact rook-brand--light" aria-label="ROOK home">
+    <img class="rook-brand__mark" src="assets/rook-logo-circle-96.png" alt="">
+    <span class="rook-brand__word"><strong>ROOK</strong><small>Medical Sales</small></span>
+  </a>
   <button type="button" class="mobile-menu-btn" onclick="document.querySelector('.sidebar').classList.toggle('mobile-open')" aria-label="Menu">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
   </button>
@@ -127,9 +129,10 @@
     <button type="button" onclick="document.querySelector('.sidebar').classList.remove('mobile-open')" aria-label="Close menu" class="mobile-close-btn">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><path d="M18 6L6 18M6 6l12 12"/></svg>
     </button>
-    <div class="logo" style="gap:8px;">
-      <img src="assets/rook-icon-192.png" alt="ROOK" style="height:43px; width:auto; display:block;"><span style="font-family:var(--font-display); font-weight:700; font-size:36px; letter-spacing:-0.02em; color:#EDF3FF; line-height:1;">ROOK</span>
-    </div>
+    <a href="rook-dashboard-v8.html" class="rook-brand rook-brand--light" aria-label="ROOK home" style="margin-bottom:28px;padding:0 6px;">
+      <img class="rook-brand__mark" src="assets/rook-logo-circle-96.png" alt="">
+      <span class="rook-brand__word"><strong>ROOK</strong><small>Medical Sales</small></span>
+    </a>
     <nav class="side-nav">
       <a href="rook-dashboard.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l9-9 9 9M5 10v10h14V10"/></svg>Dashboard</a>
       <a href="rook-search.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>Job Search</a>

@@ -21,7 +21,7 @@
     :root{--navy:#062d55;--blue:#0877d1;--teal:#12b8a6;--muted:#587283;--line:#dbe8f0;--ink:#0d2035;--bg:#f4f9fd;--paper:#fff;--radius:14px;--font:Inter,system-ui,sans-serif}
     body{font-family:var(--font);background:var(--bg);color:var(--ink);min-height:100vh;display:flex;flex-direction:column;align-items:center}
     nav{width:100%;background:var(--navy);padding:14px 24px;display:flex;align-items:center;justify-content:space-between}
-    .brand img{display:block;width:142px;max-height:40px;object-fit:contain}.secure{display:flex;align-items:center;gap:6px;color:#ffffff99;font-size:12px;font-weight:600}
+    .brand img{display:block;width:44px;height:44px;border-radius:50%;object-fit:cover;background:#fff}.secure{display:flex;align-items:center;gap:6px;color:#ffffff99;font-size:12px;font-weight:600}
     main{width:100%;max-width:480px;padding:32px 20px 64px;display:flex;flex-direction:column;gap:20px}
     .header{text-align:center}.badge{display:inline-flex;align-items:center;background:#12b8a61f;color:#0d7a6e;font-size:12px;font-weight:800;padding:6px 12px;border-radius:99px;margin-bottom:14px;text-transform:uppercase;letter-spacing:.05em}
     h1{font-size:28px;font-weight:800;color:var(--navy);line-height:1.16;margin-bottom:10px}.lead{font-size:14.5px;color:var(--muted);line-height:1.62}.lead+.lead{margin-top:7px}
@@ -31,11 +31,12 @@
     .error{color:#c0392b;font-size:13px;font-weight:600;text-align:center;min-height:18px}.pay{width:100%;background:var(--blue);color:#fff;font:800 15px var(--font);border:0;border-radius:99px;padding:16px 24px;cursor:pointer;transition:opacity .15s,transform .1s}.pay:hover{opacity:.92}.pay:active{transform:scale(.98)}.pay:disabled{opacity:.55;cursor:not-allowed;transform:none}
     .support{text-align:center;color:var(--muted);font-size:12px;font-weight:600}.terms{text-align:center;color:var(--muted);font-size:11px;line-height:1.58}.terms a{color:var(--blue)}
     .success{display:none;text-align:center;background:var(--paper);border:1.5px solid var(--line);border-radius:var(--radius);padding:38px 22px}.success-mark{width:52px;height:52px;border-radius:50%;display:grid;place-items:center;margin:0 auto 14px;background:#e5f7ef;color:#147257;font-size:27px;font-weight:900}.success h2{color:var(--navy);margin-bottom:8px}.success p{color:var(--muted);font-size:14px}
-    @media(max-width:420px){nav{padding:12px 16px}.brand img{width:124px}.secure{font-size:11px}main{padding:25px 16px 48px;gap:16px}h1{font-size:25px}.price,.card{padding:17px}.card-row{grid-template-columns:1fr}}
+    @media(max-width:420px){nav{padding:12px 16px}.brand img{width:40px;height:40px}.secure{font-size:11px}main{padding:25px 16px 48px;gap:16px}h1{font-size:25px}.price,.card{padding:17px}.card-row{grid-template-columns:1fr}}
   </style>
+<link rel="stylesheet" href="rook-brand.css?v=1">
 </head>
 <body>
-  <nav><a class="brand" href="/"><img src="assets/rook-full-logo-900.png" alt="ROOK — Smarter Careers. Better Matches."></a><div class="secure">🔒 Secured by Stripe</div></nav>
+  <nav><a class="brand" href="/"><img src="assets/rook-logo-circle-180.png" alt="ROOK Medical Sales Careers"></a><div class="secure">🔒 Secured by Stripe</div></nav>
   <main>
     <section id="checkout">
       <div class="header"><div class="badge">Membership</div><h1>KEEP YOUR ROOK ACCESS</h1><p class="lead">Your free access has ended — but your ROOK account is still here.</p><p class="lead">Your matches, saved jobs, profile, and personalized job search are waiting for you.</p></div>
