@@ -309,7 +309,7 @@
   .rook-tour-next{background:#1463ff;color:#fff}
   @media(max-width:900px){.rook-tour-card{left:16px!important;right:16px!important;bottom:98px!important;top:auto!important;width:auto}.rook-tour-highlight{z-index:1004!important}}
 </style>
-<link rel="stylesheet" href="rook-v8-member.css?v=8">
+<link rel="stylesheet" href="rook-v8-member.css?v=9">
 <link rel="stylesheet" href="rook-employer-logos-v8.css?v=2">
 </head>
 <body>
@@ -1704,11 +1704,18 @@
       ? `<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;background:#FFF3E0;color:#E65100;border:1px solid #FFB74D;margin-bottom:6px;">🔥 Just Posted</span>`
       : '';
 
+    // Card background stays on the existing Just Posted / recruiter rules —
+    // "Not on LinkedIn" is a badge only so it never fights the yellow tint.
     const rowStyle = (isRecruiterPosted || isAgencySourced)
       ? 'border-left:4px solid #7C3AED; background:#FAF8FF;'
       : hoursOld <= 72
         ? 'border-left:4px solid #FB8C00; background:#FFFBF5;'
         : '';
+
+    const notOnLinkedIn = job.linkedin_not_on_linkedin === true || job.linkedin_presence_status === 'not_on_linkedin';
+    const notOnLinkedInBadge = notOnLinkedIn
+      ? `<span class="not-on-linkedin-badge" title="We could not find this role on LinkedIn job search">Not on LinkedIn</span>`
+      : '';
 
     const recruiterBadge = isRecruiterPosted
       ? `<span style="font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:99px; background:#7C3AED18; color:#7C3AED; text-transform:uppercase; letter-spacing:0.02em;">Posted by Recruiter</span>`
@@ -1783,7 +1790,7 @@
        <div class="v8-card-face v8-card-front">
         <div class="v8-card-head">
           <div class="score-ring" style="--pct:${scorePct};" aria-label="${scoreBasis}: ${scoreDisplay}"><span>${scoreDisplay}</span></div>
-          <div class="v8-card-head-right">${justPostedBadge}<span class="v8-posted">${job.date_posted ? 'Posted ' + escapeHtml(job.date_posted) : escapeHtml(job.freshness_label || '')}</span></div>
+          <div class="v8-card-head-right">${justPostedBadge}${notOnLinkedInBadge}<span class="v8-posted">${job.date_posted ? 'Posted ' + escapeHtml(job.date_posted) : escapeHtml(job.freshness_label || '')}</span></div>
         </div>
         <div class="job-info">
           <div class="v8-employer-identity">

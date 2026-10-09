@@ -38,6 +38,11 @@ function project(job, index=0, options={}) {
     (job.remote_status === 'remote' ? territory.remote : territory[String(job.territory || '').toLowerCase()] || null);
   // Locked surfaces always receive a useful generalized role and validated
   // geography. Synthetic blur fragments remain dashboard-only.
+  // "Not on LinkedIn" is a boolean inventory signal, not employer identity —
+  // safe on locked cards and useful as a conversion differentiator.
+  const linkedinStatus = job.linkedin_presence_status
+    || job.location_evidence?.linkedin_presence?.status
+    || null;
   return {
     id:`locked-${Number.isInteger(index) && index>=0 ? index : 0}`,
     subscription_required:true,
@@ -50,6 +55,8 @@ function project(job, index=0, options={}) {
     distance_miles:number(job.distance_miles) == null || job.distance_miles<0 ? null : Math.round(job.distance_miles),
     territory_type:territoryType,
     freshness_label:freshness(job,Date.now(),!!options.dashboard),
+    linkedin_presence_status: linkedinStatus === 'not_on_linkedin' ? 'not_on_linkedin' : null,
+    linkedin_not_on_linkedin: linkedinStatus === 'not_on_linkedin',
     match:{overall_score:score(job.match?.overall_score),preference_fit:score(job.match?.preference_fit),
       candidate_fit:score(job.match?.candidate_fit),excellent_match:job.match?.excellent_match===true,
       recommendation:['Strong Match','Apply','Stretch Apply','Skip'].includes(job.match?.recommendation) ? job.match.recommendation : null,

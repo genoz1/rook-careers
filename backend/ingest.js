@@ -805,6 +805,25 @@ async function runEmployerLoop(startedAt, employerFilter, options = {}) {
     console.log('INGEST_RUN_END', JSON.stringify({ run_id: runId, status: outcome, ...summary }));
   }
   const result = { run_id: runId, status: outcome, summary };
+  // After a scheduled ingest that inserted jobs, kick off the $0 LinkedIn
+  // guest-search presence check in a detached process so it never extends
+  // this job's execution deadline. Disable with LINKEDIN_PRESENCE_AFTER_INGEST=0.
+  const inserted = Number(summary.totals?.inserted || 0);
+  const afterIngest = process.env.LINKEDIN_PRESENCE_AFTER_INGEST !== '0';
+  if (!employerFilter && afterIngest && inserted > 0 && outcome !== 'failed') {
+    try {
+      const { spawn } = require('node:child_process');
+      const child = spawn(
+        process.execPath,
+        [require('path').join(__dirname, 'scripts/checkLinkedInPresence.js'), '--since-hours=18', '--write'],
+        { detached: true, stdio: 'ignore', env: process.env }
+      );
+      child.unref();
+      console.log('LINKEDIN_PRESENCE_SPAWNED', JSON.stringify({ run_id: runId, inserted }));
+    } catch (error) {
+      console.error('LINKEDIN_PRESENCE_SPAWN_FAILED', error.message);
+    }
+  }
   // The independent web-service watchdog owns diagnosis and notifications;
   // those operations cannot extend this scheduled job's execution deadline.
   return result;

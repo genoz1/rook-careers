@@ -19,6 +19,12 @@ async function validateJobLocation(job,geocode=geocodeLocation,previous=null) {
   if(same&&old.version===VERSION&&old.source_title===normalized(job.title_original)&&old.source_description_hash===descriptionHash&&old.status==='validated'&&!old.incomplete&&cityValid&&age>=0&&age<30*86400000)return {job_lat:previous.job_lat,job_lng:previous.job_lng,state:previous.state,location_evidence:old};
   // Preserve validated legacy points only against exactly the same source.
   const input=same&&!descriptionBacked?{...job,job_lat:previous.job_lat,job_lng:previous.job_lng,state:previous.state,location_evidence:{...old,version:1,scope:undefined}}:job;
-  return resolveLocation(input,geocode);
+  const resolved=await resolveLocation(input,geocode);
+  // Keep LinkedIn presence annotation across location re-validation. The
+  // checker writes location_evidence.linkedin_presence; adapters never set it.
+  if(old?.linkedin_presence&&resolved?.location_evidence&&!resolved.location_evidence.linkedin_presence){
+    resolved.location_evidence={...resolved.location_evidence,linkedin_presence:old.linkedin_presence};
+  }
+  return resolved;
 }
 module.exports={validateJobLocation};

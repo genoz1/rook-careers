@@ -29,6 +29,7 @@ const { createClient } = require("@supabase/supabase-js");
 const { hasFullAccess, stateAbbrFromName } = require("../matching");
 const { scoreLiveJob } = require("../liveScoring");
 const { scrubCompanyNameFromText, redactForNonSubscriber, redactForAnonymous } = require("../redaction");
+const { projectPresenceFields } = require("../linkedinJobPresence");
 const {prepareJob,allowsBroadLocations} = require('../v7Location');
 const { isUsEligibleJob } = require("../jobEligibility");
 const { fetchActiveJobs } = require("../scoring/precompute");
@@ -167,7 +168,8 @@ function matchFromRow(row) {
 // scores, reasons, and ranking are entirely unaffected - only the
 // unused payload size changes.
 function stripUnusedDescriptionFields(job) {
-  if (job.subscription_required) return job;
+  const linkedinPresence = projectPresenceFields(job);
+  if (job.subscription_required) return { ...job, ...linkedinPresence };
   // Compute list-facing projections before dropping the heavy source blobs.
   // ai_analysis alone is often several KB per row — with limit=300 that was
   // megabytes of JSON the dashboard never renders (it uses industry_classification).
@@ -185,7 +187,7 @@ function stripUnusedDescriptionFields(job) {
     experience_min_years, experience_max_years, travel_percentage, overnight_travel,
     ...rest
   } = job;
-  return { ...rest, territory_locations, industry_classification };
+  return { ...rest, territory_locations, industry_classification, ...linkedinPresence };
 }
 
 // Builds the employer_note map (spec factor #43, employer-history

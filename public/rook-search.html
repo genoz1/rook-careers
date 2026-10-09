@@ -1170,6 +1170,9 @@
     const newBadge = isNewJob(job)
       ? `<span style="font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:99px; background:#E8F0FE; color:#1463FF; text-transform:uppercase; letter-spacing:0.02em; margin-left:8px;">New</span>`
       : '';
+    const notOnLinkedInBadge = (job.linkedin_not_on_linkedin === true || job.linkedin_presence_status === 'not_on_linkedin')
+      ? `<span class="not-on-linkedin-badge" style="display:inline-flex;align-items:center;font-size:10.5px;font-weight:800;padding:3px 9px;border-radius:8px;background:#E7F6F2;color:#0A5C4F;border:1.5px solid #0A5C4F;text-transform:uppercase;letter-spacing:0.03em;margin-left:8px;">Not on LinkedIn</span>`
+      : '';
     const companyLine = job.subscription_required
       ? `<span style="color:#7C3AED; font-weight:600;">🔒 Subscribe to see who's hiring</span> — ${escapeHtml(job.location_raw || '')} ${comp ? '&nbsp;·&nbsp; ' + escapeHtml(comp) : ''}`
       : `${escapeHtml(job.company_name || (isRecruiterPosted ? 'Confidential search' : ''))} — ${escapeHtml(job.location_raw || '')} ${comp ? '&nbsp;·&nbsp; ' + escapeHtml(comp) : ''}`;
@@ -1187,7 +1190,7 @@
     return `
       <div class="job-row" style="${rowStyle}">
         <div class="job-info">
-          <h4>${escapeHtml(job.title_original || job.title_normalized || 'Untitled role')}${newBadge}${recruiterBadge}</h4>
+          <h4>${escapeHtml(job.title_original || job.title_normalized || 'Untitled role')}${newBadge}${notOnLinkedInBadge}${recruiterBadge}</h4>
           <div class="company">${companyLine}</div>
           ${nearDistance}
           ${tags ? `<div class="tag-row">${tags}${expandToggle}</div>` : ''}
