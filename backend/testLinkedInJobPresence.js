@@ -73,9 +73,10 @@ test("ambiguous weak_title overlaps stay possible (no badge)", () => {
     state: "CA",
   };
   const cards = [
-    { title: "Sales Representative", company: "Other Co", loc: "Brea, CA", href: "https://www.linkedin.com/jobs/view/3" },
+    { title: "Territory Sales Manager West", company: "Completely Different Inc", loc: "Brea, CA", href: "https://www.linkedin.com/jobs/view/3" },
   ];
   const result = classifyPresence(job, cards);
+  assert.equal(result.why, "weak_title");
   assert.equal(result.status, "possible");
   assert.equal(shouldShowNotOnLinkedInBadge(result), false);
 });
