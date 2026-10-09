@@ -217,8 +217,9 @@ body.match-setup-open,body.profile-gate-open{overflow:hidden;touch-action:none}
 }
 .not-on-linkedin-badge__logo svg{display:block;width:11px;height:11px}
 .not-on-linkedin-badge__text{
-  display:inline-flex;align-items:center;height:100%;
-  line-height:1;overflow:hidden;text-overflow:ellipsis;
+  display:block;line-height:1;overflow:hidden;text-overflow:ellipsis;
+  /* Optical center: Inter/system caps sit low in the em box vs the logo tile. */
+  transform:translateY(-0.5px);
 }
 .v8-title-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
 .v8-title-row h4{margin:0;min-width:0;overflow-wrap:anywhere}
