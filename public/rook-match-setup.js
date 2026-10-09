@@ -132,7 +132,7 @@
     overlay.setAttribute('aria-labelledby', 'matchSetupTitle');
     overlay.innerHTML = `
       <div class="match-setup-card">
-        <img class="match-setup-brand" src="assets/rook-full-logo-900.png" alt="ROOK">
+        <img class="match-setup-brand" src="assets/rook-logo-circle-180.png" alt="ROOK Medical Sales Careers">
         <p class="match-setup-step" id="matchSetupStepLabel">Step 1 of 2</p>
         <h2 id="matchSetupTitle">Set up your job matches</h2>
         <p class="match-setup-lead" id="matchSetupLead">Tell us where you want to search so we can show the right opportunities.</p>
