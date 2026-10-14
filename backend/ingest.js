@@ -613,6 +613,10 @@ const {
   NEVER_CHECKED_RESERVE_MS,
   orderEmployersForIngest,
   employerTimeBudgetMs,
+  overnightWindowStart,
+  isInOvernightWindow,
+  checkedBeforeWindow,
+  shouldApplyNightFinishPressure,
 } = require('./ingestScheduling');
 
 // Guards against two overlapping `npm run ingest` invocations (e.g. a
@@ -726,8 +730,26 @@ async function runEmployerLoop(startedAt, employerFilter, options = {}) {
     throw new Error(`No active employer matched "${employerFilter}".`);
   }
 
-  const employers = employerFilter ? loadedEmployers : orderEmployersForIngest(loadedEmployers);
+  // Overnight runs (23:00–05:30 Eastern) order by "not yet checked tonight"
+  // so the window finishes a full sweep instead of re-checking early-night
+  // employers while a few remain untouched.
+  const now = new Date(startedAt);
+  const inOvernightWindow = !employerFilter && isInOvernightWindow(now);
+  const windowStart = inOvernightWindow ? overnightWindowStart(now) : null;
+  const windowStartIso = windowStart ? windowStart.toISOString() : null;
+  const employers = employerFilter
+    ? loadedEmployers
+    : orderEmployersForIngest(loadedEmployers, { windowStart });
   console.log(`Found ${employers.length} active employer(s) to sync.\n`);
+  if (inOvernightWindow) {
+    const pendingTonight = employers.filter(
+      (e) => !e.ingestion_hold_reason && checkedBeforeWindow(e, windowStartIso)
+    ).length;
+    console.log(
+      `OVERNIGHT_SWEEP window_start=${windowStartIso} pending_tonight=${pendingTonight} ` +
+        `(held deferred until pending clear)\n`
+    );
+  }
 
   // Reported directly as a real need: with the employer list roughly
   // doubling in one session (mostly never-synced employers), the ingest
@@ -755,7 +777,14 @@ async function runEmployerLoop(startedAt, employerFilter, options = {}) {
   const { randomUUID } = require('node:crypto');
   const runId = randomUUID();
   const entries = employers.map(e => ({ employer_id: e.id, name: e.company_name, status: 'not_reached' }));
-  const summary = { employers: entries, totals: {}, counts_complete: true, manual: !!employerFilter };
+  const summary = {
+    employers: entries,
+    totals: {},
+    counts_complete: true,
+    manual: !!employerFilter,
+    overnight: inOvernightWindow,
+    overnight_window_start: windowStartIso,
+  };
   const started = new Date(startedAt).toISOString();
   const persist = async (status, ended = null) => {
     const { error } = await supabase.from('ingestion_runs').upsert({ id: runId, started_at: started, ended_at: ended, status, summary }, { onConflict: 'id' });
@@ -764,32 +793,83 @@ async function runEmployerLoop(startedAt, employerFilter, options = {}) {
   await persist('running');
   const worker = options.worker || require('./ingestDeadline').boundedEmployer;
   let outcome = 'completed';
+  let sawErrors = false;
   try {
     for (let index = 0; index < employers.length; index++) {
       const elapsedMs = Date.now() - startedAt;
       const remaining = TIME_BUDGET_MS - elapsedMs;
       if (remaining < 5000) { outcome = 'budget_exhausted'; break; }
       const employer = employers[index], entry = entries[index];
-      const neverSyncedRemaining = employers.slice(index).filter((row) => !row.last_checked_at).length;
-      const timeoutMs = employerTimeBudgetMs(employer, remaining, { neverSyncedRemaining, elapsedMs });
+
+      // Overnight: once every non-held employer has been checked tonight,
+      // briefly visit held skips, then stop as night_complete instead of
+      // burning the rest of the 25-minute budget on a second pass.
+      if (
+        inOvernightWindow &&
+        !employer.ingestion_hold_reason &&
+        employer.last_checked_at &&
+        !checkedBeforeWindow(employer, windowStartIso)
+      ) {
+        summary.night_complete = true;
+        outcome = sawErrors ? 'completed_with_errors' : 'completed';
+        console.log('OVERNIGHT_SWEEP_COMPLETE', JSON.stringify({
+          run_id: runId,
+          window_start: windowStartIso,
+          attempted_before_second_pass: index,
+        }));
+        break;
+      }
+
+      const remainingSlice = employers.slice(index);
+      const neverSyncedRemaining = remainingSlice.filter((row) => !row.last_checked_at).length;
+      const pendingTonightRemaining = inOvernightWindow
+        ? remainingSlice.filter((row) => !row.ingestion_hold_reason && checkedBeforeWindow(row, windowStartIso)).length
+        : 0;
+      const nightFinishPressure = shouldApplyNightFinishPressure(new Date(), { pendingTonightRemaining });
+      const timeoutMs = employerTimeBudgetMs(employer, remaining, {
+        neverSyncedRemaining,
+        elapsedMs,
+        pendingTonightRemaining,
+        nightFinishPressure,
+      });
       entry.status = 'running'; entry.started_at = new Date().toISOString();
       entry.timeout_ms = timeoutMs;
       await persist('running');
       console.log('INGEST_EMPLOYER_START', JSON.stringify({
         run_id: runId, employer_id: employer.id, timeout_ms: timeoutMs,
         never_synced_remaining: neverSyncedRemaining,
+        pending_tonight_remaining: pendingTonightRemaining,
+        night_finish_pressure: nightFinishPressure,
       }));
       const result = await require('./ingestionRecovery').recoverEmployer(employer, timeoutMs, worker);
       Object.assign(entry, result, { ended_at: new Date().toISOString() });
+      // Keep in-memory ordering state current so later night_complete checks
+      // see employers already visited in this run as done-tonight.
+      employer.last_checked_at = entry.ended_at;
       if (result.counts_complete === false) summary.counts_complete = false;
       for (const [key, count] of Object.entries(result.metrics || {})) summary.totals[key] = (summary.totals[key] || 0) + count;
       if (['timeout','failed'].includes(result.status)) {
+        sawErrors = true;
         outcome = 'completed_with_errors';
         const { error } = await supabase.from('employers').update({ sync_status: 'error', last_checked_at: entry.ended_at }).eq('id', employer.id);
         if (error) entry.status_write_error = error.message;
       }
       await persist('running');
       console.log('INGEST_EMPLOYER_END', JSON.stringify({ run_id: runId, ...entry }));
+    }
+    if (inOvernightWindow && !summary.night_complete) {
+      const pendingLeft = employers.filter((e, index) =>
+        !e.ingestion_hold_reason &&
+        checkedBeforeWindow(e, windowStartIso) &&
+        entries[index].status === 'not_reached'
+      ).length;
+      if (pendingLeft === 0) {
+        summary.night_complete = true;
+        if (outcome === 'budget_exhausted') {
+          outcome = sawErrors ? 'completed_with_errors' : 'completed';
+        }
+      }
+      summary.pending_tonight_remaining = pendingLeft;
     }
   } catch (error) {
     outcome = 'failed'; summary.error = error.message;
