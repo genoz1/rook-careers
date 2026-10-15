@@ -48,6 +48,10 @@ function loadConfig(env = process.env) {
     bufferAccessToken: env.BUFFER_ACCESS_TOKEN,
     linkedinChannelId: env.BUFFER_ROOK_LINKEDIN_CHANNEL_ID,
     facebookChannelId: env.BUFFER_ROOK_FACEBOOK_CHANNEL_ID,
+    // Exact string "false" turns off Gene personal LinkedIn only.
+    // Company ROOK LinkedIn/Facebook continue. Missing/unset keeps the
+    // previous behavior (personal posts when a channel id is available).
+    personalLinkedinEnabled: env.BUFFER_GENE_LINKEDIN_ENABLED !== 'false',
     personalLinkedinChannelId: env.BUFFER_GENE_LINKEDIN_CHANNEL_ID,
     brandedTerms: (env.SOCIAL_BRANDED_TERMS || "").split(",").map((s) => s.trim()).filter(Boolean),
     freshnessWindowDays: Number(env.SOCIAL_FRESHNESS_WINDOW_DAYS) || 3,

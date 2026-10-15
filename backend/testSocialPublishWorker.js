@@ -332,6 +332,17 @@ async function run() {
     assert.strictEqual(config.linkedinChannelId, "li-123");
     assert.strictEqual(config.facebookChannelId, "fb-456");
     assert.strictEqual(config.personalLinkedinChannelId, "li-gene");
+    assert.strictEqual(config.personalLinkedinEnabled, true);
+  });
+  test("loadConfig disables personal LinkedIn only when BUFFER_GENE_LINKEDIN_ENABLED=false", () => {
+    const enabled = loadConfig({ BUFFER_GENE_LINKEDIN_CHANNEL_ID: "li-gene" });
+    assert.strictEqual(enabled.personalLinkedinEnabled, true);
+    const disabled = loadConfig({
+      BUFFER_GENE_LINKEDIN_CHANNEL_ID: "li-gene",
+      BUFFER_GENE_LINKEDIN_ENABLED: "false",
+    });
+    assert.strictEqual(disabled.personalLinkedinEnabled, false);
+    assert.strictEqual(disabled.personalLinkedinChannelId, "li-gene");
   });
 
   console.log("\n=== Channel discovery never exposes the token ===");
