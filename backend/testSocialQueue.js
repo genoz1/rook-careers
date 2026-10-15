@@ -254,6 +254,25 @@ test('Gene channel misconfiguration alerts only Gene and leaves company result h
  const r=await replenish(bad,deps({readQueue:async()=>({posts,limit:10}),sendEmail:async email=>{alert=email;}}));
  assert.equal(r.ok,true);assert.deepEqual(r.failures,[]);assert.equal(r.personal.enabled,false);assert.match(alert.subject,/Gene LinkedIn/);
 });
+test('BUFFER_GENE_LINKEDIN_ENABLED=false skips personal LinkedIn without alerts or mutations',async()=>{
+ const prev=process.env.BUFFER_GENE_LINKEDIN_ENABLED;
+ process.env.BUFFER_GENE_LINKEDIN_ENABLED='false';
+ try{
+  let alert=null,created=0;
+  const posts=channels.slice(0,2).flatMap(c=>Array.from({length:10},(_,i)=>({id:c.id+i,channelId:c.id,status:'scheduled',dueAt:'2031-01-01'})));
+  const r=await replenish({...config,personalLinkedinEnabled:false},deps({
+   readQueue:async()=>({posts,limit:10}),
+   createPost:async()=>{created++;return {id:'should-not-create'};},
+   generatePersonalLinkedin:async()=>{throw Error('personal generation should not run');},
+   sendEmail:async email=>{alert=email;},
+  }));
+  assert.equal(r.ok,true);assert.equal(r.personal.enabled,false);assert.equal(r.personal.created,0);
+  assert.deepEqual(r.personal.failures,[]);assert.equal(created,0);assert.equal(alert,null);
+ } finally {
+  if(prev===undefined)delete process.env.BUFFER_GENE_LINKEDIN_ENABLED;
+  else process.env.BUFFER_GENE_LINKEDIN_ENABLED=prev;
+ }
+});
 test('personal OpenAI failure cannot fail, delay, or force fallback in company pipeline',async()=>{
  const db=memoryDb(),slots=futureSlots(new Date('2030-06-01T00:00:00Z')),selected=slots.find(s=>s.slot==='marketing-1'),runKey=require('./socialAutomation').computeRunKey(selected.dateStr,selected.slot);
  db.rows.push({run_key:runKey,channel_id:'li',state:'scheduled',payload:{channelId:'li',text:'Company source',personalTemplate:`Featured Job\n${PERSONAL_COPY_TOKEN}\nFacts`,dueAt:selected.dueAt},post:{id:'company'}});

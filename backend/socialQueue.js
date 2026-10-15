@@ -93,11 +93,15 @@ async function replenish(config, deps = {}) {
     recentPosts = await (deps.readRecentPosts || readRecentPosts)(config.bufferAccessToken, org);
     const recent = [...queue.posts, ...recentPosts].filter(p => channels.some(c => c.id === p.channelId))
       .sort((a,b) => new Date(b.dueAt || b.sentAt) - new Date(a.dueAt || a.sentAt)).slice(0,24).map(p => p.text);
-    const geneMatches = discovered.filter(c => c.service==='linkedin' && c.name==='gene-zentko');
-    const personalId = config.personalLinkedinChannelId || (process.env.RESOURCES_BUFFER_ENABLED==='true' && geneMatches.length===1 ? geneMatches[0].id : null);
-    const optional = identifyOptionalPersonalLinkedin(discovered, personalId, channels.map(c => c.id));
-    if (optional.ok && optional.channel.organizationId === org) personalChannel = discovered.find(c => c.id === optional.channel.id);
-    else personalFailures.push({ stage: 'channel_identification', reason: optional.ok ? 'Gene LinkedIn must share the Buffer organization' : optional.error });
+    const personalLinkedinEnabled = config.personalLinkedinEnabled !== false
+      && process.env.BUFFER_GENE_LINKEDIN_ENABLED !== 'false';
+    if (personalLinkedinEnabled) {
+      const geneMatches = discovered.filter(c => c.service==='linkedin' && c.name==='gene-zentko');
+      const personalId = config.personalLinkedinChannelId || (process.env.RESOURCES_BUFFER_ENABLED==='true' && geneMatches.length===1 ? geneMatches[0].id : null);
+      const optional = identifyOptionalPersonalLinkedin(discovered, personalId, channels.map(c => c.id));
+      if (optional.ok && optional.channel.organizationId === org) personalChannel = discovered.find(c => c.id === optional.channel.id);
+      else personalFailures.push({ stage: 'channel_identification', reason: optional.ok ? 'Gene LinkedIn must share the Buffer organization' : optional.error });
+    }
     const { data: intents, error: intentError } = await db.from('social_queue_sends').select('*').eq('state','sending');
     if (intentError) throw Error('Cannot read Buffer intents');
     for (const intent of intents || []) {
