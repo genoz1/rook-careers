@@ -92,7 +92,9 @@
     "acquisition:stripe-test": "node scripts/acquisitionStripeTest.js --confirm-stripe-test-fixtures",
     "acquisition:staging-demo": "node scripts/acquisitionStagingDemo.js",
     "acquisition:buffer-draft-check": "node scripts/acquisitionBufferDraftCheck.js --confirm-nonpublic-drafts",
-    "dev": "ROOK_ACQ_LOCAL_PREVIEW=true node scripts/acquisitionStagingDemo.js --serve"
+    "dev": "ROOK_ACQ_LOCAL_PREVIEW=true node scripts/acquisitionStagingDemo.js --serve",
+    "acquisition:supabase-staging-test": "node scripts/acquisitionSupabaseStagingTest.js --confirm-isolated-staging",
+    "acquisition:supabase-auth-test": "node scripts/acquisitionSupabaseAuthTest.js --confirm-isolated-staging"
   },
   "engines": {
     "node": ">=18.0.0"

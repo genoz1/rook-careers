@@ -32,7 +32,7 @@
     "draftsRemainUnscheduled": true,
     "nodeAdapterRealAccountVerified": false
   },
-  "supabaseHostedPersistenceVerified": false,
+  "supabaseHostedPersistenceVerified": true,
   "stripeRealTestModeTransactionsVerified": false,
   "resendAuthorizedSimulatorVerified": false,
   "productionDeployment": false,
@@ -52,14 +52,17 @@
       "authSettingsHttpStatus": 200,
       "operation": "GET /auth/v1/settings; no database records read or modified",
       "dashboardSession": "authenticated via existing GitHub account; ROOK project healthy",
-      "stagingWriteAccess": "no ROOK staging project or preview branch exists",
+      "stagingWriteAccess": "Approved isolated preview branch created; existing schema and Node adapter validated against hosted Supabase",
       "stagingAvailability": {
         "previewBranchHourlyUsd": 0.01344,
         "dailyComputeUsd": 0.32256,
-        "created": false,
-        "requiresSpendingApproval": true
+        "created": true,
+        "requiresSpendingApproval": false,
+        "approvedByUser": true,
+        "cleanupPending": true
       },
-      "unrelatedSecondProject": "belongs to Florida Buzz; excluded from all operations"
+      "unrelatedSecondProject": "belongs to Florida Buzz; excluded from all operations",
+      "keyReuse": "Existing default staging keys copied through authenticated dashboard into a private non-repository credential file; no new key request or regeneration"
     },
     "stripe": {
       "dashboardSession": "Existing Google identity selected; Google rejected the supplied security code; dashboard authorization not completed",
@@ -91,5 +94,12 @@
       "bufferResendDigitalOcean": "no matching callable provider integrations found"
     },
     "changesMade": "existing Supabase dashboard sign-in restored; no new keys, production configuration changes, billing changes, public posts or email"
+  },
+  "supabaseAuthHttpRoundTripVerified": true,
+  "newHostedChecks": {
+    "databaseChecksPassed": 7,
+    "realAuthHttpChecksPassed": 5,
+    "syntheticPaymentLedgerOnly": true,
+    "authTestUsersRemoved": true
   }
 }

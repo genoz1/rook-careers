@@ -2,6 +2,9 @@
 
 **October 21, 2026: implemented locally; NOT operational or approved for production.** Work continues on `codex/organic-growth-oct2026`; existing SEO changes are retained. No production deployment, public post, external email, paid service or payment has been activated.
 
+
+**Latest validation:** user approved the temporary Supabase branch at $0.01344/hour. The isolated branch is now created. Seven real hosted database/REST checks and five real Supabase Auth/HTTP checks passed; see `SUPABASE_STAGING_RESULT.json` and `SUPABASE_AUTH_RESULT.json`. Actual Stripe test-mode transactions, Node-to-Buffer authorization and Resend simulator delivery remain blocked. Earlier account observations below are retained as history.
+
 ## What is implemented
 
 - Additive Supabase/Postgres sidecar schema, server-only permissions, atomic outbox leases, persistent retries, receipt reconciliation, duplicate protection, evergreen replacement and a bounded company-only Buffer adapter. Three posting slots/week/channel; seven-day queue; 23 reusable guidance items with 30-day duplicate cooldown. Missing content creates durable backlog, not silent success. Buffer channel discovery is cached for 24 hours; this lane is capped at 50 requests/day and 900/month, in addition to account-wide limits.
@@ -64,3 +67,11 @@ Reuse existing account sign-in and secret-bearing infrastructure; do not request
 ### Subsequent authorization results
 
 The existing Supabase GitHub sign-in succeeded. ROOK production is healthy. The two-project organization contains ROOK production and the unrelated Florida Buzz mobile project; the latter was excluded. ROOK has no existing preview branch. The Create branch dialog quotes $0.01344/hour ($0.32256/day before taxes), billed until removal. The dialog was cancelled without provisioning; this is now a spending decision, not missing Supabase account access. Stripe Google sign-in reached security-code verification, but Google rejected the supplied code. Resend’s selected Google method reaches the same signed-out identity. Existing-account verification remains required; no replacement keys were requested.
+
+## Real Supabase staging validation completed
+
+Applied the existing sidecar schema only to the approved preview branch. Verified all five tables have RLS; anonymous and member roles cannot execute the RPC or read the commission ledger, while the server role can. Reused the branch’s existing default keys through the authenticated dashboard; no key values were returned to chat/logs or placed in this repository. The Node SDK store passed durable writes across separate clients, concurrent claim exclusivity, duplicate commission protection, held $5 accounting, synthetic refund reversal and existing-customer exclusion. These ledger inputs are synthetic and are not proof of a Stripe payment.
+
+Real Supabase Auth issued sessions to two disposable staging accounts; existing HTTP routes verified their identities, enforced referral terms/opt-out, deduplicated onboarding, bound a signed referral cookie and protected private reporting. The accounts were deleted via the staging-only admin API. No verification email, provider publication or Stripe transaction was initiated. No existing production user, subscription or job record was read or changed by these probes.
+
+Reproduce with `npm run acquisition:supabase-staging-test` and `npm run acquisition:supabase-auth-test`, using `ACQ_STAGING_CREDENTIAL_FILE` pointing to a mode-0600 file outside the repository and `ACQ_STAGING_PROJECT_REF` identifying the approved preview. Both probes refuse the production reference and require the explicit synthetic staging marker. They do not provision infrastructure or send email. The temporary branch remains for pending provider validation at the approved hourly rate and must be removed after validation; no production merge is involved.
