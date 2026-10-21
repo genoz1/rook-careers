@@ -22,6 +22,11 @@ process.on("unhandledRejection", (reason) => {
   console.error("Unhandled promise rejection (server stayed up):", reason);
 });
 
+// Additive acquisition sidecar: absent master flag means no clients, routes or workers.
+const acquisitionRuntime = process.env.ROOK_ACQUISITION_ENABLED === 'true'
+  ? require('./backend/organicAcquisition/runtime').createRuntime() : null;
+if (acquisitionRuntime) { app.use(acquisitionRuntime.webhooks); app.use(acquisitionRuntime.emailWebhooks); }
+
 // Stripe webhooks need the RAW body to verify the signature, so this
 // route is wired BEFORE express.json() and given raw() explicitly.
 const stripeRoutes = require("./backend/routes/stripe");
@@ -31,6 +36,7 @@ app.use(
 );
 // All other Stripe routes need normal JSON parsing
 app.use(express.json());
+if (acquisitionRuntime) app.use(acquisitionRuntime.router);
 app.use("/api", stripeRoutes);
 app.use("/api/v7", require("./backend/routes/onboardingV7"));
 app.use("/api/v8", require("./backend/routes/onboardingV8"));
@@ -184,6 +190,7 @@ app.get("*", (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`ROOK server running on port ${PORT}`);
+  if (acquisitionRuntime) acquisitionRuntime.start();
   require('./backend/ingestionWatchdog').startIngestionWatchdog();
   require('./backend/resources/worker').start();
   if (industryNewsWorker) industryNewsWorker.start({ store: new (require('./backend/industryNews/store').SupabaseNewsStore)(require('./backend/resources/store').db()) });

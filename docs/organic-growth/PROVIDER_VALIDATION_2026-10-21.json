@@ -1,0 +1,42 @@
+{
+  "checkedAt": "2026-10-21",
+  "localAcquisitionTests": {
+    "passed": 75,
+    "realVendorAPIs": false
+  },
+  "browser": {
+    "environment": "isolated local staging; synthetic identities and financial data",
+    "routes": [
+      "/partners/",
+      "/partners/dashboard/",
+      "/hiring-reports/medical-sales-2026-10/",
+      "/internal/acquisition"
+    ],
+    "widths": [
+      390,
+      1280
+    ],
+    "checksPassed": 8,
+    "horizontalOverflow": false,
+    "metricsApiAnonymousStatus": 401
+  },
+  "buffer": {
+    "authenticatedUI": true,
+    "companyServices": [
+      "linkedin",
+      "facebook"
+    ],
+    "diagnosticDraftsCreated": 2,
+    "scheduled": false,
+    "published": false,
+    "draftsRemainUnscheduled": true,
+    "nodeAdapterRealAccountVerified": false
+  },
+  "supabaseHostedPersistenceVerified": false,
+  "stripeRealTestModeTransactionsVerified": false,
+  "resendAuthorizedSimulatorVerified": false,
+  "productionDeployment": false,
+  "outreachSent": false,
+  "paymentsIssued": false,
+  "secretsRecorded": false
+}

@@ -9,7 +9,7 @@
 
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  function onboardingHref(source,content){
-  const params=new URLSearchParams({utm_source:source||'resources',utm_medium:'article',utm_campaign:'open_roles',utm_content:String(content||'article').slice(0,80)});
+  const params=new URLSearchParams({rook_ref:source||'resources',rook_content:String(content||'article').slice(0,80)});
   return '/rook-onboarding-v8.html?'+params.toString();
  }
  function rankJobs(jobs,prefer){

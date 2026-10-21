@@ -38,8 +38,8 @@ test('resource articles expose a single sidebar open-roles module with membershi
   assert.match(html, /Open Medical Device roles/);
   assert.match(html, /data-jobs-prefer="Medical Device"/);
   assert.match(html, /href="\/jobs\/category\/medical-device-sales-jobs"/);
-  assert.match(html, /utm_source=resources/);
-  assert.match(html, /utm_campaign=open_roles/);
+  assert.match(html, /rook_ref=resources/);
+  assert.doesNotMatch(html, /utm_(source|medium|campaign)=/);
   assert.match(html, /Membership unlocks employers/);
   assert.match(html, /See matches for my background/);
   assert.match(html, /Find My Matches/);
@@ -59,8 +59,8 @@ test('industry news articles promote category jobs with news attribution', () =>
   assert.match(html, /id="article-open-roles"/);
   assert.equal((html.match(/data-article-jobs[\s>]/g) || []).length, 1);
   assert.ok(!html.includes('article-jobs-inline'));
-  assert.match(html, /utm_source=news/);
-  assert.match(html, /utm_campaign=open_roles/);
+  assert.match(html, /rook_ref=news/);
+  assert.doesNotMatch(html, /utm_(source|medium|campaign)=/);
   assert.match(html, /data-jobs-prefer="Medical Device"/);
   assert.match(html, /href="\/jobs\/category\/medical-device-sales-jobs"/);
   assert.match(html, /Looking for your next/);

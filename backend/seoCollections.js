@@ -1,3 +1,4 @@
+const {collectionGuidance} = require('./organicGuidance');
 const {CATEGORIES,FLORIDA} = require('./seoInventory');
 const PAGE_SIZE=30;
 function pageNumber(query) {
@@ -52,6 +53,7 @@ function createCollectionHandler({loadInventory,loadRelatedArticles=async()=>[],
         <nav class="seo-pagination" aria-label="Job result pages">${page>1?`<a class="btn btn-outline" href="${pagePath(page-1)}">Previous page</a>`:''}<span>Page ${page} of ${pages}</span>${page<pages?`<a class="btn btn-outline" href="${pagePath(page+1)}">Next page</a>`:''}</nav>
         ${state?`<p><a class="seo-detail" href="/jobs/category/${slug}">Browse all ${e(CATEGORIES[slug].label.toLowerCase())}</a></p>`:''}
         ${floridaLinks.length?`<section class="seo-section"><h2>Explore Florida opportunities</h2><nav class="seo-links" aria-label="Florida categories">${floridaLinks.join('')}</nav></section>`:''}
+        ${collectionGuidance(slug,!!state,e)}
         <section class="seo-section"><h2>Career resources</h2>${articles.length?`<ul>${articles.map(a=>`<li><a class="seo-detail" href="/resources/${a.slug}/">${e(a.title)}</a></li>`).join('')}</ul>`:''}<nav class="seo-links" aria-label="Career resources"><a href="/resources/category/${c.resourceCategory}/">${e(c.label)} career guides</a><a href="/resources/category/interviews-resumes/">Interview and resume guides</a></nav></section>
         <section class="seo-section"><h2>Related sales categories</h2><nav class="seo-links" aria-label="Related categories">${categoryLinks.join('')}</nav></section>`;
       const jsonLd={'@context':'https://schema.org','@graph':[

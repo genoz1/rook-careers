@@ -285,11 +285,15 @@ async function buildSitemapBody() {
     `${APP_BASE_URL}/rook-pricing.html`,
     `${APP_BASE_URL}/rook-employers.html`,
   ];
-  // Category paths come from the static catalog — avoids waiting on the
-  // full SEO inventory rebuild (which loads descriptions for every job).
+  if (process.env.ROOK_ACQUISITION_ENABLED === 'true') staticUrls.push(APP_BASE_URL+'/partners/', APP_BASE_URL+'/hiring-reports/');
+  // Include only qualified collections from a fresh already-warmed cache.
+  // On a cold process omit collection URLs until warm; never block XML on
+  // another heavy inventory read or submit known noindex collections.
+  const collections = loadSeoInventory.peek();
   for (const slug of Object.keys(CATEGORIES)) {
-    staticUrls.push(`${APP_BASE_URL}/jobs/category/${slug}`);
-    if (FLORIDA.includes(slug)) staticUrls.push(`${APP_BASE_URL}/jobs/category/${slug}/florida`);
+    const path = '/jobs/category/' + slug;
+    if (collections?.[path]?.qualified) staticUrls.push(APP_BASE_URL + path);
+    if (FLORIDA.includes(slug) && collections?.[path+'/florida']?.qualified) staticUrls.push(APP_BASE_URL + path+'/florida');
   }
 
   let jobs;
@@ -304,21 +308,30 @@ async function buildSitemapBody() {
   const jobUrls = jobs.filter(isUsEligibleJob).map(j => `${APP_BASE_URL}/jobs/${j.id}`);
   if (jobUrls.length + staticUrls.length > 50000) throw new Error("Sitemap requires splitting");
   let offset = 0;
+  const modified = new Map();
   const now = new Date().toISOString();
   while (true) {
     const { data: articles, error } = await supabaseAnon.from("resource_articles")
-      .select("slug, resource_topics!inner(status)").eq("resource_topics.status", "published")
+      .select("slug, updated_at, resource_topics!inner(status)").eq("resource_topics.status", "published")
       .lte("published_at", now).order("slug", { ascending: true }).range(offset, offset + 499);
     if (error || !Array.isArray(articles)) throw new Error("Resources sitemap query failed");
     if (!articles.length) break;
-    staticUrls.push(...articles.map(a => `${APP_BASE_URL}/resources/${a.slug}/`));
+    for (const a of articles) {
+      if (!/^[a-z0-9-]{1,110}$/.test(a.slug)) continue;
+      const url = `${APP_BASE_URL}/resources/${a.slug}/`;
+      staticUrls.push(url);
+      // Resource updated_at describes editorial changes. Job updated_at also
+      // advances on observation refreshes, so never invent job lastmod here.
+      const date = typeof a.updated_at === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(a.updated_at) ? Date.parse(a.updated_at) : NaN;
+      if (Number.isFinite(date) && date <= Date.parse(now)) modified.set(url, new Date(date).toISOString());
+    }
     if (jobUrls.length + staticUrls.length > 50000) throw new Error("Sitemap requires splitting");
     offset += articles.length;
   }
 
   const urlEntries = [
     ...staticUrls, ...jobUrls,
-  ].map(url => `<url><loc>${escapeHtml(url)}</loc></url>`).join("\n");
+  ].map(url => `<url><loc>${escapeHtml(url)}</loc>${modified.has(url)?`<lastmod>${modified.get(url)}</lastmod>`:""}</url>`).join("\n");
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urlEntries}\n</urlset>`;
 }
 
@@ -343,7 +356,7 @@ router.get("/sitemap.xml", async (req, res) => {
     res.set("Cache-Control", "public, max-age=300");
     return res.send(sitemapCache.body);
   }
-  if (sitemapCachingEnabled() && sitemapCache.body) {
+  if (sitemapCachingEnabled() && sitemapCache.body && Date.now() < sitemapCache.expires + 30 * 60 * 1000) {
     rebuildSitemapCache().catch(() => {});
     res.set("Content-Type", "application/xml");
     res.set("Cache-Control", "public, max-age=300");
@@ -363,7 +376,7 @@ router.get("/sitemap.xml", async (req, res) => {
 router.warmPublicCaches = async function warmPublicCaches() {
   if (!isConfigured) return;
   const tasks = [];
-  if (typeof loadSeoInventory.warm === "function") tasks.push(loadSeoInventory.warm());
+  if (typeof loadSeoInventory.warm === "function") await loadSeoInventory.warm();
   if (sitemapCachingEnabled()) {
     tasks.push(rebuildSitemapCache().catch((err) => {
       console.warn("[sitemap] warm failed:", err.message);

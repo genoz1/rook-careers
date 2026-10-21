@@ -1,0 +1,14 @@
+{
+  "environment": "local staging",
+  "realProviderDelivery": false,
+  "realStripeTestMode": false,
+  "publicDeployment": false,
+  "steps": [
+    "HTTP referral cookie -> verified fixture account binding -> one $5 ledger commission",
+    "Persistent queue -> two fixture provider confirmations -> no duplicate dispatch",
+    "Four aggregate-only report pages rendered locally",
+    "Close/reopen on-disk Postgres: referral ledger and confirmed publications preserved"
+  ],
+  "uiChecks": [],
+  "completedAt": "2026-10-21T18:25:37.626Z"
+}

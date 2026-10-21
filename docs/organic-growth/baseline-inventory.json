@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-10-21T01:31:20.444Z",
+  "source": "Existing public ROOK collection counts; not independently verified against every employer",
+  "methodology": "active-approved-US-eligible-deduplicated-collections-v1",
+  "periodType": "point-in-time",
+  "historicalComparison": null,
+  "collections": [
+    {
+      "path": "/jobs/category/medical-sales-jobs",
+      "label": "Medical Sales Jobs",
+      "jobs": 2970,
+      "representedEmployers": 204
+    },
+    {
+      "path": "/jobs/category/medical-sales-jobs/florida",
+      "label": "Medical Sales Jobs in Florida",
+      "jobs": 162,
+      "representedEmployers": 59
+    },
+    {
+      "path": "/jobs/category/medical-device-sales-jobs",
+      "label": "Medical Device Sales Jobs",
+      "jobs": 1494,
+      "representedEmployers": 111
+    },
+    {
+      "path": "/jobs/category/medical-device-sales-jobs/florida",
+      "label": "Medical Device Sales Jobs in Florida",
+      "jobs": 83,
+      "representedEmployers": 25
+    },
+    {
+      "path": "/jobs/category/pharmaceutical-sales-jobs",
+      "label": "Pharmaceutical Sales Jobs",
+      "jobs": 1094,
+      "representedEmployers": 98
+    },
+    {
+      "path": "/jobs/category/pharmaceutical-sales-jobs/florida",
+      "label": "Pharmaceutical Sales Jobs in Florida",
+      "jobs": 51,
+      "representedEmployers": 25
+    },
+    {
+      "path": "/jobs/category/diagnostics-sales-jobs",
+      "label": "Diagnostics & Laboratory Sales Jobs",
+      "jobs": 701,
+      "representedEmployers": 63
+    },
+    {
+      "path": "/jobs/category/diagnostics-sales-jobs/florida",
+      "label": "Diagnostics & Laboratory Sales Jobs in Florida",
+      "jobs": 46,
+      "representedEmployers": 19
+    },
+    {
+      "path": "/jobs/category/veterinary-sales-jobs",
+      "label": "Veterinary & Animal Health Sales Jobs",
+      "jobs": 278,
+      "representedEmployers": 40
+    },
+    {
+      "path": "/jobs/category/capital-equipment-sales-jobs",
+      "label": "Capital Equipment Sales Jobs",
+      "jobs": 242,
+      "representedEmployers": 52
+    },
+    {
+      "path": "/jobs/category/territory-sales-manager-jobs",
+      "label": "Territory Sales Manager Jobs",
+      "jobs": 27,
+      "representedEmployers": 10
+    },
+    {
+      "path": "/jobs/category/key-account-manager-jobs",
+      "label": "Key Account Manager Jobs",
+      "jobs": 52,
+      "representedEmployers": 16
+    }
+  ]
+}
