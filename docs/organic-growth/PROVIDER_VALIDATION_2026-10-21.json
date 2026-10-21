@@ -51,11 +51,18 @@
       "existingPublicCredentialReused": true,
       "authSettingsHttpStatus": 200,
       "operation": "GET /auth/v1/settings; no database records read or modified",
-      "dashboardSession": "sign_in_required",
-      "stagingWriteAccess": "not_available_in_current_session"
+      "dashboardSession": "authenticated via existing GitHub account; ROOK project healthy",
+      "stagingWriteAccess": "no ROOK staging project or preview branch exists",
+      "stagingAvailability": {
+        "previewBranchHourlyUsd": 0.01344,
+        "dailyComputeUsd": 0.32256,
+        "created": false,
+        "requiresSpendingApproval": true
+      },
+      "unrelatedSecondProject": "belongs to Florida Buzz; excluded from all operations"
     },
     "stripe": {
-      "dashboardSession": "sign_in_required",
+      "dashboardSession": "Existing Google identity selected; Google rejected the supplied security code; dashboard authorization not completed",
       "testModeCredentialsAvailableLocally": false,
       "permissionDeniedByProvider": false
     },
@@ -67,7 +74,7 @@
       "permissionDeniedByProvider": false
     },
     "resend": {
-      "dashboardSession": "sign_in_required",
+      "dashboardSession": "Google method selected; existing Google identity remains signed out pending verification",
       "serverCredential": "existing production environment configuration; not exposed to current runtime"
     },
     "hosting": {
@@ -83,6 +90,6 @@
       "stripe": "available but not installed in current account context",
       "bufferResendDigitalOcean": "no matching callable provider integrations found"
     },
-    "changesMade": "none to accounts, production configuration, billing, public posts or email"
+    "changesMade": "existing Supabase dashboard sign-in restored; no new keys, production configuration changes, billing changes, public posts or email"
   }
 }
