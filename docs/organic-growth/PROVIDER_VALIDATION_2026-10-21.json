@@ -38,5 +38,51 @@
   "productionDeployment": false,
   "outreachSent": false,
   "paymentsIssued": false,
-  "secretsRecorded": false
+  "secretsRecorded": false,
+  "connectionInvestigation": {
+    "scope": "existing ROOK infrastructure only; no new keys or service activation",
+    "priorAccessEvidence": {
+      "supabase": "Authenticated Supabase dashboard session; production project Rook Careers",
+      "stripe": "Existing separate ROOK sandbox and production account under existing login; prior sandbox payment and coupon work",
+      "buffer": "Existing authenticated browser plus server-side DigitalOcean token",
+      "resend": "Existing server-side Resend client and DigitalOcean sender/key configuration; no historical successful interactive login established"
+    },
+    "supabase": {
+      "existingPublicCredentialReused": true,
+      "authSettingsHttpStatus": 200,
+      "operation": "GET /auth/v1/settings; no database records read or modified",
+      "dashboardSession": "sign_in_required",
+      "stagingWriteAccess": "not_available_in_current_session"
+    },
+    "stripe": {
+      "dashboardSession": "sign_in_required",
+      "testModeCredentialsAvailableLocally": false,
+      "permissionDeniedByProvider": false
+    },
+    "buffer": {
+      "existingAuthenticatedBrowserReused": true,
+      "originalTestDraftStillUnscheduled": true,
+      "supportedBrowserTools": "none registered",
+      "serverApiToken": "existing token remains in production configuration; not exposed to current runtime",
+      "permissionDeniedByProvider": false
+    },
+    "resend": {
+      "dashboardSession": "sign_in_required",
+      "serverCredential": "existing production environment configuration; not exposed to current runtime"
+    },
+    "hosting": {
+      "provider": "DigitalOcean App Platform",
+      "browserResult": "Site Unavailable; not evidence that ROOK or provider is down",
+      "sourceRepositoryConnector": "available; does not provide hosting secret execution access",
+      "localEnvironment": "no provider secret variables configured",
+      "priorWorkspaceConfigs": "no additional ROOK runtime or MCP configuration found",
+      "connectedSites": "ROOK Onboarding Concept only; environment has no entries"
+    },
+    "connectorDiscovery": {
+      "supabase": "available but not installed in current account context",
+      "stripe": "available but not installed in current account context",
+      "bufferResendDigitalOcean": "no matching callable provider integrations found"
+    },
+    "changesMade": "none to accounts, production configuration, billing, public posts or email"
+  }
 }
