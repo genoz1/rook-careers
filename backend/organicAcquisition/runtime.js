@@ -57,7 +57,7 @@ function createRuntime(env=process.env){
   }finally{running=false;}
  }
  function start(){if(env.ACQ_SCHEDULER_APPROVED!=='true')return;const timer=setInterval(()=>tick().catch(()=>console.error('[acquisition] supervisor failed')),300000);timer.unref();setTimeout(()=>tick().catch(()=>console.error('[acquisition] startup check failed')),10000).unref();return timer;}
- const emailWebhooks=require('./emailWebhooks').createEmailWebhooks({store,signer:signed,secret:env.ACQ_RESEND_WEBHOOK_SECRET,replyAddress:env.ACQ_PARTNER_REPLY_EMAIL});
+ const emailWebhooks=require('./emailWebhooks').createEmailWebhooks({store,signer:signed,secret:env.ACQ_RESEND_WEBHOOK_SECRET,senderAddress:env.DIGEST_FROM_EMAIL,replyAddress:env.ACQ_PARTNER_REPLY_EMAIL});
  return {router,webhooks,emailWebhooks,start,tick,store,observer};
 }
 module.exports={createRuntime};

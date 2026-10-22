@@ -29,3 +29,11 @@ The prior temporary Supabase preview was deleted with owner confirmation, removi
 ## Activation evidence
 
 Production deployment, scheduler, company publications, referrals, remote webhooks, analytics and monitoring must each be verified after activation. This record does not label those operations complete merely because code or local tests pass.
+
+## Hosting behavior discovered during activation
+
+PR #91 merged at `222ce2e182a29052cbd9a2a967065fe3fac32391`. A configuration-only deployment reused the prior application source; acquisition code was not yet live. DigitalOcean also ran its pre-existing Adzuna post-deployment hook. The provider log reports 1,590 results examined, 112 agency-filter matches and 96 records saved/updated. This was an unintended deployment side effect; no attempt was made to undo those records or restore the database.
+
+The owner then explicitly authorized making deployment-only work manual while preserving regular schedules. There is one post-deployment ingestion hook, `ingest-adzuna`; its command now prints a pause notice. Its original manual command is `npm run ingest-adzuna`, requiring separate authorization before execution. The five scheduled jobs, their commands, schedules, resource sizes and time zones were preserved exactly. The hook pause and an encrypted, separate acquisition Stripe signing secret were applied together. The original checkout endpoint remains unchanged. The new acquisition endpoint is disabled until its runtime is configured and verified.
+
+Resend dashboard access was restored using the owner-confirmed existing Google account. The email webhook now rejects unrelated sender/recipient events before any ROOK database access, restricts bounce/complaint suppression to tracked partner receipts, and records only type/time/event hash for delivery diagnostics. Six focused HTTP/signature/scope checks passed. Provider acceptance, signed event receipt and confirmed delivery remain distinct. GA4 reporting now also queries the existing registration/checkout/browser-conversion events by source/medium, without treating browser purchase events as Stripe payment evidence.
