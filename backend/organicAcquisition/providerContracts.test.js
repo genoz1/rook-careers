@@ -32,7 +32,7 @@ before(async()=>{
     const i=v.input;assert.ok(['li_rook','fb_rook'].includes(i.channelId));if(i.channelId==='fb_rook')assert.equal(i.metadata.facebook.type,'post');
     const post={id:'buffer_'+(posts.length+1),text:i.text,channelId:i.channelId,status:i.saveToDraft?'draft':'sent',sentAt:i.saveToDraft?null:new Date().toISOString()};posts.push(post);
     if(failAfterAccept){req.socket.destroy();return;}data={createPost:{post}};
-   }else if(query.includes('DeleteDraft')){posts=posts.filter(p=>p.id!==v.input.id);data={deletePost:{__typename:'DeletePostSuccess'}};}else if(query.includes('Queue'))data={account:{organizations:[{id:'org_rook',limits:{scheduledPosts:10}}]},posts:{edges:[],pageInfo:{hasNextPage:false,endCursor:null}}};
+   }else if(query.includes('ReadDiagnosticDraft')){data={post:posts.find(p=>p.id===v.input.id)};}else if(query.includes('DeleteDraft')){posts=posts.filter(p=>p.id!==v.input.id);data={deletePost:{__typename:'DeletePostSuccess'}};}else if(query.includes('Queue'))data={account:{organizations:[{id:'org_rook',limits:{scheduledPosts:10}}]},posts:{edges:[],pageInfo:{hasNextPage:false,endCursor:null}}};
    else data={posts:{edges:posts.map(node=>({node}))}};
    res.end(JSON.stringify({data}));return;
   }
