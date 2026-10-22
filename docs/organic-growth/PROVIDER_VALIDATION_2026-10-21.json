@@ -67,7 +67,16 @@
     "stripe": {
       "dashboardSession": "Existing Google identity selected; Google rejected the supplied security code; dashboard authorization not completed",
       "testModeCredentialsAvailableLocally": false,
-      "permissionDeniedByProvider": false
+      "permissionDeniedByProvider": false,
+      "connectorSession": "Existing ROOK account authenticated successfully in live mode",
+      "readOnlyOperationsVerified": [
+        "subscription listing",
+        "expanded latest paid invoice retrieval",
+        "product retrieval"
+      ],
+      "userRequiresLiveMode": true,
+      "mutationsAttempted": false,
+      "transactionValidation": "Unverified; no live test charges or mode switch authorized"
     },
     "buffer": {
       "existingAuthenticatedBrowserReused": true,
@@ -90,7 +99,7 @@
     },
     "connectorDiscovery": {
       "supabase": "available but not installed in current account context",
-      "stripe": "available but not installed in current account context",
+      "stripe": "installed, authenticated and callable; live read-only account access verified",
       "bufferResendDigitalOcean": "no matching callable provider integrations found"
     },
     "changesMade": "existing Supabase dashboard sign-in restored; no new keys, production configuration changes, billing changes, public posts or email"
@@ -101,5 +110,7 @@
     "realAuthHttpChecksPassed": 5,
     "syntheticPaymentLedgerOnly": true,
     "authTestUsersRemoved": true
-  }
+  },
+  "lastUpdatedAt": "2026-10-22",
+  "stripeLiveReadOnlyVerified": true
 }
