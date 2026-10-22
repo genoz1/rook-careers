@@ -7,7 +7,8 @@ function bufferFixture({failDelete=false,failRead=false}={}) {
  const httpFetch=async(url,opts)=>{
   assert.equal(url,'https://api.buffer.com');
   const {query,variables}=JSON.parse(opts.body),i=variables?.input;let data;
-  if(query.includes('GetOrganizations'))data={account:{organizations:[{id:'org'}]}};
+  if(query.includes('GetCompanyChannel'))data={channel:{id:variables.id,name:'ROOK Careers',service:variables.id==='li'?'linkedin':'facebook',organizationId:'org',type:'page',allowedActions:['scheduleUpdates'],isDisconnected:false,isLocked:false,isQueuePaused:false}};
+  else if(query.includes('GetOrganizations'))data={account:{organizations:[{id:'org'}]}};
   else if(query.includes('GetChannels'))data={channels:[{id:'li',name:'ROOK Careers',service:'linkedin'},{id:'fb',name:'ROOK Careers',service:'facebook'}]};
   else if(query.includes('mutation CreatePost')){inputs.push(i);const p={id:'draft-'+inputs.length,channelId:i.channelId,text:i.text,status:'draft'};posts.set(p.id,p);data={createPost:{post:p}};}
   else if(query.includes('ReadDiagnosticDraft')){if(failRead)throw Error('read timeout');data={post:posts.get(i.id)};}
