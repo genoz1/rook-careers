@@ -3,11 +3,12 @@ const buffer=require('../socialBuffer');
 const {identifyRookChannels}=require('../socialChannels');
 const {nearSlot}=require('./coordination');
 function createBufferAdapter({token,linkedinChannelId,facebookChannelId,httpFetch=fetch,liveApproved=false,beforeRequest=async()=>{}}){
- const opts={httpFetch:async(...args)=>{await beforeRequest();return httpFetch(...args);}};let validated,validatedAt=0,scheduleCache,scheduleAt=0;
+ const opts={channelIds:[linkedinChannelId,facebookChannelId],httpFetch:async(...args)=>{await beforeRequest();return httpFetch(...args);}};let validated,validatedAt=0,scheduleCache,scheduleAt=0;
  async function channels(){
   if(validated&&Date.now()-validatedAt<24*3600000)return validated;
-  const all=await buffer.listAllChannels(token,opts);
+  const all=[];for(const id of opts.channelIds)all.push(await buffer.getChannelDetails(token,id,opts));
   const result=identifyRookChannels(all,{linkedinChannelId,facebookChannelId});if(!result.ok)throw Error('ROOK company channel configuration is invalid');
+  if(all.some(c=>c.type!=='page'||c.isDisconnected||c.isLocked||c.isQueuePaused||!c.allowedActions?.includes('scheduleUpdates')))throw Error('ROOK company page posting permission unavailable');
   validated=all.filter(c=>[linkedinChannelId,facebookChannelId].includes(c.id));validatedAt=Date.now();return validated;
  }
  async function schedule({force=false}={}){

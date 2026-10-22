@@ -163,8 +163,8 @@ async function createPost(accessToken, { channelId, text, photoUrl, mode = "shar
  */
 async function findPostById(accessToken, organizationId, postId, opts) {
   const query = `
-    query GetPosts($organizationId: OrganizationId!) {
-      posts(first: 50, input: { organizationId: $organizationId }) {
+    query GetPosts($organizationId: OrganizationId!, $channelIds: [ChannelId!]) {
+      posts(first: 50, input: { organizationId: $organizationId, filter: { channelIds: $channelIds } }) {
         edges {
           node {
             id
@@ -177,7 +177,7 @@ async function findPostById(accessToken, organizationId, postId, opts) {
         }
       }
     }`;
-  const data = await bufferGraphQLRequest(accessToken, query, { organizationId }, opts);
+  const data = await bufferGraphQLRequest(accessToken, query, { organizationId, channelIds:opts?.channelIds||null }, opts);
   const edges = data?.posts?.edges || [];
   return edges.map((e) => e.node).find((p) => p.id === postId) || null;
 }
@@ -190,18 +190,23 @@ module.exports = {
   createPost,
   findPostById,
 };
+async function getChannelDetails(accessToken,channelId,opts){
+ const data=await bufferGraphQLRequest(accessToken,`query GetCompanyChannel($id:ChannelId!){channel(input:{id:$id}){id name displayName service organizationId type allowedActions isDisconnected isLocked isQueuePaused}}`,{id:channelId},opts);
+ if(data?.channel?.id!==channelId)throw Error('Configured company channel unavailable');return data.channel;
+}
+module.exports.getChannelDetails=getChannelDetails;
 
 // Schema and scheduledPosts limit verified against the live Buffer API.
 async function readQueue(accessToken, organizationId, opts) {
   const posts = [];
   let after = null, limit;
   for (let page = 0; page < 20; page++) {
-    const data = await bufferGraphQLRequest(accessToken, `query Queue($org:OrganizationId!,$after:String){
+    const data = await bufferGraphQLRequest(accessToken, `query Queue($org:OrganizationId!,$after:String,$channelIds:[ChannelId!]){
       account{organizations{id limits{scheduledPosts}}}
-      posts(first:100,after:$after,input:{organizationId:$org,filter:{status:[scheduled,sending]}}){
+      posts(first:100,after:$after,input:{organizationId:$org,filter:{status:[scheduled,sending],channelIds:$channelIds}}){
         edges{node{id text status dueAt channelId assets{mimeType source}}} pageInfo{endCursor hasNextPage}
       }
-    }`, { org: organizationId, after }, opts);
+    }`, { org: organizationId, after, channelIds:opts?.channelIds||null }, opts);
     limit = data?.account?.organizations?.find(o => o.id === organizationId)?.limits?.scheduledPosts;
     if (!Number.isInteger(limit) || limit < 1) throw Error('Buffer did not provide a usable scheduled-post limit');
     if (!data?.posts?.pageInfo || !Array.isArray(data.posts.edges)) throw Error('Incomplete Buffer queue response');
@@ -214,9 +219,9 @@ async function readQueue(accessToken, organizationId, opts) {
   throw Error('Buffer queue exceeded bounded pagination');
 }
 async function readRecentPosts(accessToken, organizationId, opts) {
-  const data = await bufferGraphQLRequest(accessToken, `query Recent($org:OrganizationId!){
-    posts(first:100,input:{organizationId:$org,filter:{status:[sent]}}){edges{node{id text dueAt sentAt channelId}}}
-  }`, { org: organizationId }, opts);
+  const data = await bufferGraphQLRequest(accessToken, `query Recent($org:OrganizationId!,$channelIds:[ChannelId!]){
+    posts(first:100,input:{organizationId:$org,filter:{status:[sent],channelIds:$channelIds}}){edges{node{id text dueAt sentAt channelId}}}
+  }`, { org: organizationId, channelIds:opts?.channelIds||null }, opts);
   if (!Array.isArray(data?.posts?.edges)) throw Error('Cannot read recent Buffer post history');
   return data.posts.edges.map(e => e.node);
 }

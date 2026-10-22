@@ -26,7 +26,8 @@ before(async()=>{
   const url=new URL(req.url,'http://localhost'),p=url.pathname;
   if(p==='/buffer'){
    let raw='';for await(const chunk of req)raw+=chunk;const {query,variables:v}=JSON.parse(raw);let data;
-   if(query.includes('GetOrganizations'))data={account:{organizations:[{id:'org_rook',name:'ROOK'}]}};
+   if(query.includes('GetCompanyChannel'))data={channel:{id:v.id,name:'ROOK Careers',service:v.id==='li_rook'?'linkedin':'facebook',organizationId:'org_rook',type:'page',allowedActions:['scheduleUpdates'],isDisconnected:false,isLocked:false,isQueuePaused:false}};
+   else if(query.includes('GetOrganizations'))data={account:{organizations:[{id:'org_rook',name:'ROOK'}]}};
    else if(query.includes('GetChannels'))data={channels:[{id:'li_rook',name:'ROOK Careers',service:'linkedin'},{id:'fb_rook',name:'ROOK Careers',service:'facebook'},{id:'personal',name:'Gene',service:'linkedin'},{id:'buzz',name:'Florida Buzz',service:'facebook'}]};
    else if(query.includes('mutation CreatePost')){
     const i=v.input;assert.ok(['li_rook','fb_rook'].includes(i.channelId));if(i.channelId==='fb_rook')assert.equal(i.metadata.facebook.type,'post');

@@ -6,6 +6,8 @@
 // Run with: node backend/testSocialPublishWorker.js
 
 const assert = require("assert");
+// Internal legacy helpers remain testable; production loadConfig always disables this scheduler.
+const legacyFixture = env => ({ ...loadConfig(env), automationEnabled: env.SOCIAL_AUTOMATION_ENABLED });
 const { identifyRookChannels, identifyOptionalPersonalLinkedin } = require("./socialChannels");
 const { buildPostCopy } = require("./socialPostCopy");
 const { getOrganizations, listChannelsForOrganization, listAllChannels, createPost, findPostById, BUFFER_API_ENDPOINT } = require("./socialBuffer");
@@ -143,7 +145,7 @@ async function run() {
   // (e.g. "ROOK Careers" vs. "Gene Zentko") specifically so a person
   // can visually confirm before ever setting the ID, not something
   // this code can enforce after the fact for this specific case.
-  test("a channel matching the configured ID and correct service is accepted — Buffer's API provides no field to detect a personal profile beyond this", () => {
+  test("the legacy identifier matcher checks ID/service; acquisition separately verifies company page metadata", () => {
     const profiles = [LINKEDIN_PERSONAL_LOOKING, FACEBOOK_PAGE];
     const result = identifyRookChannels(profiles, { linkedinChannelId: "li-personal-1", facebookChannelId: "fb-page-1" });
     assert.strictEqual(result.ok, true, "documents the real, current limitation rather than asserting a protection that doesn't exist in this API");
@@ -769,7 +771,7 @@ async function run() {
 
   console.log("\n=== Recurring automation: duplicate scheduler triggers are idempotent ===");
   await asyncTest("a second dispatch for the same run_key (simulating a duplicate trigger or restart) does not re-post — treated as already completed", async () => {
-    const config = loadConfig({
+    const config = legacyFixture({
       SOCIAL_AUTOMATION_ENABLED: "true", SUPABASE_URL: "x", SUPABASE_SERVICE_ROLE_KEY: "x", SUPABASE_ANON_KEY: "x", SOCIAL_SPACING_HMAC_SECRET: SECRET,
       BUFFER_ACCESS_TOKEN: "x", BUFFER_ROOK_LINKEDIN_CHANNEL_ID: "li-page-1", BUFFER_ROOK_FACEBOOK_CHANNEL_ID: "fb-page-1",
     });
@@ -799,7 +801,7 @@ async function run() {
 
   console.log("\n=== Recurring automation: AM/PM separation — the PM job must differ from the morning's job ===");
   await asyncTest("the PM run excludes the exact job the AM run selected that same day", async () => {
-    const config = loadConfig({
+    const config = legacyFixture({
       SOCIAL_AUTOMATION_ENABLED: "true", SUPABASE_URL: "x", SUPABASE_SERVICE_ROLE_KEY: "x", SUPABASE_ANON_KEY: "x", SOCIAL_SPACING_HMAC_SECRET: SECRET,
       BUFFER_ACCESS_TOKEN: "x", BUFFER_ROOK_LINKEDIN_CHANNEL_ID: "li-page-1", BUFFER_ROOK_FACEBOOK_CHANNEL_ID: "fb-page-1",
     });
@@ -826,7 +828,7 @@ async function run() {
   });
 
   await asyncTest("two daily runs select distinct jobs; midday is disabled", async () => {
-    const config = loadConfig({
+    const config = legacyFixture({
       SOCIAL_AUTOMATION_ENABLED: "true", SUPABASE_URL: "x", SUPABASE_SERVICE_ROLE_KEY: "x", SUPABASE_ANON_KEY: "x", SOCIAL_SPACING_HMAC_SECRET: SECRET,
       BUFFER_ACCESS_TOKEN: "x", BUFFER_ROOK_LINKEDIN_CHANNEL_ID: "li-page-1", BUFFER_ROOK_FACEBOOK_CHANNEL_ID: "fb-page-1",
     });
@@ -860,7 +862,7 @@ async function run() {
 
   console.log("\n=== Recurring automation: candidate fallback on final-validation failure ===");
   await asyncTest("if the top-ranked candidate fails final validation, the next eligible candidate is used automatically", async () => {
-    const config = loadConfig({
+    const config = legacyFixture({
       SOCIAL_AUTOMATION_ENABLED: "true", SUPABASE_URL: "x", SUPABASE_SERVICE_ROLE_KEY: "x", SUPABASE_ANON_KEY: "x", SOCIAL_SPACING_HMAC_SECRET: SECRET,
       BUFFER_ACCESS_TOKEN: "x", BUFFER_ROOK_LINKEDIN_CHANNEL_ID: "li-page-1", BUFFER_ROOK_FACEBOOK_CHANNEL_ID: "fb-page-1",
     });
@@ -906,7 +908,7 @@ async function run() {
     assert.ok(jobBadFetchCount >= 1, "sanity check — the bad candidate was actually re-validated, not just skipped blindly");
   });
   await asyncTest("if every candidate fails final validation, the run reports no_valid_candidate rather than posting anything", async () => {
-    const config = loadConfig({
+    const config = legacyFixture({
       SOCIAL_AUTOMATION_ENABLED: "true", SUPABASE_URL: "x", SUPABASE_SERVICE_ROLE_KEY: "x", SUPABASE_ANON_KEY: "x", SOCIAL_SPACING_HMAC_SECRET: SECRET,
       BUFFER_ACCESS_TOKEN: "x", BUFFER_ROOK_LINKEDIN_CHANNEL_ID: "li-page-1", BUFFER_ROOK_FACEBOOK_CHANNEL_ID: "fb-page-1",
     });
@@ -937,7 +939,7 @@ async function run() {
 
   console.log("\n=== Recurring automation: partial-platform retry ===");
   await asyncTest("if Facebook failed but LinkedIn succeeded, a re-dispatch of the same run_key retries only Facebook", async () => {
-    const config = loadConfig({
+    const config = legacyFixture({
       SOCIAL_AUTOMATION_ENABLED: "true", SUPABASE_URL: "x", SUPABASE_SERVICE_ROLE_KEY: "x", SUPABASE_ANON_KEY: "x", SOCIAL_SPACING_HMAC_SECRET: SECRET,
       BUFFER_ACCESS_TOKEN: "x", BUFFER_ROOK_LINKEDIN_CHANNEL_ID: "li-page-1", BUFFER_ROOK_FACEBOOK_CHANNEL_ID: "fb-page-1",
     });
@@ -980,7 +982,7 @@ async function run() {
   });
 
   await asyncTest("AM and PM preserve facts, reveal employer only for AM, and use exact slots", async () => {
-    const config = loadConfig({ SOCIAL_AUTOMATION_ENABLED: "true", SUPABASE_URL: "x", SUPABASE_SERVICE_ROLE_KEY: "x", SUPABASE_ANON_KEY: "x", SOCIAL_SPACING_HMAC_SECRET: SECRET,
+    const config = legacyFixture({ SOCIAL_AUTOMATION_ENABLED: "true", SUPABASE_URL: "x", SUPABASE_SERVICE_ROLE_KEY: "x", SUPABASE_ANON_KEY: "x", SOCIAL_SPACING_HMAC_SECRET: SECRET,
       BUFFER_ACCESS_TOKEN: "x", BUFFER_ROOK_LINKEDIN_CHANNEL_ID: "li-page-1", BUFFER_ROOK_FACEBOOK_CHANNEL_ID: "fb-page-1" });
     const jobs = [baseJob(), baseJob({ id: "job-2", employer_id: "employer-2", title_original: "Sales Specialist" })];
     const history = [], posts = [], graphics = [];
@@ -1005,7 +1007,7 @@ async function run() {
   });
 
   await asyncTest("job closing while its graphic renders is not sent to Buffer", async () => {
-    const config = loadConfig({ SOCIAL_AUTOMATION_ENABLED: "true", SUPABASE_URL: "x", SUPABASE_SERVICE_ROLE_KEY: "x", SUPABASE_ANON_KEY: "x", SOCIAL_SPACING_HMAC_SECRET: SECRET,
+    const config = legacyFixture({ SOCIAL_AUTOMATION_ENABLED: "true", SUPABASE_URL: "x", SUPABASE_SERVICE_ROLE_KEY: "x", SUPABASE_ANON_KEY: "x", SOCIAL_SPACING_HMAC_SECRET: SECRET,
       BUFFER_ACCESS_TOKEN: "x", BUFFER_ROOK_LINKEDIN_CHANNEL_ID: "li-page-1", BUFFER_ROOK_FACEBOOK_CHANNEL_ID: "fb-page-1" });
     const job = baseJob(), db = makeMockSupabase({ jobs: [job] });
     const result = await runScheduledSlot("pm", "2026-09-25", config, {
@@ -1020,7 +1022,7 @@ async function run() {
   });
 
   await asyncTest("job closing after Facebook submission is rechecked before LinkedIn submission", async () => {
-    const config = loadConfig({ SOCIAL_AUTOMATION_ENABLED: "true", SUPABASE_URL: "x", SUPABASE_SERVICE_ROLE_KEY: "x", SUPABASE_ANON_KEY: "x", SOCIAL_SPACING_HMAC_SECRET: SECRET,
+    const config = legacyFixture({ SOCIAL_AUTOMATION_ENABLED: "true", SUPABASE_URL: "x", SUPABASE_SERVICE_ROLE_KEY: "x", SUPABASE_ANON_KEY: "x", SOCIAL_SPACING_HMAC_SECRET: SECRET,
       BUFFER_ACCESS_TOKEN: "x", BUFFER_ROOK_LINKEDIN_CHANNEL_ID: "li-page-1", BUFFER_ROOK_FACEBOOK_CHANNEL_ID: "fb-page-1" });
     const job=baseJob(),db=makeMockSupabase({jobs:[job]}),posts=[];
     const result=await runScheduledSlot('am','2026-09-25',config,{
@@ -1033,7 +1035,7 @@ async function run() {
     assert.equal(result.results.linkedin.status,'failed');assert.equal(result.stage,'inactive_before_submission');
   });
   await asyncTest("an unsent job closing during preparation can be replaced without duplicating a successful channel", async () => {
-    const config = loadConfig({ SOCIAL_AUTOMATION_ENABLED: "true", SUPABASE_URL: "x", SUPABASE_SERVICE_ROLE_KEY: "x", SUPABASE_ANON_KEY: "x", SOCIAL_SPACING_HMAC_SECRET: SECRET,
+    const config = legacyFixture({ SOCIAL_AUTOMATION_ENABLED: "true", SUPABASE_URL: "x", SUPABASE_SERVICE_ROLE_KEY: "x", SUPABASE_ANON_KEY: "x", SOCIAL_SPACING_HMAC_SECRET: SECRET,
       BUFFER_ACCESS_TOKEN: "x", BUFFER_ROOK_LINKEDIN_CHANNEL_ID: "li-page-1", BUFFER_ROOK_FACEBOOK_CHANNEL_ID: "fb-page-1" });
     const jobs=[baseJob(),baseJob({id:'replacement',employer_id:'e2'})],history=[],db=makeMockSupabase({jobs,history}),posts=[];
     let closedId;
@@ -1049,7 +1051,7 @@ async function run() {
 
   console.log("\n=== Recurring automation: scheduler status reporting ===");
   await asyncTest("getSchedulerStatus reports enabled/disabled, timezone, next runs, and last-run results without any secret", async () => {
-    const config = loadConfig({ SOCIAL_AUTOMATION_ENABLED: "true", BUFFER_ACCESS_TOKEN: "super-secret-value" });
+    const config = legacyFixture({ SOCIAL_AUTOMATION_ENABLED: "true", BUFFER_ACCESS_TOKEN: "super-secret-value" });
     const history = [
       { run_key: "2026-09-04-am", slot: "am", facebook_status: "scheduled", linkedin_status: "scheduled", scheduled_for: "2026-09-04T13:00:00Z", failure_reason: null },
       { run_key: "2026-09-04-pm", slot: "pm", facebook_status: "failed", linkedin_status: "scheduled", scheduled_for: "2026-09-04T21:00:00Z", failure_reason: "Facebook error" },
