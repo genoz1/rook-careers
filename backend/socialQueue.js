@@ -93,8 +93,7 @@ async function replenish(config, deps = {}) {
     recentPosts = await (deps.readRecentPosts || readRecentPosts)(config.bufferAccessToken, org);
     const recent = [...queue.posts, ...recentPosts].filter(p => channels.some(c => c.id === p.channelId))
       .sort((a,b) => new Date(b.dueAt || b.sentAt) - new Date(a.dueAt || a.sentAt)).slice(0,24).map(p => p.text);
-    const personalLinkedinEnabled = config.personalLinkedinEnabled !== false
-      && process.env.BUFFER_GENE_LINKEDIN_ENABLED !== 'false';
+    const personalLinkedinEnabled = false; // Permanent owner policy: company pages only.
     if (personalLinkedinEnabled) {
       const geneMatches = discovered.filter(c => c.service==='linkedin' && c.name==='gene-zentko');
       const personalId = config.personalLinkedinChannelId || (process.env.RESOURCES_BUFFER_ENABLED==='true' && geneMatches.length===1 ? geneMatches[0].id : null);

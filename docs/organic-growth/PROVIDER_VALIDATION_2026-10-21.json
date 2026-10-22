@@ -1,0 +1,200 @@
+{
+  "checkedAt": "2026-10-21",
+  "localAcquisitionTests": {
+    "passed": 75,
+    "realVendorAPIs": false
+  },
+  "browser": {
+    "environment": "isolated local staging; synthetic identities and financial data",
+    "routes": [
+      "/partners/",
+      "/partners/dashboard/",
+      "/hiring-reports/medical-sales-2026-10/",
+      "/internal/acquisition"
+    ],
+    "widths": [
+      390,
+      1280
+    ],
+    "checksPassed": 8,
+    "horizontalOverflow": false,
+    "metricsApiAnonymousStatus": 401
+  },
+  "buffer": {
+    "authenticatedUI": true,
+    "companyServices": [
+      "linkedin",
+      "facebook"
+    ],
+    "diagnosticDraftsCreated": 2,
+    "scheduled": false,
+    "published": false,
+    "draftsRemainUnscheduled": true,
+    "nodeAdapterRealAccountVerified": true,
+    "nodeDiagnosticDraftsCreated": 2,
+    "nodeDiagnosticDraftReadbacksConfirmed": 2,
+    "nodeDiagnosticDraftsDeleted": 2,
+    "nodeDraftCleanupConfirmed": true
+  },
+  "supabaseHostedPersistenceVerified": true,
+  "stripeRealTestModeTransactionsVerified": false,
+  "resendAuthorizedSimulatorVerified": true,
+  "productionDeployment": false,
+  "outreachSent": false,
+  "paymentsIssued": false,
+  "secretsRecorded": false,
+  "connectionInvestigation": {
+    "scope": "existing ROOK infrastructure only; no new keys or service activation",
+    "priorAccessEvidence": {
+      "supabase": "Authenticated Supabase dashboard session; production project Rook Careers",
+      "stripe": "Existing separate ROOK sandbox and production account under existing login; prior sandbox payment and coupon work",
+      "buffer": "Existing authenticated browser plus server-side DigitalOcean token",
+      "resend": "Existing server-side Resend client and DigitalOcean sender/key configuration; no historical successful interactive login established"
+    },
+    "supabase": {
+      "existingPublicCredentialReused": true,
+      "authSettingsHttpStatus": 200,
+      "operation": "GET /auth/v1/settings; no database records read or modified",
+      "dashboardSession": "authenticated via existing GitHub account; ROOK project healthy",
+      "stagingWriteAccess": "Approved isolated preview branch created; existing schema and Node adapter validated against hosted Supabase",
+      "stagingAvailability": {
+        "previewBranchHourlyUsd": 0.01344,
+        "dailyComputeUsd": 0.32256,
+        "created": true,
+        "requiresSpendingApproval": false,
+        "approvedByUser": true,
+        "cleanupPending": false,
+        "deletedOn": "2026-10-22"
+      },
+      "unrelatedSecondProject": "belongs to Florida Buzz; excluded from all operations",
+      "keyReuse": "Existing default staging keys copied through authenticated dashboard into a private non-repository credential file; no new key request or regeneration"
+    },
+    "stripe": {
+      "dashboardSession": "Existing Google identity selected; Google rejected the supplied security code; dashboard authorization not completed",
+      "testModeCredentialsAvailableLocally": false,
+      "permissionDeniedByProvider": false,
+      "connectorSession": "Existing ROOK account authenticated successfully in live mode",
+      "readOnlyOperationsVerified": [
+        "subscription listing",
+        "expanded latest paid invoice retrieval",
+        "product retrieval"
+      ],
+      "userRequiresLiveMode": true,
+      "mutationsAttempted": false,
+      "transactionValidation": "Unverified; no live test charges or mode switch authorized"
+    },
+    "buffer": {
+      "existingAuthenticatedBrowserReused": true,
+      "originalTestDraftStillUnscheduled": true,
+      "supportedBrowserTools": "none registered",
+      "serverApiToken": "existing token remains in production configuration; not exposed to current runtime",
+      "permissionDeniedByProvider": false
+    },
+    "resend": {
+      "dashboardSession": "Google method selected; existing Google identity remains signed out pending verification",
+      "serverCredential": "existing production environment configuration; not exposed to current runtime"
+    },
+    "hosting": {
+      "provider": "DigitalOcean App Platform",
+      "browserResult": "Site Unavailable; not evidence that ROOK or provider is down",
+      "sourceRepositoryConnector": "available; does not provide hosting secret execution access",
+      "localEnvironment": "no provider secret variables configured",
+      "priorWorkspaceConfigs": "no additional ROOK runtime or MCP configuration found",
+      "connectedSites": "ROOK Onboarding Concept only; environment has no entries"
+    },
+    "connectorDiscovery": {
+      "supabase": "available but not installed in current account context",
+      "stripe": "installed, authenticated and callable; live read-only account access verified",
+      "bufferResendDigitalOcean": "no matching callable provider integrations found"
+    },
+    "changesMade": "existing Supabase dashboard sign-in restored; no new keys, production configuration changes, billing changes, public posts or email"
+  },
+  "supabaseAuthHttpRoundTripVerified": true,
+  "newHostedChecks": {
+    "databaseChecksPassed": 7,
+    "realAuthHttpChecksPassed": 5,
+    "syntheticPaymentLedgerOnly": true,
+    "authTestUsersRemoved": true
+  },
+  "lastUpdatedAt": "2026-10-22",
+  "stripeLiveReadOnlyVerified": true,
+  "runtimeValidation20261022": {
+    "sourceCommit": "7033bf2d427609c23578c1190319f5b09615da34",
+    "host": "Existing ROOK DigitalOcean seashell-app / rook-careers runtime",
+    "consoleShellAvailable": true,
+    "secretValuesDisplayedOrExported": false,
+    "productionDeployment": false,
+    "buffer": {
+      "realNodeClient": true,
+      "channels": [
+        "ROOK company Facebook",
+        "ROOK company LinkedIn"
+      ],
+      "nonpublicDraftsCreated": 2,
+      "draftReadbacksConfirmed": 2,
+      "deletePostSuccessReceipts": 2,
+      "scheduled": false,
+      "published": false,
+      "priorUiDraftsTouched": false,
+      "queueRead": {
+        "complete": true,
+        "facebookQueued": 3,
+        "linkedinQueued": 6,
+        "apiScheduledPostLimit": 10,
+        "modified": false
+      },
+      "personalLinkedinDisconnected": true,
+      "companyOnlyConnectionListVerifiedAfterRefresh": true,
+      "personalPublishingProhibitedByOwner": true
+    },
+    "resend": {
+      "realExistingNodeClient": true,
+      "simulatorOnly": true,
+      "emailsSent": 1,
+      "initialReceiptEvent": "queued",
+      "reconciliationHttpStatus": 200,
+      "reconciledEvent": "delivered",
+      "prospectsContacted": false,
+      "webhookDeliveryVerified": false
+    },
+    "temporaryCodeFilesRemoved": true,
+    "hostedRecovery": {
+      "project": "rook-acquisition-staging",
+      "assertionsPassed": 6,
+      "syntheticChangesRolledBack": true,
+      "productionRecordsTouched": false
+    },
+    "stripe": {
+      "mode": "live",
+      "newTransactions": false,
+      "testModeReferralTransactionsVerified": false,
+      "payoutActivation": false
+    },
+    "stagingCleanup": {
+      "branchDeleted": true,
+      "explicitOwnerConfirmation": true,
+      "previewHourlyUsd": 0.01344,
+      "previewComputeRemoved": true,
+      "accruedBillFinalized": false
+    },
+    "focusedLocalChecksPassed": 19,
+    "updatedBufferContractChecksPassed": 1,
+    "runtimeMissingConfiguration": [
+      "ROOK_ACQUISITION_ENABLED",
+      "ACQ_PUBLICATION_APPROVED",
+      "ACQ_PARTNER_EMAIL_APPROVED",
+      "ACQ_GOOGLE_SERVICE_ACCOUNT_JSON",
+      "ACQ_RESEND_WEBHOOK_SECRET",
+      "ACQ_STRIPE_WEBHOOK_SECRET"
+    ],
+    "updatedUnsubscribeContractChecksPassed": 1,
+    "emailReceiptRecovery": {
+      "localChecksPassed": 8,
+      "acceptanceNotCountedAsDelivery": true,
+      "recordedReceiptsReconciledWithoutResend": true,
+      "socialMetricsExcludeEmail": true,
+      "runtimeWired": true,
+      "livePartnerSequenceActivated": false
+    }
+  }
+}

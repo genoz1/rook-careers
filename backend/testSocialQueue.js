@@ -225,62 +225,15 @@ test('regular posts fill only missing slots, keep existing content and respect c
  assert.ok(posts.filter(p=>p.channelId==='gene').length<=1);
  assert.equal(r.created,11);assert.ok(r.generated>0);
 });
-test('selected company source is adapted and scheduled to Gene without changing company posts',async()=>{
- const db=memoryDb(),slots=futureSlots(new Date('2030-06-01T00:00:00Z')),selected=slots.find(s=>s.slot==='marketing-1');
- const runKey=require('./socialAutomation').computeRunKey(selected.dateStr,selected.slot);
- const template=`ROOK Careers\n${PERSONAL_COPY_TOKEN}\nCareer advice\n\nExplore details.\nhttps://rookcareers.com/go/linkedin/home/marketing-1`;
- db.rows.push({run_key:runKey,channel_id:'li',state:'scheduled',payload:{channelId:'li',text:'ROOK Careers\nCompany wording\nCareer advice\n\nExplore details.',personalTemplate:template,photoUrl:'https://example.com/job.png',dueAt:selected.dueAt},post:{id:'company'}});
+test('personal channel remains excluded even if obsolete settings request it',async()=>{
+ let sent=0,generated=0,alerts=0;
  const posts=channels.slice(0,2).flatMap(c=>Array.from({length:10},(_,i)=>({id:c.id+i,channelId:c.id,status:'scheduled',dueAt:'2031-01-01',text:'Existing company post'})));
- let personalPayload;
- const r=await replenish(config,deps({supabaseAdmin:db,readQueue:async()=>({posts,limit:10}),createPost:async(_,payload)=>{personalPayload=payload;const post={...payload,id:'gene-post',status:'scheduled'};posts.push(post);return post;},generatePersonalLinkedin:async context=>{assert.match(context.recent.join(' '),/Company wording/);return {text:personalCopy};}}));
- assert.equal(r.ok,true);assert.equal(personalPayload.channelId,'gene');assert.equal(personalPayload.photoUrl,'https://example.com/job.png');
- assert.match(personalPayload.text,/I think a careful career search/);assert.equal(new Date(personalPayload.dueAt)-selected.dueAt,45*60000);
- assert.match(personalPayload.text,/https:\/\/rookcareers.com\/go\/gene-linkedin\/matches\/marketing-1/);
- assert.equal(db.rows.find(row=>row.channel_id==='li').payload.personalTemplate,template);
- assert.equal(posts.filter(p=>p.channelId==='li').length,10);assert.equal(posts.filter(p=>p.channelId==='fb').length,10);
- assert.equal(r.personal.created,1);assert.equal(r.created,0);
-});
-test('personal Buffer capacity defers safely without an extra mutation',async()=>{
- const db=memoryDb(),slots=futureSlots(new Date('2030-06-01T00:00:00Z')),selected=slots.find(s=>s.slot==='marketing-1');
- const runKey=require('./socialAutomation').computeRunKey(selected.dateStr,selected.slot);
- db.rows.push({run_key:runKey,channel_id:'li',state:'scheduled',payload:{channelId:'li',text:'Company',personalTemplate:`Featured Job\n${PERSONAL_COPY_TOKEN}\nFacts`,dueAt:selected.dueAt},post:{id:'company'}});
- const posts=channels.flatMap(c=>Array.from({length:10},(_,i)=>({id:c.id+i,channelId:c.id,status:'scheduled',dueAt:'2031-01-01',text:'Existing'})));
- const r=await replenish(config,deps({supabaseAdmin:db,readQueue:async()=>({posts,limit:10}),createPost:async()=>assert.fail('queue is full')}));
- assert.equal(r.ok,true);assert.equal(r.created,0);assert.equal(r.personal.created,0);assert.ok(r.personal.deferred>0);assert.deepEqual(r.failures,[]);
-});
-test('Gene channel misconfiguration alerts only Gene and leaves company result healthy',async()=>{
- const bad={...config,personalLinkedinChannelId:'missing'};let alert;
- const posts=channels.slice(0,2).flatMap(c=>Array.from({length:10},(_,i)=>({id:c.id+i,channelId:c.id,status:'scheduled',dueAt:'2031-01-01'})));
- const r=await replenish(bad,deps({readQueue:async()=>({posts,limit:10}),sendEmail:async email=>{alert=email;}}));
- assert.equal(r.ok,true);assert.deepEqual(r.failures,[]);assert.equal(r.personal.enabled,false);assert.match(alert.subject,/Gene LinkedIn/);
-});
-test('BUFFER_GENE_LINKEDIN_ENABLED=false skips personal LinkedIn without alerts or mutations',async()=>{
- const prev=process.env.BUFFER_GENE_LINKEDIN_ENABLED;
- process.env.BUFFER_GENE_LINKEDIN_ENABLED='false';
+ const old=process.env.BUFFER_GENE_LINKEDIN_ENABLED,resources=process.env.RESOURCES_BUFFER_ENABLED;
+ process.env.BUFFER_GENE_LINKEDIN_ENABLED='true';process.env.RESOURCES_BUFFER_ENABLED='true';
  try{
-  let alert=null,created=0;
-  const posts=channels.slice(0,2).flatMap(c=>Array.from({length:10},(_,i)=>({id:c.id+i,channelId:c.id,status:'scheduled',dueAt:'2031-01-01'})));
-  const r=await replenish({...config,personalLinkedinEnabled:false},deps({
-   readQueue:async()=>({posts,limit:10}),
-   createPost:async()=>{created++;return {id:'should-not-create'};},
-   generatePersonalLinkedin:async()=>{throw Error('personal generation should not run');},
-   sendEmail:async email=>{alert=email;},
-  }));
-  assert.equal(r.ok,true);assert.equal(r.personal.enabled,false);assert.equal(r.personal.created,0);
-  assert.deepEqual(r.personal.failures,[]);assert.equal(created,0);assert.equal(alert,null);
- } finally {
-  if(prev===undefined)delete process.env.BUFFER_GENE_LINKEDIN_ENABLED;
-  else process.env.BUFFER_GENE_LINKEDIN_ENABLED=prev;
- }
-});
-test('personal OpenAI failure cannot fail, delay, or force fallback in company pipeline',async()=>{
- const db=memoryDb(),slots=futureSlots(new Date('2030-06-01T00:00:00Z')),selected=slots.find(s=>s.slot==='marketing-1'),runKey=require('./socialAutomation').computeRunKey(selected.dateStr,selected.slot);
- db.rows.push({run_key:runKey,channel_id:'li',state:'scheduled',payload:{channelId:'li',text:'Company source',personalTemplate:`Featured Job\n${PERSONAL_COPY_TOKEN}\nFacts`,dueAt:selected.dueAt},post:{id:'company'}});
- const posts=channels.slice(0,2).flatMap(c=>Array.from({length:10},(_,i)=>({id:c.id+i,channelId:c.id,status:'scheduled',dueAt:'2031-01-01'})));
- let alert;
- const r=await replenish(config,deps({supabaseAdmin:db,readQueue:async()=>({posts,limit:10}),generatePersonalLinkedin:async()=>{throw Error('personal OpenAI offline');},sendEmail:async email=>{alert=email;}}));
- assert.equal(r.ok,true);assert.deepEqual(r.failures,[]);assert.equal(r.aiFallbacks,0);assert.equal(r.personal.created,0);assert.match(r.personal.failures[0].reason,/personal OpenAI offline/);assert.match(alert.subject,/Gene LinkedIn/);
- assert.equal(posts.filter(p=>p.channelId==='li').length,10);assert.equal(posts.filter(p=>p.channelId==='fb').length,10);
+  const r=await replenish({...config,personalLinkedinEnabled:true},deps({readQueue:async()=>({posts,limit:10}),createPost:async()=>{sent++;throw Error('No new send allowed');},generatePersonalLinkedin:async()=>{generated++;throw Error('No personal generation allowed');},sendEmail:async()=>{alerts++;}}));
+  assert.equal(r.ok,true);assert.equal(r.personal.enabled,false);assert.equal(r.personal.created,0);assert.equal(sent,0);assert.equal(generated,0);assert.equal(alerts,0);assert.deepEqual(r.personal.failures,[]);
+ }finally{if(old===undefined)delete process.env.BUFFER_GENE_LINKEDIN_ENABLED;else process.env.BUFFER_GENE_LINKEDIN_ENABLED=old;if(resources===undefined)delete process.env.RESOURCES_BUFFER_ENABLED;else process.env.RESOURCES_BUFFER_ENABLED=resources;}
 });
 test('unresolved Buffer send alerts after bounded recovery',async()=>{
  const db=memoryDb();db.rows.push({run_key:'old',channel_id:'li',state:'sending',payload:{text:'unknown',dueAt:'2030-06-01'}});let email;

@@ -78,9 +78,11 @@ test('production routing: existing industry, role and Florida pages, privacy, pa
   }
   const ad=await get('/medical-sales/free-trial?utm_source=google');assert.equal(ad.status,302);assert.equal(ad.headers.get('location'),'/rook-onboarding-v8.html?utm_source=google');
   for(const file of ['','rook-browse.html','rook-about.html','rook-employers.html','rook-companies.html']){const r=await get('/'+file);assert.equal(r.status,200);assert((await r.text()).includes(`rel="canonical" href="${PUBLIC}/${file}"`));}
-  // Category catalog paths are listed statically (thin pages remain noindex).
-  // This avoids rebuilding the full SEO inventory on every sitemap request.
-  const map=await(await get('/sitemap.xml')).text();for(const slug of Object.keys(CATEGORIES)){assert(map.includes(PUBLIC+'/jobs/category/'+slug+'</loc>'),slug);if(FLORIDA.includes(slug))assert(map.includes(PUBLIC+'/jobs/category/'+slug+'/florida</loc>'),slug+'/florida');}assert(!map.includes('/animal-health-sales-jobs'));assert(map.includes('/jobs/'+rows[0].id));noSecrets(map);
+  // XML and HTML use the same qualification boundary without a second rebuild.
+  const map=await(await get('/sitemap.xml')).text();
+  const expected=buildCollections(rows);
+  for(const c of Object.values(expected)) assert.equal(map.includes(PUBLIC+c.path+'</loc>'),c.qualified,c.path);
+  assert(!map.includes('/animal-health-sales-jobs'));assert(map.includes('/jobs/'+rows[0].id));noSecrets(map);
   for(const p of ['/jobs/'+rows[0].id,'/api/jobs/'+rows[0].id]){if(p.startsWith('/api'))continue;const r=await get(p);assert.equal(r.status,200);noSecrets(await r.text());}
   assert.equal((await get('/jobs/00000000-0000-0000-0000-000000000000')).status,404);
   fail=true;assert.equal((await get('/jobs/'+rows[0].id)).status,503);fail=false;

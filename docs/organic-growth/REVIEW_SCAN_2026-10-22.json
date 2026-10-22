@@ -1,0 +1,7 @@
+{
+  "scan": "acquisition branch changed text files relative to origin/main plus untracked additions",
+  "textFilesScanned": 67,
+  "credentialFindings": [],
+  "valuesPrinted": false,
+  "protectedDataLeakCheck": "synthetic sentinel HTTP/aggregate test passed; no production job or customer data loaded into local validation"
+}

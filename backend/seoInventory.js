@@ -173,6 +173,7 @@ function createInventoryLoader(db,{ttl=10*60*1000}={}) {
     }
     return rebuild();
   }
+  load.peek=()=>cached && Date.now()<expires ? cached : null;
   load.warm=()=>rebuild().catch(err=>{console.warn('[seo-inventory] warm failed:',err.message);return null;});
   return load;
 }

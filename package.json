@@ -1,7 +1,7 @@
 {
   "name": "rook-careers",
   "version": "0.2.0",
-  "description": "ROOK Careers — UI prototype plus Phase 1 backend scaffold (Supabase, Stripe, ATS ingestion adapters).",
+  "description": "ROOK Careers \u2014 UI prototype plus Phase 1 backend scaffold (Supabase, Stripe, ATS ingestion adapters).",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -86,7 +86,19 @@
     "industry-news:discover": "node backend/industryNews/worker.js discover",
     "industry-news:report": "node backend/industryNews/worker.js report",
     "industry-news:publish": "node backend/industryNews/runPublication.js",
-    "test-production-readiness-repairs": "node --test backend/testProductionReadinessRepairs.js"
+    "test-production-readiness-repairs": "node --test backend/testProductionReadinessRepairs.js",
+    "test-acquisition": "node --test --test-concurrency=1 backend/organicAcquisition/recoveryPilot.test.js backend/organicAcquisition/integration.test.js backend/organicAcquisition/providerContracts.test.js",
+    "acquisition:preflight": "node scripts/acquisitionPreflight.js",
+    "acquisition:stripe-test": "node scripts/acquisitionStripeTest.js --confirm-stripe-test-fixtures",
+    "acquisition:staging-demo": "node scripts/acquisitionStagingDemo.js",
+    "acquisition:buffer-draft-check": "node scripts/acquisitionBufferDraftCheck.js --confirm-nonpublic-drafts",
+    "dev": "ROOK_ACQ_LOCAL_PREVIEW=true node scripts/acquisitionStagingDemo.js --serve",
+    "acquisition:supabase-staging-test": "node scripts/acquisitionSupabaseStagingTest.js --confirm-isolated-staging",
+    "acquisition:supabase-auth-test": "node scripts/acquisitionSupabaseAuthTest.js --confirm-isolated-staging",
+    "test-acquisition-providers": "node --test backend/organicAcquisition/providerValidation.test.js",
+    "acquisition:resend-simulator-check": "node scripts/acquisitionResendSimulatorCheck.js --confirm-resend-simulator",
+    "test-acquisition-launch-safeguards": "node --test backend/organicAcquisition/launchSafeguards.test.js",
+    "test-acquisition-email-recovery": "node --test backend/organicAcquisition/emailRecovery.test.js"
   },
   "engines": {
     "node": ">=18.0.0"

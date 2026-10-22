@@ -1,0 +1,29 @@
+✔ resource articles expose a single sidebar open-roles module with membership attribution (21.826429ms)
+✔ industry news articles promote category jobs with news attribution (1.218301ms)
+✔ client script hydrates open roles from the slim featured jobs API (0.364586ms)
+✔ 210 distinct curated topics; image rotation; schedules across DST (56.246956ms)
+✔ migration, idempotent claims, restart fencing, transaction and permissions (6803.019076ms)
+✔ public routes return indexable HTML without authentication; missing articles are 404 (20.479251ms)
+✔ article metadata escapes text and emits Article schema (1.100784ms)
+✔ resources sitemap excludes redirects and only emits published, non-future guides (8.31802ms)
+✔ unsafe and malformed article output is rejected before storage (15.939955ms)
+✔ public URL failure cannot enqueue social or delete a published article (8.377681ms)
+✔ disabled scheduler makes no requests (0.819295ms)
+✔ Meta preflight rejects a non-ROOK token, never posts (3.113193ms)
+✔ single Meta token resolves only ROOK and verifies both publishing permissions (3.547913ms)
+✔ explicit Meta Page bypasses discovery and enforces linked Instagram ID (5.179793ms)
+✔ inventory eligibility, market union, deduplication and genuine Florida scope (107.776423ms)
+✔ full pagination through database caps; short safe cache; failures do not become empty inventory (457.83688ms)
+✔ production routing: existing industry, role and Florida pages, privacy, pagination, canonicals, schema, sitemap, filters, private headers and application compatibility (11150.457152ms)
+✔ thin Florida inventory remains usable but noindexed and not promoted (65.886364ms)
+✔ existing role collections count matching eligible jobs and employers, not all employers (4.457519ms)
+✔ pharmaceutical collection uses classified active inventory and distinct matching employers (4.300774ms)
+✔ resource links include only valid published results and reuse a short cache (1.999293ms)
+ℹ tests 21
+ℹ suites 0
+ℹ pass 21
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 24950.807978

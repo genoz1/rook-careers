@@ -1,0 +1,16 @@
+{
+  "environment": "real isolated Supabase preview branch + local HTTP server",
+  "realSupabaseAuth": true,
+  "completedAt": "2026-10-21T23:33:14.532Z",
+  "checks": [
+    "Two disposable staging users authenticate through real Supabase Auth; no verification emails requested",
+    "Verified-user onboarding enforces terms, preserves opt-out and deduplicates real account enrollment",
+    "Signed referral cookie binds the actual Supabase-authenticated buyer through the existing passive HTTP route",
+    "Real authenticated partner reporting works; anonymous/non-admin users cannot read private admin metrics",
+    "Disposable Supabase Auth test accounts removed; no production users or subscriptions touched"
+  ],
+  "productionTouched": false,
+  "emailSent": false,
+  "stripeTransactionPerformed": false,
+  "secretValuesRecorded": false
+}

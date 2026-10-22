@@ -1,0 +1,20 @@
+{
+  "environment": "real isolated Supabase preview branch",
+  "realSupabase": true,
+  "completedAt": "2026-10-21T23:31:58.978Z",
+  "checks": [
+    "Existing server adapter reaches the explicitly marked isolated Supabase branch",
+    "Write persists across separate SDK clients and REST requests",
+    "Public API key cannot execute sidecar RPC or read the commission ledger",
+    "Concurrent hosted workers acquire exactly one lease; receipt survives REST persistence",
+    "Synthetic referral ledger creates one $5 held commission despite duplicate invoice/event attempts",
+    "Synthetic refund reversal persists; no Stripe transaction or payment is represented as real",
+    "Existing-customer exclusion remains enforced by the hosted database"
+  ],
+  "realStripeTestMode": false,
+  "realSocialDelivery": false,
+  "realEmailDelivery": false,
+  "productionTouched": false,
+  "secretsRecorded": false,
+  "syntheticFinancialRecords": true
+}

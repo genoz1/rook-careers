@@ -331,18 +331,18 @@ async function run() {
     assert.strictEqual(config.bufferAccessToken, "secret-token-value");
     assert.strictEqual(config.linkedinChannelId, "li-123");
     assert.strictEqual(config.facebookChannelId, "fb-456");
-    assert.strictEqual(config.personalLinkedinChannelId, "li-gene");
-    assert.strictEqual(config.personalLinkedinEnabled, true);
+    assert.strictEqual(config.personalLinkedinChannelId, null);
+    assert.strictEqual(config.personalLinkedinEnabled, false);
   });
-  test("loadConfig disables personal LinkedIn only when BUFFER_GENE_LINKEDIN_ENABLED=false", () => {
+  test("loadConfig permanently prohibits personal LinkedIn regardless of old environment values", () => {
     const enabled = loadConfig({ BUFFER_GENE_LINKEDIN_CHANNEL_ID: "li-gene" });
-    assert.strictEqual(enabled.personalLinkedinEnabled, true);
+    assert.strictEqual(enabled.personalLinkedinEnabled, false);
     const disabled = loadConfig({
       BUFFER_GENE_LINKEDIN_CHANNEL_ID: "li-gene",
       BUFFER_GENE_LINKEDIN_ENABLED: "false",
     });
     assert.strictEqual(disabled.personalLinkedinEnabled, false);
-    assert.strictEqual(disabled.personalLinkedinChannelId, "li-gene");
+    assert.strictEqual(disabled.personalLinkedinChannelId, null);
   });
 
   console.log("\n=== Channel discovery never exposes the token ===");

@@ -1,0 +1,18 @@
+{
+  "checkedAt": "2026-10-21T18:15:44.687Z",
+  "configured": {
+    "SUPABASE_URL": false,
+    "SUPABASE_SERVICE_ROLE_KEY": false,
+    "ACQ_SIGNING_SECRET": false,
+    "STRIPE_SECRET_KEY": false,
+    "STRIPE_PRICE_ID_MONTHLY": false,
+    "ACQ_STRIPE_WEBHOOK_SECRET": false,
+    "BUFFER_ACCESS_TOKEN": false,
+    "BUFFER_ROOK_LINKEDIN_CHANNEL_ID": false,
+    "BUFFER_ROOK_FACEBOOK_CHANNEL_ID": false,
+    "ADMIN_EMAILS": false
+  },
+  "productionReady": false,
+  "accountChecks": {},
+  "note": "Configured is not validated. Public delivery remains untested without a separately approved live post."
+}
