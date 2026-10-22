@@ -13,10 +13,11 @@ async function checkDestination(url,{httpFetch=fetch,expectedHash}={}){
  const $=require('cheerio').load(html);const canonical=$('link[rel="canonical"]').attr('href');
  return canonical?.replace(/\/$/,'')===u.origin+u.pathname.replace(/\/$/,'')&&$('h1').length>0&&(!expectedHash||$('[data-content-hash]').attr('data-content-hash')===expectedHash);
 }
-async function refreshInventory(store,{collectSnapshot=collect,now=Date.now()}={}){
+async function refreshInventory(store,{collectSnapshot=collect,now,clock=Date.now}={}){
+ const started=now??clock();
  const old=await store.call('get',{kind:'snapshot',id:'latest'});
- if(old&&now-Date.parse(old.capturedAt)<86400000)return old;
- const s=await collectSnapshot();require('./content').validateFresh(s,now);
+ if(old&&started-Date.parse(old.capturedAt)>=0&&started-Date.parse(old.capturedAt)<86400000)return old;
+ const s=await collectSnapshot();require('./content').validateFresh(s,now??clock());
  await store.call('put',{kind:'snapshot',id:s.capturedAt,body:s});await store.call('put',{kind:'snapshot',id:'latest',body:s});return s;
 }
 async function publishReports(store,snapshot,now){

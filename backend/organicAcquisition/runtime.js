@@ -34,10 +34,10 @@ function createRuntime(env=process.env){
    }
    const seo=await store.call('get',{kind:'seo',id:'latest'});
    if(!seo||now-Date.parse(seo.capturedAt)>7*86400000){const audit=await attempt('seo_audit',()=>require('./seoMonitor').auditPublicResources());if(audit)await store.call('put',{kind:'seo',id:'latest',body:audit});}
-   if(stage('REPORT_PUBLICATION')){const snapshot=await attempt('aggregate_refresh',()=>worker.refreshInventory(store));if(snapshot)await attempt('report_publication',()=>worker.publishReports(store,snapshot,now));}
+   if(stage('REPORT_PUBLICATION')){const snapshot=await attempt('aggregate_refresh',()=>worker.refreshInventory(store));if(snapshot)await attempt('report_publication',()=>worker.publishReports(store,snapshot,Date.now()));}
    if(stage('PUBLICATION')&&env.ACQ_ENVIRONMENT==='production'){
     const channels=await attempt('channel_authorization',()=>adapter.channels());
-    if(channels){const externalSchedule=await attempt('existing_schedule_coordination',()=>adapter.schedule());if(externalSchedule)await attempt('reserve_replenishment',()=>worker.replenish(store,{channels,now,externalSchedule}));}
+    if(channels){const externalSchedule=await attempt('existing_schedule_coordination',()=>adapter.schedule());if(externalSchedule)await attempt('reserve_replenishment',()=>worker.replenish(store,{channels,now:Date.now(),externalSchedule}));}
     for(let i=0;i<4;i++){const result=await attempt('social_delivery',()=>worker.dispatchOne(store,{adapter}));if(!result)break;}
    }
    if(stage('PARTNER_DISCOVERY'))await attempt('partner_discovery',()=>require('./partners').discover(store));
