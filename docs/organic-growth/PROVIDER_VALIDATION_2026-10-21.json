@@ -142,7 +142,10 @@
         "linkedinQueued": 6,
         "apiScheduledPostLimit": 10,
         "modified": false
-      }
+      },
+      "personalLinkedinDisconnected": true,
+      "companyOnlyConnectionListVerifiedAfterRefresh": true,
+      "personalPublishingProhibitedByOwner": true
     },
     "resend": {
       "realExistingNodeClient": true,

@@ -8,6 +8,10 @@ Continued from fetched branch head `eab34e27dd0ceb9e75cf11a107c9af5eb28753ee` on
 
 The previously verified baseline is three active paid $19.99 subscriptions: $59.97/month. The target is 51 such subscribers ($1,019.49/month), requiring 48 net additional subscribers. The separate paid $29 subscription is excluded from that subscriber target. A new isolated observer test confirms a $29 price on the same product cannot inflate the target. This session made no Stripe transactions, mode switches or subscription changes. No revenue growth is claimed from validation.
 
+## Company-page-only publishing policy
+
+The owner prohibited personal LinkedIn publishing. The personal LinkedIn Buffer connection was disconnected after explicit confirmation of Buffer’s irreversible data-removal warning. A refreshed connection list showed only ROOK’s company LinkedIn Page and Facebook Page. The acquisition adapter already targets only the two explicitly configured ROOK company IDs. No company channel was disconnected. Removing a Buffer connection does not remove posts previously published on LinkedIn.
+
 ## New real-provider evidence
 
 | Check | Observed result | Limit |
