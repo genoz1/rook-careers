@@ -29,7 +29,7 @@ function createRuntime(env=process.env){
    if(!latest||now-Date.parse(latest.capturedAt)>20*3600000){
     await attempt('stripe_payment_reconciliation',()=>observer.reconcile());
     await attempt('stripe_reconciliation',()=>observer.metrics());
-    const analytics=await attempt('analytics',()=>require('./analytics').collectAnalytics({credentials:env.ACQ_GOOGLE_SERVICE_ACCOUNT_JSON?JSON.parse(env.ACQ_GOOGLE_SERVICE_ACCOUNT_JSON):null,gaProperty:env.ACQ_GA4_PROPERTY||'552914293',gscProperty:env.ACQ_GSC_PROPERTY}));
+    const analytics=await attempt('analytics',()=>require('./analytics').collectAnalytics({credentials:(env.ACQ_GOOGLE_SERVICE_ACCOUNT_JSON||env.GA4_SERVICE_ACCOUNT_JSON)?JSON.parse(env.ACQ_GOOGLE_SERVICE_ACCOUNT_JSON||env.GA4_SERVICE_ACCOUNT_JSON):null,gaProperty:env.ACQ_GA4_PROPERTY||env.GA4_PROPERTY_ID||'552914293',gscProperty:env.ACQ_GSC_PROPERTY}));
     if(analytics)await store.call('put',{kind:'metrics',id:'analytics',body:analytics});
    }
    const seo=await store.call('get',{kind:'seo',id:'latest'});

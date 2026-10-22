@@ -23,8 +23,7 @@ process.on("unhandledRejection", (reason) => {
 });
 
 // Additive acquisition sidecar: absent master flag means no clients, routes or workers.
-const acquisitionRuntime = process.env.ROOK_ACQUISITION_ENABLED === 'true'
-  ? require('./backend/organicAcquisition/runtime').createRuntime() : null;
+const acquisitionRuntime = require('./backend/organicAcquisition/startup').startSafely();
 if (acquisitionRuntime) { app.use(acquisitionRuntime.webhooks); app.use(acquisitionRuntime.emailWebhooks); }
 
 // Stripe webhooks need the RAW body to verify the signature, so this
@@ -200,7 +199,8 @@ app.listen(PORT, () => {
   const { createClient } = require("@supabase/supabase-js");
   if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
     const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-    require('./backend/repairCitySuffixCoordinates').repairCitySuffixCoordinates(supabaseAdmin)
+    // An acquisition deployment must never mutate protected job records on boot.
+    require('./backend/bootMaintenance').runCoordinateRepair(supabaseAdmin)
       .then(result => console.log('[location-repair]', JSON.stringify(result)))
       .catch(err => console.error('[location-repair] failed:', err.message));
     setTimeout(() => {

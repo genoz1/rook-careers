@@ -48,18 +48,16 @@ function loadConfig(env = process.env) {
     bufferAccessToken: env.BUFFER_ACCESS_TOKEN,
     linkedinChannelId: env.BUFFER_ROOK_LINKEDIN_CHANNEL_ID,
     facebookChannelId: env.BUFFER_ROOK_FACEBOOK_CHANNEL_ID,
-    // Exact string "false" turns off Gene personal LinkedIn only.
-    // Company ROOK LinkedIn/Facebook continue. Missing/unset keeps the
-    // previous behavior (personal posts when a channel id is available).
-    personalLinkedinEnabled: env.BUFFER_GENE_LINKEDIN_ENABLED !== 'false',
-    personalLinkedinChannelId: env.BUFFER_GENE_LINKEDIN_CHANNEL_ID,
+    // Owner policy: automated ROOK publishing is company-pages only.
+    // Old environment values cannot opt a personal profile back in.
+    personalLinkedinEnabled: false,
+    personalLinkedinChannelId: null,
     brandedTerms: (env.SOCIAL_BRANDED_TERMS || "").split(",").map((s) => s.trim()).filter(Boolean),
     freshnessWindowDays: Number(env.SOCIAL_FRESHNESS_WINDOW_DAYS) || 3,
     publicAppUrl: env.PUBLIC_APP_URL || "https://rookcareers.com",
-    // Direct instruction: global emergency pause. Anything other than
-    // the exact string "true" (including missing/unset) is treated as
-    // disabled — a safe default, never opt-in by omission.
-    automationEnabled: env.SOCIAL_AUTOMATION_ENABLED,
+    // This legacy job-card scheduler can reveal protected listing facts.
+    // Public acquisition now uses the separate aggregate/evergreen sidecar.
+    automationEnabled: 'false',
   };
 }
 
