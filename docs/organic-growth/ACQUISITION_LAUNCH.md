@@ -1,3 +1,5 @@
+> Current status, real provider receipts, costs and cleanup: [October 22 launch-readiness report](LAUNCH_READINESS_2026-10-22.md). It supersedes the historical account-access blockers and pending-staging-cleanup notes below. Production launch remains gated.
+
 # ROOK acquisition implementation — launch status
 
 **October 21, 2026: implemented locally; NOT operational or approved for production.** Work continues on `codex/organic-growth-oct2026`; existing SEO changes are retained. No production deployment, public post, external email, paid service or payment has been activated.

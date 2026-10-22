@@ -96,7 +96,9 @@
     "acquisition:supabase-staging-test": "node scripts/acquisitionSupabaseStagingTest.js --confirm-isolated-staging",
     "acquisition:supabase-auth-test": "node scripts/acquisitionSupabaseAuthTest.js --confirm-isolated-staging",
     "test-acquisition-providers": "node --test backend/organicAcquisition/providerValidation.test.js",
-    "acquisition:resend-simulator-check": "node scripts/acquisitionResendSimulatorCheck.js --confirm-resend-simulator"
+    "acquisition:resend-simulator-check": "node scripts/acquisitionResendSimulatorCheck.js --confirm-resend-simulator",
+    "test-acquisition-launch-safeguards": "node --test backend/organicAcquisition/launchSafeguards.test.js",
+    "test-acquisition-email-recovery": "node --test backend/organicAcquisition/emailRecovery.test.js"
   },
   "engines": {
     "node": ">=18.0.0"

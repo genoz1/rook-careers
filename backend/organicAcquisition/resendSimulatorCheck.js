@@ -17,8 +17,8 @@ async function verifySimulator({confirm=false,send=require('../email/resend').se
   const d = await r.json();
   if (d.id !== receipt.id || d.subject !== subject || !Array.isArray(d.to) || d.to.length !== 1 || d.to[0] !== to) throw Error('Simulator receipt mismatch');
   event = d.last_event;
-  if (event === 'delivered') return {accepted:true,simulatedDeliveryConfirmed:true,recipient:'Resend delivered simulator',lastEvent:event,realProspectDeliveryTested:false,webhookDeliveryTested:false};
+  if (event === 'delivered') return {receiptId:receipt.id,accepted:true,simulatedDeliveryConfirmed:true,recipient:'Resend delivered simulator',lastEvent:event,realProspectDeliveryTested:false,webhookDeliveryTested:false};
  }
- return {accepted:true,simulatedDeliveryConfirmed:false,recipient:'Resend delivered simulator',lastEvent:['sent','queued'].includes(event)?event:'unconfirmed',realProspectDeliveryTested:false,webhookDeliveryTested:false};
+ return {receiptId:receipt.id,accepted:true,simulatedDeliveryConfirmed:false,recipient:'Resend delivered simulator',lastEvent:['sent','queued'].includes(event)?event:'unconfirmed',realProspectDeliveryTested:false,webhookDeliveryTested:false};
 }
 module.exports = {verifySimulator};

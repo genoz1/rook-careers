@@ -89,6 +89,6 @@ async function dispatchOne(store,{adapter,now=Date.now(),check=checkDestination}
  }
 }
 async function health(store,now=Date.now()){
- const rows=await store.call('outbox');return {generatedAt:new Date(now).toISOString(),published:rows.filter(r=>r.status==='published').length,queued:rows.filter(r=>['ready','retry'].includes(r.status)).length,uncertain:rows.filter(r=>['uncertain','accepted'].includes(r.status)).length,overdue:rows.filter(r=>['ready','retry','uncertain','accepted','working'].includes(r.status)&&now-Date.parse(r.due_at)>86400000).length};
+ const rows=(await store.call('outbox')).filter(r=>r.lane==='social');return {generatedAt:new Date(now).toISOString(),published:rows.filter(r=>r.status==='published').length,queued:rows.filter(r=>['ready','retry'].includes(r.status)).length,uncertain:rows.filter(r=>['uncertain','accepted'].includes(r.status)).length,overdue:rows.filter(r=>['ready','retry','uncertain','accepted','working'].includes(r.status)&&now-Date.parse(r.due_at)>86400000).length};
 }
 module.exports={checkDestination,refreshInventory,publishReports,replenish,dispatchOne,health};
