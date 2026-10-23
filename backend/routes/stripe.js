@@ -21,6 +21,9 @@ const { createClient } = require("@supabase/supabase-js");
 const { notifyNewSubscriber } = require("../adminPush");
 const linkedinPaid = require("../linkedinPaidConversion");
 const {hasFullAccess}=require('../matching');
+const subscriptionAuthorization = require("../subscriptionAuthorization");
+const { buildSubscriptionConfirmationEmail } = require("../email/subscriptionConfirmation");
+const { sendEmail } = require("../email/resend");
 
 const router = express.Router();
 
@@ -150,6 +153,59 @@ async function requireAuth(req, res, next) {
 router.get("/stripe/trial-config", (req, res) => {
   res.json({ trialDays: 0, deprecated: true });
 });
+
+// Exact consent copy for the selected plan. Server-authored; clients must not invent text.
+router.get("/stripe/authorization-copy", requireConfig, requireAuth, (req, res) => {
+  const copy = subscriptionAuthorization.authorizationCopy(String(req.query.plan || ""));
+  if (!copy) return res.status(400).json({ error: "Choose a valid membership option." });
+  res.json(copy);
+});
+
+// Record unchecked-checkbox consent BEFORE SetupIntent / purchase. Never backfills history.
+router.post("/stripe/record-authorization", requireConfig, requireAuth, async (req, res) => {
+  try {
+    const row = await subscriptionAuthorization.recordAuthorization(supabaseAdmin, {
+      userId: req.user.id,
+      planId: String(req.body?.plan || ""),
+      consented: req.body?.consented === true,
+      req,
+    });
+    res.json({
+      authorization_id: row.id,
+      plan_id: row.plan_id,
+      consent_text: row.consent_text,
+      terms_version: row.terms_version,
+      checkout_version: row.checkout_version,
+      consented_at: row.consented_at,
+    });
+  } catch (err) {
+    const status = err.status || 500;
+    if (status >= 500) console.error("record-authorization failed:", err.message);
+    res.status(status).json({ error: err.status ? err.message : "Could not record billing authorization." });
+  }
+});
+
+async function sendPurchaseConfirmation(authorization, userEmail) {
+  if (!authorization || !userEmail) return;
+  try {
+    const mail = buildSubscriptionConfirmationEmail(authorization, {
+      publicAppUrl: process.env.PUBLIC_APP_URL || "https://rookcareers.com",
+    });
+    await sendEmail({
+      to: userEmail,
+      subject: mail.subject,
+      html: mail.html,
+      idempotencyKey: `rook-authz-confirm-${authorization.id}`,
+    });
+    await subscriptionAuthorization.markConfirmationEmailSent(
+      supabaseAdmin,
+      authorization.id,
+      authorization.user_id
+    );
+  } catch (err) {
+    console.error("[subscription-confirmation] email failed:", err.message);
+  }
+}
 
 // Only these six keys are ever trusted from the client for attribution —
 // an allowlist, not a blind passthrough of req.body, so this endpoint
@@ -324,6 +380,15 @@ function _resetPortalConfigCheckForTests() {
 // then the resulting payment_method_id is sent to create-subscription-from-setup.
 router.post("/stripe/create-setup-intent", requireConfig, requireAuth, async (req, res) => {
   try {
+    const planId = String(req.body?.plan || "");
+    const authorizationId = String(req.body?.authorization_id || "");
+    // Card collection is part of initiating payment — consent must already be on file.
+    await subscriptionAuthorization.requireOpenAuthorization(supabaseAdmin, {
+      userId: req.user.id,
+      authorizationId,
+      planId,
+    });
+
     // Find or create a Stripe customer for this user
     const { data: profile } = await supabaseAdmin
       .from("candidate_profiles")
@@ -354,13 +419,14 @@ router.post("/stripe/create-setup-intent", requireConfig, requireAuth, async (re
       customer: customerId,
       payment_method_types: ["card"],
       usage: "off_session",
-      metadata: { user_id: req.user.id },
+      metadata: { user_id: req.user.id, authorization_id: authorizationId, membership_plan: planId },
     });
 
-    res.json({ client_secret: setupIntent.client_secret, customer_id: customerId });
+    res.json({ client_secret: setupIntent.client_secret, customer_id: customerId, authorization_id: authorizationId });
   } catch (err) {
-    console.error("create-setup-intent failed:", err.message);
-    res.status(500).json({ error: err.message });
+    const status = err.status || 500;
+    if (status >= 500) console.error("create-setup-intent failed:", err.message);
+    res.status(status).json({ error: err.status ? err.message : "Could not initialize payment." });
   }
 });
 
@@ -472,10 +538,14 @@ router.post("/stripe/create-v9-subscription-from-setup", requireConfig, requireA
   try {
     const paymentMethodId = req.body?.payment_method_id;
     const customerId = req.body?.customer_id;
+    const authorizationId = String(req.body?.authorization_id || "");
     const couponId = process.env.STRIPE_V9_FIRST_MONTH_COUPON_ID;
     if (!/^pm_/.test(String(paymentMethodId || "")) || !/^cus_/.test(String(customerId || "")))
       return res.status(400).json({ error: "Invalid payment setup. Please restart checkout." });
     if (!couponId) return res.status(503).json({ error: "The V9 introductory offer is not configured yet." });
+    await subscriptionAuthorization.requireOpenAuthorization(supabaseAdmin, {
+      userId: req.user.id, authorizationId, planId: "monthly",
+    });
 
     const profileResult = await supabaseAdmin.from("candidate_profiles")
       .select("stripe_customer_id,subscription_status,subscription_started_at,trial_started_at,trial_ends_at,trial_source,utm_source,utm_medium,utm_campaign,utm_term,utm_content,utm_id")
@@ -502,7 +572,7 @@ router.post("/stripe/create-v9-subscription-from-setup", requireConfig, requireA
     await stripe.customers.update(customerId, { invoice_settings: { default_payment_method: paymentMethodId } });
     const subscription = await stripe.subscriptions.create(buildV9SubscriptionParams({
       customerId, paymentMethodId, userId: req.user.id, priceId: process.env.STRIPE_PRICE_ID_MONTHLY,
-      couponId, utm: pickUtmFields(profile),
+      couponId, utm: { ...pickUtmFields(profile), authorization_id: authorizationId, membership_plan: "monthly" },
     }));
     if (subscription.status !== "active") throw new Error("Payment was not completed. No access was granted.");
 
@@ -512,11 +582,17 @@ router.post("/stripe/create-v9-subscription-from-setup", requireConfig, requireA
       subscription_started_at:profile.subscription_started_at||paidAt,updated_at:paidAt,
     },{onConflict:"user_id"});
     if (update.error) console.error("V9 subscription profile update failed:",update.error.message);
+    const authorization = await subscriptionAuthorization.completeAuthorization(supabaseAdmin, {
+      authorizationId, userId: req.user.id, stripeCustomerId: customerId,
+      stripeSubscriptionId: subscription.id, purchaseReference: subscription.id,
+    });
+    await sendPurchaseConfirmation(authorization, req.user.email);
     console.log(`[checkout-v9] uid=${req.user.id.slice(0,8)} subscription=${subscription.id} status=${subscription.status}`);
-    res.json({ok:true,subscription_id:subscription.id,status:subscription.status});
+    res.json({ok:true,subscription_id:subscription.id,status:subscription.status,authorization_id:authorizationId});
   } catch (error) {
-    console.error("create-v9-subscription-from-setup failed:",error.message);
-    res.status(500).json({error:"Payment could not be completed. Please verify your card or try another card."});
+    const status = error.status || 500;
+    if (status >= 500) console.error("create-v9-subscription-from-setup failed:",error.message);
+    res.status(status).json({error: error.status ? error.message : "Payment could not be completed. Please verify your card or try another card."});
   }
 });
 
@@ -527,10 +603,14 @@ router.post("/stripe/create-v8-subscription-from-setup", requireConfig, requireA
   try {
     const paymentMethodId = req.body?.payment_method_id;
     const customerId = req.body?.customer_id;
+    const authorizationId = String(req.body?.authorization_id || "");
     const couponId = process.env.STRIPE_V9_FIRST_MONTH_COUPON_ID;
     if (!/^pm_/.test(String(paymentMethodId || "")) || !/^cus_/.test(String(customerId || "")))
       return res.status(400).json({ error: "Invalid payment setup. Please restart checkout." });
     if (!couponId) return res.status(503).json({ error: "The introductory offer is not configured yet." });
+    await subscriptionAuthorization.requireOpenAuthorization(supabaseAdmin, {
+      userId: req.user.id, authorizationId, planId: "monthly",
+    });
 
     const profileResult = await supabaseAdmin.from("candidate_profiles")
       .select("stripe_customer_id,subscription_status,subscription_started_at,trial_started_at,trial_ends_at,trial_source,utm_source,utm_medium,utm_campaign,utm_term,utm_content,utm_id")
@@ -551,7 +631,7 @@ router.post("/stripe/create-v8-subscription-from-setup", requireConfig, requireA
     await stripe.customers.update(customerId, { invoice_settings: { default_payment_method: paymentMethodId } });
     const subscription = await stripe.subscriptions.create(buildV8SubscriptionParams({
       customerId, paymentMethodId, userId: req.user.id, priceId: process.env.STRIPE_PRICE_ID_MONTHLY,
-      couponId, utm: pickUtmFields(profile),
+      couponId, utm: { ...pickUtmFields(profile), authorization_id: authorizationId, membership_plan: "monthly" },
     }));
     if (subscription.status !== "active") throw new Error("Payment was not completed. No access was granted.");
 
@@ -561,11 +641,17 @@ router.post("/stripe/create-v8-subscription-from-setup", requireConfig, requireA
       subscription_started_at:profile.subscription_started_at||paidAt,updated_at:paidAt,
     },{onConflict:"user_id"});
     if (update.error) console.error("V8 subscription profile update failed:",update.error.message);
+    const authorization = await subscriptionAuthorization.completeAuthorization(supabaseAdmin, {
+      authorizationId, userId: req.user.id, stripeCustomerId: customerId,
+      stripeSubscriptionId: subscription.id, purchaseReference: subscription.id,
+    });
+    await sendPurchaseConfirmation(authorization, req.user.email);
     console.log(`[checkout-v8] uid=${req.user.id.slice(0,8)} subscription=${subscription.id} status=${subscription.status}`);
-    res.json({ok:true,subscription_id:subscription.id,status:subscription.status});
+    res.json({ok:true,subscription_id:subscription.id,status:subscription.status,authorization_id:authorizationId});
   } catch (error) {
-    console.error("create-v8-subscription-from-setup failed:",error.message);
-    res.status(500).json({error:"Payment could not be completed. Please verify your card or try another card."});
+    const status = error.status || 500;
+    if (status >= 500) console.error("create-v8-subscription-from-setup failed:",error.message);
+    res.status(status).json({error: error.status ? error.message : "Payment could not be completed. Please verify your card or try another card."});
   }
 });
 
@@ -577,9 +663,13 @@ router.post('/stripe/purchase-membership',requireConfig,requireAuth,async(req,re
     const planId=String(req.body?.plan||''),plan=MEMBERSHIP_PLANS[planId];
     const paymentMethodId=String(req.body?.payment_method_id||''),customerId=String(req.body?.customer_id||'');
     const purchaseToken=String(req.body?.purchase_token||'');
+    const authorizationId=String(req.body?.authorization_id||'');
     if(!plan)return res.status(400).json({error:'Choose a valid membership option.'});
     if(!/^pm_/.test(paymentMethodId)||!/^cus_/.test(customerId)||!/^[-a-f0-9]{20,64}$/i.test(purchaseToken))
       return res.status(400).json({error:'Invalid payment setup. Please restart checkout.'});
+    await subscriptionAuthorization.requireOpenAuthorization(supabaseAdmin,{
+      userId:req.user.id,authorizationId,planId,
+    });
     const result=await supabaseAdmin.from('candidate_profiles')
       .select('stripe_customer_id,subscription_status,subscription_cancel_at,trial_ends_at,subscription_started_at,utm_source,utm_medium,utm_campaign,utm_term,utm_content,utm_id')
       .eq('user_id',req.user.id).maybeSingle();
@@ -588,9 +678,9 @@ router.post('/stripe/purchase-membership',requireConfig,requireAuth,async(req,re
     if(hasFullAccess(profile))return res.status(409).json({error:'This account already has membership access.'});
     if(profile.stripe_customer_id&&profile.stripe_customer_id!==customerId)
       return res.status(400).json({error:'Payment customer mismatch. Please restart checkout.'});
-    const metadata={user_id:req.user.id,onboarding_version:'v8',membership_plan:planId,...pickUtmFields(profile)};
+    const metadata={user_id:req.user.id,onboarding_version:'v8',membership_plan:planId,authorization_id:authorizationId,...pickUtmFields(profile)};
     const key=`rook_${req.user.id}_${purchaseToken}`.slice(0,255);
-    let reference,status='active',expiresAt=null;
+    let reference,status='active',expiresAt=null,stripeSubscriptionId=null,stripePaymentIntentId=null;
     if(plan.kind==='subscription'){
       const couponId=process.env.STRIPE_V9_FIRST_MONTH_COUPON_ID;
       if(!couponId)return res.status(503).json({error:'Monthly membership is temporarily unavailable.'});
@@ -600,23 +690,29 @@ router.post('/stripe/purchase-membership',requireConfig,requireAuth,async(req,re
       const subscription=await stripe.subscriptions.create(buildV8SubscriptionParams({customerId,paymentMethodId,userId:req.user.id,
         priceId:process.env.STRIPE_PRICE_ID_MONTHLY,couponId,utm:metadata}),{idempotencyKey:key});
       if(subscription.status!=='active')throw Error('Payment was not completed. No access was granted.');
-      reference=subscription.id;status=subscription.status;
+      reference=subscription.id;status=subscription.status;stripeSubscriptionId=subscription.id;
     }else{
       const intent=await stripe.paymentIntents.create({amount:plan.amount,currency:'usd',customer:customerId,
         payment_method:paymentMethodId,payment_method_types:['card'],confirm:true,description:`ROOK ${plan.label}`,metadata},{idempotencyKey:key});
       if(intent.status!=='succeeded')throw Error('Payment was not completed. No access was granted.');
-      reference=intent.id;expiresAt=accessEnd(plan);
+      reference=intent.id;expiresAt=accessEnd(plan);stripePaymentIntentId=intent.id;
     }
     const paidAt=new Date().toISOString();
     const update=await supabaseAdmin.from('candidate_profiles').upsert({user_id:req.user.id,stripe_customer_id:customerId,
       subscription_status:status,subscription_cancel_at:expiresAt,subscription_started_at:profile.subscription_started_at||paidAt,
       updated_at:paidAt},{onConflict:'user_id'});
     if(update.error)throw update.error;
+    const authorization=await subscriptionAuthorization.completeAuthorization(supabaseAdmin,{
+      authorizationId,userId:req.user.id,stripeCustomerId:customerId,
+      stripeSubscriptionId,stripePaymentIntentId,purchaseReference:reference,
+    });
+    await sendPurchaseConfirmation(authorization,req.user.email);
     console.log(`[checkout-v8] uid=${req.user.id.slice(0,8)} plan=${planId} reference=${reference} status=${status}`);
-    res.json({ok:true,plan:planId,reference,status,access_expires_at:expiresAt});
+    res.json({ok:true,plan:planId,reference,status,access_expires_at:expiresAt,authorization_id:authorizationId});
   }catch(error){
-    console.error('purchase-membership failed:',error.message);
-    res.status(500).json({error:'Payment could not be completed. Please verify your card or try another card.'});
+    const status=error.status||500;
+    if(status>=500)console.error('purchase-membership failed:',error.message);
+    res.status(status).json({error:error.status?error.message:'Payment could not be completed. Please verify your card or try another card.'});
   }
 });
 

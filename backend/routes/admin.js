@@ -9,6 +9,7 @@
 
 const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
+const subscriptionAuthorization = require("../subscriptionAuthorization");
 
 const router = express.Router();
 
@@ -536,6 +537,25 @@ router.get("/admin/ingestion-health", requireConfig, requireIngestionHealthAuth,
   } catch (error) {
     console.error("[ingestion-health]", error.message);
     return res.status(503).json({ ok: false, error: "Unable to read ingestion health." });
+  }
+});
+
+// Owner-only billing authorization evidence pack (never invents historical consent).
+router.get("/admin/billing-authorization", requireConfig, requireAuth, requireAdmin, async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const email = String(req.query.email || "").trim().toLowerCase();
+    const userId = String(req.query.user_id || "").trim();
+    if (!email && !userId) return res.status(400).json({ error: "email or user_id is required." });
+    const pack = await subscriptionAuthorization.getAuthorizationsForAdmin(supabaseAdmin, { email, userId });
+    return res.json({
+      profile: pack.profile,
+      authorizations: pack.authorizations,
+      note: "Rows exist only for purchases after the authorization evidence system shipped. Historical consent is never manufactured.",
+    });
+  } catch (error) {
+    console.error("[billing-authorization]", error.message);
+    return res.status(500).json({ error: "Unable to load billing authorization evidence." });
   }
 });
 
