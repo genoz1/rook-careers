@@ -17,6 +17,12 @@ async function collectAnalytics({credentials,gaProperty,gscProperty,httpFetch=fe
   const end=new Date(Date.now()-3*86400000).toISOString().slice(0,10),start=new Date(Date.now()-31*86400000).toISOString().slice(0,10);
   result.searchConsole=await query(`https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(gscProperty)}/searchAnalytics/query`,{startDate:start,endDate:end,dimensions:['query','page'],rowLimit:100});
  }catch{result.searchConsole={unavailable:'Search Console property access denied or quota unavailable'};}
+ if(gaProperty&&/^\d+$/.test(gaProperty)){
+  for(const [key,dimensions,metrics,filter] of [
+   ['campaignTraffic',['sessionSourceMedium','sessionCampaignName'],['sessions','totalUsers'],null],
+   ['campaignFunnel',['sessionSourceMedium','sessionCampaignName','eventName'],['eventCount'],{filter:{fieldName:'eventName',inListFilter:{values:['v8_account_created','v7_account_created','checkout_started','v8_checkout_started','v7_checkout_started','successful_paid_conversion']}}}],
+  ])try{result[key]=await query(`https://analyticsdata.googleapis.com/v1beta/properties/${gaProperty}:runReport`,{dateRanges:[{startDate:'28daysAgo',endDate:'yesterday'}],dimensions:dimensions.map(name=>({name})),metrics:metrics.map(name=>({name})),...(filter?{dimensionFilter:filter}:{}),limit:500});}catch{result[key]={unavailable:'Campaign conversion analytics permission or quota unavailable'};}
+ }
  return result;
 }
 module.exports={collectAnalytics,googleToken};

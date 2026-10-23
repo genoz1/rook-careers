@@ -40,6 +40,12 @@ function createRuntime(env=process.env){
     if(channels){const externalSchedule=await attempt('existing_schedule_coordination',()=>adapter.schedule());if(externalSchedule)await attempt('reserve_replenishment',()=>worker.replenish(store,{channels,now:Date.now(),externalSchedule}));}
     for(let i=0;i<4;i++){const result=await attempt('social_delivery',()=>worker.dispatchOne(store,{adapter}));if(!result)break;}
    }
+   const marketingMetrics=await store.call('get',{kind:'metrics',id:'marketing-performance'});
+   if(!marketingMetrics||now-Date.parse(marketingMetrics.capturedAt)>20*3600000){
+    try{await store.call('put',{kind:'metrics',id:'marketing-performance',body:await require('./performance').collect(client,store)});}catch{/* Analytics availability does not stop safe publishing. */}
+    let insights;try{insights=await adapter.insights();}catch{insights={capturedAt:new Date().toISOString(),unavailable:'Company reach/engagement metrics are unavailable with current provider access; no values inferred.'};}
+    await store.call('put',{kind:'metrics',id:'social-insights',body:insights});
+   }
    if(stage('PARTNER_DISCOVERY'))await attempt('partner_discovery',()=>require('./partners').discover(store));
    if(stage('PARTNER_EMAIL')){
     await attempt('email_preparation',()=>require('./partners').schedulePartnerMessages(store,{postalAddress:env.ACQ_POSTAL_ADDRESS,followupsEnabled:env.ACQ_REPLY_SUPPRESSION_VERIFIED==='true'&&Boolean(env.ACQ_PARTNER_REPLY_EMAIL&&env.ACQ_RESEND_WEBHOOK_SECRET)}));

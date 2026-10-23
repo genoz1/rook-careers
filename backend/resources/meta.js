@@ -77,6 +77,7 @@ async function sendArticle(a,channel,deps={}){
  }catch(e){await result(client.from('resource_distribution').update({state:'uncertain'}).eq('article_slug',a.slug).eq('channel',channel));throw e;}
 }
 async function dispatch(deps={}){
+ if(process.env.ROOK_ACQUISITION_ENABLED==='true')return {state:'managed_by_acquisition'};
  const client=deps.db||db();
  for(const channel of ['facebook','instagram']){
   if(process.env['RESOURCES_'+channel.toUpperCase()+'_ENABLED']==='false'||!process.env.ROOK_META_ACCESS_TOKEN)continue;

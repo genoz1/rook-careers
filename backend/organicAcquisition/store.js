@@ -2,6 +2,7 @@
 class SupabaseAcquisitionStore {
  constructor(client) { this.client=client; }
  async call(op,a={}) { const {data,error}=await this.client.rpc('rook_acq_command',{op,a}); if(error)throw Error('Acquisition database operation failed'); return data; }
+ async recordClick(body){const {error}=await this.client.from('rook_acq_events').insert({event_id:'click_'+require('node:crypto').randomUUID(),type:'social_click',result:body});if(error)throw Error('Click recording unavailable');}
 }
 // Real embedded Postgres used in staging tests; same SQL/RPC logic, not a fake store.
 class PostgresAcquisitionStore {

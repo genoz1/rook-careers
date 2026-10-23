@@ -10,6 +10,21 @@ const authScripts='<script src="/rook-config.js"></script><script src="https://c
 function createRouter({store,signer,authenticate,adminEmails=[],clock=Date.now,secureCookies=true}){
  const router=express.Router();
  const safe=fn=>async(req,res,next)=>{try{await fn(req,res,next);}catch{res.status(503).set('Cache-Control','no-store').json({error:'ROOK acquisition service temporarily unavailable'});}};
+ router.get('/marketing/:id.jpg',safe(async(req,res)=>{
+  if(!/^[a-z0-9-]{1,80}$/.test(req.params.id))return res.sendStatus(404);
+  if(!require('./marketing').catalog.some(t=>t.id===req.params.id))return res.sendStatus(404);
+  res.set('Cache-Control','public,max-age=86400').type('image/jpeg').send(await require('./creative').render(req.params.id));
+ }));
+ router.get('/s/:platform/:code',safe(async(req,res)=>{
+  res.set('Cache-Control','no-store').set('X-Robots-Tag','noindex,nofollow');
+  const platform={li:'linkedin',fb:'facebook'}[req.params.platform];if(!platform||!/^[a-f0-9]{12}$/.test(req.params.code))return res.sendStatus(404);
+  const link=await store.call('get',{kind:'config',id:'marketing-link-'+req.params.code});if(!link||link.platform!==platform)return res.sendStatus(404);
+  const target=new URL(link.url);if(target.origin!==ORIGIN||target.username||target.password||/^\/jobs\/(?!category\/)/.test(target.pathname))return res.sendStatus(404);
+  if(req.method==='GET'&&!/bot|crawler|spider|preview|facebookexternalhit|facebot|meta-external|whatsapp|slack|discord|telegram/i.test(req.get('user-agent')||'')){
+   try{await store.recordClick?.({platform,category:link.category,candidateId:link.candidateId,postId:link.postId,at:new Date(clock()).toISOString()});}catch{/* Analytics cannot block a career search. */}
+  }
+  res.redirect(302,target.href);
+ }));
  router.get('/robots.txt',(req,res)=>res.type('text/plain').send(require('node:fs').readFileSync(require('node:path').join(__dirname,'../../public/robots.txt'),'utf8')+'\nDisallow: /r/\nDisallow: /partners/dashboard\nDisallow: /internal/\nSitemap: '+ORIGIN+'/hiring-reports/sitemap.xml\n'));
  const auth=safe(async(req,res,next)=>{const u=await authenticate(req);if(!u?.id||!u.email||!u.email_confirmed_at)return res.status(401).json({error:'Sign in with a verified email to continue'});req.acqUser=u;next();});
  const admin=(req,res,next)=>adminEmails.map(e=>e.toLowerCase()).includes(req.acqUser.email.toLowerCase())?next():res.status(403).json({error:'Not authorized'});
@@ -66,7 +81,7 @@ function createRouter({store,signer,authenticate,adminEmails=[],clock=Date.now,s
  router.get('/api/acquisition/admin',auth,admin,safe(async(req,res)=>{
   const stripe=await store.call('get',{kind:'metrics',id:'stripe'}),analytics=await store.call('get',{kind:'metrics',id:'analytics'}),health=await store.call('get',{kind:'metrics',id:'health'}),seo=await store.call('get',{kind:'seo',id:'latest'});
   const commissions=await store.call('commissions');const revenue=await store.call('revenue');
-  res.json({stripe:stripe||{unavailable:'Stripe reconciliation not completed'},analytics:analytics||{unavailable:'GA4 and Search Console read-only access not configured'},health:health||{unavailable:'Worker has not run'},seo:seo||{unavailable:'SEO checks have not run'},revenueByChannel:revenue,partners:(await store.call('list',{kind:'partner'})).length,commissions,provenance:'Stripe-confirmed invoice payments; channel is attribution, not proof of causation'});
+  res.json({stripe:stripe||{unavailable:'Stripe reconciliation not completed'},analytics:analytics||{unavailable:'GA4 and Search Console read-only access not configured'},health:health||{unavailable:'Worker has not run'},seo:seo||{unavailable:'SEO checks have not run'},marketing:await store.call('get',{kind:'metrics',id:'marketing-performance'}),socialInsights:await store.call('get',{kind:'metrics',id:'social-insights'}),revenueByChannel:revenue,partners:(await store.call('list',{kind:'partner'})).length,commissions,provenance:'Stripe-confirmed invoice payments; channel is attribution, not proof of causation'});
  }));
  router.post('/api/acquisition/admin/payout-prepare',auth,admin,safe(async(req,res)=>{const id='monthly-'+new Date(clock()).toISOString().slice(0,7);await store.call('prepare_batch',{id,now:new Date(clock()).toISOString()});res.json(await require('./payouts').reviewBatch(store,id));}));
  return router;

@@ -27,7 +27,10 @@ function createBufferAdapter({token,linkedinChannelId,facebookChannelId,httpFetc
    if(same)return {id:same.id,status:same.sentAt||same.status==='sent'?'published':'accepted',organizationId:ch.organizationId};
    if([...queue,...recent].some(p=>nearSlot(p,row.channel,Date.now())))throw Error('Existing ROOK post occupies this publication window');
   }catch(e){e.definitelyNotAccepted=true;throw e;}
-  const p=await buffer.createPost(token,{channelId:row.channel,text:row.payload.text,metadata:ch.service==='facebook'?{facebook:{type:'post'}}:undefined},opts);
+  const visual=row.payload.imageUrl,card=row.payload.format==='link';
+  const details=card&&visual?{linkAttachment:{url:row.payload.shortUrl,title:row.payload.headline,description:row.payload.description,thumbnail:{url:visual}}}:{};
+  const metadata=ch.service==='facebook'?{facebook:{type:'post',...details}}:{linkedin:details};
+  const p=await buffer.createPost(token,{channelId:row.channel,text:row.payload.text,photoUrl:!card?visual:undefined,metadata},opts);
   return {id:p.id,status:p.status==='sent'?'published':'accepted',organizationId:ch.organizationId};
  }
  async function reconcile(row){
@@ -38,6 +41,7 @@ function createBufferAdapter({token,linkedinChannelId,facebookChannelId,httpFetc
   // Absence from a bounded recent list does NOT prove a mutation was unaccepted.
   return p?{id:p.id,status:p.status==='sent'||p.sentAt?'published':'accepted',organizationId:ch.organizationId}:{status:'unknown'};
  }
- return {channels,schedule,publish,reconcile};
+ async function insights(){const selected=await channels();const rows=[];for(const org of new Set(selected.map(c=>c.organizationId)))rows.push(...await buffer.readCompanyMetrics(token,org,opts));return {capturedAt:new Date().toISOString(),posts:rows,note:'Provider-reported metrics can lag by a day; null metrics are unavailable, not zero. Provider defaults may also use zero for an unreported metric.'};}
+ return {channels,schedule,publish,reconcile,insights};
 }
 module.exports={createBufferAdapter};
