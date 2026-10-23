@@ -18,30 +18,27 @@ The private dashboard adds company reach/engagement when the provider supplies i
 
 Automatic mix changes require at least 25 Stripe-confirmed new active subscribers and three comparable categories with at least 100 sessions and three subscribers each. Changes are limited to five percentage points; absent sufficient evidence, the initial mix remains. This is an observational rule, not proof of causation or a revenue guarantee.
 
-## Validation and rollout record
+## Verified production rollout — October 23
 
-The next ten local generated posts cover all five content categories and render twenty Facebook/LinkedIn layout previews. All twenty image elements loaded at 1200 × 630 without page overflow. Local previews are labeled as approximations; real nonpublic Buffer drafts must be checked separately before queue replacement/resumption.
+PR [96](https://github.com/genoz1/rook-careers/pull/96) merged at source commit `40cbb80c6dfeaf00280ee48adc5df741ec0872f4`. ROOK's existing `seashell-app` deployment `bec107bb-d962-4ee5-a373-2061bfd94d0a` went live at 17:46:52 UTC. Publishing activation configuration `3f20dbd5-a750-4c66-a6f6-61db13e628c5` went live at 18:02:47 UTC. Only `ACQ_PUBLICATION_APPROVED` changed from false to true in that activation save; all other configuration was preserved.
 
-Seventy focused acquisition/provider checks passed, including persistence/recovery, referral exclusions, canonical Stripe reads and the new editorial rules. Eighteen marketing/company-scope/production-safety checks passed. Subsequent targeted validation covers the final creative preflight. SQL schema, billing routes, price/product objects and ingestion code are unchanged.
+Both approved company Buffer queues are resumed. Their Buffer shortening setting is now No Shortening so ROOK's first-party tracking route is retained; social networks may apply their own display shortening. Legacy resource Facebook/Instagram and industry-news social distribution remain disabled. Partner discovery/email and referral payments remain disabled.
 
-Both company Buffer queues and the old automatic social paths were temporarily held for this rollout. Production resume, provider draft readback and queue replacement receipts will be added after verification. Never label this document alone as proof of a deployment or conversion improvement.
+Ten real nonpublic Buffer draft readbacks covered all five categories. Real Facebook image/link-card and LinkedIn image/link-card previews were inspected. Four earlier disposable drafts were deleted after the owner's explicit confirmation, with provider cleanup confirmed. The ten later preview drafts remain unscheduled as a verification record; they are not an automatic send queue. The two older drafts were preserved.
 
-Buffer integration references: [public media requirements](https://developers.buffer.com/guides/hosting-media.html), [API reference](https://developers.buffer.com/reference.html). A literal URL in post text does not request a link-preview card; this revision explicitly supplies `metadata.<service>.linkAttachment` or an image asset.
+Fresh counts initially disguised repeated opportunity copy and selected a preview asset outside the exported set. The fix strips the count sentence during similarity checks. Preview recovery now reconciles every saved receipt's draft state, company channel, exact text and attachment before continuing; any unresolved attempt, modified draft or published receipt blocks continuation. The combined acquisition/editorial/recovery run passed 55 checks; the final 16 editorial/recovery checks include an additional fresh-count regression. These are overlapping suites, not 71 distinct checks. The changed-file credential scan found no matching credential patterns across 32 files.
 
+All ten public production graphics returned HTTP 200 image/jpeg. Production tracking redirects returned HTTP 302 to the intended existing ROOK landing pages with campaign attribution. All fifteen distinct marketing destinations returned HTTP 200. Home, current login, checkout, pricing, partner signup and private dashboard shell responded; unauthenticated private dashboard data returned HTTP 401. No SQL migration was needed for this revision.
 
-## Actual provider verification, October 23
+Six unsent/unclaimed acquisition reservations and both remaining future Buffer posts were revised. Existing due times and the two published launch rows were preserved. Missed legacy Buffer posts remain failed and were not retried automatically.
 
-Production runtime confirmed acquisition publication held and legacy resource Facebook/Instagram and industry-news social distribution disabled. Both approved company Buffer queues remain paused; no public post was created by this verification.
+The automatic supervisor run observed at 18:06:50 UTC delivered both revised company posts without a manual supervisor invocation. Exact provider receipts and public pages were confirmed:
 
-Four nonpublic diagnostic drafts were read back in `draft` state on the exact approved company channel IDs, with matching copy and branded media/card metadata:
+- LinkedIn company receipt `6adba227e4be8a4d861ccfe8`, sent 18:06:53.614 UTC: https://www.linkedin.com/feed/update/urn:li:share:7519459346842550272/
+- Facebook company receipt `6adba2358b3d437ddc7d7649`, sent 18:06:49.157 UTC: https://www.facebook.com/122102812179462837/posts/122124185703462837
 
-- LinkedIn Florida opportunity: `6adb743d10223fea566c7844`.
-- Facebook territory advice card: `6adb743d7af932dee4e6df8d`.
-- LinkedIn membership benefit image: `6adb743e6fe59a6ed27d42c5`.
-- Facebook resume preparation image: `6adb743f6fe59a6ed27d42e3`.
+Campaign GA4 traffic/funnel reads and scoped company metrics succeeded. The private report uses Stripe-confirmed subscription data; no conversion lift is inferred from publication. Search Console access remains unavailable. Revenue totals and cancellation evidence are kept in the owner's private report, not this public repository document. The private dashboard requires a verified authorized ROOK login.
 
-The LinkedIn image preview and Facebook card preview were visually inspected in Buffer. Public preview media is pinned to a reviewed Git commit; production-generated media and short redirects still require deployment verification. The following diagnostic creation did not return a successful receipt; a scoped read of both draft collections confirmed only these four new drafts and the two older drafts. No blind retry occurred.
+Existing subscription terms, checkout implementation, protected job projection, ingestion code and regular job schedules were not changed by this marketing revision. No paid service, advertising, unsolicited outreach or payout was activated.
 
-Automatic review rejected merging before full provider verification, then rejected permanent cleanup of the four disposable drafts without action-time confirmation. Cleanup confirmation is pending. The deployed quality revision, complete ten-post provider check, unpublished queue replacement and publishing resumption are therefore **not completed**. Published history is preserved.
-
-The preview helper now records an in-flight attempt before a mutation and retains returned IDs before validating status. A lost response blocks further creations until reconciliation. Three new recovery/rejection tests plus ten marketing tests passed (13 total).
+Buffer references: [public media requirements](https://developers.buffer.com/guides/hosting-media.html), [API reference](https://developers.buffer.com/reference.html).
