@@ -11,20 +11,24 @@ async function select(store,channels,count=10){
   if(!chosen)throw Error('Insufficient quality reserve');const id=require('./security').digest('marketing-review-v2:'+i+':'+channel.id);const payload=await marketing.payloadFor(store,chosen,channel,id);selected.push({candidate:chosen,channel,payload,id});rows.push({channel:channel.id,payload,status:'ready'});
  }return selected;
 }
-async function previewDrafts(runtime,env){
- const previous=await runtime.store.call('get',{kind:'config',id:'marketing-review-drafts'});if(previous?.created?.length)throw Error('Reconcile existing diagnostic drafts before creating more');
- const channels=await companyChannels(env),items=await select(runtime.store,channels),token=env.BUFFER_ACCESS_TOKEN,created=[];
+async function previewDrafts(runtime,env,{lookup=companyChannels,request=query}={}){
+ const previous=await runtime.store.call('get',{kind:'config',id:'marketing-review-drafts'});if(previous?.created?.length||previous?.attempt)throw Error('Reconcile existing diagnostic drafts before creating more');
+ const channels=await lookup(env),items=await select(runtime.store,channels),token=env.BUFFER_ACCESS_TOKEN,created=[];
  // Only explicit disposable diagnostics are created. Nothing is scheduled or published.
  for(const item of items){const input={channelId:item.channel.id,...presentation(item.payload,item.channel.service),mode:'addToQueue',schedulingType:'automatic',saveToDraft:true,aiAssisted:true};
-  const r=await query(token,`mutation MarketingPreview($input:CreatePostInput!){createPost(input:$input){... on PostActionSuccess{post{${fields}}} ... on MutationError{message}}}`,input);const p=r.createPost?.post;if(!p?.id||p.status!=='draft'||p.channelId!==item.channel.id)throw Error('Draft creation incomplete; reconcile before retry');
+  await runtime.store.call('put',{kind:'config',id:'marketing-review-drafts',body:{created,complete:false,attempt:{channel:item.channel.id,candidateId:item.candidate.id,startedAt:new Date().toISOString()}}});
+  const r=await request(token,`mutation MarketingPreview($input:CreatePostInput!){createPost(input:$input){__typename ... on PostActionSuccess{post{${fields}}} ... on MutationError{message}}}`,input);const p=r.createPost?.post;
+  if(!p?.id){if(r.createPost?.message){await runtime.store.call('put',{kind:'config',id:'marketing-review-drafts',body:{created,complete:false,attempt:null}});throw Error('Buffer rejected diagnostic: '+String(r.createPost.message).slice(0,300));}throw Error('Draft creation incomplete; reconcile before retry');}
   created.push({id:p.id,channel:p.channelId,service:item.channel.service,category:item.candidate.category,candidateId:item.candidate.id});
   await runtime.store.call('put',{kind:'config',id:'marketing-review-drafts',body:{created,complete:false}});
-  const read=(await query(token,`query MarketingPreviewRead($input:PostInput!){post(input:$input){${fields}}}`,{id:p.id})).post;
+  if(p.status!=='draft'||p.channelId!==item.channel.id)throw Error('Unexpected draft state; reconcile recorded receipt');
+  const read=(await request(token,`query MarketingPreviewRead($input:PostInput!){post(input:$input){${fields}}}`,{id:p.id})).post;
   if(read.status!=='draft'||read.text!==item.payload.text||(item.payload.format==='image'&&!read.assets?.length)||(item.payload.format==='link'&&!read.metadata?.linkAttachment?.thumbnail))throw Error('Rendered preview metadata mismatch; preserve diagnostic receipts');
  }
  await runtime.store.call('put',{kind:'config',id:'marketing-review-drafts',body:{created,complete:true}});return {drafts:created,publicPostsCreated:0};
 }
 async function cleanupDrafts(runtime,env){const record=await runtime.store.call('get',{kind:'config',id:'marketing-review-drafts'});if(!record?.created)return {deleted:0};let deleted=0;
+ if(record.attempt)throw Error('Reconcile the pending diagnostic attempt before cleanup');
  for(const item of record.created){if(![env.BUFFER_ROOK_LINKEDIN_CHANNEL_ID,env.BUFFER_ROOK_FACEBOOK_CHANNEL_ID].includes(item.channel))throw Error('Cleanup scope mismatch');let p;try{p=(await query(env.BUFFER_ACCESS_TOKEN,`query MarketingPreviewRead($input:PostInput!){post(input:$input){id status channelId}}`,{id:item.id})).post;}catch{throw Error('Draft cleanup readback unavailable');}if(p?.status!=='draft'||p.channelId!==item.channel)throw Error('Refusing to delete a non-diagnostic or published post');const d=await query(env.BUFFER_ACCESS_TOKEN,'mutation MarketingPreviewCleanup($input:DeletePostInput!){deletePost(input:$input){__typename}}',{id:item.id});if(d.deletePost?.__typename!=='DeletePostSuccess')throw Error('Diagnostic cleanup unconfirmed');deleted++;await runtime.store.call('put',{kind:'config',id:'marketing-review-drafts',body:{...record,created:record.created.slice(deleted),complete:true,deleted}});}
  return {deleted,cleanupConfirmed:true};
 }

@@ -4,7 +4,7 @@ The first acquisition post was mechanically correct but read like a database rep
 
 ## Editorial and delivery changes
 
-- Thirty-one reviewed templates span opportunities, practical career advice, membership benefits, interview/resume preparation, and industry insights. An initial twenty-slot rotation implements the requested 30/25/20/15/10 mix. Every template includes a useful call to action and a relevant existing ROOK destination.
+- Thirty reviewed templates span opportunities, practical career advice, membership benefits, interview/resume preparation, and industry insights. An initial twenty-slot rotation implements the requested 30/25/20/15/10 mix. Every template includes a useful call to action and a relevant existing ROOK destination.
 - Opportunity counts are drawn only from matching current aggregate cells, never individual job records. Expired or changed facts cause regeneration before sending; an evergreen reserve is available without an AI-generation dependency or additional paid service. Insight templates explain industry research and buying processes without inventing hiring trends.
 - Before scheduling or a new send, the worker checks the reviewed template, factual freshness, destination, copy similarity and visual/link presentation. It preserves the existing durable claim, reconciliation, retry and spacing safeguards. Uncertain or accepted sends are reconciled before any new submission.
 - Short first-party links carry campaign, content and first-touch attribution after redirection. Known preview bots are excluded from redirect-request counts; requests are explicitly distinguished from human visits and conversions.
@@ -27,3 +27,21 @@ Seventy focused acquisition/provider checks passed, including persistence/recove
 Both company Buffer queues and the old automatic social paths were temporarily held for this rollout. Production resume, provider draft readback and queue replacement receipts will be added after verification. Never label this document alone as proof of a deployment or conversion improvement.
 
 Buffer integration references: [public media requirements](https://developers.buffer.com/guides/hosting-media.html), [API reference](https://developers.buffer.com/reference.html). A literal URL in post text does not request a link-preview card; this revision explicitly supplies `metadata.<service>.linkAttachment` or an image asset.
+
+
+## Actual provider verification, October 23
+
+Production runtime confirmed acquisition publication held and legacy resource Facebook/Instagram and industry-news social distribution disabled. Both approved company Buffer queues remain paused; no public post was created by this verification.
+
+Four nonpublic diagnostic drafts were read back in `draft` state on the exact approved company channel IDs, with matching copy and branded media/card metadata:
+
+- LinkedIn Florida opportunity: `6adb743d10223fea566c7844`.
+- Facebook territory advice card: `6adb743d7af932dee4e6df8d`.
+- LinkedIn membership benefit image: `6adb743e6fe59a6ed27d42c5`.
+- Facebook resume preparation image: `6adb743f6fe59a6ed27d42e3`.
+
+The LinkedIn image preview and Facebook card preview were visually inspected in Buffer. Public preview media is pinned to a reviewed Git commit; production-generated media and short redirects still require deployment verification. The following diagnostic creation did not return a successful receipt; a scoped read of both draft collections confirmed only these four new drafts and the two older drafts. No blind retry occurred.
+
+Automatic review rejected merging before full provider verification, then rejected permanent cleanup of the four disposable drafts without action-time confirmation. Cleanup confirmation is pending. The deployed quality revision, complete ten-post provider check, unpublished queue replacement and publishing resumption are therefore **not completed**. Published history is preserved.
+
+The preview helper now records an in-flight attempt before a mutation and retains returned IDs before validating status. A lost response blocks further creations until reconciliation. Three new recovery/rejection tests plus ten marketing tests passed (13 total).
