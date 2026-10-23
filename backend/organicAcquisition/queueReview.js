@@ -11,11 +11,19 @@ async function select(store,channels,count=10){
   if(!chosen)throw Error('Insufficient quality reserve');const id=require('./security').digest('marketing-review-v2:'+i+':'+channel.id);const payload=await marketing.payloadFor(store,chosen,channel,id);selected.push({candidate:chosen,channel,payload,id});rows.push({channel:channel.id,payload,status:'ready'});
  }return selected;
 }
-async function previewDrafts(runtime,env,{lookup=companyChannels,request=query}={}){
- const previous=await runtime.store.call('get',{kind:'config',id:'marketing-review-drafts'});if(previous?.created?.length||previous?.attempt)throw Error('Reconcile existing diagnostic drafts before creating more');
- const channels=await lookup(env),items=await select(runtime.store,channels),token=env.BUFFER_ACCESS_TOKEN,created=[];
+async function previewDrafts(runtime,env,{lookup=companyChannels,request=query,resume=false}={}){
+ const previous=await runtime.store.call('get',{kind:'config',id:'marketing-review-drafts'});if(previous?.attempt||(previous?.created?.length&&!resume))throw Error('Reconcile existing diagnostic drafts before creating more');
+ const channels=await lookup(env),items=await select(runtime.store,channels),token=env.BUFFER_ACCESS_TOKEN,created=[...(previous?.created||[])];
+ if(resume){
+  if(env.ACQ_PUBLICATION_APPROVED==='true'||channels.some(c=>!c.isQueuePaused)||created.length>items.length||new Set(created.map(p=>p.id)).size!==created.length)throw Error('Paused, bounded company preview reconciliation required');
+  // Every known receipt must still be the same nonpublic draft before any further mutation.
+  for(let i=0;i<created.length;i++){const saved=created[i],item=items[i];if(saved.channel!==item.channel.id||saved.candidateId!==item.candidate.id)throw Error('Existing diagnostic selection changed; stop before creating more');
+   const read=(await request(token,`query MarketingPreviewRead($input:PostInput!){post(input:$input){${fields}}}`,{id:saved.id})).post;
+   if(read?.id!==saved.id||read.status!=='draft'||read.channelId!==saved.channel||read.text!==item.payload.text||(item.payload.format==='image'&&!read.assets?.some(a=>a.source===item.payload.imageUrl))||(item.payload.format==='link'&&(read.metadata?.linkAttachment?.url!==item.payload.shortUrl||read.metadata?.linkAttachment?.thumbnail!==item.payload.imageUrl)))throw Error('Existing diagnostic receipt did not reconcile; stop before creating more');
+  }
+ }
  // Only explicit disposable diagnostics are created. Nothing is scheduled or published.
- for(const item of items){const input={channelId:item.channel.id,...presentation(item.payload,item.channel.service),mode:'addToQueue',schedulingType:'automatic',saveToDraft:true,aiAssisted:true};
+ for(const item of items.slice(created.length)){const input={channelId:item.channel.id,...presentation(item.payload,item.channel.service),mode:'addToQueue',schedulingType:'automatic',saveToDraft:true,aiAssisted:true};
   await runtime.store.call('put',{kind:'config',id:'marketing-review-drafts',body:{created,complete:false,attempt:{channel:item.channel.id,candidateId:item.candidate.id,startedAt:new Date().toISOString()}}});
   const r=await request(token,`mutation MarketingPreview($input:CreatePostInput!){createPost(input:$input){__typename ... on PostActionSuccess{post{${fields}}} ... on MutationError{message}}}`,input);const p=r.createPost?.post;
   if(!p?.id){if(r.createPost?.message){await runtime.store.call('put',{kind:'config',id:'marketing-review-drafts',body:{created,complete:false,attempt:null}});throw Error('Buffer rejected diagnostic: '+String(r.createPost.message).slice(0,300));}throw Error('Draft creation incomplete; reconcile before retry');}

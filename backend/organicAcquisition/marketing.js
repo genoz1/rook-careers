@@ -55,7 +55,7 @@ function candidates(snapshot,now=Date.now()){
   const copy=[t.hook,body,t.cta].join('\n\n');return {...t,text:copy,url:ORIGIN+t.path,observedAt,proof,hash:digest(copy+'\n'+ORIGIN+t.path)};
  });
 }
-function words(text){return new Set(String(text).toLowerCase().replace(/https?:\/\/\S+|#[a-z0-9]+/g,'').match(/[a-z]{3,}/g)?.filter(w=>!['the','and','your','you','for','with','from','that','this','rook','sales','medical'].includes(w))||[]);}
+function words(text){return new Set(String(text).replace(/ROOK currently tracks[\s\S]*?Openings can change\./gi,'').toLowerCase().replace(/https?:\/\/\S+|#[a-z0-9]+/g,'').match(/[a-z]{3,}/g)?.filter(w=>!['the','and','your','you','for','with','from','that','this','rook','sales','medical'].includes(w))||[]);}
 function similar(a,b){const x=words(a),y=words(b);if(!x.size||!y.size)return false;const same=[...x].filter(w=>y.has(w)).length;return same/Math.min(x.size,y.size)>.82||same/new Set([...x,...y]).size>.64;}
 function validateCandidate(c,{now=Date.now(),recent=[]}={}){
  if(!catalog.some(t=>t.id===c.id)||!Object.hasOwn(MIX,c.category))throw Error('Unreviewed marketing template');
