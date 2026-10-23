@@ -227,3 +227,9 @@ async function readRecentPosts(accessToken, organizationId, opts) {
 }
 module.exports.readQueue = readQueue;
 module.exports.readRecentPosts = readRecentPosts;
+async function readCompanyMetrics(accessToken,organizationId,opts){
+ const data=await bufferGraphQLRequest(accessToken,`query CompanyMetrics($org:OrganizationId!,$channelIds:[ChannelId!]){posts(first:100,input:{organizationId:$org,filter:{status:[sent],channelIds:$channelIds}}){edges{node{id channelId sentAt externalLink metricsUpdatedAt metrics{type value unit}}}}}`,{org:organizationId,channelIds:opts.channelIds},opts);
+ if(!Array.isArray(data?.posts?.edges))throw Error('Company metrics unavailable');
+ const rows=data.posts.edges.map(e=>e.node);if(rows.some(p=>!opts.channelIds.includes(p.channelId)))throw Error('Company metrics scope mismatch');return rows;
+}
+module.exports.readCompanyMetrics=readCompanyMetrics;

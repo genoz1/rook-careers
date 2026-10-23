@@ -43,6 +43,7 @@ async function sendArticle(article, channel, deps = {}) {
 }
 
 async function dispatch(deps = {}) {
+  if(process.env.ROOK_ACQUISITION_ENABLED==='true')return {state:'managed_by_acquisition'};
   for (const row of await deps.store.queuedDistributions(2)) {
     try { await sendArticle(row.article, row.channel, deps); }
     catch { console.warn(`[industry-news] ${row.channel} distribution deferred`); }

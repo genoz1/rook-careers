@@ -30,13 +30,6 @@ function reports(snapshot,now=Date.now()){
 }
 function reportHtml(r){return `<article><h1>${escape(r.title)}</h1><p>Observed ${escape(r.date)}. Point-in-time inventory.</p><table><thead><tr><th>Collection</th><th>Opportunities</th><th>Represented employers</th></tr></thead><tbody>${r.cells.map(c=>`<tr><td><a href="${escape(c.path)}">${escape(c.label)}</a></td><td>${c.jobs}</td><td>${c.employers}</td></tr>`).join('')}</tbody></table><p>${escape(r.caveat)}</p><h2>Methodology</h2><p>${escape(r.methodology)}</p><h2>Prepare for your search</h2><p>${escape(r.guidance)}</p><p><a href="/resources/how-to-build-a-30-60-90-day-territory-sales-plan/">Territory planning guide</a> · <a href="/rook-pricing.html">How ROOK membership works</a></p></article>`;}
 function candidates(snapshot,now,reportRows=[]){
- const result=[];
- try{
-  validateFresh(snapshot,now);
-  for(const row of reportRows){const r=row.body;if(Date.parse(r.observedAt)!==Date.parse(snapshot.capturedAt))continue;const c=r.cells[0];result.push({id:r.slug,text:`${r.title}: ROOK tracked ${c.jobs.toLocaleString('en-US')} opportunities across ${c.employers.toLocaleString('en-US')} represented employers in ${c.label}, observed ${r.date}. This is tracked inventory, not the whole market or evidence of hiring growth.`,url:ORIGIN+'/hiring-reports/'+r.slug+'/',observedAt:r.observedAt,reportHash:r.hash});}
- }catch{/* evergreen reserve remains available */}
- result.push(...evergreen);
- result.push({id:'partner-program',text:'Help medical sales candidates prepare for their next move? ROOK’s referral program offers a $5 one-time commission for a verified new paying monthly subscriber. Existing customers and self-referrals do not qualify. See the rules and get your own referral link.',url:ORIGIN+'/partners/'});
- return result.map(c=>({...c,hash:digest(c.text+'\n'+c.url)}));
+ return require('./marketing').candidates(snapshot,now);
 }
 module.exports={ORIGIN,FAMILY,validateFresh,reports,reportHtml,candidates};

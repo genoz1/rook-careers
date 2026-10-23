@@ -5,6 +5,7 @@ const {collect}=require('../../scripts/collectOrganicBaseline');
 const {candidates,reports,ORIGIN}=require('./content');
 const {digest}=require('./security');
 const {nearSlot,repeatsContent}=require('./coordination');
+const marketing=require('./marketing');
 async function checkDestination(url,{httpFetch=fetch,expectedHash}={}){
  const u=new URL(url);if(u.origin!==ORIGIN||u.username||u.password)return false;
  const res=await httpFetch(u,{redirect:'manual',signal:AbortSignal.timeout(12000)});
@@ -30,7 +31,7 @@ async function publishReports(store,snapshot,now){
 async function replenish(store,{channels,now=Date.now(),check=checkDestination,externalSchedule=[]}){
  const snapshot=await store.call('get',{kind:'snapshot',id:'latest'});
  const reportRows=await store.call('list',{kind:'report'}), existing=await store.call('outbox');
- const pool=candidates(snapshot,now,reportRows);let added=0;
+ const pool=candidates(snapshot,now,reportRows),performance=await store.call('get',{kind:'metrics',id:'marketing-performance'});let added=0;
  // Pre-fill a bounded week; dispatch missed slots for up to seven days after an outage.
  for(let offset=0;offset<7;offset++){
   const d=new Date(now+offset*86400000), p=getEasternParts(d);
@@ -45,21 +46,19 @@ async function replenish(store,{channels,now=Date.now(),check=checkDestination,e
    const channelDue=new Date(due);
    for(let step=0;step<32&&externalSchedule.some(p=>nearSlot(p,channel.id,channelDue.getTime()));step++)channelDue.setTime(channelDue.getTime()+15*60000);
    let selected;
-   // Rotate the reserve; partner invitation appears periodically rather than disappearing behind fresh stats.
-   const rotate=parseInt(digest(p.dateStr+channel.id).slice(0,6),16)%pool.length;
-   const ordered=[...pool.slice(rotate),...pool.slice(0,rotate)];
-   for(const c of ordered){if(externalSchedule.some(p=>p.channelId===channel.id&&repeatsContent(p,c.url)))continue;if(existing.some(r=>r.channel===channel.id&&r.payload.contentHash===c.hash&&(r.status!=='published'||now-Date.parse(r.created_at)<30*86400000)))continue;
+   const ordered=marketing.rank(pool,existing,channel.id,performance);
+   const recent=[...externalSchedule.filter(p=>p.channelId===channel.id),...existing.filter(r=>r.channel===channel.id&&r.status!=='replaced'&&(r.status!=='published'||now-Date.parse(r.created_at)<30*86400000))];
+   for(const c of ordered){try{marketing.validateCandidate(c,{now,recent});}catch{continue;}if(existing.some(r=>r.channel===channel.id&&r.payload.contentHash===c.hash&&(r.status!=='published'||now-Date.parse(r.created_at)<30*86400000)))continue;
     if(await check(c.url,{expectedHash:c.reportHash})){selected=c;break;}}
    if(!selected){
     const row=await store.call('enqueue',{id,lane:'social',channel:channel.id,payload:{needsReplacement:true,url:ORIGIN+'/resources/',text:'',contentHash:'reserve-backlog-'+id},dueAt:channelDue.toISOString()});existing.push(row);continue;
    } // An unfilled slot remains durable work, never silent success.
-   const url=new URL(selected.url);url.searchParams.set('utm_source','rook_'+channel.service);url.searchParams.set('utm_medium','organic_social');url.searchParams.set('utm_campaign','organic_careers');url.searchParams.set('rook_post',id.slice(0,16));
-   const payload={text:selected.text+'\n'+url.href,url:selected.url,contentHash:selected.hash,candidateId:selected.id,observedAt:selected.observedAt||null,reportHash:selected.reportHash||null};
+   const payload=await marketing.payloadFor(store,selected,channel,id,now);
    const row=await store.call('enqueue',{id,lane:'social',channel:channel.id,payload,dueAt:channelDue.toISOString()});existing.push(row);added++;
   }
  }return {added,reserveSize:pool.length};
 }
-async function dispatchOne(store,{adapter,now=Date.now(),check=checkDestination}){
+async function dispatchOne(store,{adapter,now=Date.now(),check=checkDestination,checkMedia=async url=>{const r=await fetch(url,{method:'HEAD',redirect:'error',signal:AbortSignal.timeout(12000)});return r.status===200&&/image\/jpeg/i.test(r.headers.get('content-type')||'');}}){
  const token=crypto.randomUUID();const row=await store.call('claim',{lane:'social',token,now:new Date(now).toISOString()});if(!row)return null;
  const finish=(status,receipt=null,error=null,delay=300000)=>store.call('outcome',{id:row.id,token,status,receipt,error,dueAt:new Date(now+delay).toISOString()});
  try{
@@ -69,17 +68,20 @@ async function dispatchOne(store,{adapter,now=Date.now(),check=checkDestination}
    await finish(receipt.status==='published'?'published':receipt.status==='failed'?'retry':receipt.status==='accepted'?'accepted':'uncertain',receipt,receipt.status==='unknown'?'provider_receipt_unresolved':null,receipt.status==='unknown'?Math.min(21600000,3600000*2**Math.min(row.attempts,3)):Math.min(21600000,300000*2**Math.min(row.attempts,6)));
    return {id:row.id,status:receipt.status};
   }
-  const stale=row.payload.needsReplacement||(row.payload.observedAt&&now-Date.parse(row.payload.observedAt)>86400000);
+  let qualityPassed=false;try{marketing.validatePayload(row.payload,{snapshot:await store.call('get',{kind:'snapshot',id:'latest'}),now});qualityPassed=true;}catch{/* Regenerate before any new provider send. */}
+  const stale=!qualityPassed||row.payload.needsReplacement||(row.payload.observedAt&&now-Date.parse(row.payload.observedAt)>86400000);
   if(stale||!await check(row.payload.url,{expectedHash:row.payload.reportHash})){
    // Queue a reserve replacement using a unique key; retire only this unusable attempt.
-   const old=await store.call('outbox');let replacement;
-   for(const c of candidates(null,now,[])){if(old.some(r=>r.channel===row.channel&&r.payload.contentHash===c.hash&&(r.status!=='published'||now-Date.parse(r.created_at)<30*86400000)))continue;if(await check(c.url)){replacement=c;break;}}
+   const old=await store.call('outbox'),channels=await adapter.channels(),channel=channels.find(c=>c.id===row.channel);if(!channel)throw Object.assign(Error('Unapproved company channel'),{definitelyNotAccepted:true});let replacement;
+   const recent=old.filter(r=>r.id!==row.id&&r.channel===row.channel&&r.status!=='replaced'&&(r.status!=='published'||now-Date.parse(r.created_at)<30*86400000));
+   for(const c of marketing.rank(candidates(null,now,[]),recent,row.channel)){try{marketing.validateCandidate(c,{now,recent});}catch{continue;}if(old.some(r=>r.channel===row.channel&&r.payload.contentHash===c.hash&&(r.status!=='published'||now-Date.parse(r.created_at)<30*86400000)))continue;if(await check(c.url)){replacement=c;break;}}
    if(!replacement){await finish('retry',null,'reserve_temporarily_unavailable',3600000);return {status:'retry'};}
-   const url=new URL(replacement.url);url.searchParams.set('utm_source','rook_social');url.searchParams.set('utm_medium','organic_social');url.searchParams.set('rook_post',row.id.slice(0,16));
-   await store.call('enqueue',{id:digest(row.id+replacement.hash),lane:'social',channel:row.channel,payload:{text:replacement.text+'\n'+url.href,url:replacement.url,contentHash:replacement.hash,candidateId:replacement.id},dueAt:new Date(now).toISOString()});
+   const id=digest(row.id+replacement.hash),payload=await marketing.payloadFor(store,replacement,channel,id,now);
+   await store.call('enqueue',{id,lane:'social',channel:row.channel,payload,dueAt:new Date(now).toISOString()});
    await finish('replaced',null,'automatic_reserve_replacement');return {status:'replaced'};
   }
   // Row is already durably marked working before external side effect.
+  if(row.payload.imageUrl&&!await checkMedia(row.payload.imageUrl))throw Object.assign(Error('ROOK creative temporarily unavailable'),{definitelyNotAccepted:true});
   const receipt=await adapter.publish(row);
   await finish(receipt.status==='published'?'published':'accepted',receipt);return {id:row.id,status:receipt.status};
  }catch(e){
