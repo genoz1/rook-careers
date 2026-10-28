@@ -25,7 +25,7 @@ const supabaseAnon = isConfigured
   : null;
 
 const APP_BASE_URL = (process.env.PUBLIC_APP_URL || "https://rookcareers.com").replace(/\/$/, "");
-const {CATEGORIES, FLORIDA, createInventoryLoader, fetchApprovedJobPages} = require("../seoInventory");
+const {CATEGORIES, FLORIDA, createInventoryLoader} = require("../seoInventory");
 const {createCollectionHandler, createRelatedArticleLoader, hasFilters} = require("../seoCollections");
 const loadSeoInventory = createInventoryLoader(supabaseAnon);
 // Sitemap XML is expensive to rebuild (thousands of job URLs). Serve a
@@ -143,10 +143,9 @@ function pageShell({ title, description, canonicalUrl, ogImage, bodyHtml, jsonLd
 </html>`;
 }
 
-// GET /jobs/:id — the partial-reveal public job page. Title, location,
-// compensation, and a description preview are real and visible; company
-// name and the real apply link stay gated behind sign-up, same fields
-// withheld as the anonymous JSON API teaser in backend/routes/jobs.js.
+// Locked previews remain shareable conversion pages. Their generalized content
+// repeats across employers, so search landing pages are the useful collections
+// and Resources, not thousands of indistinguishable individual job URLs.
 router.get("/jobs/:id", async (req, res, next) => {
   if (!isConfigured) return next(); // falls through to the SPA catch-all if Supabase isn't set up yet
 
@@ -228,7 +227,8 @@ router.get("/jobs/:id", async (req, res, next) => {
       <a class="btn btn-primary" href="/rook-onboarding-v8.html?${escapeHtml(query.toString())}">Browse protected matches</a>
       <p style="font-size:13px;margin-top:16px">Preview first, then choose a paid access option when you want full details.</p>
     </section><script src="/rook-attribution.js"></script>`;
-  res.send(pageShell({title:`${title} — ROOK`,description,canonicalUrl,bodyHtml,jobId:job.id,
+  res.set('X-Robots-Tag', 'noindex, follow');
+  res.send(pageShell({title:`${title} — ROOK`,description,canonicalUrl,bodyHtml,jobId:job.id,noindex:true,
     jsonLd:{'@context':'https://schema.org','@type':'WebPage',name:title,description,url:canonicalUrl}}));
 
 });
@@ -262,6 +262,7 @@ router.get("/jobs", async (req, res) => {
     const bodyHtml = `
       <h1 style="font-size:28px;margin-bottom:16px;">Medical sales job previews${page > 1 ? ` — page ${page}` : ""}</h1>
       <p style="line-height:1.7;margin-bottom:24px;">Explore current opportunities by broad industry and role. ROOK membership unlocks job titles, employers, full details and application links.</p>
+      <nav aria-label="Browse jobs by specialty" style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:24px;">${Object.entries(CATEGORIES).map(([slug,category])=>`<a href="/jobs/category/${slug}">${escapeHtml(category.label)}</a>`).join('')}<a href="/resources/">Career guides</a></nav>
       <p style="margin-bottom:24px;"><a href="/rook-browse.html" style="color:var(--royal);">Find roles near your ZIP code</a></p>
       ${eligibleData.slice(0, pageSize).map(job => { const safe = project(job); return `<a href="/jobs/${escapeHtml(job.id)}" style="display:block;background:#fff;border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:12px;"><h2 style="font-size:17px;margin-bottom:6px;">${escapeHtml(safe.role_type || 'Sales opportunity')}</h2><p style="color:var(--muted);">${escapeHtml([(safe.industry_classification.labels || []).join(' · '), safe.territory_type || safe.location_label, safe.freshness_label].filter(Boolean).join(' · '))}</p></a>`; }).join("") || "<p>No open roles right now. Please check back soon.</p>"}
       <nav aria-label="Job directory pages" style="display:flex;justify-content:space-between;gap:16px;margin-top:24px;">
@@ -296,17 +297,8 @@ async function buildSitemapBody() {
     if (FLORIDA.includes(slug) && collections?.[path+'/florida']?.qualified) staticUrls.push(APP_BASE_URL + path+'/florida');
   }
 
-  let jobs;
-  try {
-    jobs = await fetchApprovedJobPages(
-      supabaseAnon,
-      "id, job_lat, job_lng, state, location_raw, location_evidence"
-    );
-  } catch (_) {
-    throw new Error("Sitemap query failed");
-  }
-  const jobUrls = jobs.filter(isUsEligibleJob).map(j => `${APP_BASE_URL}/jobs/${j.id}`);
-  if (jobUrls.length + staticUrls.length > 50000) throw new Error("Sitemap requires splitting");
+  // Keep locked individual previews crawlable so Google can see their noindex,
+  // but don't submit them as search landing pages or query the entire job pool.
   let offset = 0;
   const modified = new Map();
   const now = new Date().toISOString();
@@ -325,12 +317,12 @@ async function buildSitemapBody() {
       const date = typeof a.updated_at === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(a.updated_at) ? Date.parse(a.updated_at) : NaN;
       if (Number.isFinite(date) && date <= Date.parse(now)) modified.set(url, new Date(date).toISOString());
     }
-    if (jobUrls.length + staticUrls.length > 50000) throw new Error("Sitemap requires splitting");
+    if (staticUrls.length > 50000) throw new Error("Sitemap requires splitting");
     offset += articles.length;
   }
 
   const urlEntries = [
-    ...staticUrls, ...jobUrls,
+    ...staticUrls,
   ].map(url => `<url><loc>${escapeHtml(url)}</loc>${modified.has(url)?`<lastmod>${modified.get(url)}</lastmod>`:""}</url>`).join("\n");
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urlEntries}\n</urlset>`;
 }
@@ -346,9 +338,8 @@ function rebuildSitemapCache() {
   return sitemapRebuild;
 }
 
-// GET /sitemap.xml — lists the homepage, the public browse page, and
-// every currently-active job's real crawlable URL. Cached briefly in
-// memory so crawlers are not blocked by a full rebuild on every hit.
+// GET /sitemap.xml — public marketing pages, qualified job collections and
+// published Resources. Locked job previews are intentionally excluded.
 router.get("/sitemap.xml", async (req, res) => {
   if (!isConfigured) return res.status(503).set("Retry-After", "300").send("Sitemap temporarily unavailable.");
   if (sitemapCachingEnabled() && sitemapCache.body && Date.now() < sitemapCache.expires) {
