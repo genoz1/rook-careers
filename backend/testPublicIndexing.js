@@ -69,20 +69,20 @@ const jobs = count => Array.from({ length: count }, (_, i) => ({
   application_url: "https://private-application.example/", ai_analysis: {},
 }));
 
-test("sitemap includes more than 1,000 approved jobs despite a lower server response cap", async () => {
+test("sitemap focuses on public landing pages and omits repetitive locked jobs", async () => {
   const rows = jobs(1203);
   rows.push({ ...rows[0], id: "inactive", status: "closed" }, { ...rows[0], id: "pending", moderation_status: "pending" });
   const res = await setup(rows, { cap: 200 })("/sitemap.xml");
   assert.equal(res.statusCode, 200);
-  assert.equal((res.body.match(/<loc>https:\/\/rookcareers.com\/jobs\/job-/g) || []).length, 1203);
-  assert.ok(res.body.includes("job-01202"));
+  assert.equal((res.body.match(/<loc>https:\/\/rookcareers.com\/jobs\/job-/g) || []).length, 0);
   assert.ok(!res.body.includes("/jobs/inactive") && !res.body.includes("/jobs/pending"));
   assert.ok(!res.body.includes("<lastmod>"));
   assert.ok(res.body.includes("<loc>https://rookcareers.com/jobs</loc>"));
 });
 
 test("sitemap failures return retryable errors rather than partial successful XML", async () => {
-  for (const invoke of [setup(jobs(1203), { failAt: 500 }), setup([], { configured: false })]) {
+  const resources = Array.from({length:600},(_,i)=>({slug:'guide-'+i,published_at:'2020-01-01T00:00:00Z','resource_topics.status':'published'}));
+  for (const invoke of [setup([], { failAt: 500, resources }), setup([], { configured: false })]) {
     const res = await invoke("/sitemap.xml");
     assert.equal(res.statusCode, 503);
     assert.equal(res.headers["Retry-After"], "300");
@@ -99,7 +99,7 @@ test("public directory, sitemap, and direct job pages hide ineligible jobs", asy
   const hiddenDetail = await invoke("/jobs/:id", { params: { id: rows[1].id } });
   assert.ok(directory.body.includes(rows[0].id) && directory.body.includes(rows[2].id));
   assert.ok(!directory.body.includes(rows[1].id));
-  assert.ok(sitemap.body.includes(rows[0].id) && sitemap.body.includes(rows[2].id));
+  assert.ok(!sitemap.body.includes('/jobs/job-'));
   assert.ok(!sitemap.body.includes(rows[1].id));
   assert.equal(hiddenDetail.statusCode, 404);
 });
@@ -138,6 +138,8 @@ test("job previews use ordinary WebPage metadata, retain gates, and escape conte
   assert.ok(!res.body.includes('"@type":"JobPosting"'));
   assert.ok(!res.body.includes("PRIVATE_") && !res.body.includes("private-application"));
   assert.ok(res.body.includes("Employer: 🔒 Protected until membership"));
+  assert.equal(res.headers['X-Robots-Tag'], 'noindex, follow');
+  assert.ok(res.body.includes('<meta name="robots" content="noindex, follow">'));
   assert.ok(res.body.includes("complete job description"));
   assert.ok(!res.body.includes("&lt;script&gt;"), "original title is withheld, not escaped into metadata");
   assert.ok(res.body.includes("Tampa, FL"));
@@ -164,7 +166,7 @@ test("main sitemap includes only published Resources and picks up new articles a
   assert.ok(first.body.includes('<loc>https://rookcareers.com/resources/</loc>'));
   for(let i=0;i<7;i++)assert.ok(first.body.includes('/resources/guide-'+i+'/'));
   for(const slug of ['draft','rejected','future'])assert.ok(!first.body.includes('/resources/'+slug+'/'));
-  assert.ok(first.body.includes('/jobs/job-00002'));
+  assert.ok(!first.body.includes('/jobs/job-00002'));
   resources.push({slug:'newly-published',published_at:'2020-01-01T00:00:00Z','resource_topics.status':'published'});
   assert.ok((await invoke('/sitemap.xml')).body.includes('/resources/newly-published/'));
 });
