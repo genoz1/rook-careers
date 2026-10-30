@@ -469,7 +469,11 @@ router.get("/admin/admanager/ga4", async (req, res) => {
 function summarizeIngestionHealth(runs, employers, watchdog, now = Date.now()) {
   const scheduled = (runs || []).filter((r) => !r.summary?.manual);
   const newest = scheduled[0] || null;
-  const lastSuccess = scheduled.find((r) => r.status === "completed" || r.status === "success") || null;
+  const lastSuccess = scheduled.find((r) =>
+    r.status === "completed" ||
+    r.status === "success" ||
+    (r.summary?.night_complete && r.status !== "failed")
+  ) || null;
   const gapMinutes = Number(process.env.INGESTION_MAX_GAP_MINUTES || 1200);
   const maxGapMs = (Number.isFinite(gapMinutes) ? gapMinutes : 1200) * 60000;
   const newestStarted = newest ? Date.parse(newest.started_at) : NaN;
