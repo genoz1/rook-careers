@@ -10,6 +10,7 @@ const { distanceMiles } = require("../geocoding");
 const { isUsEligibleJob, resolveUsStateCode } = require("../jobEligibility");
 const { publicPreview } = require("../pretrialProjection");
 const { generalizedRole } = require("../maskedPresentation");
+const { digestUnsubscribeUrl } = require("./digestUnsubscribe");
 
 const MIN_SCORE_TO_INCLUDE = 60;
 const MAX_JOBS_PER_EMAIL = 5;
@@ -83,9 +84,10 @@ function prepareDigestJobs(jobs, subscribed) {
   });
 }
 
-function renderDigestHtml({ name, jobs, appBaseUrl, subscribed, hasNewJobs }) {
+function renderDigestHtml({ name, jobs, appBaseUrl, subscribed, hasNewJobs, unsubscribeUrl = "" }) {
   jobs = (jobs || []).filter(validDigestJob);
   if (!jobs.length) return null;
+  const unsub = String(unsubscribeUrl || "").trim();
   const rows = jobs
     .map((job) => {
       const comp = validDisplayText(job.compensation_text) ? job.compensation_text :
@@ -154,7 +156,11 @@ function renderDigestHtml({ name, jobs, appBaseUrl, subscribed, hasNewJobs }) {
       <!-- Footer -->
       <div style="padding:28px 24px; text-align:center; border-top:1px solid #E3E8F0; margin-top:4px;">
         ${footerLine}
-        <p style="margin:16px 0 0; font-size:11px; color:#9BAABB;">You're receiving ROOK daily job alerts. Receiving alerts does not require a paid subscription.<br>Manage email preferences from your dashboard.</p>
+        <p style="margin:16px 0 0; font-size:11px; color:#9BAABB;">You're receiving ROOK daily job alerts. Receiving alerts does not require a paid subscription.<br>${
+          unsub
+            ? `<a href="${escapeHtml(unsub)}" style="color:#9BAABB;">Unsubscribe</a> · Manage preferences in your <a href="${escapeHtml(appBaseUrl)}/rook-settings.html" style="color:#9BAABB;">dashboard</a>.`
+            : `Manage email preferences from your dashboard.`
+        }</p>
       </div>
 
     </div>`;
@@ -243,7 +249,20 @@ async function sendDigestForCandidate(supabase, profile, appBaseUrl) {
   const validFreshCount = emailJobs.filter(job => freshScored.some(row => row.jobs.id === job.id)).length;
   hasNewJobs = validFreshCount > 0;
 
-  const html = renderDigestHtml({ name: profile.name, jobs: emailJobs, appBaseUrl, subscribed: hasAccess, hasNewJobs });
+  let unsubscribeUrl = "";
+  try {
+    unsubscribeUrl = digestUnsubscribeUrl(appBaseUrl, profile.id);
+  } catch (err) {
+    console.warn(`[digest] unsubscribe link unavailable for ${profile.id}: ${err.message}`);
+  }
+  const html = renderDigestHtml({
+    name: profile.name,
+    jobs: emailJobs,
+    appBaseUrl,
+    subscribed: hasAccess,
+    hasNewJobs,
+    unsubscribeUrl,
+  });
 
   if (!html) return { sent: false, reason: "no_valid_alert_jobs" };
   const subjectNew = `🔥 ${validFreshCount} new medical sales job${validFreshCount === 1 ? "" : "s"} matching your location`;
