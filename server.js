@@ -39,6 +39,7 @@ if (acquisitionRuntime) app.use(acquisitionRuntime.router);
 app.use("/api", stripeRoutes);
 app.use("/api/v7", require("./backend/routes/onboardingV7"));
 app.use("/api/v8", require("./backend/routes/onboardingV8"));
+app.use("/api", require("./backend/routes/digest"));
 // V9's retired API could still activate a free trial when called directly,
 // even though its HTML entry points now redirect. Retire the API as well so
 // an old client cannot bypass the current paid-membership funnel.

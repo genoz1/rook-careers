@@ -64,11 +64,16 @@ test('the legacy Stripe trial switch is disabled and deprecated', () => {
 test('non-subscriber email destinations enter V8 and keep unsubscribe handling intact', () => {
   const daily = read('backend/email/dailyDigest.js');
   const pretrial = read('backend/email/pretrialDigest.js');
+  const digestRoute = read('backend/routes/digest.js');
   assert.match(daily, /rook-onboarding-v8\.html/);
   assert.doesNotMatch(daily, /rook-pricing\.html/);
+  assert.match(daily, /digestUnsubscribeUrl/);
+  assert.match(daily, /Unsubscribe/);
   assert.match(pretrial, /rook-onboarding-v8\.html\?from=job_alert/);
   assert.doesNotMatch(pretrial, /rook-dashboard-v7\.html\?from=job_alert/);
   assert.match(pretrial, /alerts\/unsubscribe/);
+  assert.match(digestRoute, /candidate_profiles/);
+  assert.match(digestRoute, /digest_enabled:\s*false/);
 });
 
 test('shared locked destinations now use current checkout without trial routing', () => {

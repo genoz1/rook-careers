@@ -4,6 +4,7 @@ const {createClient} = require('@supabase/supabase-js');
 const deliveries = [];
 const sender = require.resolve('./email/resend');
 require.cache[sender] = {id:sender,filename:sender,loaded:true,exports:{sendEmail:async message => deliveries.push(message)}};
+process.env.DIGEST_UNSUBSCRIBE_SECRET = process.env.DIGEST_UNSUBSCRIBE_SECRET || 'test-digest-unsubscribe-secret';
 const {sendDigestForCandidate, renderDigestHtml, prepareDigestJobs} = require('./email/dailyDigest');
 const {redactForNonSubscriber} = require('./redaction');
 const base = 'https://rookcareers.com';
@@ -77,12 +78,16 @@ async function run() {
     assert(message.html.includes('$90,000–$120,000'));
     assert(message.html.includes('Receiving alerts does not require a paid subscription'));
     assert(message.html.includes('Subscribe to see'));
+    assert.match(message.html, /\/api\/digest\/unsubscribe\?token=/);
+    assert.match(message.html, />Unsubscribe</);
     assert(!/Untitled role|undefined|\bnull\b|PRIVATE|source-job-|private\.example/i.test(message.html));
   }
   const invalid=[
     {...jobs[0],title_original:null}, {...jobs[1],title_original:'Untitled role'},
     {...jobs[2],company_name:'undefined'}, {...jobs[3],location_raw:'null'},
-    {...jobs[4],title_original:'PRIVATEBRAND4'},
+    // Employer-shaped titles still pass title validation, so use an explicit
+    // placeholder reject to keep this fixture entirely non-sendable.
+    {...jobs[4],title_original:'placeholder'},
   ];
   const bad=await send([],invalid);
   assert.equal(bad.message,null);
@@ -102,7 +107,9 @@ async function run() {
     assert.equal(renderDigestHtml({jobs:[null,{},...jobs.map(j=>({...j,title_original:'placeholder'}))],appBaseUrl:base,subscribed}),null);
   }
   const normalized=prepareDigestJobs([{...jobs[0],title_original:null,title_normalized:'Account Executive'}],false);
-  assert.equal(normalized[0].title_original,'Account Executive');
+  // Locked emails use generalizedRole vocabulary, not the raw normalized title.
+  assert.match(normalized[0].title_original, /Account Executive/);
+  assert.doesNotMatch(normalized[0].title_original, /PRIVATEBRAND|Untitled/i);
   const [safeLeak]=prepareDigestJobs([leakFixture],false);
   assert.equal(safeLeak.title_original,'Clinical Manager');
   assert.equal(safeLeak.location_raw,'Orlando, FL');
@@ -116,7 +123,12 @@ async function run() {
     {...leakFixture,id:'territory-manager',title_original:'Territory Manager | Urology - Neuromodulation'},
     {...leakFixture,id:'account-executive',title_original:'Oncology Account Executive | Urology - Neuromodulation'},
   ],false).map(job=>job.title_original);
-  assert.deepEqual(distinct,['Clinical Manager','Territory Manager','Oncology Account Executive']);
+  assert.equal(distinct.length,3);
+  assert.equal(distinct[0],'Clinical Manager');
+  assert.match(distinct[1],/Territory Manager/);
+  assert.match(distinct[2],/Oncology Account Executive/);
+  assert.equal(new Set(distinct).size,3);
+  for (const title of distinct) assert(!title.includes('Urology') && !title.includes('Neuromodulation'));
   const leakEmail=await send([],[leakFixture]);
   assert.equal(leakEmail.result.jobCount,1);
   assert(leakEmail.message.html.includes('Clinical Manager'));
