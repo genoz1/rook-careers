@@ -2,13 +2,18 @@
 
 const crypto = require('crypto');
 
-/** Prefer a dedicated secret; fall back to secrets already present on seashell. */
+/**
+ * Prefer a dedicated secret when configured. Otherwise use app-level secrets
+ * shared by both rook-daily-digest (sender) and rook-careers (unsubscribe route).
+ * Do not prefer service-only secrets like ACQ_SIGNING_SECRET first — that would
+ * sign with one key in the digest job and verify with another on the web app.
+ */
 function digestUnsubscribeSecret(env = process.env) {
   return (
     env.DIGEST_UNSUBSCRIBE_SECRET
-    || env.ACQ_SIGNING_SECRET
     || env.SOCIAL_SPACING_HMAC_SECRET
     || env.SUPABASE_SERVICE_ROLE_KEY
+    || env.ACQ_SIGNING_SECRET
     || ''
   );
 }
